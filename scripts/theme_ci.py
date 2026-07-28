@@ -58,6 +58,7 @@ PACKAGE_SUFFIXES = {
     "snippets": ".liquid",
     "templates": ".liquid",
 }
+PACKAGE_ROOT = "cc-ez-theme"
 PACKAGE_TIMESTAMP = (2020, 1, 1, 0, 0, 0)
 
 
@@ -218,31 +219,31 @@ def validate_archive(archive_path: Path | str) -> list[str]:
                 path = PurePosixPath(name)
                 if name.startswith("/") or "\\" in name or ".." in path.parts:
                     issues.append(f"Unsafe archive path: {name}")
-                if path.parts and path.parts[0] == "theme":
-                    issues.append(f"Unexpected theme/ wrapper: {name}")
-                if path.parts and path.parts[0] not in REQUIRED_DIRECTORIES:
-                    issues.append(f"Unexpected top-level archive path: {name}")
+                if path.parts and path.parts[0] != PACKAGE_ROOT:
+                    issues.append(f"Unexpected archive root: {name}")
                 if _is_forbidden(path):
                     issues.append(f"Forbidden metadata in archive: {name}")
 
             for directory in REQUIRED_DIRECTORIES:
-                prefix = f"{directory}/"
+                prefix = f"{PACKAGE_ROOT}/{directory}/"
                 if not any(name.startswith(prefix) for name in names):
                     issues.append(f"Archive is missing directory: {directory}/")
 
             for filename in REQUIRED_FILES:
-                if filename not in names:
+                archive_filename = f"{PACKAGE_ROOT}/{filename}"
+                if archive_filename not in names:
                     issues.append(f"Archive is missing file: {filename}")
 
             asset_names = {
-                name.removeprefix("assets/")
+                name.removeprefix(f"{PACKAGE_ROOT}/assets/")
                 for info, name in zip(infos, names)
-                if name.startswith("assets/") and not info.is_dir()
+                if name.startswith(f"{PACKAGE_ROOT}/assets/") and not info.is_dir()
             }
             editor_asset_names = {
-                name.removeprefix("editor_assets/")
+                name.removeprefix(f"{PACKAGE_ROOT}/editor_assets/")
                 for info, name in zip(infos, names)
-                if name.startswith("editor_assets/") and not info.is_dir()
+                if name.startswith(f"{PACKAGE_ROOT}/editor_assets/")
+                and not info.is_dir()
             }
             for filename in sorted(asset_names - editor_asset_names):
                 issues.append(
@@ -280,8 +281,15 @@ def build_archive(theme_dir: Path | str, output_path: Path | str) -> str:
     with zipfile.ZipFile(
         output_path, mode="w", compression=zipfile.ZIP_DEFLATED, compresslevel=9
     ) as archive:
+        root_info = zipfile.ZipInfo(f"{PACKAGE_ROOT}/", PACKAGE_TIMESTAMP)
+        root_info.create_system = 3
+        root_info.external_attr = 0o40755 << 16
+        archive.writestr(root_info, b"")
+
         for directory in REQUIRED_DIRECTORIES:
-            info = zipfile.ZipInfo(f"{directory}/", PACKAGE_TIMESTAMP)
+            info = zipfile.ZipInfo(
+                f"{PACKAGE_ROOT}/{directory}/", PACKAGE_TIMESTAMP
+            )
             info.create_system = 3
             info.external_attr = 0o40755 << 16
             archive.writestr(info, b"")
@@ -297,7 +305,8 @@ def build_archive(theme_dir: Path | str, output_path: Path | str) -> str:
             if expected_suffix is not None and path.suffix != expected_suffix:
                 continue
 
-            info = zipfile.ZipInfo(relative.as_posix(), PACKAGE_TIMESTAMP)
+            archive_path = f"{PACKAGE_ROOT}/{relative.as_posix()}"
+            info = zipfile.ZipInfo(archive_path, PACKAGE_TIMESTAMP)
             info.create_system = 3
             info.external_attr = 0o100644 << 16
             info.compress_type = zipfile.ZIP_DEFLATED
