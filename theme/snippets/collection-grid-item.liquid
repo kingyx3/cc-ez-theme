@@ -1,0 +1,13 @@
+<div class="grid__item {{ collection_item_width }}">
+  <a class="card-wrapper" href="{{ collection.url }}">
+    {% if collection.image != blank %}
+      <img
+        src="{{ collection.image | img_url: '600x' }}"
+        alt="{{ collection.title | escape }}"
+        loading="lazy"
+        width="600"
+      >
+    {% endif %}
+    <h2>{{ collection.title | escape }}</h2>
+  </a>
+</div>

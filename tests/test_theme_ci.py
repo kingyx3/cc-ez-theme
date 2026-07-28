@@ -40,9 +40,22 @@ class ThemeCITests(unittest.TestCase):
         (theme / "sections" / "plain.liquid").write_text(
             "<p>Static section</p>\n", encoding="utf-8"
         )
+        (theme / "snippets" / "card.liquid").write_text(
+            "<article>Card</article>\n", encoding="utf-8"
+        )
         (theme / "templates" / "home.liquid").write_text(
-            "{{ 'app.css?v=1' | asset_url }}\n{% section 'hero' %}\n",
+            "{{ 'app.css?v=1' | asset_url }}\n"
+            "{% section 'hero' %}\n"
+            "{% include 'card' %}\n"
+            "{% comment %}{% include 'not-a-real-snippet' %}{% endcomment %}\n",
             encoding="utf-8",
+        )
+        (theme / "templates" / "ignored.liquid.backup").write_text(
+            "Not a runtime template\n", encoding="utf-8"
+        )
+        (theme / "editor_assets").mkdir()
+        (theme / "editor_assets" / "draft.css").write_text(
+            "Not a runtime asset\n", encoding="utf-8"
         )
         (theme / "README.md").write_text("Not shipped\n", encoding="utf-8")
         return theme
@@ -72,6 +85,8 @@ class ThemeCITests(unittest.TestCase):
             names = archive.namelist()
         self.assertIn("layout/theme.liquid", names)
         self.assertNotIn("README.md", names)
+        self.assertNotIn("templates/ignored.liquid.backup", names)
+        self.assertFalse(any(name.startswith("editor_assets/") for name in names))
 
     def test_missing_and_non_directory_theme_paths(self) -> None:
         missing = self.root / "missing"
@@ -113,13 +128,16 @@ class ThemeCITests(unittest.TestCase):
     def test_missing_asset_and_section_references(self) -> None:
         theme = self.make_theme()
         (theme / "templates" / "home.liquid").write_text(
-            "{{ 'missing.css' | asset_url }}\n{% section 'missing' %}\n",
+            "{{ 'missing.css' | asset_url }}\n"
+            "{% section 'missing' %}\n"
+            "{% render 'missing' %}\n",
             encoding="utf-8",
         )
 
         issues = theme_ci.validate_theme(theme)
         self.assertTrue(any("missing local asset 'missing.css'" in issue for issue in issues))
         self.assertTrue(any("missing section 'missing'" in issue for issue in issues))
+        self.assertTrue(any("missing snippet 'missing'" in issue for issue in issues))
 
     def test_section_schema_errors(self) -> None:
         theme = self.make_theme()
@@ -172,6 +190,9 @@ class ThemeCITests(unittest.TestCase):
         self.assertIn("Archive contains duplicate paths", issues)
         self.assertTrue(any("Unsafe archive path" in issue for issue in issues))
         self.assertTrue(any("Unexpected theme/ wrapper" in issue for issue in issues))
+        self.assertTrue(
+            any("Unexpected top-level archive path" in issue for issue in issues)
+        )
         self.assertTrue(any("Forbidden metadata in archive" in issue for issue in issues))
         self.assertTrue(any("Archive is missing directory" in issue for issue in issues))
         self.assertTrue(any("Archive is missing file" in issue for issue in issues))
