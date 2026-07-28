@@ -1,0 +1,9 @@
+{% comment %}
+  Safe fallback for stores where identity normalization is enabled.
+  The regular phone input remains visible in the customer details form.
+{% endcomment %}
+<input
+  type="hidden"
+  name="{{ country_code_field_name | escape }}"
+  value="{{ default_country_code | escape }}"
+>

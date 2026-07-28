@@ -31,12 +31,26 @@ SCHEMA_BLOCK = re.compile(
     r"{%\s*schema\s*%}(?P<body>.*?){%\s*endschema\s*%}",
     re.DOTALL,
 )
+LIQUID_COMMENT = re.compile(
+    r"{%\s*comment\s*%}.*?{%\s*endcomment\s*%}",
+    re.DOTALL,
+)
 ASSET_REFERENCE = re.compile(
     r"(?P<quote>['\"])(?P<name>.+?)(?P=quote)\s*\|\s*asset_url\b"
 )
 SECTION_REFERENCE = re.compile(
     r"{%\s*section\s+(?P<quote>['\"])(?P<name>.+?)(?P=quote)\s*%}"
 )
+SNIPPET_REFERENCE = re.compile(
+    r"{%\s*(?:include|render)\s+(?P<quote>['\"])(?P<name>.+?)(?P=quote)"
+)
+PACKAGE_SUFFIXES = {
+    "config": ".json",
+    "layout": ".liquid",
+    "sections": ".liquid",
+    "snippets": ".liquid",
+    "templates": ".liquid",
+}
 PACKAGE_TIMESTAMP = (2020, 1, 1, 0, 0, 0)
 
 
@@ -50,16 +64,22 @@ def _validate_liquid(
     path: Path, text: str, theme_dir: Path, issues: list[str]
 ) -> None:
     relative = path.relative_to(theme_dir).as_posix()
+    references = LIQUID_COMMENT.sub("", text)
 
-    for match in ASSET_REFERENCE.finditer(text):
+    for match in ASSET_REFERENCE.finditer(references):
         asset_name = match.group("name").partition("?")[0]
         if not (theme_dir / "assets" / asset_name).is_file():
             issues.append(f"{relative}: missing local asset {asset_name!r}")
 
-    for match in SECTION_REFERENCE.finditer(text):
+    for match in SECTION_REFERENCE.finditer(references):
         section_name = match.group("name")
         if not (theme_dir / "sections" / f"{section_name}.liquid").is_file():
             issues.append(f"{relative}: missing section {section_name!r}")
+
+    for match in SNIPPET_REFERENCE.finditer(references):
+        snippet_name = match.group("name")
+        if not (theme_dir / "snippets" / f"{snippet_name}.liquid").is_file():
+            issues.append(f"{relative}: missing snippet {snippet_name!r}")
 
     if path.parent != theme_dir / "sections":
         return
@@ -170,6 +190,8 @@ def validate_archive(archive_path: Path | str) -> list[str]:
                     issues.append(f"Unsafe archive path: {name}")
                 if path.parts and path.parts[0] == "theme":
                     issues.append(f"Unexpected theme/ wrapper: {name}")
+                if path.parts and path.parts[0] not in REQUIRED_DIRECTORIES:
+                    issues.append(f"Unexpected top-level archive path: {name}")
                 if _is_forbidden(path):
                     issues.append(f"Forbidden metadata in archive: {name}")
 
@@ -217,7 +239,11 @@ def build_archive(theme_dir: Path | str, output_path: Path | str) -> str:
             if not path.is_file():
                 continue
             relative = path.relative_to(theme_dir)
-            if relative.as_posix() == "README.md":
+            root_directory = relative.parts[0]
+            if root_directory not in REQUIRED_DIRECTORIES:
+                continue
+            expected_suffix = PACKAGE_SUFFIXES.get(root_directory)
+            if expected_suffix is not None and path.suffix != expected_suffix:
                 continue
 
             info = zipfile.ZipInfo(relative.as_posix(), PACKAGE_TIMESTAMP)
