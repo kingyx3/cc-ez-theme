@@ -91,11 +91,13 @@ class ThemeCITests(unittest.TestCase):
         self.assertEqual(theme_ci.validate_archive(first_archive), [])
         with zipfile.ZipFile(first_archive) as archive:
             names = archive.namelist()
-        self.assertIn("layout/theme.liquid", names)
-        self.assertIn("editor_assets/app.css", names)
-        self.assertIn("editor_config/settings_schema.json", names)
+        self.assertIn("cc-ez-theme/layout/theme.liquid", names)
+        self.assertIn("cc-ez-theme/editor_assets/app.css", names)
+        self.assertIn("cc-ez-theme/editor_config/settings_schema.json", names)
         self.assertNotIn("README.md", names)
-        self.assertNotIn("templates/ignored.liquid.backup", names)
+        self.assertNotIn(
+            "cc-ez-theme/templates/ignored.liquid.backup", names
+        )
 
     def test_missing_and_non_directory_theme_paths(self) -> None:
         missing = self.root / "missing"
@@ -217,9 +219,8 @@ class ThemeCITests(unittest.TestCase):
         issues = theme_ci.validate_archive(archive)
         self.assertIn("Archive contains duplicate paths", issues)
         self.assertTrue(any("Unsafe archive path" in issue for issue in issues))
-        self.assertTrue(any("Unexpected theme/ wrapper" in issue for issue in issues))
         self.assertTrue(
-            any("Unexpected top-level archive path" in issue for issue in issues)
+            any("Unexpected archive root" in issue for issue in issues)
         )
         self.assertTrue(any("Forbidden metadata in archive" in issue for issue in issues))
         self.assertTrue(any("Archive is missing directory" in issue for issue in issues))
@@ -230,9 +231,15 @@ class ThemeCITests(unittest.TestCase):
         archive = self.root / "theme.zip"
         theme_ci.build_archive(theme, archive)
 
-        with mock.patch.object(zipfile.ZipFile, "testzip", return_value="assets/app.css"):
+        with mock.patch.object(
+            zipfile.ZipFile,
+            "testzip",
+            return_value="cc-ez-theme/assets/app.css",
+        ):
             issues = theme_ci.validate_archive(archive)
-        self.assertIn("Archive CRC failed for: assets/app.css", issues)
+        self.assertIn(
+            "Archive CRC failed for: cc-ez-theme/assets/app.css", issues
+        )
 
     def test_archive_asset_and_editor_asset_filenames_must_match(self) -> None:
         theme = self.make_theme()
@@ -243,15 +250,15 @@ class ThemeCITests(unittest.TestCase):
         with zipfile.ZipFile(archive) as source:
             for info in source.infolist():
                 if info.is_dir() or info.filename in {
-                    "assets/app.css",
-                    "editor_assets/app.css",
+                    "cc-ez-theme/assets/app.css",
+                    "cc-ez-theme/editor_assets/app.css",
                 }:
                     continue
                 entries.append((info.filename, source.read(info).decode("utf-8")))
         entries.extend(
             [
-                ("assets/storefront-only.css", "body {}\n"),
-                ("editor_assets/editor-only.css", "body {}\n"),
+                ("cc-ez-theme/assets/storefront-only.css", "body {}\n"),
+                ("cc-ez-theme/editor_assets/editor-only.css", "body {}\n"),
             ]
         )
         mismatch = self.make_zip("mismatch.zip", entries)
