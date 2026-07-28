@@ -1,0 +1,263 @@
+{
+  "current": "editor",
+  "presets": {
+    "editor": {
+      "colors_solid_button_labels": "#FFFFFF",
+      "colors_accent_1": "#000000",
+      "colors_text": "#000000",
+      "colors_outline_button_labels": "#051C62",
+      "colors_background_1": "#FFFFFF",
+      "gradient_background_1": "#FFFFFF",
+      "page_width": 1600,
+      "body_bg_image": "",
+      "bg_img_position": "top center",
+      "bg_img_repeat": 0,
+      "type_header_font": {
+        "category": "sans-serif",
+        "font_family": "Alata",
+        "font_id": 15,
+        "name": "Alata",
+        "title": "Alata",
+        "variant": "regular",
+        "variant_file": "https://fonts.gstatic.com/s/alata/v2/PbytFmztEwbIofe6xKcRQEOX.ttf"
+      },
+      "type_body_font": {
+        "category": "sans-serif",
+        "font_family": "Alata",
+        "font_id": 15,
+        "name": "Alata",
+        "title": "Alata",
+        "variant": "regular",
+        "variant_file": "https://fonts.gstatic.com/s/alata/v2/PbytFmztEwbIofe6xKcRQEOX.ttf"
+      },
+      "body_font_style": "normal",
+      "body_font_weight": 400,
+      "header_font_style": "normal",
+      "header_font_weight": "700",
+      "product_description_position": "bottom",
+      "logo_img": "https://cdn.store-assets.com/s/1441746/f/17363520.png",
+      "logo_width": 100,
+      "favicon_img": "https://cdn.store-assets.com/s/1441746/f/17363518.png",
+      "meta_img": "https://cdn.store-assets.com/s/1441746/f/17363520.png",
+      "use_original_image": "1",
+      "collection_show_variant_img": "1",
+      "product_img_res": "grande",
+      "show_add_to_cart_button": 1,
+      "sections": {
+        "header": {
+          "type": "header",
+          "settings": {
+            "logo": "https://cdn.store-assets.com/s/1441746/f/17363518.png",
+            "align_logo": "middle-left",
+            "logo_max_width": 110,
+            "main_linklist": "main-menu",
+            "message": 0,
+            "home_page_only": true,
+            "message_text": "Announce something here",
+            "message_link": "",
+            "color_bg": "#FFFFFF",
+            "color_text": "#000000",
+            "enable_sticky_header": true,
+            "header_bg_color": "rgba(255, 255, 255, 1)",
+            "transparent_header": 0,
+            "secondary_color_text": "#FFFFFF",
+            "logo_secondary": "https://cdn.store-assets.com/s/1441746/f/17363520.png"
+          }
+        },
+        "main-cart-featured-collection": {
+          "type": "main-cart-featured-collection",
+          "settings": {
+            "title": "",
+            "collection__id": "feature-on-homepage",
+            "products_per_row": 4,
+            "products_to_show": 4,
+            "show_view_all": true,
+            "swipe_on_mobile": true,
+            "show_secondary_image": true,
+            "product_bg_color": "rgba(245, 245, 245, 1)",
+            "show_product_info": true
+          }
+        },
+        "main-collection": {
+          "type": "main-collection",
+          "settings": {
+            "products_per_row": 5,
+            "show_secondary_image": true,
+            "show_add_to_cart_button": true,
+            "image_ratio": "square",
+            "product_bg_color": "rgba(245, 245, 245, 1)",
+            "show_product_info": true
+          }
+        },
+        "main-product": {
+          "type": "main-product",
+          "settings": {
+            "variant_options_display": "radio-img",
+            "product_description_position": "bottom",
+            "wrapper_bg_color": "rgba(245, 245, 245, 1)",
+            "show_selected_variant_image": true
+          },
+          "blocks": {
+            "text-1": {
+              "type": "text",
+              "settings": {
+                "image": "https://cdn.store-assets.com/s/943101/f/8656454.png",
+                "text": "Worldwide shipping"
+              }
+            },
+            "main-product-bok5afngub5-ooz1xoo": {
+              "type": "text",
+              "settings": {
+                "image": "https://cdn.store-assets.com/s/943101/f/8656465.png",
+                "text": "Secure payments"
+              }
+            },
+            "main-product-0wkbnnri6s7r-budfnl": {
+              "type": "text",
+              "settings": {
+                "image": "https://cdn.store-assets.com/s/943101/f/8656462.png",
+                "text": "Authentic products"
+              }
+            }
+          },
+          "blocks_order": [
+            "text-1",
+            "main-product-bok5afngub5-ooz1xoo",
+            "main-product-0wkbnnri6s7r-budfnl"
+          ]
+        },
+        "footer": {
+          "type": "footer",
+          "blocks": {
+            "footer-1": {
+              "type": "about_us",
+              "settings": {
+                "title": "Our mission",
+                "text": "📦  MTG Sealed Specialist (Boxes, Bundles & Secret Lairs) 📦  ✅  Shipped in sturdy collector-grade packaging  ✅  🤝  Meeting Points: Outram Park / Tanjong Pagar MRT ⭐  Welcome bulk deals⭐  Authentic. Factory Sealed ⭐  From Sealed to Sleeved. Since 1994 ⭐ "
+              }
+            },
+            "footer-2": {
+              "type": "follow_us",
+              "settings": {
+                "title": "Follow us",
+                "twitter": "",
+                "facebook": "https://facebook.com/",
+                "instagram": "https://instagram.com/",
+                "tiktok": "",
+                "whatsapp": "https://wa.me/",
+                "line": "",
+                "wechat": "",
+                "youtube": ""
+              }
+            },
+            "footer-payment": {
+              "type": "payment_accept",
+              "settings": {
+                "title": "We accept",
+                "show_payment_method": true,
+                "show_visa_icon": 0,
+                "show_master_icon": 0,
+                "show_amex_icon": 0,
+                "show_paypal_icon": 0,
+                "show_diners_icon": 0,
+                "show_discover_icon": 0
+              }
+            },
+            "footer-sj4k55g9j8-fojkr4l": {
+              "type": "quick_link",
+              "settings": {
+                "title": "Quick links"
+              }
+            }
+          },
+          "blocks_order": [
+            "footer-2",
+            "footer-payment",
+            "footer-sj4k55g9j8-fojkr4l",
+            "footer-1"
+          ],
+          "settings": {
+            "color_footer_background": "#FFFFFF",
+            "color_footer_heading_text": "#000000",
+            "color_footer_body_text": "#000000"
+          }
+        },
+        "1667498127486": {
+          "settings": {
+            "title": "Popular",
+            "collection__id": "feature-on-homepage",
+            "products_per_row": 5,
+            "products_to_show": 20,
+            "show_view_all": true,
+            "image_ratio": "square",
+            "show_secondary_image": true,
+            "show_add_to_cart_button": true,
+            "swipe_on_mobile": true,
+            "center_title": true,
+            "show_product_info": true,
+            "product_bg_color": "rgba(246, 246, 246, 1)"
+          },
+          "type": "featured-collection"
+        },
+        "1684403242688": {
+          "settings": {
+            "title": "New Arrivals",
+            "collection__id": "the-hobbit",
+            "products_per_row": 5,
+            "products_to_show": 20,
+            "show_view_all": true,
+            "image_ratio": "square",
+            "show_secondary_image": true,
+            "show_add_to_cart_button": true,
+            "swipe_on_mobile": true,
+            "center_title": true,
+            "show_product_info": true,
+            "product_bg_color": "rgba(245, 245, 245, 1)"
+          },
+          "type": "featured-collection"
+        },
+        "1684412368816": {
+          "settings": {
+            "image": "https://cdn.store-assets.com/s/1441746/f/17367541.png",
+            "image_2": "https://cdn.store-assets.com/s/1441746/f/17370493.png",
+            "desktop_text_box_position": "center",
+            "show_text_box": 0,
+            "image_overlay_opacity": 20,
+            "show_text_below": 0
+          },
+          "type": "image-banner",
+          "blocks_order": [
+            "1684412368816-0",
+            "1684412368816-2"
+          ],
+          "blocks": {
+            "1684412368816-0": {
+              "type": "heading",
+              "settings": {
+                "heading": "Marvel Super Heroes",
+                "heading_size": "large"
+              }
+            },
+            "1684412368816-2": {
+              "type": "buttons",
+              "settings": {
+                "button_label_1": "Shop Now",
+                "button_link_1": "/collections/marvel-super-heroes",
+                "button_style_secondary_1": true
+              }
+            }
+          }
+        }
+      },
+      "content_for_index": [
+        "1684412368816",
+        "1684403242688",
+        "1667498127486"
+      ],
+      "placeholder": {
+        "featured_single_product": "https://s3-ap-southeast-1.amazonaws.com/eesb.themes/onboarding/candy/en_placeholder_featured-single-product.jpg",
+        "featured_blog": "https://s3-ap-southeast-1.amazonaws.com/eesb.themes/onboarding/candy/en_placeholder_featured-blog.jpg"
+      }
+    }
+  }
+}
