@@ -1,0 +1,77 @@
+name: Package EasyStore theme
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Build downloadable theme ZIP
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Validate theme structure
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          required_directories=(
+            assets
+            config
+            layout
+            sections
+            snippets
+            templates
+          )
+
+          for directory in "${required_directories[@]}"; do
+            test -d "theme/${directory}" || {
+              echo "::error::Missing required theme directory: theme/${directory}"
+              exit 1
+            }
+          done
+
+          test -f theme/layout/theme.liquid || {
+            echo "::error::Missing required file: theme/layout/theme.liquid"
+            exit 1
+          }
+
+      - name: Create EasyStore upload ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          (
+            cd theme
+            zip -q -r "${GITHUB_WORKSPACE}/cc-ez-theme.zip" . \
+              -x "README.md" \
+              -x "*.DS_Store" \
+              -x "__MACOSX/*"
+          )
+
+          unzip -t cc-ez-theme.zip
+          test -s cc-ez-theme.zip
+
+          {
+            echo "### EasyStore theme package"
+            echo
+            echo "\`cc-ez-theme.zip\` is ready to download from this workflow run."
+            echo
+            echo "SHA-256: \`$(sha256sum cc-ez-theme.zip | cut -d ' ' -f 1)\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload theme package
+        uses: actions/upload-artifact@v7
+        with:
+          path: cc-ez-theme.zip
+          archive: false
+          if-no-files-found: error
+          retention-days: 30
