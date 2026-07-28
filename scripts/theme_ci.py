@@ -15,12 +15,18 @@ from typing import Sequence
 REQUIRED_DIRECTORIES = (
     "assets",
     "config",
+    "editor_assets",
+    "editor_config",
     "layout",
     "sections",
     "snippets",
     "templates",
 )
 REQUIRED_FILES = (
+    "config/settings_data.json",
+    "config/settings_schema.json",
+    "editor_config/settings_data.json",
+    "editor_config/settings_schema.json",
     "layout/theme.liquid",
     "templates/home.liquid",
 )
@@ -46,6 +52,7 @@ SNIPPET_REFERENCE = re.compile(
 )
 PACKAGE_SUFFIXES = {
     "config": ".json",
+    "editor_config": ".json",
     "layout": ".liquid",
     "sections": ".liquid",
     "snippets": ".liquid",
@@ -131,6 +138,29 @@ def validate_theme(theme_dir: Path | str) -> list[str]:
         if not (theme_dir / filename).is_file():
             issues.append(f"Missing required file: {filename}")
 
+    assets_dir = theme_dir / "assets"
+    editor_assets_dir = theme_dir / "editor_assets"
+    if assets_dir.is_dir() and editor_assets_dir.is_dir():
+        asset_names = {
+            path.relative_to(assets_dir).as_posix()
+            for path in assets_dir.rglob("*")
+            if path.is_file()
+        }
+        editor_asset_names = {
+            path.relative_to(editor_assets_dir).as_posix()
+            for path in editor_assets_dir.rglob("*")
+            if path.is_file()
+        }
+        for filename in sorted(asset_names - editor_asset_names):
+            issues.append(
+                "editor_assets/: missing counterpart for "
+                f"assets/{filename}"
+            )
+        for filename in sorted(editor_asset_names - asset_names):
+            issues.append(
+                f"assets/: missing counterpart for editor_assets/{filename}"
+            )
+
     for path in sorted(theme_dir.rglob("*")):
         relative_path = path.relative_to(theme_dir)
         relative = relative_path.as_posix()
@@ -203,6 +233,27 @@ def validate_archive(archive_path: Path | str) -> list[str]:
             for filename in REQUIRED_FILES:
                 if filename not in names:
                     issues.append(f"Archive is missing file: {filename}")
+
+            asset_names = {
+                name.removeprefix("assets/")
+                for info, name in zip(infos, names)
+                if name.startswith("assets/") and not info.is_dir()
+            }
+            editor_asset_names = {
+                name.removeprefix("editor_assets/")
+                for info, name in zip(infos, names)
+                if name.startswith("editor_assets/") and not info.is_dir()
+            }
+            for filename in sorted(asset_names - editor_asset_names):
+                issues.append(
+                    "Archive editor_assets/ is missing counterpart for "
+                    f"assets/{filename}"
+                )
+            for filename in sorted(editor_asset_names - asset_names):
+                issues.append(
+                    "Archive assets/ is missing counterpart for "
+                    f"editor_assets/{filename}"
+                )
 
             corrupt_file = archive.testzip()
             if corrupt_file is not None:
