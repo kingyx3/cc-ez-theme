@@ -1,0 +1,352 @@
+{{ 'component-price.css' | asset_url | stylesheet_tag }}
+{{ 'component-card.css' | asset_url | stylesheet_tag }}
+{{ 'component-product-grid.css' | asset_url | stylesheet_tag }}
+{{ 'component-loading-overlay.css' | asset_url | stylesheet_tag }}
+{{ 'component-slider.css' | asset_url | stylesheet_tag }}
+{{ 'template-collection.css' | asset_url | stylesheet_tag }}
+
+{% assign collection_id = section.settings.collection__id %}
+{% assign collection = collections[collection_id] %}
+
+
+{% assign products_to_display = collection.product_count %}
+
+{% if products_to_display > section.settings.products_to_show %}
+  {% assign products_to_display = section.settings.products_to_show %}
+  {% assign more_in_collection = true %}
+{% endif %}
+
+<style>
+  .title-center {
+    place-content: center;
+  }
+</style>
+
+
+<div id="section-{{ section.__key }}" class="spaced-section page-width{% if section.settings.swipe_on_mobile == true and products_to_display > 2 and section.settings.products_to_show > 2 %} page-width-desktop{% endif %}{% if section.settings.title == '' %} mt-0{% endif %}">
+  <div class="title-wrapper-with-link{% if section.settings.title == '' %} title-wrapper-with-link--no-heading mt-0{% endif %}{% if products_to_display > 2 and section.settings.swipe_on_mobile and section.settings.products_to_show > 2 %} title-wrapper--self-padded-tablet-down{% endif %}{% if section.settings.center_title == true %} title-center{% endif %}">
+    <h2 class="title{% if section.settings.title == '' %} title--no-heading{% endif %}">{{ section.settings.title }}</h2>
+
+    {% if section.settings.show_view_all and section.settings.swipe_on_mobile and more_in_collection %}
+      <a href="{{ collection.url }}" class="link underlined-link large-up-hide">{{ 'general.view_all' | t }}</a>
+    {% endif %}
+  </div>
+
+  {% if collection_id and products_to_display > 0 %}
+
+    <slider-component class="slider-mobile-gutter">
+      <ul class="grid grid--2-col product-grid{% if products_to_display == 4 or section.settings.collection == '' %} grid--3-col-tablet grid--{{section.settings.products_per_row}}-col-desktop{% else %} grid--3-col-tablet{% endif %}{% if products_to_display > 5 %} grid--one-third-max grid--{{section.settings.products_per_row}}-col-desktop grid--quarter-max{% endif %}{% if products_to_display > 2 and section.settings.swipe_on_mobile and section.settings.products_to_show > 2 %} slider slider--tablet grid--peek{% endif %}{% if section.settings.show_view_all == false or section.settings.products_to_display < section.settings.products_to_show %} negative-margin{% endif %}{% if section.settings.show_view_all and section.settings.products_to_display > section.settings.products_to_show %} negative-margin--small{% endif %}" role="list">
+        {% for product in collection.products limit: section.settings.products_to_show %}
+          <li class="grid__item{% if products_to_display > 2 and section.settings.swipe_on_mobile and section.settings.products_to_show > 2 %} slider__slide{% endif %}">
+            {% include 'product-card', show_secondary_image: section.settings.show_secondary_image, show_add_to_cart_button: section.settings.show_add_to_cart_button, image_ratio: section.settings.image_ratio, show_product_info: section.settings.show_product_info %}
+          </li>
+        {% endfor %}
+      </ul>
+      {% if products_to_display > 2 and section.settings.swipe_on_mobile and section.settings.products_to_show > 2 %}
+        <div class="slider-buttons no-js-hidden{% if products_to_display < 4 %} medium-hide{% endif %}{% if products_to_display < 3 %} small-hide{% endif %}">
+          <button
+            type="button"
+            class="slider-button slider-button--prev"
+            name="previous">{% include 'svg-definitions' with 'icon-caret' %}</button>
+          <div class="slider-counter caption">
+            <span class="slider-counter--current">1</span>
+            <span aria-hidden="true">
+              /
+            </span>
+            <span class="slider-counter--total">{{ products_to_display }}</span>
+          </div>
+          <button
+            type="button"
+            class="slider-button slider-button--next"
+            name="next">{% include 'svg-definitions' with 'icon-caret' %}</button>
+        </div>
+      {% endif %}
+    </slider-component>
+
+    {% if section.settings.show_view_all and more_in_collection %}
+      <div class="center{% if section.settings.swipe_on_mobile %} small-hide medium-hide{% endif %}">
+        <a href="{{ collection.url }}" class="button">
+          {{ 'general.view_all' | t }}
+        </a>
+      </div>
+    {% endif %}
+
+  {% else %}
+    <!-- Placeholder -->
+    <style>
+      .collection-placeholder-wrapper {
+        position: relative;
+      }
+      .collection-placeholder-wrapper .card {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -40%);
+        padding: 30px;
+        background: #F8F9FA;
+        color: #000;
+        box-shadow: 0 5px 30px #bbb;
+        opacity: 0;
+        z-index: 10;
+        transition: all 200ms ease-out;
+        width: 650px;
+        max-width: 90%;
+      }
+      .collection-placeholder-wrapper .collection-placeholder-grid {
+        transition: all 200ms ease-out;
+      }
+      .collection-placeholder-wrapper:hover .collection-placeholder-grid {
+        opacity: 0.4;
+      }
+      .collection-placeholder-wrapper:hover .card {
+        opacity: 1;
+        transform: translate(-50%, -50%);
+      }
+      @media screen and (max-width: 500px) {
+        .collection-placeholder-wrapper .collection-placeholder-grid {
+          opacity: 0.4;
+        }
+        .collection-placeholder-wrapper .card {
+          opacity: 1;
+          transform: translate(-50%, -50%);
+        }
+      }
+    </style>
+    <div class="collection-placeholder-wrapper">
+      <ul class="collection-placeholder-grid grid grid--2-col grid--4-col-desktop grid--quarter-max">
+        {% for i in (1..8) %}
+          <li class="grid__item text-center">
+            {% capture placeholder_image_url %}https://themes.easystore.co/onboarding/placeholder/products/frame/product-frame-{{ i }}.png{% endcapture %}
+            <a href="https://{{GLOBALS.ADMIN_DOMAIN}}/products/" class="full-unstyled-link">
+              <img src="{{ placeholder_image_url }}" width="100%">
+              <div>
+                {{ 'home_page.onboarding.product_title' | t: i }}
+              </div>
+              <div>
+                {{ shop.money_prefix }} 19.99 {{ shop.money_suffix }}
+              </div>
+            </a>
+          </li>
+        {% endfor %}
+      </ul>
+
+      <div class="card card--outline text-center">
+        <h3>{{ 'home_page.onboarding.modal_title' | t }}</h3>
+        <p>{{ 'home_page.onboarding.no_product_html' | t }}</p>
+        <p>
+          <a class="btn btn--primary" href="https://{{GLOBALS.ADMIN_DOMAIN}}/products/new">{{ 'home_page.onboarding.add_product' | t }}</a>
+        </p>
+      </div>
+    </div>
+
+  {% endif %}
+
+</div>
+
+{% schema %}
+  {
+    "name": {
+      "en_US": "Featured Collection",
+      "zh_TW": "精選商品目錄",
+      "zh_CN": "精选商品目录",
+      "ms_MY": "Koleksi Terpilih"
+    },
+    "tag": "section",
+    "class": "spaced-section",
+    "settings": [
+      {
+        "type": "text",
+        "id": "title",
+        "default": "Featured collection",
+        "label": {
+          "en_US": "Heading",
+          "ja_JP": "見出し",
+          "ko_KR": "제목",
+          "ms_MY": "Tajuk",
+          "th_TH": "ส่วนหัว",
+          "zh_CN": "商品分类标题",
+          "zh_TW": "商品分類標題"
+        }
+      },
+      {
+        "type": "collection",
+        "id": "collection__id",
+        "default": "feature-on-homepage",
+        "label": {
+          "en_US": "Collection",
+          "ja_JP": "コレクション",
+          "ko_KR": "컬렉션",
+          "ms_MY": "Koleksi",
+          "th_TH": "คอลเลกชัน",
+          "zh_CN": "分类",
+          "zh_TW": "分類"
+        }
+      },
+      {
+        "type": "range",
+        "id": "products_per_row",
+        "min": 2,
+        "max": 5,
+        "step": 1,
+        "default": 4,
+        "label": {
+          "en_US": "Collections per row",
+          "ja_JP": "行あたりのコレクション数",
+          "ko_KR": "열 별 컬렉션",
+          "ms_MY": "Koleksi setiap baris",
+          "th_TH": "คอลเลกชันต่อแถว",
+          "zh_CN": "目录每行显示数量",
+          "zh_TW": "目錄每行顯示數量"
+        }
+      },
+      {
+        "type": "range",
+        "id": "products_to_show",
+        "min": 2,
+        "max": 20,
+        "step": 2,
+        "default": 8,
+        "label": {
+          "en_US": "Products display",
+          "ja_JP": "行あたりのコレクション数",
+          "ko_KR": "열 별 컬렉션",
+          "ms_MY": "Koleksi setiap baris",
+          "th_TH": "คอลเลกชันต่อแถว",
+          "zh_CN": "商品展示总数",
+          "zh_TW": "商品展示總數"
+        }
+      }, {
+        "type": "checkbox",
+        "id": "show_view_all",
+        "default": true,
+        "label": {
+          "en_US": "Show all button",
+          "zh_TW": "顯示按鈕",
+          "zh_CN": "显示按钮",
+          "ms_MY": "Tunjukkan semua butang"
+        }
+      }, {
+        "type": "select",
+        "id": "image_ratio",
+        "options": [
+          {
+            "value": "portrait",
+            "label": {
+              "en_US": "Portrait",
+              "zh_TW": "直向",
+              "zh_CN": "直向",
+              "ms_MY": "Potret"
+            }
+          },
+          {
+            "value": "landscape",
+            "label": {
+              "en_US": "Landscape",
+              "zh_TW": "橫向",
+              "zh_CN": "横向",
+              "ms_MY": "Melintang"
+            }
+          },
+          {
+            "value": "square",
+            "label": {
+              "en_US": "Square",
+              "zh_TW": "正方形",
+              "zh_CN": "正方形",
+              "ms_MY": "Segi empat sama"
+            }
+          },
+          {
+            "value": "circle",
+            "label": {
+              "en_US": "Circle",
+              "zh_TW": "圓形",
+              "zh_CN": "圆形",
+              "ms_MY": "Bulat"
+            }
+          }, {
+            "value": "16-9",
+            "label": "16:9"
+          }
+        ],
+        "default": "square",
+        "label": {
+          "en_US": "Image Ratio",
+          "zh_TW": "圖片比例",
+          "zh_CN": "图片比例",
+          "ms_MY": "Nisbah Imej"
+        }
+      }, {
+        "type": "checkbox",
+        "id": "show_secondary_image",
+        "default": false,
+        "label": {
+          "en_US": "Show secondary image",
+          "zh_TW": "顯示次要圖片",
+          "zh_CN": "显示次要图像",
+          "ms_MY": "Tunjukkan imej sekunder"
+        }
+      }, {
+        "type": "checkbox",
+        "id": "show_add_to_cart_button",
+        "default": true,
+        "label": {
+          "en_US": "Show add to cart button",
+          "zh_TW": "顯示加入購物車按鈕",
+          "zh_CN": "显示加入购物车按钮",
+          "ms_MY": "Tunjukkan butang tambah ke troli"
+        }
+      }, {
+        "type": "checkbox",
+        "id": "swipe_on_mobile",
+        "default": true,
+        "label": {
+          "en_US": "Swipe on Mobile",
+          "zh_TW": "手機版顯示滑動圖片",
+          "zh_CN": "手机版显示滑动图片",
+          "ms_MY": "Leret pada mudah alih"
+        }
+      }, {
+        "type": "checkbox",
+        "id": "center_title",
+        "default": false,
+        "label": {
+          "en_US": "Center Title",
+          "zh_TW": "標題置中",
+          "zh_CN": "标题置中",
+          "ms_MY": "Tajuk Tengah"
+        }
+      }, {
+        "type": "checkbox",
+        "id": "show_product_info",
+        "default": true,
+        "label": {
+          "en_US": "Show Product Info",
+          "zh_TW": "顯示產品資料",
+          "zh_CN": "显示产品资料",
+          "ms_MY": "Tunjuk info Produk"
+        }
+      }, {
+        "type": "color",
+        "id": "product_bg_color",
+        "default": "rgba(245, 245, 245, 1)",
+        "label": {
+          "en_US": "Product background color",
+          "zh_TW": "產品背景色",
+          "zh_CN": "产品背景色",
+          "ms_MY": "Warna latar belakang produk"
+        }
+      }
+    ],
+    "presets": [
+      {
+        "name": {
+          "en_US": "Featured Collection",
+          "zh_TW": "精選商品目錄",
+          "zh_CN": "精选商品目录",
+          "ms_MY": "Koleksi Terpilih"
+        }
+      }
+    ]
+  }
+{% endschema %}

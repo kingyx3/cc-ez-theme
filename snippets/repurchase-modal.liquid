@@ -1,0 +1,442 @@
+<div class="repurchase-modal-wrapper page-width">
+  <div id="repurchase-modal" class="repurchase-modal focus-inset" aria-modal="true" role="dialog" tabindex="-1">
+    <div class="repurchase-modal__header">
+      <div class="repurchase-modal__heading">{{ 'customer.order.buy_again' | t }}</div>
+      <button type="button" class="repurchase-modal__close modal__close-button link link--text focus-inset" aria-label="{{ 'accessibility.close' | t }}" onclick="closeRepurchaseModal()">
+      {% include 'svg-definitions' with 'icon-close' %}
+      </button>
+    </div>
+    <ul class="note errors" id="errorMessage"></ul>
+    <div class="repurchase-modal__body"></div>
+    <div class="repurchase-modal__footer">
+    	<button class="btn button" id="repurchaseButton">{{ 'products.product.add_to_cart' | t }}</button>
+    </div>
+  </div>
+</div>
+<div id="repurchase-modal-backdrop"></div>
+
+<style>
+#repurchase-modal-backdrop {
+  display: none;
+  opacity: 0;
+}
+
+.no-scroll {
+  overflow: hidden;
+}
+
+.repurchase-modal-wrapper {
+  position: relative;
+}
+
+.repurchase-modal-wrapper .repurchase-modal {
+  display: block;
+}
+
+.repurchase-modal {
+  background-color: #F8F9FA;
+  border-color: rgba(18, 18, 18, 0.2);
+  border-style: solid;
+  border-width: 1px;
+  padding: 25px 35px;
+  position: fixed;
+  top: 10vh;
+  left: 50%;
+  transform: translate(-50%, 100%);
+  visibility: hidden;
+  width: 100%;
+  z-index: -1;
+  display: none;
+  opacity: 0;
+}
+
+#MainContent .repurchase-modal {
+  color: rgb(var(--color-foreground));
+  border-color: rgb(var(--color-foreground));
+  background-color: rgb(var(--color-background));
+}
+
+@media screen and (min-width: 750px) {
+  .repurchase-modal {
+    max-width: 600px;
+  }
+}
+
+.repurchase-modal.animate {
+  transition: transform var(--duration-short) ease,
+    visibility 0s var(--duration-short) ease;
+}
+
+.repurchase-modal.active {
+  transform: translate(-50%, 0);
+  transition: transform var(--duration-default) ease, visibility 0s;
+  visibility: visible;
+  z-index: 10000;
+  opacity: 1;
+}
+
+#repurchase-modal-backdrop.active {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.7);
+  z-index: 2001;
+  display: block;
+  opacity: 1;
+  transition: opacity var(--duration-default) ease, visibility 0s;
+}
+
+.repurchase-modal__header {
+  align-items: flex-start;
+  display: flex;
+}
+
+.repurchase-modal__heading {
+  align-items: center;
+  display: flex;
+  flex-grow: 1;
+  margin-bottom: 10px;
+  margin-top: 0;
+  font-size: 1.2em;
+  font-weight: bold;
+}
+
+.repurchase-modal__close {
+  margin-top: -8px !important;
+  margin-right: -15px !important;
+}
+
+.modal__close-button.link {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 0rem;
+  height: 3em;
+  width: 3em;
+  background-color: transparent;
+  border: none;
+  box-shadow: none;
+  min-width: 3em;
+  min-height: 3em;
+}
+  
+.modal__close-button.link:hover {
+  box-shadow: none;
+}
+  
+.modal__close-button .icon {
+  width: 1.7rem;
+  height: 1.7rem;
+  color: rgb(var(--color-foreground));
+}
+
+.repurchase-modal__body {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.repurchase-modal__footer {
+  margin-top: 20px;
+}
+
+.repurchase-modal__footer .btn {
+  width: 100%;
+}
+
+.repurchase-item-list {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+  border-bottom: 1px solid #ccc;
+}
+  
+.repurchase-item-list:last-child {
+  border: none;
+}
+  
+.repurchase-item-list:not(.unavailable):hover .text-left {
+  opacity: 0.8;
+}
+
+.repurchase-item-checkbox {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%; 
+  cursor: pointer; 
+}
+
+.repurchase-item-checkbox input[type="checkbox"] {
+  margin-right: 10px;
+  width: 15px;
+  height: 15px;
+}
+
+.repurchase-item-list.unavailable .repurchase-item-checkbox > div,
+.repurchase-item-list.unavailable .repurchase-item-checkbox .h5 {
+  color: #999;
+}
+  
+.repurchase-modal-separator {
+  color: #666;
+  text-align: left;
+}
+  
+.repurchase-modal-separator.mt-25 {
+  margin-top: 25px;
+}
+
+.label-sold-out {
+  background-color: #ddd;
+  color: #999;
+  font-size: 13px;
+  padding: 2px 15px;
+  border-radius: 15px;
+  flex-shrink: 0;
+}
+
+.repurchase-product {
+  display: flex;
+  flex-grow: 1; 
+  column-gap: 15px;
+}
+
+.repurchase-product .h5 {
+  font-size: 16px;
+  margin-bottom: 0;
+}
+
+.repurchase-product .product-img-wrapper {
+  width: 70px;
+  height: 70px;
+  flex-shrink: 0;
+}
+
+.repurchase-product .product-img-wrapper img {
+  object-fit: cover;
+  width: 100%;
+  height: 100%;
+}
+</style>
+
+<script type="text/javascript">
+  const repurchaseModal = document.getElementById('repurchase-modal');
+  const repurchaseModalBackdrop = document.getElementById('repurchase-modal-backdrop');
+  const errorMessage = document.getElementById('errorMessage');
+  let activeElementRepurchase;
+
+  const selectedVariantIds = [];
+
+  function handleCheckboxChange(checkbox) {
+    const variantId = checkbox.getAttribute('data-variant-id');
+
+    if (checkbox.checked) {
+      selectedVariantIds.push(Number(variantId));
+    } else {
+      const index = selectedVariantIds.indexOf(Number(variantId));
+      if (index > -1) {
+        selectedVariantIds.splice(index, 1);
+      }
+    }
+  }
+  
+  function formatPrice(amount, currency) {
+    let convert_amount = Number(amount),
+        price =  convert_amount.toFixed(currency.format_decimals).toString(),
+        prefix = currency.format_prefix != "" ? currency.format_prefix+' ' : '',
+        suffix = currency.format_suffix != "" ? ' '+currency.format_suffix : '';
+    if(currency.thousand_separator != "") {
+      let prices = price.split(".");
+          prices[0] = prices[0].replace(/\B(?=(\d{3})+(?!\d))/g, currency.thousand_separator);
+      price = prices.join(".");
+    }
+    
+    return `${prefix}${price}${suffix}` ;
+  }
+  
+  function updateRepurchaseButton() {
+    if (selectedVariantIds.length === 0) {
+      repurchaseButton.classList.add('btn--outline');
+      repurchaseButton.classList.add('button--secondary');
+      repurchaseButton.textContent = "Back to order";
+      repurchaseButton.onclick = closeRepurchaseModal;
+    } else {
+      repurchaseButton.classList.remove('btn--outline');
+      repurchaseButton.classList.remove('button--secondary');
+      repurchaseButton.textContent = "Add to cart";
+      repurchaseButton.onclick = null;
+    }
+  }
+  
+  function disableRepurchaseButton() {
+    console.log("repurchase button", selectedVariantIds);
+    if (selectedVariantIds.length === 0) {
+      repurchaseButton.classList.add('disabled');
+    } else {
+      repurchaseButton.classList.remove('disabled');
+    }
+  }
+
+  function handleRepurchaseBodyClick(evt) {
+    if (evt.target.id === 'repurchase-modal-backdrop') {
+      closeRepurchaseModal();
+    }
+  }
+
+  function openRepurchaseModal(event, button) {
+    event.stopPropagation();
+    const items = button.getAttribute('data-repurchase-items');
+    const repurchaseItems = JSON.parse(items);
+    const currency = button.getAttribute('data-currency');
+    const currencyFormat = JSON.parse(currency);
+    
+    renderModal(repurchaseItems, currencyFormat);
+
+    repurchaseModal.classList.add('animate', 'active');
+    repurchaseModalBackdrop.classList.add('active');
+    errorMessage.innerHTML = '';
+    errorMessage.classList.add('hide');
+
+    document.body.classList.add('no-scroll');
+    document.body.addEventListener('click', handleRepurchaseBodyClick, { capture: true });
+  }
+
+  function closeRepurchaseModal() {
+    repurchaseModal.classList.remove('active');
+    repurchaseModalBackdrop.classList.remove('active');
+	selectedVariantIds.length = 0;
+
+    document.body.classList.remove('no-scroll');
+    document.body.removeEventListener('click', handleRepurchaseBodyClick, { capture: true });
+  }
+
+  function setRepurchaseActiveElement(element) {
+    activeElementRepurchase = element;
+  }
+
+  function renderModal(repurchaseItems, currencyFormat) {
+    const modalCenter = document.querySelector('.repurchase-modal__body');
+    modalCenter.innerHTML = '';
+    
+    let modalContent = '';
+    let availableItems = [];
+  	let unavailableItems = [];
+
+	repurchaseItems.forEach(lineItem => {
+        const variantId = lineItem.variant_id;
+
+        if (lineItem.is_available) {
+          selectedVariantIds.push(Number(variantId));
+          availableItems.push(lineItem);
+        } else {
+          unavailableItems.push(lineItem);
+        }
+    });
+    
+    if (availableItems.length > 0) {
+      modalContent += generateItemContent(availableItems, currencyFormat);
+    }
+    if (unavailableItems.length > 0) {
+      modalContent += `<div class="repurchase-modal-separator ${availableItems.length > 0 ? 'mt-25' : ''}">{{ "customer.order.unvailable_item" | t }}</div>`;
+      modalContent += generateItemContent(unavailableItems, currencyFormat);
+    }
+
+    modalCenter.innerHTML = modalContent;
+    updateRepurchaseButton();
+    
+    const checkboxes = document.querySelectorAll('.repurchase-item-checkbox input[type="checkbox"]');
+    checkboxes.forEach(checkbox => {
+      checkbox.addEventListener('change', function () {
+        handleCheckboxChange(this);
+        disableRepurchaseButton();
+      });
+    });
+  }
+  
+  function generateItemContent(items, currency) {
+    let content = '';
+
+    items.forEach(lineItem => {
+      const isAvailable = lineItem.is_available;
+      const formattedPrice = formatPrice(lineItem.price, currency);
+
+      content += `
+        <div class="repurchase-item-list ${!isAvailable ? 'unavailable' : ''}">
+            <label class="repurchase-item-checkbox">
+            	${isAvailable ? `<input type="checkbox" checked data-variant-id="${lineItem.variant_id}">`:
+    			`` }
+                
+                <div class="repurchase-product">
+                    <div class="product-img-wrapper">
+                        <img src="${lineItem.image ? lineItem.image : '/assets/images/products/no_image.png'}">
+                    </div>
+                    <div class="text-left">
+                        <div class="h5">${lineItem.title}</div>
+                        <div>${lineItem.variant_title ? `<small>${lineItem.variant_title}</small>` : ''}</div>
+                        <small>${formattedPrice}</small>
+                    </div>
+                </div>
+            </label>
+        </div>
+      `;
+    });
+
+    return content;
+  }
+  
+  const repurchaseButton = document.getElementById('repurchaseButton');
+  repurchaseButton.addEventListener('click', function (e) {
+    e.stopPropagation();
+    
+    if (selectedVariantIds.length > 0) {
+      var self = $(this);
+      self.addClass('btn--loading');
+      
+      var cartCount = $('.cart-count');
+      const variantArr = selectedVariantIds;
+      const quantityArr = variantArr.map(() => 1);
+      
+      $.ajax({
+        type: "POST",
+        dataType: 'json',
+        url: "/cart/add",
+        data:{
+            id: variantArr,
+            quantity: quantityArr,
+            _token: "{% csrf %}",
+          	is_from_repurchase_order: true,
+        },
+        success: function(response){
+          cartCount.text(response.item_count);
+          $('.hidden-count').removeClass('hidden-count');
+          if(response.cart_content && document.querySelector('#cart-template')) document.querySelector('#cart-template').innerHTML = response.cart_content;
+          
+          window.location.href = '/cart';
+          closeRepurchaseModal();
+          
+          // new
+          if(document.querySelector('cart-notification')) document.querySelector('cart-notification').renderContents(response)
+          // old
+		  if (popToast) {
+            var addCartHtml = '<svg class="svg-icon" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"viewBox="0 0 512 512" style="enable-background:new 0 0 512 512;" xml:space="preserve"> <g> <g> <path d="M383.841,171.838c-7.881-8.31-21.02-8.676-29.343-0.775L221.987,296.732l-63.204-64.893 c-8.005-8.213-21.13-8.393-29.35-0.387c-8.213,7.998-8.386,21.137-0.388,29.35l77.492,79.561 c4.061,4.172,9.458,6.275,14.869,6.275c5.134,0,10.268-1.896,14.288-5.694l147.373-139.762 C391.383,193.294,391.735,180.155,383.841,171.838z"/> </g> </g> <g> <g> <path d="M256,0C114.84,0,0,114.84,0,256s114.84,256,256,256s256-114.84,256-256S397.16,0,256,0z M256,470.487 c-118.265,0-214.487-96.214-214.487-214.487c0-118.265,96.221-214.487,214.487-214.487c118.272,0,214.487,96.221,214.487,214.487 C470.487,374.272,374.272,470.487,256,470.487z"/> </g> </g> <g> </g> <g> </g> <g> </g> <g> </g> <g> </g> <g> </g> <g> </g> <g> </g> <g> </g> <g> </g> <g> </g> <g> </g> <g> </g> <g> </g> <g> </g> </svg>';
+            addCartHtml += '{{ "products.product.added_to_cart" | t }}';
+            popToast(addCartHtml);
+          }
+        },
+        error: function(xhr){
+          var data = eval('(' + xhr.responseText + ')');
+          var message = data.description;
+          if (message) {
+    		errorMessage.innerHTML = message;
+    		errorMessage.classList.remove('hide');
+          }
+          
+          self.removeClass('btn--loading');
+        },
+      });
+    }
+  });
+</script>

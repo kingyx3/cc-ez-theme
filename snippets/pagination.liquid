@@ -1,0 +1,42 @@
+
+{% if paginate.pages > 1 %}
+  <div class="pagination-wrapper">
+    <link rel="preload" href="{{ 'component-pagination.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <nav class="pagination" role="navigation" aria-label="{{ 'general.pagination.label' | t }}">
+      <ul class="pagination__list list-unstyled" role="list">
+      {% if paginate.previous %}
+        <li>
+          <a href="{{ paginate.previous.url }}" class="pagination__item pagination__item--next pagination__item-arrow link motion-reduce" aria-label="{{ paginate.previous.title }}">
+            <svg aria-hidden="true" focusable="false" role="presentation" class="icon icon-caret" viewBox="0 0 10 6">
+              <path fill-rule="evenodd" clip-rule="evenodd" d="M9.354.646a.5.5 0 00-.708 0L5 4.293 1.354.646a.5.5 0 00-.708.708l4 4a.5.5 0 00.708 0l4-4a.5.5 0 000-.708z" fill="currentColor">
+              </path>
+            </svg>
+          </a>
+        </li>
+      {% endif %}
+
+      {% for part in paginate.parts %}
+        <li>
+          {% if part.title == paginate.current_page %}
+            <span class="pagination__item pagination__item--current" aria-current="page" aria-label="{{ 'general.pagination.page' | t: number: part.title }}">{{ part.title }}</span>
+          {% else %}
+            <a href="{{ part.url }}" class="pagination__item">{{ part.title }}</a>
+          {% endif %}
+        </li>
+      {% endfor %}
+
+      {% if paginate.next %}
+        <li>
+          <a href="{{ paginate.next.url }}" class="pagination__item pagination__item--prev pagination__item-arrow link motion-reduce" aria-label="{{ paginate.next.title }}" >
+            <svg aria-hidden="true" focusable="false" role="presentation" class="icon icon-caret" viewBox="0 0 10 6">
+              <path fill-rule="evenodd" clip-rule="evenodd" d="M9.354.646a.5.5 0 00-.708 0L5 4.293 1.354.646a.5.5 0 00-.708.708l4 4a.5.5 0 00.708 0l4-4a.5.5 0 000-.708z" fill="currentColor">
+              </path>
+            </svg>
+          </a>
+        </li>
+      {% endif %}
+      </ul>
+    </nav>
+  </div>
+{% endif %}
+

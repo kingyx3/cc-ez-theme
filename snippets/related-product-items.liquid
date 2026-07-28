@@ -1,0 +1,26 @@
+<link rel="preload" href="{{ 'component-card.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<link rel="preload" href="{{ 'component-price.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<link rel="preload" href="{{ 'component-product-grid.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+
+{% if recommend.products and recommend.products.size > 0 %}
+  <product-recommendations class="product-recommendations page-width">
+  
+    <h2 class="product-recommendations__heading">
+      {% if recommend.settings and recommend.settings.title %}
+        {{ recommend.settings.title | t }}
+      {% else %}
+        {{ 'products.general.related_products_title' | t }}
+      {% endif %}
+    </h2>
+  
+    <ul class="grid grid--2-col product-grid grid--4-col-desktop grid--quarter-max" role="list">
+      {% for product in recommend.products %}
+        <li class="grid__item">
+          {% include 'product-card' with 'related-products', show_product_info: true %}
+        </li>
+      {% endfor %}
+      
+    </ul>
+  </product-recommendations>
+{% endif %}
+

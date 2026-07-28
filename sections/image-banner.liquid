@@ -1,0 +1,224 @@
+{{ 'section-image-banner.css' | asset_url | stylesheet_tag }}
+
+<style>
+  @media screen and (max-width: 749px) {
+    #Banner{{ section.__key }}::before,
+    #Banner{{ section.__key }} .banner__media::before,
+    #Banner{{ section.__key }}:not(.banner--mobile-bottom) .banner__content::before {
+      padding-bottom: 35%;
+      content: '';
+      display: block;
+    }
+  }
+
+  @media screen and (min-width: 750px) {
+    #Banner{{ section.__key }}::before,
+    #Banner{{ section.__key }} .banner__media::before {
+      padding-bottom: 40%;
+      content: '';
+      display: block;
+    }
+  }
+
+  #Banner{{ section.__key }}::after {
+    opacity: {{ section.settings.image_overlay_opacity | divided_by: 100.0 }};
+  }
+</style>
+
+<div id="Banner{{ section.__key }}" class="banner {% if section.settings.show_text_below %} banner--mobile-bottom{% endif %}{% if section.settings.show_text_box == false %} banner--desktop-transparent{% endif %}">
+  {% if section.settings.image != "" %}
+    <div class="banner__media media{% if section.settings.image == "" and section.settings.image_2 == "" %} placeholder{% endif %}{% if section.settings.image_2 != "" %} banner__media-half{% endif %}">
+      <img
+        srcset="{{ section.settings.image | img_url: '375x' }} 375w,{{ section.settings.image | img_url: '750x' }} 750w,{{ section.settings.image | img_url: '1500x' }} 1500w"
+        sizes="{% if section.settings.image_2 != "" %}(min-width: 750px) 50vw, 100vw{% elsif section.settings.image_2 != "" %}50vw{% else %}100vw{% endif %}"
+        src="{{ section.settings.image | img_url: '1500x' }}"
+        alt="{{ section.settings.image.alt | escape }}"
+        {% if section.settings.image_2 != "" %}class="banner__media-image-half"{% endif %}
+        loading="lazy"
+      >
+    </div>
+  {% elsif section.settings.image_2 == ""  %}
+    <div class="banner__media media{% if section.settings.image == "" and section.settings.image_2 == "" %} placeholder{% endif %}{% if section.settings.image_2 != "" %} banner__media-half{% endif %}">
+      {{ 'lifestyle-2' | placeholder_svg_tag: 'placeholder-svg' }}
+    </div>
+  {% endif %}
+  {% if section.settings.image_2 != "" %}
+    <div class="banner__media media{% if section.settings.image != "" %} banner__media-half{% endif %}">
+      <img
+        srcset="{{ section.settings.image_2 | img_url: '375x' }} 375w,{{ section.settings.image_2 | img_url: '750x' }} 750w,{{ section.settings.image_2 | img_url: '1500x' }} 1500w"
+        sizes="{% if section.settings.image != "" %}(min-width: 750px) 50vw, 100vw{% elsif section.settings.image != "" %}50vw{% else %}100vw{% endif %}"
+        src="{{ section.settings.image_2 | img_url: '1500x' }}"
+        alt="{{ section.settings.image_2.alt | escape }}"
+        {% if section.settings.image != "" %}class="banner__media-image-half"{% endif %}
+        loading="lazy"
+      >
+    </div>
+  {% endif %}
+  <div class="banner__content banner__content--{{ section.settings.desktop_text_box_position }} page-width">
+    <div class="banner__box color-background-1">
+      {% for block_handle in section.blocks_order %}
+      {% assign blocks = section.blocks %}
+        {% case blocks[block_handle].type %}
+          {% when 'heading' %}
+            <h2 class="banner__heading {% if  blocks[block_handle].settings.heading_size == 'medium' %}h1{% else %}h0{% endif %}">
+              <span>{{ blocks[block_handle].settings.heading | escape }}</span>
+            </h2>
+          {% when 'text' %}
+            <div class="banner__text">
+              <span>{{ blocks[block_handle].settings.text | escape }}</span>
+            </div>
+          {% when 'buttons' %}
+            <div class="banner__buttons{% if  blocks[block_handle].settings.button_label_1 != "" and  blocks[block_handle].settings.button_link_1 != "" and  blocks[block_handle].settings.button_label_2 != "" and  blocks[block_handle].settings.button_link_2 != "" %} banner__buttons--multiple{% endif %}">
+              {% if blocks[block_handle].settings.button_label_1 != "" %}
+                <a {% if  blocks[block_handle].settings.button_link_1 != "" %} href="{{  blocks[block_handle].settings.button_link_1 }}"{% endif %} class="button{% if  blocks[block_handle].settings.button_style_secondary_1 %} button--secondary{% else %} button--primary{% endif %}"{% if  blocks[block_handle].settings.button_link_1 == "" %} aria-disabled="true"{% endif %}>{{  blocks[block_handle].settings.button_label_1 | escape }}</a>
+              {% endif %}
+            </div>
+        {% endcase %}
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": { "en_US": "Image Banner", "zh_TW": "圖面橫幅", "zh_CN": "图面横幅", "ms_MY": "Sepanduk imej" },
+  "settings": [
+    {
+      "type": "image",
+      "id": "image",
+      "label": { "en_US": "Background", "zh_TW": "背景 1", "zh_CN": "背景 1", "ms_MY": "latar belakang" }
+    },
+    {
+      "type": "image",
+      "id": "image_2",
+      "label": { "en_US": "Background 2", "zh_TW": "背景 2", "zh_CN": "背景 2", "ms_MY": "latar belakang 2" }
+    },
+    {
+      "type": "select",
+      "id": "desktop_text_box_position",
+      "options": [
+        {
+          "value": "flex-start",
+          "label": { "en_US": "Top", "zh_TW": "頂端", "zh_CN": "顶端", "ms_MY": "Atas" }
+        },
+        {
+          "value": "center",
+          "label": { "en_US": "Center", "zh_TW": "置中", "zh_CN": "置中", "ms_MY": "Tengah" }
+        },
+        {
+          "value": "flex-end",
+          "label": { "en_US": "Bottom", "zh_TW": "底部", "zh_CN": "底部", "ms_MY": "Bawah" }
+        }
+      ],
+      "default": "center",
+      "label": { "en_US": "Text Position", "zh_TW": "文字位置", "zh_CN": "文字位置", "ms_MY": "Kedudukan Teks" }
+    },
+    {
+      "type": "checkbox",
+      "id": "show_text_box",
+      "default": true,
+      "label": { "en_US": "Show Text Box", "zh_TW": "顯示文字區塊底色", "zh_CN": "显示文字区块底色", "ms_MY": "Tunjukkan kotak teks" }
+    },
+    {
+      "type": "range",
+      "id": "image_overlay_opacity",
+      "min": 0,
+      "max": 100,
+      "step": 10,
+      "unit": "%",
+      "label": { "en_US": "Image Overlay Opacity", "zh_TW": "圖片疊加深色濾鏡", "zh_CN": "图片叠加深色滤镜", "ms_MY": "Kelegapan Tindanan Imej" },
+      "default": 0
+    },
+    {
+      "type": "checkbox",
+      "id": "show_text_below",
+      "default": true,
+      "label": { "en_US": "Show text below on mobile", "zh_TW": "手機版將文字顯示於圖片下方", "zh_CN": "手机版将文字显示于图片下方", "ms_MY": "Tunjukkan teks di bawah pada mudah alih" }
+    }
+  ],
+  "blocks": [
+    {
+      "type": "heading",
+      "name": { "en_US": "Heading", "zh_TW": "標題", "zh_CN": "标题", "ms_MY": "tajuk" },
+      "limit": 1,
+      "settings": [
+        {
+          "type": "text",
+          "id": "heading",
+          "default": { "en_US": "Image Banner", "zh_TW": "輪播圖面", "zh_CN": "轮播图面", "ms_MY": "Sepanduk imej" },
+          "label": { "en_US": "Title", "zh_TW": "標題", "zh_CN": "标题", "ms_MY": "tajuk" }
+        },
+        {
+          "type": "select",
+          "id": "heading_size",
+          "options": [
+            {
+              "value": "medium",
+              "label": { "en_US": "Medium", "zh_TW": "普通", "zh_CN": "普通", "ms_MY": "Sederhana" }
+            },
+            {
+              "value": "large",
+              "label": { "en_US": "Large", "zh_TW": "大", "zh_CN": "大", "ms_MY": "Besar" }
+            }
+          ],
+          "default": "medium",
+          "label": { "en_US": "Heading size", "zh_TW": "標題字體大小", "zh_CN": "标题字体大小", "ms_MY": "Saiz tajuk" }
+        }
+      ]
+    },
+    {
+      "type": "text",
+      "name": { "en_US": "Text", "zh_TW": "文字", "zh_CN": "文字", "ms_MY": "Teks" },
+      "limit": 1,
+      "settings": [
+        {
+          "type": "text",
+          "id": "text",
+          "default": "Give customers details about the banner image(s) or content on the template.",
+          "label": { "en_US": "Text", "zh_TW": "文字", "zh_CN": "文字", "ms_MY": "Teks" }
+        }
+      ]
+    },
+    {
+      "type": "buttons",
+      "name": { "en_US": "Button", "zh_TW": "按鈕", "zh_CN": "按钮", "ms_MY": "Butang" },
+      "limit": 1,
+      "settings": [
+        {
+          "type": "text",
+          "id": "button_label_1",
+          "default": "Button label",
+          "label": { "en_US": "Button Label", "zh_TW": "按鈕內文", "zh_CN": "按钮标签", "ms_MY": "Label Butang" }
+        },
+        {
+          "type": "text",
+          "id": "button_link_1",
+          "label": { "en_US": "Button Link", "zh_TW": "按鈕連結", "zh_CN": "按钮链接", "ms_MY": "Link Butang" }
+        },
+        {
+          "type": "checkbox",
+          "id": "button_style_secondary_1",
+          "default": false,
+          "label": { "en_US": "Button style secondary", "zh_TW": "使用次要按鈕設計", "zh_CN": "次要按鈕设计", "ms_MY": "Reka bentuk butang sekunder" }
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": { "en_US": "Image Banner", "zh_TW": "橫幅圖片", "zh_CN": "横幅图片", "ms_MY": "Sepanduk imej" },
+      "blocks": [
+        {
+          "type": "heading"
+        },
+        {
+          "type": "text"
+        },
+        {
+          "type": "buttons"
+        }
+      ]
+    }
+  ]
+}
+{% endschema %}

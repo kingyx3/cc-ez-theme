@@ -1,0 +1,205 @@
+<link rel="preload" href="{{ 'component-deferred-media.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<link rel="preload" href="{{ 'section-video.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+
+<style>
+  .video-bg-section{
+  	position: relative;
+    overflow: hidden;
+  }
+  
+  .video-bg-section .video-section__media{
+    --video-bg-extend: -500px;
+  	position: absolute;
+    top: var(--video-bg-extend);
+    left: var(--video-bg-extend);
+    bottom: var(--video-bg-extend);
+    right: var(--video-bg-extend);
+    padding: 0;
+  }
+  .video-bg-wrapper{
+    position: relative;
+    z-index: 3;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 700px;
+  }
+  .video-bg-section .video-bg-content {
+    background-color: transparent;
+    --color-foreground: 255, 255, 255;
+    --color-button: 255, 255, 255;
+    --color-button-text: 0, 0, 0;
+    max-width: 650px;
+    padding: 18vh 35px;
+  }
+  @media screen and (min-width: 750px) {
+    .video-bg-section .video-section__media{
+      --video-bg-extend: -350px;
+    }
+    .video-bg-section .video-bg-content {
+      padding: 20vh 35px;
+    }
+  }
+
+  .video-bg-section .button--secondary {
+  	--color-button: 255, 255, 255;
+  	--color-button-text: 255, 255, 255;
+  	--alpha-button-background: 0;
+  }
+  #VideoBg{{ section.__key }}{
+    position: relative;
+  }
+  #VideoBg{{ section.__key }}::before{
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    content: '';
+    background: #000;
+  }
+  #VideoBg{{ section.__key }}::before {
+    opacity: {{ section.settings.image_overlay_opacity | divided_by: 100.0 }};
+  }
+</style>
+
+
+<div id="VideoBg{{ section.__key }}" class="video-bg-section">
+  <deferred-media class="video-section__media deferred-media no-js-hidden" data-media-id="{{ section.settings.video_url }}">
+    <div id="ytplayer{{ section.__key }}" class="js-youtube"></div>
+  </deferred-media>
+  <div class="video-bg-wrapper">
+    <div class="video-bg-content text-center color-background-1">
+      {% if section.settings.desc != "" %}
+        <p class="mb-2">{{ section.settings.desc }}</p>
+      {% endif %}
+      {% if section.settings.heading != "" %}
+        <h2 class="h1 mt-2">{{ section.settings.heading }}</h2>
+      {% endif %}
+      <div class="banner__buttons">
+        {% if section.settings.button_label != "" %}
+          <a {% if section.settings.button_link != "" %} href="{{ section.settings.button_link }}"{% endif %} class="button{% if  section.settings.button_style_secondary %} button--secondary{% else %} button--primary{% endif %}"{% if  section.settings.button_link == "" %} aria-disabled="true"{% endif %}>{{  section.settings.button_label | escape }}</a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  var youtube_url = '{{section.settings.video_url}}';
+  var VID_REGEX = /(?:youtube(?:-nocookie)?\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
+  if(youtube_url.match(VID_REGEX) != null){
+  	var youtube_url = youtube_url.match(VID_REGEX)[1];
+  }
+  
+  var youtube_url_json = youtube_url_json || [];
+  youtube_url_json.push({
+    id: 'ytplayer{{ section.__key }}',
+    video_id: youtube_url
+  });
+  
+  // Load the IFrame Player API code asynchronously.
+  var tag = document.createElement('script');
+  tag.src = "https://www.youtube.com/iframe_api";
+  if(!firstYTScriptTag){
+    var firstYTScriptTag = document.getElementsByTagName('script')[0];
+    firstYTScriptTag.parentNode.insertBefore(tag, firstYTScriptTag);
+  }
+  
+  function onYouTubePlayerAPIReady() {
+    for (let i = 0; i < youtube_url_json.length; i++) {
+      createPlayer(youtube_url_json[i].id,youtube_url_json[i].video_id)
+    }
+  }
+  
+  function createPlayer(id,video_id) {
+    return new YT.Player(id, {
+        height: '445',
+        width: '791',
+        videoId: video_id,
+        playerVars:{
+          autoplay: 1,
+          autohide: 0,
+          branding: 0,
+          cc_load_policy: 0,
+          loop: 1,
+          playsinline: 1,
+          modestbranding: 1,
+          mute: 1,
+          controls: 0,
+          origin: '{{canonical_url}}',
+          playlist: video_id
+        },
+        events: {
+          'onReady': onPlayerReady,
+          'onStateChange': onPlayerStateChange
+        }
+      });
+  }
+  function onPlayerReady(event) {
+    event.target.mute();
+    event.target.playVideo();
+  }
+  function onPlayerStateChange(event) {
+  }
+</script>
+
+{% schema %}
+{
+  "name": { "en_US": "Video loop", "zh_TW": "影片循環", "zh_CN": "影片循环", "ms_MY": "Video loop" },
+  "tag": "section",
+  "settings": [
+    {
+      "label": { "en_US": "Youtube Video URL", "zh_TW": "YouTube 影片連結", "zh_CN": "Youtube 影片连结", "ms_MY": "Youtube Video URL" },
+      "type": "text",
+      "id": "video_url",
+      "default": "https://www.youtube.com/watch?v=rbwPvz1WNAw",
+      "accept": [
+        "youtube"
+      ],
+      "info": "Paste YouTube video url here"
+    },
+    {
+      "type": "text",
+      "id": "desc",
+      "label": { "en_US": "Text", "zh_TW": "文字", "zh_CN": "文字", "ms_MY": "Teks" }
+    },
+    {
+      "type": "text",
+      "id": "heading",
+      "label": { "en_US": "Title", "zh_TW": "影片標題", "zh_CN": "影片标题", "ms_MY": "Title" }
+    },
+    {
+      "type": "text",
+      "id": "button_label",
+      "label": { "en_US": "Button Label", "zh_TW": "按鈕內文", "zh_CN": "按钮标签", "ms_MY": "Label Butang" }
+    },
+    {
+      "type": "text",
+      "id": "button_link",
+      "label": { "en_US": "Button Link", "zh_TW": "按鈕連結", "zh_CN": "按钮链接", "ms_MY": "Link Butang" }
+    },
+    {
+      "type": "checkbox",
+      "id": "button_style_secondary",
+      "default": true,
+      "label": { "en_US": "Button style secondary", "zh_TW": "使用次要按鈕設計", "zh_CN": "次要按鈕设计", "ms_MY": "Reka bentuk butang sekunder" }
+    },
+    {
+      "type": "range",
+      "id": "image_overlay_opacity",
+      "min": 0,
+      "max": 100,
+      "step": 10,
+      "unit": "%",
+      "label": { "en_US": "Image Overlay Opacity", "zh_TW": "圖片疊加深色濾鏡", "zh_CN": "图片叠加深色滤镜", "ms_MY": "Kelegapan Tindanan Imej" },
+      "default": 20
+    }
+  ],
+  "presets": [
+    {
+      "name": { "en_US": "Video loop", "zh_TW": "影片循環", "zh_CN": "影片循环", "ms_MY": "Video loop" }
+    }
+  ]
+}
+{% endschema %}

@@ -1,0 +1,102 @@
+
+{% assign on_sale = false %}
+{% assign sale_text = 'products.product.sale' | t %}
+{% if product.compare_at_price > product.price %}
+  {% assign on_sale = true %}
+{% endif %}
+
+{% assign sold_out = true %}
+{% assign sold_out_text = 'products.product.sold_out' | t %}
+{% if product.available %}
+  {% assign sold_out = false %}
+{% endif %}
+
+{% assign product_image_ratio = 'square' | t %}
+{% if image_ratio %}
+  {% assign product_image_ratio = image_ratio %}
+{% endif %}
+
+<div class="product-card-wrapper card-wrapper">
+  <a href="{{ product.url | within: collection | escape }}" class="full-unstyled-link">
+    {% if show_add_to_cart_button %}
+      <add-to-cart-button>
+        <div class="card__badge card__badge-top-right card__badge-float-edge">
+          <span class="badge badge-circle badge--bottom-right addToClassList" data-variant-id="{{product.sole_variant_id}}" data-product-handle="{{product.handle}}" data-product-price="{{product.price}}" data-product-price-max="{{product.price_max}}" data-product-available="{{product.available}}" data-product-id="{{product.id}}" data-token="{% csrf %}" data-quantity="1" data-url="{{ product.url | within: collection | escape }}">	
+            {% include 'svg-definitions' with 'icon-plus' %}
+          </span>
+          <div class="loading-overlay hidden">
+            <div class="loading-overlay__spinner">
+              <svg aria-hidden="true" focusable="false" role="presentation" class="spinner" viewBox="0 0 66 66" xmlns="http://www.w3.org/2000/svg">
+                  <circle class="path" fill="none" stroke-width="6" cx="33" cy="33" r="30"></circle>
+              </svg>
+            </div>
+          </div>
+        </div>
+      </add-to-cart-button>
+    {% endif %}
+    <div class="card card--product grid-link__image--product" tabindex="-1">
+      <div class="card__inner">
+        <div class="media media--transparent media--{{product_image_ratio}} media--hover-effect">
+          <img src="{{ product.featured_image.src | img_url: settings.product_img_res }}" alt="{{ product.featured_image.alt | escape }}" loading="lazy">
+          {% if show_secondary_image and product.secondary_image.src != "" and product.secondary_image.src != null %}
+            <img src="{{ product.secondary_image.src | img_url: settings.product_img_res }}" alt="{{ product.secondary_image.alt | escape }}" loading="lazy">
+          {% endif %}
+        </div>
+        {% if on_sale %}
+          <div class="card__badge card__badge-on_sale card__badge-top-left"><span class="badge badge-ribbon badge--top-left color-accent-2" aria-hidden="true">{{sale_text}}</span></div>
+        {% endif %}
+        {% if sold_out %}
+          <div class="card__badge card__badge-sold_out card__badge-top-left"><span class="badge badge-ribbon badge--top-left" aria-hidden="true">{{sold_out_text}}</span></div>
+        {% endif %}
+      </div>
+    </div>
+    
+    {% if show_product_info == true %}
+    <div class="card-information">
+      <div class="card-information__wrapper">
+        {% app_snippet 'collection/product_top' %}
+        <span class="card-information__text">
+          {{ product.title | escape }}
+        </span>
+        {% app_snippet 'collection/product_middle' %}
+        <span class="caption-large light"></span>
+        {% include 'price' %}
+      </div>
+      {% if settings.collection_show_variant_img %}
+        <div class="card-information__wrapper d-flex flex-align-center">
+          {% assign has_variant_img = false %}
+          {% assign variant_img_count = 0 %}
+          {% assign options_count = 0 %}
+          {% assign display_limit = 3 %}
+          {% assign product_variants = product.variants %}
+          {% assign displayed_variant_option = null %}
+          
+          {% comment %} Single loop through variants to collect all data {% endcomment %}
+          {% for variant in product_variants %}
+            {% if variant.is_enabled and variant.featured_image.src and variant.featured_image.is_variant_image and displayed_variant_option != variant.options[0] %}
+              {% assign options_count = options_count | plus: 1 %}
+              {% assign displayed_variant_option = variant.options[0] %}
+              
+              {% comment %} Only display first 3 variants with images {% endcomment %}
+              {% if variant_img_count < display_limit %}
+                {% assign has_variant_img = true %}
+                {% assign variant_img_count = variant_img_count | plus: 1 %}
+                <span class="product-card-options__item"> 
+                  <img src="{{ variant.featured_image.src | img_url: '80x' }}" alt="{{ variant.option1 | escape }}">
+                  <span class="product-card-options__item_text">{{ variant.option1 }}</span>
+                </span>
+              {% endif %}
+            {% endif %}
+          {% endfor %}
+          
+          {% if options_count > variant_img_count and has_variant_img %}
+            <span class="product-card-options__item">+{{ options_count | minus: variant_img_count }}</span>
+          {% endif %}
+        </div>
+      {% endif %}
+      {% app_snippet 'collection/product_bottom' %}
+    </div>
+    {% endif %}
+  </a>
+</div>
+

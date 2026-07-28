@@ -1,0 +1,40 @@
+<script>
+  EasyStore.Currencies.init({{ shop.enabled_currencies |json }}, {{ settings.is_server_side_currency_conversion }})
+</script>
+
+{% if settings.show_multiple_currencies %}
+
+  <script>
+    let page_template = '{{ template }}';
+
+    if(document.querySelector('.currency-picker')) {
+      EasyStore.Currencies.change(document.querySelector('.currency-picker').value)
+      EasyStore.Currencies.convertAll() 
+    }
+
+    document.querySelectorAll('.currency-picker').forEach((el)=>{
+      el.addEventListener('change',(event)=>{
+        EasyStore.Currencies.change(event.target.value)
+
+        {% if settings.is_server_side_currency_conversion == true %}
+          if (page_template == 'cart') {
+            const params = new URLSearchParams(window.location.search);
+            params.set('delete_cache', 1);
+            window.location.search = params;
+          } else {
+            window.location.reload();
+          }
+
+          return
+        {% endif %}
+
+        document.querySelectorAll('[name=currencies],[name=current_currency]').forEach((el)=>{
+          el.value = event.target.value
+        })
+
+        if(page_template == 'cart') location.reload();
+      })
+    })
+  </script>
+
+{% endif %}

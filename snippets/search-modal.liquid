@@ -1,0 +1,45 @@
+<details-modal class="header__search">
+  <details>
+    <summary class="header__icon header__icon--search header__icon--summary link link--text focus-inset modal__toggle" aria-haspopup="dialog" aria-label="{{ 'general.search.placeholder' | t }}">
+      <span>
+        <svg class="modal__toggle-open icon icon-search" aria-hidden="true" focusable="false" role="presentation">
+          <use href="#icon-search">
+        </svg>
+        <svg class="modal__toggle-close icon icon-close" aria-hidden="true" focusable="false" role="presentation">
+          <use href="#icon-close">
+        </svg>
+      </span>
+    </summary>
+    <div class="search-modal modal__content" role="dialog" aria-modal="true" aria-label="{{ 'general.search.placeholder' | t }}">
+      <div class="modal-overlay"></div>
+      <div class="search-modal__content" tabindex="-1">
+          <form action="/search" method="get" role="search" class="search search-modal__form">
+            <div class="field">
+              <input class="search__input field__input" 
+                id="Search-In-Modal"
+                type="search"
+                name="q"
+                value="{{ search.terms | escape }}"
+                placeholder="{{ 'general.search.placeholder' | t }}"
+                autocomplete="off"
+              >
+              <label class="field__label" for="Search-In-Modal">{{ 'general.search.placeholder' | t }}</label>
+              <div class="dropdown" id="searchDropdown"></div>
+              <input type="hidden" name="search_history" class="hidden_search_history">
+              <input type="hidden" name="options[prefix]" value="last">
+              <button class="search__button field__button" aria-label="{{ 'general.search.placeholder' | t }}">
+                <svg class="icon icon-search" aria-hidden="true" focusable="false" role="presentation">
+                  <use href="#icon-search">
+                </svg>
+              </button> 
+            </div>
+          </form>
+        <button type="button" class="search-modal__close-button modal__close-button link link--text focus-inset" aria-label="{{ 'accessibility.close' | t }}">
+          <svg class="icon icon-close" aria-hidden="true" focusable="false" role="presentation">
+            <use href="#icon-close">
+          </svg>
+        </button>
+      </div>
+    </div>
+  </details>
+</details-modal>

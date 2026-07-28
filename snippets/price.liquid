@@ -1,0 +1,69 @@
+{% capture price %}
+  {% if product_template and product.price_varies %}
+    {{ product.selected_or_first_available_variant.price | divided_by: 100 | money: shop.money_format }}
+  {% else %}
+    {{ product.price | money: shop.money_format }}
+  {% endif %}
+{% endcapture %}
+
+<div class="price
+  {% if price_class %} {{ price_class }}{% endif %}
+  {% if product.available == false %} price--sold-out {% endif %}
+  {% if product.compare_at_price > product.price %} price--on-sale {% endif %}"
+  {% if product.compare_at_price > product.price %}data-expires="{{ product.expires }}"{% endif %}>
+
+  <dl>
+    <div class="price__regular">
+      <dt>
+        <span class="visually-hidden visually-hidden--inline">Regular price</span>
+      </dt>
+      <dd {% if show_badges == false %}class="price__last"{% endif %}>
+        <span class="price-item price-item--regular">
+          {% if product.price_varies and product_template == null %}
+            {{ price }} {% if product.price != product.price_max %}- {{ product.price_max | money: shop.money_format }}{% endif %}
+          {% else %}
+            {{ price }}
+          {% endif %}
+        </span>
+      </dd>
+    </div>
+    <div class="price__sale">
+      <dt>
+        <span class="visually-hidden visually-hidden--inline">Sale price</span>
+      </dt>
+      <dd {% if show_badges == false %}class="price__last"{% endif %}>
+        <span {% if template == 'product' %}id="ProductPrice"{% endif %} class="price-item price-item--sale">
+          {% if product.price_varies and product_template == null %}
+            {{ price }} {% if product.price != product.price_max %}- {{ product.price_max | money: shop.money_format }}{% endif %}
+          {% else %}
+            {{ price }}
+          {% endif %}
+        </span>
+      </dd>
+      
+      <dt class="price__compare">
+        <span class="visually-hidden visually-hidden--inline">Regular price</span>
+      </dt>
+      <dd class="price__compare">
+        <s class="price-item price-item--regular">
+          {% if product.price_varies and product_template %}
+            {{ product.selected_or_first_available_variant.compare_at_price | divided_by: 100 | money: shop.money_format }}
+          {% else %}
+            {{ product.compare_at_price | money: shop.money_format }} {% if product.compare_at_price != product.compare_at_price_max %}- {{ product.compare_at_price_max | money: shop.money_format }}{% endif %}
+          {% endif %}
+          
+        </s>
+      </dd>
+      
+    </div>
+  </dl>
+  {% if show_badges %}
+    <span class="badge price__badge-sale color-accent-2" aria-hidden="true">
+      {{ 'products.product.sale' | t }}
+    </span>
+
+    <span class="badge price__badge-sold-out" aria-hidden="true">
+      {{ 'products.product.sold_out' | t }}
+    </span>
+  {% endif %}
+</div>

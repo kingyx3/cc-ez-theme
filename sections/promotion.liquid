@@ -1,0 +1,201 @@
+<link rel="preload" href="{{ 'section-promotion.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+
+<style>
+  {% for block_handle in section.blocks_order %}
+    {% assign blocks = section.blocks %}
+    {% assign block = blocks[block_handle] %}
+    {% assign promotion = block.settings %}
+    [id="promotion-section-{{ section.__key }}-{{ forloop.index }}"].promotion-banner{
+      background-color: {{promotion.color_promotion_background}};
+      color: {{promotion.text_color}};
+    }
+    [id="promotion-section-{{ section.__key }}-{{ forloop.index }}"].promotion-banner .btn{
+      background-color: {{promotion.text_color}};
+      border-color: {{promotion.text_color}};
+      color: {{promotion.color_promotion_background}};
+    }
+    [id="promotion-section-{{ section.__key }}-{{ forloop.index }}"].promotion-wrapper .promotion-block{
+      background-color: {{promotion.color_promotion_background}};
+      color: {{promotion.text_color}};
+    }
+  {% endfor %}
+</style>
+
+<link rel="preload" href="{{ 'component-slider.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<div class="section-collection-list spaced-section page-width page-width-desktop">
+  <div class="promotion-section-container">
+    {% for block_handle in section.blocks_order %}
+    {% assign blocks = section.blocks %}
+    {% assign block = blocks[block_handle] %}
+      {% if block.type == 'banner' %}
+        <div id="promotion-section-{{ section.__key }}-{{ forloop.index }}" class="promotion-banner">
+            <div class="promotion-banner-title">{{block.settings.title}}</div>
+            <div class="promotion-banner-description"><p style="margin: 7.5px 10px;">{{block.settings.text}}</p></div>
+            <a href="{{block.settings.button_link}}" class="btn">{{block.settings.button_label}}</a>
+        </div>
+      {% else %}
+        <a id="promotion-section-{{ section.__key }}-{{ forloop.index }}" href="{{block.settings.link_url}}" class="promotion-wrapper">
+            <div class="promotion-block">
+                <div class="promotion-block-text">
+                <p class="top-text">{{block.settings.top_text}}</p>
+                <span class="center-text">{{block.settings.center_text}}</span>
+                <p class="bottom-text">{{block.settings.bottom_text}}</p>
+                </div>
+                <div class="promotion-block-img">
+                  {% if block.settings.promotion_image_1 != '' %}
+                  <div class="img-wrapper">
+                      <img src="{{block.settings.promotion_image_1 | img_url: '550x' }}" alt="{{ shop.name }}"/>
+                  </div>
+                  {% endif %}
+                  {% if block.settings.promotion_image_2 != '' %}
+                  <div class="img-wrapper">
+                      <img src="{{block.settings.promotion_image_2 | img_url: '550x' }}" alt="{{ shop.name }}"/>
+                  </div>
+                  {% endif %}
+                </div>
+            </div>
+        </a>
+      {% endif %}
+    {% endfor %}
+      </div>
+</div>
+
+
+{% schema %}
+{
+  "name": { "en_US": "Promotion", "zh_TW": "促銷版位", "zh_CN": "促销版位", "ms_MY": "Bahagian Promosi" },
+  "max_blocks": 6,
+  "blocks": [
+    {
+      "type": "banner",
+      "name": { "en_US": "Banner", "zh_TW": "橫幅區塊", "zh_CN": "横幅区块", "ms_MY": "Banner" },
+      "settings": [
+        {
+          "type": "color",
+          "id": "color_promotion_background",
+          "label": {
+            "en_US": "Background",
+            "ja_JP": "背景",
+            "ko_KR": "배경",
+            "th_TH": "พื้นหลัง",
+            "vi": "Nền",
+            "zh_CN": "背景颜色",
+            "zh_TW": "背景色"
+          },
+          "default": "#515432"
+        },
+        {
+          "type": "color",
+          "id": "text_color",
+          "label": { "en_US": "Color","zh_CN": "文字颜色", "zh_TW": "文字色", "ms_MY": "Warna Teks" },
+          "default": "#FFF"
+        },
+        {
+          "type": "text",
+          "id": "title",
+          "default": { "en_US": "Column", "zh_TW": "格框", "zh_CN": "格框", "ms_MY": "Kolum" },
+          "label": { "en_US": "Title", "zh_TW": "標題", "zh_CN": "标题", "ms_MY": "tajuk" }
+        },
+        {
+          "type": "text",
+          "id": "text",
+          "default": { 
+            "en_US": "Pair text with an image to focus on your chosen product, collection, or blog post. Add details on availability, style, or even provide a review.", 
+            "zh_TW": "將文本與圖像配對，以專注於您選擇的產品、收藏或博客文章。添加有關可用性、樣式的詳細信息，甚至提供評論。", 
+            "zh_CN": "将文本与图像配对，以专注于您选择的产品、收藏或博客文章。添加有关可用性、样式的详细信息，甚至提供评论。", 
+            "ms_MY": "Gandingkan teks dengan imej untuk memfokuskan pada produk, koleksi atau siaran blog pilihan anda. Tambahkan butiran tentang ketersediaan, gaya atau bahkan berikan ulasan." 
+          },
+          "label": { "en_US": "Text", "zh_TW": "文字", "zh_CN": "文字", "ms_MY": "Teks" }
+        },
+        {
+          "type": "text",
+          "id": "button_label",
+          "label": { "en_US": "Button Label", "zh_TW": "連結文字", "zh_CN": "连结文字", "ms_MY": "Teks pautan" }
+        },
+        {
+          "type": "text",
+          "id": "button_link",
+          "label": { "en_US": "Button Link", "zh_TW": "連結", "zh_CN": "连结", "ms_MY": "URL pautan" }
+        }
+      ]
+    },
+    {
+      "type": "block",
+      "name": { "en_US": "Block", "zh_TW": "方形區塊", "zh_CN": "方形區塊", "ms_MY": "Blok" },
+      "settings": [
+        {
+          "type": "color",
+          "id": "color_promotion_background",
+          "label": {
+            "en_US": "Background",
+            "ja_JP": "背景",
+            "ko_KR": "배경",
+            "th_TH": "พื้นหลัง",
+            "vi": "Nền",
+            "zh_CN": "背景颜色",
+            "zh_TW": "背景色"
+          },
+          "default": "#282828"
+        },
+        {
+          "type": "color",
+          "id": "text_color",
+          "label": { "en_US": "Color","zh_CN": "文字颜色", "zh_TW": "文字色", "ms_MY": "Warna Teks" },
+          "default": "#FFF"
+        },
+        {
+          "type": "text",
+          "id": "top_text",
+          "default": { "en_US": "Top Text", "zh_TW": "頂端文字", "zh_CN": "顶端文字", "ms_MY": "Teks Atas" },
+          "label": { "en_US": "Texts on the top", "zh_TW": "頂端的文字", "zh_CN": "顶端的文字", "ms_MY": "Teks di Atas"}
+        },
+        {
+          "type": "text",
+          "id": "center_text",
+          "default": { "en_US": "Center Text", "zh_TW": "中間文字", "zh_CN": "顶端文字", "ms_MY": "Teks Tengah" },
+          "label": { "en_US": "Texts in the center", "zh_TW": "中間文字", "zh_CN": "中間文字", "ms_MY": "Teks Tengah"}
+        },
+        {
+          "type": "text",
+          "id": "bottom_text",
+          "default": { "en_US": "Bottom Text", "zh_TW": "下方文字", "zh_CN": "下方文字", "ms_MY": "Teks Bawah" },
+          "label": { "en_US": "Texts at the bottom", "zh_TW": "下方文字", "zh_CN": "下方文字", "ms_MY": "Teks Bawah"}
+        },
+        {
+          "type": "image",
+          "id": "promotion_image_1",
+          "label": { "en_US": "Image", "zh_TW": "圖片", "zh_CN": "图片", "ms_MY": "Imej" },
+          "default": "https://cdn.store-assets.com/s/943566/f/8657894.jpeg"
+        },
+        {
+          "type": "image",
+          "id": "promotion_image_2",
+          "label": { "en_US": "Image 2", "zh_TW": "圖片 2", "zh_CN": "图片 2", "ms_MY": "Imej 2" },
+          "default": "https://cdn.store-assets.com/s/943566/f/8657897.jpeg"
+        },
+        {
+          "type": "text",
+          "id": "link_url",
+          "label": { "en_US": "Link URL", "zh_TW": "連結", "zh_CN": "连结", "ms_MY": "URL pautan" }
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": { "en_US": "Promotion Section", "zh_TW": "促銷版位", "zh_CN": "促销版位", "ms_MY": "Bahagian Promosi" },
+      "blocks": [
+        {
+          "type": "banner"
+        },
+        {
+          "type": "block"
+        },
+        {
+          "type": "block"
+        }
+      ]
+    }
+  ]
+}
+{% endschema %}

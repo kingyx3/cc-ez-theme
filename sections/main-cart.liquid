@@ -1,0 +1,107 @@
+<link rel="preload" href="{{ 'component-cart.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<link rel="preload" href="{{ 'component-cart-items.css?v1.01' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<link rel="preload" href="{{ 'component-totals.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<link rel="preload" href="{{ 'component-price.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<link rel="preload" href="{{ 'component-discounts.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<link rel="preload" href="{{ 'component-loading-overlay.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<link rel="preload" href="{{ 'css/vouchers.css?v1.3' | global_asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<link rel="preload" href="{{ 'account/vouchers/vouchers.css' | global_asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<link rel="preload" href="{{ 'account/vouchers/voucher-widget.css' | global_asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+
+{{ 'js/promotion/vouchers.js?v1.4' | global_asset_url | script_tag }}
+{{ 'account/vouchers/voucher-widget.js' | global_asset_url | script_tag }}
+<script src="{{ 'cart.js' | asset_url }}" defer="defer"></script>
+
+<section class="spaced-section">
+  {% app_snippet 'cart/content_top' %}
+  <div id="cart-template">
+    {% include 'cart-template' %}
+  </div>
+  {% app_snippet 'cart/content_bottom' %}
+</section>
+
+<style>
+  discount-input .field__input{
+    margin-right: 10px;
+  }
+</style>
+
+<vouchers-modal>
+  <div class="vouchers-modal-wrapper page-width">
+    <div id="vouchers-modal" class="vouchers-modal focus-inset" aria-modal="true" role="dialog" tabindex="-1">
+      <div class="vouchers-modal__header">
+        <div class="vouchers-modal__heading">{{ 'checkout.general.vouchers' | t }}</div>
+        <button type="button" class="vouchers-modal__close modal__close-button link link--text focus-inset" aria-label="{{ 'accessibility.close' | t }}">
+          {% include 'svg-definitions' with 'icon-close' %}
+        </button>
+      </div>
+
+      <discount-input>
+        <div class="field">
+          <input type="text" id="input-discount_code" class="search__input field__input" name="voucher_code" placeholder="{{ 'checkout.general.discount_code' | t }}">
+          <label class="field__label" for="input-discount_code">{{ 'checkout.general.discount_code' | t }}</label>
+          <button type="button" name="apply" class="button button--secondary">{{ 'checkout.general.apply' | t }}</button>
+        </div>
+        <div class="form__message hidden" tabindex="-1" autofocus>
+          {% include 'svg-definitions' with 'icon-error' %}
+          <div class="js-error-content"></div>
+        </div>
+      </discount-input>
+      <br>
+
+      
+      {% if cart.available_discount_codes.size > 0 %}
+      <div class="vouchers-list-heading">{{ 'checkout.general.available_vouchers' | t }}</div>
+      <div class="vouchers-list-wrapper">
+        {% for discount_code in cart.available_discount_codes %}
+          {% assign voucherData = discount_code | json %}
+          <div class="voucher-widget-list__item" data-voucher-widget='{{ voucherData | escape }}'>
+          </div>
+        {% endfor %}
+      </div>
+      {% else %}
+        <div class="empty-vouchers_placeholder">{{ 'checkout.general.empty_vouchers' | t }}</div>
+      {% endif %}
+
+    </div>
+  </div>
+  <div id="vouchers-modal-backdrop" class="vouchers-modal__close"></div>
+</vouchers-modal>
+
+<script>
+  //  For voucher widget 
+  let settings = {{ settings | json }}
+  if (settings.promotion_uis.voucher_widget != null) {
+    setVoucherTheme(settings.promotion_uis.voucher_widget)
+  }
+  var shop = {
+    money_prefix: {{ cart.currency.format_prefix | json }},
+    format_decimals: {{ cart.currency.format_decimals | json }}
+  };
+  var _getEntitlementTranslation = {
+    "free_shipping": "{{ 'customer.rewards.free_shipping' | t }}",
+    "free_of_charge": "{{ 'customer.rewards.free_of_charge' | t }}",
+  }
+  var _getTargetTypeTranslation = {
+    "amount_credit": "{{ 'customer.rewards.amount_credit' | t }}",
+    "amount_off": "{{'customer.rewards.amount_off' | t }}",
+  }
+  var _getPrerequisiteTranslation = {
+    "min_quantity": "{{ 'customer.rewards.min_quantity' | t: 'formatValue' }}",
+    "every_quantity": "{{ 'customer.rewards.every_quantity' | t: 'formatValue' }}",
+    "min_amount": "{{ 'customer.rewards.min_amount' | t: 'formatCurrency' }}",
+    "every_amount": "{{ 'customer.rewards.every_amount' | t: 'formatCurrency' }}"
+  }
+  var _getPrerequisiteConditionTranslation = {
+    "selected_items": "{{ 'customer.rewards.selected_items' | t }}",
+    "selected_collections": "{{ 'customer.rewards.selected_collections' | t }}",
+    "storewide": "{{ 'customer.rewards.storewide' | t }}",
+    "order_subtotal": "{{ 'customer.rewards.order_subtotal' | t }}"
+  }
+  var _getVoucherButtonTextTranslation = {
+    "apply": "{{ 'customer.rewards.apply' | t }}",
+  }
+  var _getVoucherErrorTranslation = {
+    "condition_not_matched": "{{ 'error.checkout.voucher_condition_not_matched' | t }}"
+  }
+</script>

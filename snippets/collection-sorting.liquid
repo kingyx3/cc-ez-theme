@@ -1,0 +1,112 @@
+<style>
+  .collection-filters{
+    margin-bottom: 2rem;
+  }
+
+  .collection-filters__sort {
+    font-size: 1.4rem;
+    height: auto;
+    line-height: 1.5;
+    margin: 0;
+    padding-left: 0;
+    padding-right: 1.75rem;
+  }
+
+  .collection-filters__sort,
+  .collection-filters__sort:hover {
+    box-shadow: none;
+  }
+
+  .collection-filters__sort:focus-visible,
+  .mobile-facets__sort .select__select:focus-visible {
+    outline: 0.2rem solid rgba(var(--color-foreground), 0.5);
+    outline-offset: 1rem;
+    box-shadow: 0 0 0 1rem rgb(var(--color-background)),
+      0 0 0.2rem 1.2rem rgba(var(--color-foreground), 0.3);
+  }
+
+  .collection-filters__sort.focused,
+  .mobile-facets__sort .select__select.focused  {
+    outline: 0.2rem solid rgba(var(--color-foreground), 0.5);
+    outline-offset: 1rem;
+    box-shadow: 0 0 0 1rem rgb(var(--color-background)),
+      0 0 0.2rem 1.2rem rgba(var(--color-foreground), 0.3);
+  }
+
+  .collection-filters__sort + .icon-caret {
+    right: 0;
+  }
+
+  .collection-filters__label {
+    display: block;
+    color: var(--color-foreground-85);
+    font-size: 1.4rem;
+    margin-right: 2rem;
+  }
+
+  .collection-filters__item {
+    align-items: flex-start;
+    display: flex;
+    grid-column: 2;
+    grid-row: 1;
+    padding-left: 2.5rem;
+  }
+
+  @media screen and (min-width: 990px) {
+    .collection-filters__item {
+      padding-left: 4.5rem;
+    }
+  }
+
+  @media screen and (max-width: 990px) {
+    .collection-hero__title {
+      text-align: center;
+    }
+  }
+
+  .collection-filters__field {
+    align-items: center;
+    display: flex;
+    flex-grow: 1;
+    justify-content: flex-end;
+  }
+
+  .collection-filters__field .select {
+    width: auto;
+  }
+</style>
+
+<div class="collection-filters__item sorting caption">
+  <div class="collection-filters__field">
+    <label class="collection-filters__label caption-large" for="SortBy">{{ 'collections.sorting.title' | t }} : </label>
+    <div class="select">
+      <select name="SortBy" class="collection-filters__sort select__select caption-large" id="SortBy" aria-describedby="a11y-refresh-page-message">
+        <option value="featured">{{ 'collections.sorting.featured' | t }}</option>
+        <option value="title+asc">{{ 'collections.sorting.az' | t }}</option>
+        <option value="title+desc">{{ 'collections.sorting.za' | t }}</option>
+        <option value="price+asc">{{ 'collections.sorting.price_ascending' | t }}</option>
+        <option value="price+desc">{{ 'collections.sorting.price_descending' | t }}</option>
+        <option value="date+desc">{{ 'collections.sorting.date_descending' | t }}</option>
+        <option value="date+asc">{{ 'collections.sorting.date_ascending' | t }}</option>
+      </select>
+    </div>
+  </div>
+</div>
+
+<script>
+  let this_el = document.querySelector.bind(document)
+
+  this_el('select[name="SortBy"]').value = '{{ collection.sort_by | default: collection.default_sort_by }}';
+  this_el('select[name="SortBy"]').addEventListener('change', ()=>{
+    url=window.location.href;
+    newParam="sort="+this_el('select[name="SortBy"]').value;
+    if(url.indexOf("sort=")===-1){
+      separator = (url.indexOf("?")===-1)?"?":"&";
+      newUrl= url + separator + newParam;
+    }else{
+      oldParam="sort={{ collection.sort_by | default: collection.default_sort_by }}";
+      newUrl=url.replace(oldParam,newParam); 
+    }
+    window.location.href =newUrl; 
+  });
+</script>

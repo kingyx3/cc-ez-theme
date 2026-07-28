@@ -1,0 +1,71 @@
+<link rel="preload" href="{{ 'component-deferred-media.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<link rel="preload" href="{{ 'section-video.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+
+<div class="video-section{% if section.settings.full_width == false %} page-width{% endif %}">
+  <div class="text-center {% if section.settings.full_width %} page-width {% endif %}">
+    <h2 class="title">{{ section.settings.heading }}</h2>
+  </div>
+  <deferred-media class="video-section__media deferred-media no-js-hidden" data-media-id="{{ section.settings.video_url }}">
+    <button
+      id="Deferred-Poster-Modal-{{ section.settings.video_url }}"
+      class="video-section__poster media deferred-media__poster media--landscape"
+      type="button"
+    >
+      {% if section.settings.cover_image != "" %}
+        <img
+          srcset="{{ section.settings.cover_image | img_url: '375x' }} 375w,{{ section.settings.cover_image | img_url: '750x' }} 750w,{{ section.settings.cover_image | img_url: '1500x' }} 1500w"
+          src="{{ section.settings.cover_image | img_url: '1920x' }}"
+          sizes="{% if section.settings.full_width %}100vw{% else %}(min-width: {{ settings.page_width }}px) {{ settings.page_width | minus: 100 }}px, (min-width: 750px) calc(100vw - 10rem), 100vw{% endif %}"
+          alt="{{ section.settings.heading | escape }}"
+          loading="lazy"
+        >
+        <span class="deferred-media__poster-button motion-reduce">
+          {% include 'svg-definitions' with 'icon-play' %}
+        </span>
+      {% endif %}
+    </button>
+    <iframe data-video-id="{{ section.settings.video_url }}" class="js-youtube" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+  </deferred-media>
+</div>
+
+{% schema %}
+{
+  "name": { "en_US": "Video", "zh_TW": "影片", "zh_CN": "影片", "ms_MY": "Video" },
+  "tag": "section",
+  "class": "spaced-section spaced-section--full-width",
+  "settings": [
+    {
+      "type": "text",
+      "id": "heading",
+      "label": { "en_US": "Video title", "zh_TW": "影片標題", "zh_CN": "影片标题", "ms_MY": "Video title" }
+    },
+    {
+      "type": "image",
+      "id": "cover_image",
+      "default": "https://cdn.store-assets.com/s/1278714/f/10968317.jpg",
+      "label": { "en_US": "Image", "zh_TW": "顯示圖片", "zh_CN": "显示图片", "ms_MY": "Imej" }
+    },
+    {
+      "label": { "en_US": "Youtube Video URL", "zh_TW": "YouTube 影片連結", "zh_CN": "Youtube 影片连结", "ms_MY": "Youtube Video URL" },
+      "type": "text",
+      "id": "video_url",
+      "default": "https://youtu.be/3Bn4wCo6YMY",
+      "accept": [
+        "youtube"
+      ],
+      "info": "Paste YouTube video url here"
+    },
+    {
+      "label": { "en_US": "Full Width", "zh_TW": "全螢幕寬度", "zh_CN": "全萤幕宽度", "ms_MY": "Kelebaran Penuh" },
+      "type": "checkbox",
+      "id": "full_width",
+      "default": false
+    }
+  ],
+  "presets": [
+    {
+      "name": { "en_US": "Video", "zh_TW": "影片", "zh_CN": "影片", "ms_MY": "Video" }
+    }
+  ]
+}
+{% endschema %}

@@ -1,0 +1,115 @@
+<style>
+.quickview_promo-promo-label, #quickview_promo-view-more-tag, .quickview_promo-label-unclickable:hover {
+    color: {{settings.promotion_uis.primary_color}}
+}
+</style>
+
+<div class="product-quickview">
+  <div class="product-quickview__img-wrapper">
+    {% assign featured_image = product.selected_or_first_available_variant.featured_image | default: product.featured_image %}
+    <img src="{{ featured_image | img_url: '1024x' }}" alt="{{ featured_image.alt | escape }}" id="productModal-MainImg" class="product-quickview__img">
+  </div>
+  <div id="ProductInfo-ProductModal" class="product-quickview__content-wrapper">
+    <a href="{{ product.url | within: collection | escape }}" class="quickview-title" title="{{ 'collections.general.link_title' | t: collection_title }}">
+      <h2>{{ product.title | escape }}</h2>
+    </a>
+
+    <!-- price -->
+    <div id="price">
+      {% include 'price', product: product, show_badges: true, price_class: 'price--large', product_template: true %}
+    </div>
+
+    <div class="quickview_promo-tag-wrapper">
+        <div id="quickview_promo-tag-label"></div>
+        <div class="quickview_promo-tag-container">
+            <div id="quickview_promo-tag"></div>
+        </div>
+    </div>
+
+    <product-form class="product-form">
+      <form action="/cart/add" method="post" enctype="multipart/form-data" data-addtocart='{{prod_d}}' id="AddToCartForm-ProductModal">
+
+        <select name="id" id="productModal-productSelect" class="hide">
+          {% for variant in product.variants %}
+            {% if variant.available %}
+
+              <option {% if variant == product.selected_or_first_available_variant %} selected="selected" {% endif %} data-sku="{{ variant.sku }}" value="{{ variant.id }}">{{ variant.title }} - {{ variant.price | money: shop.money_format }}</option>
+
+            {% else %}
+              <option disabled="disabled">
+                {{ variant.title }} - {{ 'products.product.sold_out' | t }}
+              </option>
+            {% endif %}
+          {% endfor %}
+        </select>
+
+        
+        {% assign timestamp = 'now' | date: '%s' %}
+        <div id="product-properties_{{ product.id }}_{{ timestamp }}" class="product-properties-wrapper"></div>
+
+        <!-- quantity_selector -->
+        <div class="product-form__input product-form__quantity">
+          <label class="form__label" for="Quantity">
+            {{ 'products.product.quantity' | t }}
+          </label>
+
+          <quantity-input class="quantity">
+            <button class="quantity__button no-js-hidden" name="minus" type="button">
+              {% include 'svg-definitions' with 'icon-minus' %}
+            </button>
+            <input class="quantity__input"
+                type="number"
+                name="quantity"
+                id="Quantity"
+                min="1"
+                value="1"
+              >
+            <button class="quantity__button no-js-hidden" name="plus" type="button">
+              {% include 'svg-definitions' with 'icon-plus' %}
+            </button>
+          </quantity-input>
+        </div>
+
+        <br>
+
+        <div class="quickview-sticky-actions">
+          <button
+            type="submit"
+            name="add"
+            id="AddToCartModal"
+            class="product-form__submit button button--full-width button--primary"
+          {% if product.selected_or_first_available_variant.available == false %}disabled{% endif %}
+          >
+              {% if product.selected_or_first_available_variant.available %}
+                {{ 'products.product.add_to_cart' | t }}
+              {% else %}
+                {{ 'products.product.sold_out' | t }}
+              {% endif %}
+          </button>
+        </div>
+
+        <div class="form__message hidden" tabindex="-1" autofocus>
+          <span class="visually-hidden">{{ 'accessibility.error' | t }} </span>
+          {% include 'svg-definitions' with 'icon-error' %}
+          <div class="js-error-content"></div>
+        </div>
+      </form>
+    </product-form>
+  </div>
+</div>
+
+<script>
+(() => {
+  const elQuickViewModal = document.querySelector('#product-quickview-modal');
+  let cartProductProperties = null;
+  
+  if (elQuickViewModal.dataset.cartItem) {
+    let cartItem = JSON.parse(elQuickViewModal.dataset.cartItem);
+    if(cartItem.properties) cartProductProperties = JSON.parse(cartItem.properties);
+  }
+
+  if(window.getProductProperties) {
+    getProductProperties(true, '{{product.id}}', 'product-properties_{{ product.id }}_{{ timestamp }}', null, cartProductProperties);
+  }
+})();
+</script>

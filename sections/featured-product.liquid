@@ -1,0 +1,320 @@
+<link rel="preload" href="{{ 'section-featured-product.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<link rel="preload" href="{{ 'component-price.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+
+<!-- {{ 'component-rte.css' | asset_url | stylesheet_tag }} -->
+
+<style>
+  .product__info-wrapper{
+    display: flex;
+    align-items: center;
+    padding: 15px;
+  }
+    
+  .featured-product-section .product__media-item img{
+    max-height: 600px;
+    width:auto;
+    max-width:100%;
+    margin:0 auto;
+    cursor: zoom-in;
+  }
+  
+  @media screen and (min-width: 750px){
+    .featured-product-section .product__media-item {
+       width: 100%;
+    }
+  }
+</style>
+
+<link rel="preload" href="{{ 'component-slider.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<script src="{{ 'product-form.js' | asset_url }}" defer="defer"></script>
+{% if section.settings.product__id %}
+  <div class="product-section page-width spaced-section">
+    {% assign handle = section.settings.product__id %}
+    {% assign featured_product = products[handle] %}
+    <div class="product grid grid--1-col grid--2-col-tablet">
+      {% if featured_product.images.size > 0 %}
+        <div class="grid__item product__media-wrapper">
+          <div class="image-modal-wrapper">
+            <slider-component class="slider-mobile-gutter slider--desktop slider-component">
+              <ul id="main-image-wrapper-{{ section.__key }}" class="featured-product-section product__media-list grid grid--peek list-unstyled slider slider--mobile" role="list">
+                {% if section.settings.show_selected_variant_image and featured_product.selected_or_first_available_variant.featured_image != null %}
+                    <li id="image-item-{{ featured_product.selected_variant.featured_image.id }}" class="main-image product__media-item grid__item slider__slide d-flex flex-align-center" data-image-id="{{ featured_product.selected_variant.featured_image.id }}">
+                      {% if featured_product.selected_or_first_available_variant.featured_image.type == "Youtube" %}
+                        <iframe width="90%" height="320px" src="https://www.youtube.com/embed/{{ featured_product.featured_image.id }}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                      {% else %}
+                        <img id="main-image" class="js-image-modal-toggle" src="{{ featured_product.selected_or_first_available_variant.featured_image.src | img_url: 'social-share' }}" alt="{{ image.alt | escape }}" width="100%" loading="lazy">
+                      {% endif %}
+                    </li>
+                {% endif %}
+                {% for image in featured_product.images %}
+                  {% if section.settings.show_selected_variant_image and image.id != featured_product.selected_or_first_available_variant.featured_image.id or section.settings.show_selected_variant_image == false %}
+                    <li id="image-item-{{image.id}}" class="main-image product__media-item grid__item slider__slide d-flex flex-align-center" data-image-id="{{ image.id }}">
+                      {% if image.type == "Youtube" %}
+                        <iframe width="90%" height="320px" src="https://www.youtube.com/embed/{{ image.id }}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                      {% else %}
+                        <img src="{{ image.src | img_url: 'social-share' }}" alt="{{ image.alt | escape }}" width="100%" loading="lazy" class="js-image-modal-toggle">
+                      {% endif %}
+                    </li>
+                  {% endif %}
+                {% endfor %}
+              </ul>
+              <div class="slider-buttons no-js-hidden {% if product.images.size < 1 %} medium-hide small-hide {% endif %}">
+                <button type="button" class="slider-button slider-button--prev" name="previous">{% include 'svg-definitions' with 'icon-caret' %}</button>
+                <div class="slider-counter caption">
+                  <span class="slider-counter--current">1</span>
+                  <span aria-hidden="true"> / </span>
+                  <span class="slider-counter--total">{{ products_to_display }}</span>
+                </div>
+                <button type="button" class="slider-button slider-button--next" name="next">{% include 'svg-definitions' with 'icon-caret' %}</button>
+              </div>
+            </slider-component>
+            <span class="js-image-modal-close product-media-modal__toggle hidden">{% include 'svg-definitions' with 'icon-close' %}</span>
+          </div>
+        </div>
+      {% endif %}
+      <div class="grid__item product__info-wrapper">
+        <div id="ProductInfo-{{ section.__key }}" class="product__info-container">
+          <div class="product-wrapper_color">
+            <h1 class="product__title">
+              {{ featured_product.title | escape }}
+            </h1>
+
+            <!-- price -->
+            <div id="price-{{ section.__key }}">
+              {% include 'price', product: featured_product, show_badges: true, price_class: 'price--large', product_template: true %}
+            </div>
+            
+            <product-form class="product-form">
+              <form action="/cart/add" method="post" enctype="multipart/form-data" data-addtocart='{{prod_d}}' id="AddToCartForm-{{ section.__key }}">
+                <div class="variants-selector-wrapper">
+                  <select name="id" id="featured-product-select-{{ section.__key }}" class="hide">
+                    {% for variant in featured_product.variants %}
+                      {% if variant.available %}
+                        <option {% if variant == featured_product.selected_or_first_available_variant %} selected="selected" {% endif %} data-sku="{{ variant.sku }}" value="{{ variant.id }}">{{ variant.title }} - {{ variant.price | money: shop.money_format }}</option>
+                      {% else %}
+                        <option disabled="disabled">
+                          {{ variant.title }} - {{ 'products.product.sold_out' | t }}
+                        </option>
+                      {% endif %}
+                    {% endfor %}
+                  </select>
+                </div>
+                <!-- quantity_selector -->
+                <div class="product-form__input product-form__quantity">
+                  <label class="form__label" for="Quantity">
+                    {{ 'products.product.quantity' | t }}
+                  </label>
+                  <quantity-input class="quantity">
+                    <button class="quantity__button no-js-hidden" name="minus" type="button">
+                      {% include 'svg-definitions' with 'icon-minus' %}
+                    </button>
+                    <input class="quantity__input"
+                        type="number"
+                        name="quantity"
+                        id="Quantity"
+                        min="1"
+                        value="1"
+                      >
+                    <button class="quantity__button no-js-hidden" name="plus" type="button">
+                      {% include 'svg-definitions' with 'icon-plus' %}
+                    </button>
+                  </quantity-input>
+                </div>
+
+                <div class="product-form__buttons">
+                  <button
+                    type="submit"
+                    name="add"
+                    id="AddToCart"
+                    class="product-form__submit button button--full-width button--primary btn--radius"
+                  {% if product.selected_or_first_available_variant.available == false %}disabled{% endif %}
+                  >
+                      {% if product.selected_or_first_available_variant.available %}
+                        {{ 'products.product.add_to_cart' | t }}
+                      {% else %}
+                        {{ 'products.product.sold_out' | t }}
+                      {% endif %}
+                  </button>
+
+                </div>
+                
+                <div class="form__message hidden" tabindex="-1" autofocus>
+                  <span class="visually-hidden">{{ 'accessibility.error' | t }} </span>
+                  {% include 'svg-definitions' with 'icon-error' %}
+                  <div class="js-error-content"></div>
+                </div>
+
+              </form>
+            </product-form>
+            
+          </div>
+        </div> 
+      </div>
+    </div>
+      <!-- The Modal -->
+    <div id="product-modal" class="modal hide">
+      <span class="js-image-modal-close product-media-modal__toggle product-modal-close">{% include 'svg-definitions' with 'icon-close' %}</span>
+      <img class="modal-content" id="modal-img">
+    </div>
+  </div>
+
+  <script>
+
+
+    document.addEventListener( 'DOMContentLoaded', function() {
+      
+      let this_el = document.querySelector.bind(document),
+      all_this_el = document.querySelectorAll.bind(document),
+      is_variants_initial = false,
+      variants = {{ featured_product.variants | json }},
+      variants_unavailable = variants.filter(value => value.available == false);
+
+      var keyId = "{{ section.__key }}";
+
+      var selectCallback = function(variant, selector) {
+        console.log('variant, selector',variant, selector);
+        VariantSelector.onVariantChange(variant,keyId);
+        if(variants_unavailable && variants_unavailable.length > 0 && VariantSelector.updateVariantsUnavailable) VariantSelector.updateVariantsUnavailable(variants,variants_unavailable);
+        
+        {% if section.settings.show_selected_variant_image %}
+          var img_wrapper = document.getElementById("main-image-wrapper-{{ section.__key }}");
+          if(variant.featured_image != null && variant.featured_image.id && is_variants_initial){
+            const img_item = document.getElementById("image-item-" + variant.featured_image.id);
+            img_wrapper.insertAdjacentElement("afterbegin", img_item);
+            setTimeout(function(){img_item.scrollIntoView({block: 'center'})}, 100);
+
+          }
+          is_variants_initial = true
+        {% endif %}
+      }
+      
+      new EasyStore.OptionSelectors('featured-product-select-{{ section.__key }}', '{{section.settings.variant_options_display}}', {
+          product: {{ featured_product | json }},
+          onVariantSelected: selectCallback,
+          enableHistoryState: false
+      })
+
+      //modal
+      var product_modal = document.getElementById("product-modal");
+      const body = document.querySelector("body");
+      all_this_el('.js-image-modal-toggle').forEach(imgModal => imgModal.addEventListener("click", (event)=>{
+        var modalImg = document.getElementById("modal-img");
+        product_modal.classList.remove("hide");
+        product_modal.classList.add("show");
+        modalImg.src = imgModal.src;
+        if (product_modal.classList.contains("show")) {
+            // Disable scroll
+            body.style.overflow = "hidden";
+        } 
+      }))
+
+      // close modal
+      var modal_close = document.getElementsByClassName("product-modal-close")[0];
+      modal_close.onclick = function() { 
+        product_modal.classList.add("hide");
+        if (product_modal.classList.contains("hide")) {
+            // Disable scroll
+            body.style.overflow = "";
+        } 
+      }
+      window.onclick = function(event) {
+      if (event.target == product_modal) {
+          product_modal.classList.add("hide");
+          body.style.overflow = "";
+      }
+      }
+      
+    });
+      
+
+      
+  </script>
+{% else %}
+  <div class="page-width spaced-section text-center">
+    <img src="{{settings.placeholder.featured_single_product}}" width="1100px"/>
+  </div>
+{% endif %}
+
+{% schema %}
+{
+  "type": "featured_product",
+    "name": {
+      "en_US": "Featured Product",
+      "zh_CN": "特色商品",
+      "zh_TW": "特色商品",
+      "ms_MY": "Koleksi"
+    },
+  	"settings": [
+    {
+      "type": "product",
+      "id": "product__id",
+      "label": {
+        "en_US": "Product",
+        "ja_JP": "コレクション",
+        "ko_KR": "컬렉션",
+        "ms_MY": "Koleksi",
+        "th_TH": "คอลเลกชัน",
+        "zh_CN": "目录",
+        "zh_TW": "目錄"
+      }
+    },
+    {
+      "type": "select",
+      "id": "variant_options_display",
+      "label": {
+        "en_US": "Variant options display",
+        "zh_TW": "規格顯示方式", 
+        "zh_CN": "规格显示方式", 
+        "ms_MY": "Paparan pilihan spesifikasi"
+      },
+      "default": "radio",
+      "options": [
+        {
+          "value": "radio",
+          "label": {
+            "en_US": "Tag",
+            "zh_TW": "標籤", 
+            "zh_CN": "标签", 
+            "ms_MY": "Tag"
+          }
+        },
+        {
+          "value": "select",
+          "label": {
+            "en_US": "Select",
+            "zh_TW": "下拉選單", 
+            "zh_CN": "下拉选单", 
+            "ms_MY": "Pilih"
+          }
+        }
+      ]
+    },
+    {
+      "type": "checkbox",
+      "id": "show_selected_variant_image",
+      "default": false,
+      "label": {
+        "en_US": "Display selected product variant image",
+        "zh_TW": "顯示選定商品規格的图像", 
+        "zh_CN": "显示选定商品规格的图像", 
+        "ms_MY": "Paparkan imej spesifikasi produk yang dipilih"
+      }
+    }
+  ],
+  "presets": [
+    {
+      "name": {
+        "en_US": "Featured Product",
+        "zh_CN": "特色商品",
+        "zh_TW": "特色商品",
+        "ms_MY": "Koleksi"
+      },
+      "blocks": [
+        {
+          "type": "featured-product"
+        }
+      ]
+    }
+  ]
+}
+{% endschema %}

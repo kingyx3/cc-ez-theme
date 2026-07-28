@@ -1,0 +1,187 @@
+#product-quickview-modal[open] + .product-quickview-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.7);
+  z-index: 2001;
+  display: block;
+  opacity: 1;
+  transition: opacity var(--duration-default) ease, visibility 0s;
+}
+#product-quickview-modal[open] + .product-quickview-modal-backdrop::after {
+  content: ' ';
+  display: block;
+}
+#product-quickview-modal{
+  display: none;
+}
+#product-quickview-modal[open]{
+  --color-foreground: 0,0,0;
+  --color-background: 248, 249, 250;
+  display: block;
+  transform: translate(-50%, -50%);
+  transition: transform var(--duration-default) ease, visibility 0s;
+  z-index: 10000;
+  background-color: #F8F9FA;
+  position: fixed;
+  top: 45%;
+  left: 50%;
+  width: 100%;
+  max-width: 950px;
+  color: #000;
+  text-align: left;
+  min-height: 500px;
+}
+
+.product-quickview {
+  display: flex;
+  flex-direction: row;
+}
+.product-quickview .product-quickview__img-wrapper{
+  width: 100%;
+  max-width: 500px;
+  background: rgba(0, 0, 0, 0.05);
+}
+.product-quickview .product-quickview__img-wrapper img{
+  display: block;
+  width: 100%;
+  aspect-ratio: 1/1;
+  object-fit: contain;
+  object-position: center;
+}
+.product-quickview .product-quickview__content-wrapper{
+  padding: 30px 30px 0;
+  max-width: 450px;
+  max-height: 500px;
+  overflow-y: auto;
+  flex: 1 1 auto;
+}
+.product-quickview-modal-wrapper .product-quickview-modal__close{
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 35px;
+  height: 35px;
+  background-color: transparent;
+  border: none;
+  cursor: pointer;
+  background-color: #F8F9FA;
+  border-radius: 50%;
+}
+.quickview-sticky-actions{
+  position: sticky;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  padding: 0 0 20px;
+  background: #F8F9FA;
+  box-shadow: 0 0 30px 25px #F8F9FA;
+}
+.quickview-sticky-actions .button{
+  position: relative;
+  margin: 0;
+}
+
+.product-quickview h2{
+  margin: 0.5em 0 0.7em;
+}
+.product-quickview .quickview-title:not(:hover){
+  text-decoration: none;
+}
+.product-quickview #price{
+  margin-bottom: 0.6em;
+}
+.product-quickview .product-form{
+  margin-top: 1em;
+}
+
+.product-quickview-modal-wrapper .loading-overlay{
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+.product-quickview-modal-wrapper .loading-overlay__spinner{
+  width: 4rem;
+}
+
+/* Promotion label */
+.quickview_promo-promo-label{
+  position: relative;
+  cursor: pointer;
+  display: inline-block;
+  margin-right: 5px;
+  margin-top: 5px;
+  border: 1px solid;
+  font-size: 0.7em;
+  padding: 5px 10px;
+  font-weight: 400;
+  line-height: 1.3;
+  border-radius: 2px;
+  max-width: 100%;
+  text-decoration: none;
+}
+
+.quickview_promo-promo-label:before {
+  content: '';
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  background: currentColor;
+  z-index: 1;
+  opacity: 0.05;
+  top: 0;
+  left: 0;
+  border-radius: 2px;
+}
+
+.quickview_promo-promo-label.quickview_promo-label-unclickable{
+  border: 1px dashed;
+}
+
+.quickview_promo-promo-label.quickview_promo-label-clickable{
+  padding-right: 2.6em;
+}
+
+.quickview_promo-promo-label .quickview_promo-svg-icon{
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translate(0,-50%);
+  -webkit-transform: translate(0,-50%);
+  width: 1.4em;
+  height: 1.4em;
+  fill: none;
+}
+
+@media screen and (max-width: 998px) {
+  #product-quickview-modal[open]{
+    min-height: 80dvh;
+  }
+  .product-quickview {
+    flex-direction: column;
+    overflow-y: auto;
+    max-width: 100%;
+    height: 80dvh;
+  }
+  #product-quickview-modal[open]{
+    transform: translate(0%, 0%);
+    top: initial;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+  }
+  .product-quickview .product-quickview__img-wrapper{
+    max-width: 100%;
+  }
+  .product-quickview .product-quickview__img-wrapper img{
+    max-height: 300px;
+  }
+  .product-quickview .product-quickview__content-wrapper {
+    max-width: 100%;
+    max-height: none;
+    overflow-y: visible;
+  }
+}

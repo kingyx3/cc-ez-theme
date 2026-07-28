@@ -1,0 +1,679 @@
+<style>
+  .footer{
+    background-color: {{section.settings.color_footer_background}};
+    color: {{section.settings.color_footer_body_text}};
+    --color-foreground: {{ section.settings.color_footer_body_text | color_extract: 'red' }},{{ section.settings.color_footer_body_text | color_extract: 'green' }},{{ section.settings.color_footer_body_text | color_extract: 'blue' }};
+  }
+  .footer .link--text,
+  .footer .list-menu__item--link,
+  .footer .footer-block__details-content .list-menu__item--link{
+    color: {{section.settings.color_footer_body_text}};
+  }
+  .footer-block__heading{
+    color: {{section.settings.color_footer_heading_text}};
+  }
+  .rounded{
+    border-radius: 10px;
+  }
+  .object-contain{
+    object-fit: contain;
+  }
+  .shopping-app-border{
+    border: 1px #ECECEC solid;
+    margin-right: 3px;
+  }
+  .app-download-badge{
+    display: inline-block; 
+    margin-right: 3px;
+  }
+</style>
+
+<link rel="preload" href="{{ 'section-footer.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+
+<footer class="footer color-background-1">
+  <div class="footer__content-top page-width">
+    <div class="grid grid--1-col grid--4-col-tablet ">
+      {% for block_handle in section.blocks_order %}
+      {% assign blocks = section.blocks %}
+      {% assign block = blocks[block_handle] %}
+        <div class="grid__item">
+          {% case block.type %}
+            {% when 'quick_link' %}
+              <h2 class="footer-block__heading">
+                {{ block.settings.title | escape }}
+              </h2>
+              <ul class="footer-block__details-content list-unstyled">
+                {% for link in contents.footer.links %}
+                <li>
+                  <a href="{{ link.url }}" {% if link.new_page == "true" %} target="_blank" {% endif %} class="link link--text list-menu__item list-menu__item--link">
+                    {{ link.title | escape }}
+                  </a>
+                </li>
+                {% endfor %}
+                {% app_snippet 'global/quick_link' %}
+              </ul>
+            {% when 'about_us' %}
+              <h2 class="footer-block__heading">{{ block.settings.title | escape }}</h2>
+              <div class="footer-block__details-content">
+                <p>{{ block.settings.text }}</p>
+              </div>
+            {% when 'follow_us' %}
+              <h2 class="footer-block__heading">{{ block.settings.title | escape }}</h2>
+              <ul class="footer__list-social list-unstyled list-social footer-block__details-content" role="list">
+                {% if block.settings.twitter %}
+                  <li class="list-social__item">
+                    <a href="{{ block.settings.twitter }}" class="link link--text list-social__link">
+                      {% include 'svg-definitions' with 'icon-twitter' %}
+                    </a>
+                  </li>
+                {% endif %}
+                {% if block.settings.facebook %}
+                  <li class="list-social__item">
+                    <a href="{{ block.settings.facebook }}" class="link link--text list-social__link">
+                      {% include 'svg-definitions' with 'icon-facebook' %}
+                    </a>
+                  </li>
+                {% endif %}
+                {% if block.settings.instagram %}
+                  <li class="list-social__item">
+                    <a href="{{ block.settings.instagram }}" class="link link--text list-social__link">
+                      {% include 'svg-definitions' with 'icon-instagram' %}
+                    </a>
+                  </li>
+                {% endif %}
+                {% if block.settings.tiktok %}
+                  <li class="list-social__item">
+                    <a href="{{ block.settings.tiktok }}" class="link link--text list-social__link">
+                      {% include 'svg-definitions' with 'icon-tiktok' %}
+                    </a>
+                  </li>
+                {% endif %}
+                {% if block.settings.whatsapp %}
+                  <li class="list-social__item">
+                    <a href="{{ block.settings.whatsapp }}" class="link link--text list-social__link">
+                      {% include 'svg-definitions' with 'icon-whatsapp' %}
+                    </a>
+                  </li>
+                {% endif %}
+                {% if block.settings.line %}
+                  <li class="list-social__item">
+                    <a href="{{ block.settings.line }}" class="link link--text list-social__link">
+                      {% include 'svg-definitions' with 'icon-line-footer' %}
+                    </a>
+                  </li>
+                {% endif %}
+                {% if block.settings.wechat %}
+                  <li class="list-social__item">
+                    <a href="{{ block.settings.wechat }}" class="link link--text list-social__link">
+                      {% include 'svg-definitions' with 'icon-wechat' %}
+                    </a>
+                  </li>
+                {% endif %}
+                {% if block.settings.youtube %}
+                  <li class="list-social__item">
+                    <a href="{{ block.settings.youtube }}" class="link link--text list-social__link">
+                      {% include 'svg-definitions' with 'icon-youtube' %}
+                    </a>
+                  </li>
+                {% endif %}
+                {% app_snippet 'global/social_link' %}
+              </ul>
+            {% when 'payment_accept' %}
+              <h2 class="footer-block__heading">{{ block.settings.title | escape }}</h2>
+              <div class="footer-block__details-content footer__payment">
+                <ul class="list list-payment" role="list">
+                  {% if block.settings.show_visa_icon %}
+                    <li class="list-payment__item">
+                      {% include 'svg-definitions' with 'icon-visa' %}
+                    </li>
+                  {% endif %}
+                  {% if block.settings.show_master_icon %}
+                    <li class="list-payment__item">
+                      {% include 'svg-definitions' with 'icon-master' %}
+                    </li>
+                  {% endif %}
+                  {% if block.settings.show_amex_icon %}
+                    <li class="list-payment__item">
+                      {% include 'svg-definitions' with 'icon-amex' %}
+                    </li>
+                  {% endif %}
+                  {% if block.settings.show_paypal_icon %}
+                    <li class="list-payment__item">
+                      {% include 'svg-definitions' with 'icon-paypal' %}
+                    </li>
+                  {% endif %}
+                  {% if block.settings.show_diners_icon %}
+                    <li class="list-payment__item">
+                      {% include 'svg-definitions' with 'icon-diners' %}
+                    </li>
+                  {% endif %}
+                  {% if block.settings.show_discover_icon %}
+                    <li class="list-payment__item">
+                      {% include 'svg-definitions' with 'icon-discover' %}
+                    </li>
+                  {% endif %}
+									{% if block.settings.show_payment_method %}
+                    {% for type in shop.enabled_payment_types %}
+                      <li class="list-payment__item">
+                        <img src="{{ type | payment_type_image_url }}" loading="lazy" width="85px">
+                      </li>
+                    {% endfor %}
+                 {% endif %}
+              </div>
+                <br>
+            {% when 'image' %}
+              {% if block.settings.image_link %}<a href="{{ block.settings.image_link }}">{% endif %}
+                <img
+                  src="{{ block.settings.image }}"
+                  style="max-width: min(100%, {{ block.settings.image_width }}px);"
+                  loading="lazy"
+                >
+              {% if block.settings.image_link %}</a>{% endif %}
+            {% when 'shopping_app' %}
+              <div>
+                <h2 class="footer-block__heading">{{ block.settings.title | escape }}</h2>
+                <a class="full-unstyled-link" href="{{ shop.shopping_app.download_url }}" target="_blank">
+                  {% if shop.shopping_app.icon_url %}
+                    <img
+                      src="{{ shop.shopping_app.icon_url }}"
+                      width="50px"
+                      height="50px"
+                      class="rounded shopping-app-border object-contain mr-2"
+                      alt="{{ shop.name }}"
+                      loading="lazy"
+                    >
+                  {% endif %}
+                  <img 
+                    src="https://resources.easystore.co/admin/channels/shopping_app.png"
+                    class="rounded"
+                    width="50px"
+                    height="50px"
+                    loading="lazy"
+                  >
+                </a>
+                <p class="mt-1">{{ block.settings.text }}</p>
+                <a class="full-unstyled-link" href="{{ shop.shopping_app.download_url }}" target="_blank">
+                  <img
+                    src="https://resources.easystore.co/email-templates/badges/app-store-badge.png"
+                    class="app-download-badge"
+                    width="100px"
+                    alt="App Store"
+                  >
+                  <img
+                    src="https://resources.easystore.co/email-templates/badges/play-store-badge.png"
+                    class="app-download-badge"
+                    width="100px"
+                    alt="Play Store"
+                  >
+                  <img
+                    src="https://resources.easystore.co/email-templates/badges/app-gallery-badge.png"
+                    class="app-download-badge"
+                    width="100px"
+                    alt="App Gallery"
+                  >
+                </a>
+                <br>
+              </div>
+          {% endcase %}
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="footer__content-bottom">
+    <div class="footer__content-bottom-wrapper page-width">
+      <div class="footer__column footer__column--info">
+
+        {% include 'currency-picker', class: 'disclosure mb-1' %}
+        
+        <div class="footer__copyright caption">
+          <div class="copyright__content">{{ copyright }}</div>
+        </div>
+
+        <div class="footer__copyright caption">
+          {% if contents.terms-policy.links %}
+            <div>
+            {% assign count = 0 %}
+            {% for link in contents.terms-policy.links %}
+              {% if count == 0 %}
+                <a href="{{ link.url }}">{{ link.title | escape }}</a>
+              {% else %}
+                | <a href="{{ link.url }}">{{ link.title | escape }}</a>
+              {% endif %}
+              {% assign count = count | plus: 1 %}
+            {% endfor %}
+            </div>
+         {% endif %}
+        </div>
+        
+      </div>
+    </div>
+  </div>
+</footer>
+
+
+{% schema %}
+{
+  "name": {
+    "en_US": "Footer",
+    "ja_JP": "フッター",
+    "ko_KR": "바닥글",
+    "th_TH": "ส่วนท้าย",
+    "vi": "Chân trang",
+    "zh_CN": "页脚",
+    "zh_TW": "頁尾"
+  },
+  "max_blocks": 4,
+  "settings": [
+    {
+      "type": "header",
+      "label": {
+        "en_US": "Color",
+        "ja_JP": "色",
+        "ko_KR": "색상",
+        "th_TH": "สี",
+        "vi": "Màu",
+        "zh_CN": "颜色",
+        "zh_TW": "顏色"
+      }
+    },
+    {
+      "type": "color",
+      "id": "color_footer_background",
+      "label": {
+        "en_US": "Background",
+        "ja_JP": "背景",
+        "ko_KR": "배경",
+        "th_TH": "พื้นหลัง",
+        "vi": "Nền",
+        "zh_CN": "背景颜色",
+        "zh_TW": "背景色"
+      },
+      "default": "#FAF3EC"
+    },
+    {
+      "type": "color",
+      "id": "color_footer_heading_text",
+      "label": {
+        "en_US": "Heading text",
+        "ja_JP": "見出しテキスト",
+        "ko_KR": "제목 텍스트",
+        "th_TH": "ข้อความส่วนหัว",
+        "vi": "Văn bản tiêu đề",
+        "zh_CN": "标题字色",
+        "zh_TW": "標題字色"
+      },
+      "default": "#000000"
+    },
+    {
+      "type": "color",
+      "id": "color_footer_body_text",
+      "label": {
+        "en_US": "Body text",
+        "ja_JP": "本文",
+        "ko_KR": "본문 텍스트",
+        "th_TH": "ข้อความเนื้อหา",
+        "vi": "Văn bản nội dung",
+        "zh_CN": "内文字色",
+        "zh_TW": "內文字色"
+      },
+      "default": "#746B60"
+    }
+  ],
+  "blocks": [
+    {
+      "type": "quick_link",
+      "name": {
+        "en_US": "Quick links",
+        "ja_JP": "メニュー",
+        "ko_KR": "메뉴",
+        "th_TH": "เมนู",
+        "vi": "Menu",
+        "zh_CN": "快速连结",
+        "zh_TW": "快速連結"
+      },
+      "settings": [
+        {
+          "type": "text",
+          "id": "title",
+          "label": {
+            "en_US": "Heading",
+            "ja_JP": "見出し",
+            "ko_KR": "제목",
+            "th_TH": "ส่วนหัว",
+            "vi": "Tiêu đề",
+            "zh_CN": "标题文字",
+            "zh_TW": "標題文字"
+          },
+          "default": {
+            "en_US": "Quick links",
+            "ja_JP": "クイックリンク",
+            "ko_KR": "빠른 링크",
+            "th_TH": "ลิงก์ด่วน",
+            "vi": "Liên kết nhanh",
+            "zh_CN": "快速连结",
+            "zh_TW": "快速連結"
+          }
+        }
+      ]
+    },
+    {
+      "type": "about_us",
+      "name": {
+        "en_US": "About us",
+        "ja_JP": "テキスト",
+        "ko_KR": "텍스트",
+        "th_TH": "ข้อความ",
+        "vi": "Văn bản",
+        "zh_CN": "关于我们",
+        "zh_TW": "關於我們"
+      },
+      "settings": [
+        {
+          "type": "text",
+          "id": "title",
+          "label": {
+            "en_US": "Heading",
+            "ja_JP": "見出し",
+            "ko_KR": "제목",
+            "th_TH": "ส่วนหัว",
+            "vi": "Tiêu đề",
+            "zh_CN": "标题文字",
+            "zh_TW": "標題文字"
+          },
+          "default": {
+            "en_US": "Talk about your business",
+            "ja_JP": "あなたのビジネスについて語る",
+            "ko_KR": "비즈니스에 대한 이야기하기",
+            "th_TH": "พูดถึงธุรกิจของคุณ",
+            "vi": "Chia sẻ về doanh nghiệp của bạn",
+            "zh_CN": "介绍您的业务",
+            "zh_TW": "描述您的商家"
+          }
+        },
+        {
+          "type": "text",
+          "id": "text",
+          "label": {
+            "en_US": "Text",
+            "ja_JP": "テキスト",
+            "ko_KR": "텍스트",
+            "th_TH": "ข้อความ",
+            "vi": "Văn bản",
+            "zh_CN": "文本",
+            "zh_TW": "文字"
+          },
+          "default": {
+            "en_US": "Share store details, promotions, or brand content with your customers.",
+            "ja_JP": "ストア詳細、プロモーション、ブランドのコンテンツをお客様と共有する。",
+            "ko_KR": "스토어 세부 정보, 프로모션 또는 브랜드 콘텐츠를 고객과 공유하십시오.",
+            "th_TH": "แชร์รายละเอียดร้านค้า โปรโมชัน หรือเนื้อหาแบรนด์กับลูกค้าของคุณ",
+            "vi": "Chia sẻ thông tin cửa hàng, khuyến mãi hoặc nội dung thương hiệu với khách hàng.",
+            "zh_CN": "与您的客户共享商店详细信息、促销信息或品牌内容。",
+            "zh_TW": "與顧客分享商店的詳細資訊、宣傳活動或品牌內容。"
+          }
+        }
+      ]
+    },
+    {
+      "type": "follow_us",
+      "name": {
+        "en_US": "Social media",
+        "zh_CN": "社群媒体",
+        "zh_TW": "社群媒體"
+      },
+      "settings": [
+        {
+          "type": "text",
+          "id": "title",
+          "label": {
+            "en_US": "Heading",
+            "ja_JP": "見出し",
+            "ko_KR": "제목",
+            "th_TH": "ส่วนหัว",
+            "vi": "Tiêu đề",
+            "zh_CN": "标题文字",
+            "zh_TW": "標題文字"
+          },
+          "default": {
+            "en_US": "Follow us",
+            "zh_CN": "关注我们",
+            "zh_TW": "關注我們"
+          }
+        },
+        {
+          "type": "text",
+          "id": "twitter",
+          "label": "Twitter",
+          "default": "https://twitter.com/"
+        },
+        {
+          "type": "text",
+          "id": "facebook",
+          "label": "Facebook",
+          "default": "https://facebook.com/"
+        },
+        {
+          "type": "text",
+          "id": "instagram",
+          "label": "Instagram",
+          "default": "http://instagram.com/"
+        },
+        {
+          "type": "text",
+          "id": "tiktok",
+          "label": {
+            "en_US":"Tiktok",
+            "zh_CN":"抖音",
+            "zh_TW":"抖音"
+          },
+          "default": "https://tiktok.com/"
+        },
+        {
+          "type": "text",
+          "id": "whatsapp",
+          "label": "Whatsapp",
+          "default": "https://wa.me/"
+        },
+        {
+          "type": "text",
+          "id": "line",
+          "label": "Line",
+          "default": "https://line.com/"
+        },
+        {
+          "type": "text",
+          "id": "wechat",
+          "label": "Wechat",
+          "default": "https://wechat.com/"
+        },
+        {
+          "type": "text",
+          "id": "youtube",
+          "label": "YouTube",
+          "default": "https://www.youtube.com/"
+        }
+      ]
+    },
+    {
+      "type": "payment_accept",
+      "name": {
+        "en_US": "Payment methods",
+        "zh_CN": "支付方式",
+        "zh_TW": "支付方式"
+      },
+      "settings": [
+        {
+          "type": "text",
+          "id": "title",
+          "label": {
+            "en_US": "Heading",
+            "ja_JP": "見出し",
+            "ko_KR": "제목",
+            "th_TH": "ส่วนหัว",
+            "vi": "Tiêu đề",
+            "zh_CN": "标题文字",
+            "zh_TW": "標題文字"
+          },
+          "default": {
+            "en_US": "We accept",
+            "zh_CN": "支付方式",
+            "zh_TW": "支付方式"
+          }
+        },
+        {
+          "type": "checkbox",
+          "id": "show_visa_icon",
+          "label": "Visa",
+          "default": true
+        },
+        {
+          "type": "checkbox",
+          "id": "show_master_icon",
+          "label": "Master",
+          "default": true
+        },
+        {
+          "type": "checkbox",
+          "id": "show_amex_icon",
+          "label": "American Express",
+          "default": true
+        },
+        {
+          "type": "checkbox",
+          "id": "show_paypal_icon",
+          "label": "PayPal",
+          "default": true
+        },
+        {
+          "type": "checkbox",
+          "id": "show_diners_icon",
+          "label": "Diners Club",
+          "default": true
+        },
+        {
+          "type": "checkbox",
+          "id": "show_discover_icon",
+          "label": "Discover",
+          "default": true
+        },
+        {
+          "type": "checkbox",
+          "id": "show_payment_method",
+          "label": {
+            "en_US": "Payment methods",
+            "ja_JP": "決済方法",
+            "ko_KR": "결제 방법",
+            "th_TH": "วิธีการชำระเงิน",
+            "vi": "Phương thức thanh toán",
+            "zh_CN": "显示金流方式",
+            "zh_TW": "顯示金流方式"
+          },
+          "default": false
+        }
+      ]
+    },
+    {
+      "type": "image",
+      "name": {
+        "en_US": "Image",
+        "ja_JP": "メニュー",
+        "ko_KR": "메뉴",
+        "th_TH": "เมนู",
+        "vi": "Image",
+        "zh_CN": "图片",
+        "zh_TW": "圖片"
+      },
+      "settings": [
+        {
+          "type": "image",
+          "id": "image",
+          "label": {
+            "en_US": "Image",
+            "ja_JP": "見出し",
+            "ko_KR": "제목",
+            "th_TH": "ส่วนหัว",
+            "vi": "Tiêu đề",
+            "zh_CN": "图片",
+            "zh_TW": "圖片"
+          }
+        },
+        {
+          "type": "range",
+          "id": "image_width",
+          "min": 50,
+          "max": 250,
+          "step": 5,
+          "unit": {
+            "en_US": "px",
+            "ja_JP": "px",
+            "ko_KR": "px",
+            "ms_MY": "px",
+            "th_TH": "px",
+            "zh_CN": "px",
+            "zh_TW": "像素"
+          },
+          "default": 100,
+          "label": {
+            "en_US": "Image width",
+            "ja_JP": "見出し",
+            "ko_KR": "제목",
+            "th_TH": "ส่วนหัว",
+            "vi": "Tiêu đề",
+            "zh_CN": "图片宽度",
+            "zh_TW": "圖片寬度"
+          }
+        },
+        {
+          "type": "text",
+          "id": "image_link",
+          "label": {
+            "en_US": "Image link",
+            "ja_JP": "見出し",
+            "ko_KR": "제목",
+            "th_TH": "ส่วนหัว",
+            "vi": "Tiêu đề",
+            "zh_CN": "图片连结",
+            "zh_TW": "圖片連結"
+          }
+        }
+      ]
+    },
+    {
+      "type": "shopping_app",
+      "name": {
+        "en_US": "Shopping App",
+        "ja_JP": "ショッピングアプリ",
+        "ko_KR": "쇼핑 앱",
+        "th_TH": "แอปช้อปปิ้ง",
+        "vi": "Ứng dụng mua sắm",
+        "zh_CN": "会员购物APP",
+        "zh_TW": "會員購物APP"
+      },
+      "settings": [
+        {
+          "type": "text",
+          "id": "text",
+          "label": {
+            "en_US": "Text",
+            "ja_JP": "テキスト",
+            "ko_KR": "텍스트",
+            "th_TH": "ข้อความ",
+            "vi": "Văn bản",
+            "zh_CN": "文本",
+            "zh_TW": "文字"
+          },
+          "default": {
+            "en_US": "Download the Shopping App now to get best offers and memberships experience at your fingertips.",
+            "ja_JP": "今すぐショッピングアプリをダウンロードして、最高のオファーと会員体験を手に入れましょう。",
+            "ko_KR": "지금 쇼핑 앱을 다운로드하여 최고의 혜택과 멤버십 경험을 손끝에서 누리세요.",
+            "th_TH": "ดาวน์โหลดแอปช้อปปิ้งตอนนี้เพื่อรับข้อเสนอและประสบการณ์สมาชิกที่ดีที่สุดที่ปลายนิ้วของคุณ",
+            "vi": "Tải ứng dụng mua sắm ngay bây giờ để nhận được ưu đãi tốt nhất và trải nghiệm thành viên ngay trong tầm tay bạn.",
+            "zh_CN": "立即下载购物应用程序，尽享最佳优惠和会员体验。",
+            "zh_TW": "立即下載購物應用程式，享受最佳優惠和會員體驗。"
+          }
+        }
+      ]
+    }
+  ]
+}
+{% endschema %}

@@ -1,0 +1,264 @@
+{{ 'section-multicolumn.css' | asset_url | stylesheet_tag }}
+{{ 'component-slider.css' | asset_url | stylesheet_tag }}
+<style>
+	.title-center{
+      place-content:center;
+    }
+</style>
+
+<div class="multicolumn background-{{ section.settings.background_style }}{% if section.settings.title == '' %} no-heading{% endif %}">
+  <div class="page-width">
+    <div class="title-wrapper-with-link title-wrapper--self-padded-mobile{% if section.settings.title == '' %} title-wrapper-with-link--no-heading{% endif %}{% if section.settings.center_title == true %} title-center{% endif %}">
+      <h2 class="title">
+        {{ section.settings.title | escape }}
+      </h2>
+      {% if section.settings.button_label != '' and section.settings.swipe_on_mobile %}
+        <a href="{{ section.settings.button_link }}" class="link underlined-link large-up-hide">{{ section.settings.button_label | escape }}</a>
+      {% endif %}
+    </div>
+    <slider-component class="slider-mobile-gutter">
+      <ul class="multicolumn-list grid grid--1-col{% if section.blocks.size > 3 %} grid--2-col-tablet grid--4-col-desktop{% else %} grid--3-col-tablet{% endif %}{% if section.settings.swipe_on_mobile and section.blocks.size > 1 %} slider slider--mobile grid--peek{% endif %}"
+        id="Slider-{{ section.id }}"
+        role="list"
+      >
+        {% for block_handle in section.blocks_order %}
+        {% assign blocks = section.blocks %}
+        {% assign block = blocks[block_handle] %}
+          <li class="multicolumn-list__item grid__item{% if section.settings.swipe_on_mobile %} slider__slide{% endif %}{% if section.settings.column_alignment == 'center' %} center{% endif %}" {{ block.shopify_attributes }}>
+            <div class="multicolumn-card">
+              {% if block.settings.image and block.settings.image != '' %}
+                {% assign spaced_image = false %}
+                {% if section.settings.image_ratio == 'adapt' or section.settings.image_ratio == 'circle' %}
+                  {% assign spaced_image = true %}
+                {% endif %}
+                <div class="multicolumn-card__image-wrapper multicolumn-card__image-wrapper--{{ section.settings.image_width }}-width{% if section.settings.image_width != 'full' or spaced_image %} multicolumn-card-spacing{% endif %}">
+                  <{% if block.settings.link_url %}a href="{{ block.settings.link_url }}"{% else %}div{% endif %} class="media media--transparent media--{{ section.settings.image_ratio }}"
+                    {% if section.settings.image_ratio == 'adapt' %}
+                      style="padding-bottom: 50%;"
+                    {% endif %}>
+                    
+                    <img
+                      srcset="{{ block.settings.image | img_url: '550x' }} 550w, {{ block.settings.image | img_url: '710x' }} 710w, {{ block.settings.image | img_url: '1420x' }} 1420w"
+                      src="{{ block.settings.image | img_url: '550x' }}"
+                      sizes="(min-width: 990px) 710px,
+                        (min-width: 750px) 550px,
+                        550px"
+                      alt="{{ block.settings.image_alt }}"
+                      loading="lazy"
+                    >
+                    
+                  </{% if block.settings.link_url %}a{% else %}div{% endif %}>
+                </div>
+              {% endif %}
+              <div class="multicolumn-card__info">
+                {% if block.settings.title != '' %}
+                  <h3>{{ block.settings.title | escape }}</h3>
+                {% endif %}
+                {% if block.settings.text != '' %}
+                  <div class="rte">{{ block.settings.text }}</div>
+                {% endif %}
+                {% if block.settings.link_text != '' %}
+                  <a href="{{ block.settings.link_url }}" class="button button--secondary">{{ block.settings.link_text }}</a>
+                {% endif %}
+              </div>
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
+
+      {% if section.settings.swipe_on_mobile %}
+        <div class="slider-buttons no-js-hidden medium-hide{% if section.blocks.size < 2 %} small-hide{% endif %}">
+          <button type="button" class="slider-button slider-button--prev" name="previous" aria-label="{{ 'accessibility.previous_slide' | t }}">{% include 'svg-definitions' with 'icon-caret' %}</button>
+          <div class="slider-counter caption">
+            <span class="slider-counter--current">1</span>
+            <span aria-hidden="true"> / </span>
+            <span class="visually-hidden">{{ 'accessibility.of' | t }}</span>
+            <span class="slider-counter--total">{{ section.blocks.size }}</span>
+          </div>
+          <button type="button" class="slider-button slider-button--next" name="next" aria-label="{{ 'accessibility.next_slide' | t }}">{% include 'svg-definitions' with 'icon-caret' %}</button>
+        </div>
+      {% endif %}
+    </slider-component>
+    <div class="center{% if section.settings.swipe_on_mobile %} small-hide medium-hide{% endif %}">
+      {% if section.settings.button_label != '' %}
+        <a class="button button--primary"{% if section.settings.button_link == '' %} aria-disabled="true" role="link"{% else %} href="{{ section.settings.button_link }}"{% endif %}>
+          {{ section.settings.button_label | escape }}
+        </a>
+      {% endif%}
+    </div>
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": { "en_US": "Multicolumn", "zh_TW": "多元格框", "zh_CN": "多元格框", "ms_MY": "Berbilang lajur" },
+  "max_blocks": 6,
+  "settings": [
+    {
+      "type": "text",
+      "id": "title",
+      "default": { "en_US": "Multicolumn", "zh_TW": "多元格框", "zh_CN": "多元格框", "ms_MY": "Berbilang lajur" },
+      "label": { "en_US": "Title", "zh_TW": "標題", "zh_CN": "标题", "ms_MY": "tajuk" }
+    },
+    {
+      "type": "select",
+      "id": "image_width",
+      "options": [
+        {
+          "value": "third",
+          "label": { "en_US": "Third", "zh_TW": "三分", "zh_CN": "三分", "ms_MY": "Satu per tiga" }
+        },
+        {
+          "value": "half",
+          "label": { "en_US": "Half", "zh_TW": "半幅", "zh_CN": "半幅", "ms_MY": "Separuh" }
+        },
+        {
+          "value": "full",
+          "label": { "en_US": "Full", "zh_TW": "全幅", "zh_CN": "全幅", "ms_MY": "Penuh" }
+        }
+      ],
+      "default": "full",
+      "label": { "en_US": "Image Width", "zh_TW": "圖片寬度", "zh_CN": "图片宽度", "ms_MY": "Kelebaran Imej" }
+    },
+    {
+      "type": "select",
+      "id": "image_ratio",
+      "options": [
+        {
+          "value": "adapt",
+          "label": { "en_US": "Adapt", "zh_TW": "響應式調整", "zh_CN": "响应式调整", "ms_MY": "Menyesuaikan" }
+        },
+        {
+          "value": "portrait",
+          "label": { "en_US": "Portrait", "zh_TW": "直向", "zh_CN": "直向", "ms_MY": "Potret" }
+        },
+        {
+          "value": "square",
+          "label": { "en_US": "Square", "zh_TW": "正方形", "zh_CN": "正方形", "ms_MY": "Segi empat sama" }
+        },
+        {
+          "value": "circle",
+          "label": { "en_US": "Circle", "zh_TW": "圓形", "zh_CN": "圆形", "ms_MY": "Bulat" }
+        }
+      ],
+      "default": "square",
+      "label": { "en_US": "Image Ratio", "zh_TW": "圖片比例", "zh_CN": "图片比例", "ms_MY": "Nisbah Imej" }
+    },
+    {
+      "type": "select",
+      "id": "column_alignment",
+      "options": [
+        {
+          "value": "left",
+          "label": { "en_US": "Left", "zh_TW": "靠左", "zh_CN": "靠左", "ms_MY": "Kiri" }
+        },
+        {
+          "value": "center",
+          "label": { "en_US": "Center", "zh_TW": "置中", "zh_CN": "置中", "ms_MY": "Tengah" }
+        }
+      ],
+      "default": "center",
+      "label": { "en_US": "Column alignment", "zh_TW": "內容位置", "zh_CN": "内容位置", "ms_MY": "Penjajaran lajur" }
+    },
+    {
+      "type": "select",
+      "id": "background_style",
+      "options": [
+        {
+          "value": "none",
+          "label": { "en_US": "None", "zh_TW": "透明", "zh_CN": "透明", "ms_MY": "Tiada" }
+        },
+        {
+          "value": "primary",
+          "label": { "en_US": "Primary", "zh_TW": "前景色", "zh_CN": "前景色", "ms_MY": "Utama" }
+        },
+        {
+          "value": "secondary",
+          "label": { "en_US": "Secondary", "zh_TW": "背景色", "zh_CN": "背景色", "ms_MY": "Sekunder" }
+        }
+      ],
+      "default": "primary",
+      "label": { "en_US": "Background Style", "zh_TW": "背景色風格", "zh_CN": "背景色风格", "ms_MY": "Gaya latar belakang" }
+    },
+    {
+      "type": "text",
+      "id": "button_label",
+      "default": { "en_US": "Button Label", "zh_TW": "按鈕文字", "zh_CN": "按钮文字", "ms_MY": "Label Butang" },
+      "label": { "en_US": "Button Label", "zh_TW": "按鈕文字", "zh_CN": "按钮文字", "ms_MY": "Label Butang" }
+    },
+    {
+      "type": "text",
+      "id": "button_link",
+      "label": { "en_US": "Button Link", "zh_TW": "按鈕連結", "zh_CN": "按钮连结", "ms_MY": "Link Butang" }
+    },
+    {
+      "type": "checkbox",
+      "id": "swipe_on_mobile",
+      "default": true,
+      "label": { "en_US": "Swipe on Mobile", "zh_TW": "手機版顯示滑動圖片", "zh_CN": "手机版显示滑动图片", "ms_MY": "Leret pada mudah alih" }
+    },
+    {
+      "type": "checkbox",
+      "id": "center_title",
+      "default": false,
+      "label": { "en_US": "Center Title", "zh_TW": "標題置中", "zh_CN": "标题置中", "ms_MY": "Tajuk Tengah" }
+    }
+  ],
+  "blocks": [
+    {
+      "type": "column",
+      "name": { "en_US": "Column", "zh_TW": "格框", "zh_CN": "格框", "ms_MY": "Kolum" },
+      "settings": [
+        {
+          "type": "image",
+          "id": "image",
+          "label": { "en_US": "Image", "zh_TW": "圖片", "zh_CN": "图片", "ms_MY": "Imej" }
+        },
+        {
+          "type": "text",
+          "id": "title",
+          "default": { "en_US": "Column", "zh_TW": "格框", "zh_CN": "格框", "ms_MY": "Kolum" },
+          "label": { "en_US": "Title", "zh_TW": "標題", "zh_CN": "标题", "ms_MY": "tajuk" }
+        },
+        {
+          "type": "text",
+          "id": "text",
+          "default": { 
+            "en_US": "Pair text with an image to focus on your chosen product, collection, or blog post. Add details on availability, style, or even provide a review.", 
+            "zh_TW": "將文本與圖像配對，以專注於您選擇的產品、收藏或博客文章。添加有關可用性、樣式的詳細信息，甚至提供評論。", 
+            "zh_CN": "将文本与图像配对，以专注于您选择的产品、收藏或博客文章。添加有关可用性、样式的详细信息，甚至提供评论。", 
+            "ms_MY": "Gandingkan teks dengan imej untuk memfokuskan pada produk, koleksi atau siaran blog pilihan anda. Tambahkan butiran tentang ketersediaan, gaya atau bahkan berikan ulasan." 
+          },
+          "label": { "en_US": "Text", "zh_TW": "文字", "zh_CN": "文字", "ms_MY": "Teks" }
+        },
+        {
+          "type": "text",
+          "id": "link_text",
+          "label": { "en_US": "Link text", "zh_TW": "連結文字", "zh_CN": "连结文字", "ms_MY": "Teks pautan" }
+        },
+        {
+          "type": "text",
+          "id": "link_url",
+          "label": { "en_US": "Link URL", "zh_TW": "連結", "zh_CN": "连结", "ms_MY": "URL pautan" }
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": { "en_US": "Multicolumn", "zh_TW": "多元格框", "zh_CN": "多元格框", "ms_MY": "Berbilang lajur" },
+      "blocks": [
+        {
+          "type": "column"
+        },
+        {
+          "type": "column"
+        },
+        {
+          "type": "column"
+        }
+      ]
+    }
+  ]
+}
+{% endschema %}

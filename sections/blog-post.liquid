@@ -1,0 +1,227 @@
+<link rel="preload" href="{{ 'component-slider.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<link rel="preload" href="{{ 'section-blog-post.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+
+<style>
+  .blog-btn-margin-top{
+  	margin-top:2rem;
+  }
+</style>
+
+<div class="multicolumn background-{{ section.settings.background_style }}{% if section.settings.title == '' %} no-heading{% endif %}">
+  <div class="page-width">
+    <div class="title-wrapper-with-link title-wrapper--self-padded-mobile{% if section.settings.title == '' %} title-wrapper-with-link--no-heading{% endif %}">
+      <h2 class="title">
+        {{ section.settings.title | escape }}
+      </h2>
+      {% if section.settings.button_label != '' and section.settings.swipe_on_mobile %}
+        <a href="{{ section.settings.button_link }}" class="link underlined-link large-up-hide">{{ section.settings.button_label | escape }}</a>
+      {% endif %}
+    </div>
+    <slider-component class="slider-mobile-gutter">
+      <ul class="multicolumn-list grid grid--1-col{% if section.blocks.size > 3 and section.settings.image_width != 'full' %} grid--2-col-tablet grid--4-col-desktop{% elsif section.blocks.size > 3 and section.settings.image_width == 'full' %} grid--2-col-tablet{% else %} grid--3-col-tablet{% endif %}{% if section.settings.swipe_on_mobile and section.blocks.size > 1 %} slider slider--mobile grid--peek{% endif %}"
+        id="Slider-{{ section.id }}"
+        role="list"
+      >
+        {% for block_handle in section.blocks_order %}
+        {% assign blocks = section.blocks %}
+        {% assign block = blocks[block_handle] %}
+        {% assign handle = block.settings.article_id %}
+          <li class="multicolumn-list__item grid__item{% if section.settings.swipe_on_mobile %} slider__slide{% endif %}">
+            <div class="multicolumn-card">
+                {% assign spaced_image = false %}
+                {% if section.settings.image_ratio == 'adapt' or section.settings.image_ratio == 'circle' %}
+                  {% assign spaced_image = true %}
+                {% endif %}
+                <div class="multicolumn-card__image-wrapper multicolumn-card__image-wrapper--{{ section.settings.image_width }}-width{% if section.settings.image_width != 'full' or spaced_image %} multicolumn-card-spacing{% endif %}">
+                  <div class="media media--transparent media--{{ section.settings.image_ratio }}"
+                    {% if section.settings.image_ratio == 'adapt' %}
+                      style="padding-bottom: 50%;"
+                    {% endif %}>
+                    
+                    <img
+                      srcset="{{ articles[handle].image_url | img_url: '550x' }} 550w, {{ articles[handle].image_url | img_url: '710x' }} 710w, {{ articles[handle].image_url | img_url: '1420x' }} 1420w"
+                      src="{{ articles[handle].image_url | img_url: '550x' }}"
+                      sizes="(min-width: 990px) {% if section.blocks.size <= 2 %}710px{% else %}550px{% endif %},
+                        (min-width: 750px) {% if section.blocks.size == 1 %}710px{% else %}550px{% endif %},
+                        calc(100vw - 30px)"
+                      alt="{{ block.settings.image_alt }}"
+                      loading="lazy"
+                    >
+                  </div>
+                  <div class="multicolumn-card__info">
+                    {% if articles[handle].author != '' %}
+                      <h3>{{ articles[handle].author | escape }}</h3>
+                    {% endif %}
+                      <h2>{{ articles[handle].title | escape }}</h3>
+                      <div class="rte">{{ articles[handle].description | strip_html | truncatewords: 25 }} </div>
+                      <a href="{{articles[handle].url }}" class="button button--secondary">Read more</a>
+                  </div>
+                </div>
+              </div>
+            </li>
+        {% endfor %}
+      </ul>
+
+      {% if section.settings.swipe_on_mobile %}
+        <div class="slider-buttons no-js-hidden medium-hide{% if section.blocks.size < 2 %} small-hide{% endif %}">
+          <button type="button" class="slider-button slider-button--prev" name="previous" aria-label="{{ 'accessibility.previous_slide' | t }}">{% include 'svg-definitions' with 'icon-caret' %}</button>
+          <div class="slider-counter caption">
+            <span class="slider-counter--current">1</span>
+            <span aria-hidden="true"> / </span>
+            <span class="visually-hidden">{{ 'accessibility.of' | t }}</span>
+            <span class="slider-counter--total">{{ section.blocks.size }}</span>
+          </div>
+          <button type="button" class="slider-button slider-button--next" name="next" aria-label="{{ 'accessibility.next_slide' | t }}">{% include 'svg-definitions' with 'icon-caret' %}</button>
+        </div>
+      {% endif %}
+    </slider-component>
+    <div class="blog-btn-margin-top center{% if section.settings.swipe_on_mobile %} small-hide medium-hide{% endif %}">
+      {% if section.settings.button_label != '' %}
+        <a class="button button--primary"{% if section.settings.button_link == '' %} aria-disabled="true" role="link"{% else %} href="{{ section.settings.button_link }}"{% endif %}>
+          {{ section.settings.button_label | escape }}
+        </a>
+      {% endif%}
+    </div>
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": { "en_US": "Blog Post", "zh_TW": "部落格", "zh_CN": "博客", "ms_MY": "Blog" },
+  "max_blocks": 6,
+  "settings": [
+    {
+      "type": "text",
+      "id": "title",
+      "default": { "en_US": "Blog post", "zh_TW": "部落格", "zh_CN": "博客", "ms_MY": "Blog" },
+      "label": {  "en_US": "Title", "zh_TW": "欄位標題", "zh_CN": "栏位标题", "ms_MY": "tajuk" }
+    },
+    {
+      "type": "select",
+      "id": "image_width",
+      "options": [
+        {
+          "value": "third",
+          "label": { "en_US": "Third", "zh_TW": "三分", "zh_CN": "三分", "ms_MY": "Satu per tiga" }
+        },
+        {
+          "value": "half",
+          "label": { "en_US": "Half", "zh_TW": "半幅", "zh_CN": "半幅", "ms_MY": "Separuh" }
+        },
+        {
+          "value": "full",
+          "label": { "en_US": "Full", "zh_TW": "全幅", "zh_CN": "全幅", "ms_MY": "Penuh" }
+        }
+      ],
+      "default": "full",
+      "label": { "en_US": "Image Width", "zh_TW": "圖片寬度", "zh_CN": "图片宽度", "ms_MY": "Kelebaran Imej" }
+    },
+    {
+      "type": "select",
+      "id": "image_ratio",
+      "options": [
+        {
+          "value": "adapt",
+          "label": { "en_US": "Adapt", "zh_TW": "響應式調整", "zh_CN": "响应式调整", "ms_MY": "Menyesuaikan" }
+        },
+        {
+          "value": "portrait",
+          "label": { "en_US": "Portrait", "zh_TW": "直向", "zh_CN": "直向", "ms_MY": "Potret" }
+        },
+        {
+          "value": "square",
+          "label": { "en_US": "Square", "zh_TW": "正方形", "zh_CN": "正方形", "ms_MY": "Segi empat sama" }
+        },
+        {
+          "value": "circle",
+          "label": { "en_US": "Circle", "zh_TW": "圓形", "zh_CN": "圆形", "ms_MY": "Bulat" }
+        }
+      ],
+      "default": "adapt",
+      "label": { "en_US": "Image Ratio", "zh_TW": "圖片比例", "zh_CN": "图片比例", "ms_MY": "Nisbah Imej" }
+    },
+    {
+      "type": "select",
+      "id": "column_alignment",
+      "options": [
+        {
+          "value": "left",
+          "label": { "en_US": "Left", "zh_TW": "靠左", "zh_CN": "靠左", "ms_MY": "Kiri" }
+        },
+        {
+          "value": "center",
+          "label": { "en_US": "Center", "zh_TW": "置中", "zh_CN": "置中", "ms_MY": "Tengah" }
+        }
+      ],
+      "default": { "en_US": "Left", "zh_TW": "左", "zh_CN": "左", "ms_MY": "Kiri" },
+      "label": { "en_US": "Column alignment", "zh_TW": "內容位置", "zh_CN": "内容位置", "ms_MY": "Penjajaran lajur" }
+    },
+    {
+      "type": "select",
+      "id": "background_style",
+      "options": [
+        {
+          "value": "none",
+          "label": { "en_US": "None", "zh_TW": "透明", "zh_CN": "透明", "ms_MY": "Tiada" }
+        },
+        {
+          "value": "primary",
+          "label": { "en_US": "Primary", "zh_TW": "前景色", "zh_CN": "前景色", "ms_MY": "Utama" }
+        },
+        {
+          "value": "secondary",
+          "label": { "en_US": "Secondary", "zh_TW": "背景色", "zh_CN": "背景色", "ms_MY": "Sekunder" }
+        }
+      ],
+      "default": "primary",
+      "label": { "en_US": "Background Style", "zh_TW": "背景色風格", "zh_CN": "背景色风格", "ms_MY": "Gaya latar belakang" }
+    },
+    {
+      "type": "checkbox",
+      "id": "swipe_on_mobile",
+      "default": true,
+      "label": { "en_US": "Swipe on Mobile", "zh_TW": "手機版顯示滑動圖片", "zh_CN": "手机版显示滑动图片", "ms_MY": "Leret pada mudah alih" }
+    },
+    {
+      "type": "text",
+      "id": "button_label",
+      "default": { "en_US": "Button Label", "zh_TW": "按鈕文字", "zh_CN": "按钮文字", "ms_MY": "Label Butang" },
+      "label": { "en_US": "Button Label", "zh_TW": "按鈕文字", "zh_CN": "按钮文字", "ms_MY": "Label Butang" }
+    },
+    {
+      "type": "text",
+      "id": "button_link",
+      "label": { "en_US": "Button Link", "zh_TW": "按鈕連結", "zh_CN": "按钮连结", "ms_MY": "Link Butang" }
+    }
+  ],
+  "blocks": [
+    {
+      "type": "column",
+      "name": { "en_US": "Column", "zh_TW": "格框", "zh_CN": "格框", "ms_MY": "Kolum" },
+      "settings": [
+        {
+          "type": "article",
+          "id": "article_id",
+          "label": { "en_US": "Article", "zh_TW": "文章", "zh_CN": "文章", "ms_MY": "Artikel" }
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": { "en_US": "Blog Post", "zh_TW": "部落格", "zh_CN": "博客", "ms_MY": "Blog" },
+      "blocks": [
+        {
+          "type": "column"
+        },
+        {
+          "type": "column"
+        },
+        {
+          "type": "column"
+        }
+      ]
+    }
+  ]
+}
+{% endschema %}

@@ -1,0 +1,34 @@
+
+<cart-notification>
+  <div class="cart-notification-wrapper page-width color-background-1">
+    <div id="cart-notification" class="cart-notification focus-inset" aria-modal="true" aria-label="{{ "products.product.added_to_cart" | t }}" role="dialog" tabindex="-1">
+      <div class="cart-notification__header">
+        <h2 class="cart-notification__heading caption-large">{% include 'svg-definitions' with 'icon-checkmark' %} {{ "products.product.added_to_cart" | t }}</h2>
+        <button type="button" class="cart-notification__close modal__close-button link link--text focus-inset" aria-label="{{ 'accessibility.close' | t }}">
+          {% include 'svg-definitions' with 'icon-close' %}
+        </button>
+      </div>
+      <div id="cart-notification-product" class="cart-notification-product"></div>
+      <div class="cart-notification__links">
+        <a href="/cart" id="cart-notification-button" class="button button--secondary button--full-width">{{ 'products.product.view_cart' | t }} (<span class="js-content-cart-count">{{cart.item_count}}</span>)</a>
+        <form action="/cart" method="post" id="cart-notification-form">
+          <input type="hidden" name="_token" value="{% csrf %}">
+          <input type="hidden" name="current_currency" value="{{ shop.selected_currency }}">
+          <button class="button button--primary button--full-width" name="checkout" value="true">{{ 'cart.general.checkout' | t }}</button>
+        </form>
+        <a href="/collections/all" class="link button-label">{{ 'products.product.continue_shopping' | t }}</a>
+      </div>
+    </div>
+  </div>
+</cart-notification>
+<style>
+  .cart-notification {
+     display: none;
+  }
+</style>
+<script>
+document.getElementById('cart-notification-form').addEventListener('submit',(event)=>{
+  if(event.submitter) event.submitter.classList.add('loading');
+})
+
+</script>

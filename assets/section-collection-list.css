@@ -1,0 +1,106 @@
+.featured-collections__tablist {
+	margin-top: 0;
+	margin-bottom: 0;
+	padding: 0
+}
+
+.scroller-wrapper {
+	overflow-x: auto;
+	overflow-y: hidden;
+	-webkit-overflow-scrolling: touch;
+	white-space: nowrap;
+	-ms-overflow-style: -ms-autohiding-scrollbar;
+	scrollbar-width: none;
+	max-width: 100%;
+}
+
+.scroller-wrapper::-webkit-scrollbar {
+	display: none
+}
+
+.scroller-wrapper--overflow-visible {
+	overflow: visible
+}
+
+.featured-collections-tab__item--active .featured-collections__item-title::after,
+.featured-collections__title .featured-collections__item-title::after {
+	content: '';
+	position: absolute;
+	left: 0;
+	bottom: 0;
+	height: .2rem;
+	width: 100%;
+	background-color: rgba(var(--color-button), var(--alpha-button-background));
+	z-index: -1
+}
+
+.featured-collections-tab__item.featured-collections-tab__item--active,
+.featured-collections-tab__item--active .featured-collections__item-title {
+	opacity: 1;
+	font-weight: bold;
+}
+
+.featured-collections__title {
+	cursor: default;
+	white-space: normal
+}
+
+.featured-collections__title:hover {
+	opacity: .7
+}
+
+.featured-collections__item-title::after {
+	bottom: 0
+}
+
+.featured-collections-tab__item,
+.featured-collections__title {
+	position: relative;
+	list-style: none;
+	display: inline-block;
+	align-items: center;
+	cursor: pointer;
+	height: 5rem;
+	color: var(--color-base-text);
+	font-family: var(--font-heading-family);
+	font-weight: var(--font-heading-weight);
+	font-style: var(--font-heading-style);
+	font-size: 1.5rem;
+	text-transform: none;
+	white-space: nowrap;
+	opacity: .7;
+	padding: 0 1.5rem
+}
+
+@media only screen and (min-width:46.85em) {
+	.featured-collections-tab__item,
+	.featured-collections__title {
+		font-size: 1.4rem;
+		height: 6rem;
+		padding: 0 2.4rem
+	}
+}
+
+@media screen and (max-width:990px) {
+	.featured-collections__tablist-wrapper{
+		width: 100%;
+	}
+}
+
+.featured-collections-tab__item:hover,
+.featured-collections__title:hover {
+	opacity: 1
+}
+
+.featured-collections__item-title {
+	display: inline-flex;
+	align-items: center;
+	height: 100%;
+	position: relative
+}
+
+.featured-collections__product-count {
+	display: inline-block;
+	font-size: 1.3rem;
+	top: -1rem
+}

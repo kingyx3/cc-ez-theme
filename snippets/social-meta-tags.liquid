@@ -1,0 +1,131 @@
+{% comment %}
+  Add Facebook and Pinterest Open Graph meta tags to product pages
+  for friendly Facebook sharing and Pinterest pinning.
+
+  More info Open Graph meta tags
+    - https://developers.facebook.com/docs/opengraph/using-objects/
+    - https://developers.pinterest.com/rich_pins/
+
+  Use the Facebook Open Graph Debugger for validation (and cache clearing)
+    - http://developers.facebook.com/tools/debug
+
+  Validate your Pinterest rich pins
+    - https://developers.pinterest.com/rich_pins/validator/
+{% endcomment %}
+{% if template contains 'product' %}
+  <meta property="og:type" content="product">
+  <meta property="og:title" content="{{ product.title | strip_html | escape }}">
+  <meta property="og:url" content="{{ canonical_url }}">
+  {% for image in product.images limit:3 %}
+  <meta property="og:image" content="{{ image.src | img_url: 'grande' }}">
+  <meta property="og:image:secure_url" content="{{ image.src | img_url: 'grande' }}">
+  {% endfor %}
+  <meta property="og:price:amount" content="{{ product.price | money_without_currency | strip_html | escape }}">
+  <meta property="og:price:currency" content="{{ shop.currency }}">
+{% elsif template contains 'index' %}
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="{{ page_title | escape }}">
+  <meta property="og:url" content="{{ canonical_url }}">
+  
+  {% if settings.meta_img %}
+    <meta property="og:image" content="{{ settings.meta_img }}">
+    <meta property="og:image:secure_url" content="{{ settings.meta_img }}">
+  {% else %}
+    <meta property="og:image" content="{{ settings.sections.header.settings.logo }}">
+    <meta property="og:image:secure_url" content="{{ settings.sections.header.settings.logo }}">
+  {% endif %}
+{% elsif template contains 'article' %}
+    <meta property="og:type" content="article">
+    <meta property="og:title" content="{{ article.title | strip_html | escape }}">
+    <meta property="og:url" content="{{ canonical_url }}">
+    {% if article.image_url %}
+      <meta property="og:image" content="{{ article.image_url | img_url: 'original' }}">
+      <meta property="og:image:secure_url" content="{{ article.image_url | img_url: 'original' }}">
+    {% endif %}
+{% elsif template contains 'blog'%}
+    <meta property="og:type" content="blog">
+    <meta property="og:title" content="{{ blog.title | strip_html | escape }}">
+    <meta property="og:url" content="{{ canonical_url }}">
+{% elsif template == 'password' %}
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="{{ shop.name | escape}}">
+  <meta property="og:url" content="{{ shop.url }}">
+  {% if settings.meta_img %}
+    <meta property="og:image" content="{{ settings.meta_img }}">
+    <meta property="og:image:secure_url" content="{{ settings.meta_img }}">
+  {% else %}
+    <meta property="og:image" content="{{ settings.sections.header.settings.logo }}">
+    <meta property="og:image:secure_url" content="{{ settings.sections.header.settings.logo }}">
+  {% endif %}
+{% else %}
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="{{ page_title | escape }}">
+  <meta property="og:url" content="{{ canonical_url }}">
+  {% if settings.meta_img %}
+    <meta property="og:image" content="{{ settings.meta_img }}">
+    <meta property="og:image:secure_url" content="{{ settings.meta_img }}">
+  {% else %}
+    <meta property="og:image" content="{{ settings.sections.header.settings.logo }}">
+    <meta property="og:image:secure_url" content="{{ settings.sections.header.settings.logo }}">
+  {% endif %}
+{% endif %}
+
+<meta property="og:description" content="{{ page_description | _default: description | _default: shop.name }}">
+<meta property="og:site_name" content="{{ shop.name | escape}}">
+
+{% comment %}
+
+  This snippet renders meta data needed to create a Twitter card
+  for products and articles.
+
+  Your cards must be approved by Twitter to be activated
+    - https://dev.twitter.com/docs/cards/validation/validator
+
+  More information:
+   - https://dev.twitter.com/docs/cards/types/summary-card
+
+{% endcomment %}
+{% if template contains 'article' and article.image_url %}
+  <meta name="twitter:card" content="summary_large_image">
+{% elsif template == 'index' and slider_enabled %}
+  <meta name="twitter:card" content="summary_large_image">
+{% else %}
+  <meta name="twitter:card" content="summary">
+{% endif %}
+{% comment %}
+  Twitter user name of the site, based on theme settings
+{% endcomment %}
+{% if settings.twitter_url != "" %}
+  <meta name="twitter:site" content="@{{ settings.twitter_url | split: 'twitter.com/' | last }}">
+{% endif %}
+{% if template contains 'index' %}
+  <meta name="twitter:title" content="{{ page_title | escape }}">
+  {% if settings.home_page_content != blank and settings.home_page_content != '' %}
+    <meta name="twitter:description" content="{{ pages[settings.home_page_content].content | strip_html | truncate: 200, '' | escape }}">
+  {% else %}
+    <meta name="twitter:description" content="{{ page_description | escape }}">
+  {% endif %}
+  {% if settings.meta_img %}
+    <meta property="twitter:image" content="{{ settings.meta_img }}">
+    <meta property="twitter:image:secure_url" content="{{ settings.meta_img }}">
+  {% else %}
+    <meta property="twitter:image" content="{{ settings.sections.header.settings.logo }}">
+    <meta property="twitter:image:secure_url" content="{{ settings.sections.header.settings.logo }}">
+  {% endif %}
+{% elsif template contains 'product' %}
+  <meta name="twitter:title" content="{{ product.title | strip_html | escape }}">
+  <meta name="twitter:description" content="{{ product.description | strip_html | truncate: 200, '' | escape }}">
+  <meta name="twitter:image" content="{{ product | img_url: 'large' }}">
+  <meta name="twitter:image:width" content="480">
+  <meta name="twitter:image:height" content="480">
+{% elsif template contains 'article' %}
+  <meta name="twitter:title" content="{{ article.title | strip_html | escape }}">
+  <meta name="twitter:description" content="{{ article.description | strip_html | truncate: 200, '' | escape }}">
+  {% if article.image %}
+    <meta property="twitter:image" content="{{ article | img_url: 'original' }}">
+  {% endif %}
+{% elsif template contains 'blog' %}
+  <meta name="twitter:title" content="{{ blog.title | strip_html | escape }}">
+  <meta name="twitter:description" content="{{ blog.description | strip_html | truncate: 200, '' | escape }}">
+{% endif %}
+

@@ -1,0 +1,157 @@
+<link rel="preload" href="{{ 'component-card.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<link rel="preload" href="{{ 'component-price.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<link rel="preload" href="{{ 'component-product-grid.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<link rel="preload" href="{{ 'component-loading-overlay.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+
+<div class="spaced-section spaced-section--full-width">
+  <div class="collection-hero">
+    <div class="collection-hero__inner page-width">
+      <div class="collection-hero__text-wrapper">
+        <div>
+          <h1 class="collection-hero__title">{{ collection.title | escape }}</h1>
+          <div class="top-wrapper-section" id="top-wrapper-section">
+            {% app_snippet 'collection/content_center' %}
+          </div>
+          <div class="collection-filters section-header__link--right">
+            {% if shop.is_product_filter_enabled == false or collection.filters == blank %}
+            	{% include 'collection-sorting' %}
+            {% endif %}
+          </div>
+        </div>
+        {% if collection.description != blank %}
+          <div class="rte">
+            {{ collection.description }}
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="CollectionProductGrid">
+  <div id="section-{{ section.__key }}" class="collection page-width">
+    {% if shop.is_product_filter_enabled and collection.filters != blank %}
+      <div class="float-filter-icon text-right h2 medium-hide large-up-hide">
+        <span filter-container-toggle>
+          {% include 'svg-definitions' with 'icon-filter' %}
+        </span>
+      </div>
+      <aside id="filter-container">
+        {% include 'filters' %}
+      </aside>
+    {% endif %}
+    <div class="loading-overlay gradient"></div>
+    <ul id="main-collection-product-grid" class="
+      grid grid--2-col product-grid
+      {% if section.settings.products_per_row < 3 %}grid--2-col-tablet{% else %}grid--3-col-tablet{% endif %} grid--one-third-max grid--{{section.settings.products_per_row}}-col-desktop grid--quarter-max">
+      {% if collection.products %}
+        {% for product in collection.products %}
+          <li class="grid__item">
+            {% include 'product-card', show_secondary_image: section.settings.show_secondary_image, show_add_to_cart_button: section.settings.show_add_to_cart_button, image_ratio: section.settings.image_ratio, show_product_info: section.settings.show_product_info %}
+          </li>
+        {% endfor %}
+      {% else %}
+        <p class="p-3"><em>{{ 'collections.general.no_matches' | t }}</em></p>
+      {% endif %}
+    </ul>
+    
+    <div id="pagination-container" >
+      {% if paginate.pages > 1 %}
+        {% include 'pagination' %}
+      {% endif %}
+    </div>
+    
+  </div>
+</div>  
+
+
+{% schema %}
+{
+  "name": {
+    "en_US": "Collection",
+    "zh_TW": "商品目錄", 
+    "zh_CN": "商品目录", 
+    "ms_MY": "Koleksi"
+  },
+  "settings": [
+    {
+      "type": "range",
+      "id": "products_per_row",
+      "min": 2,
+      "max": 5,
+      "step": 1,
+      "default": 4,
+      "label": {
+        "en_US": "Collections per row",
+        "ja_JP": "行あたりのコレクション数",
+        "ko_KR": "열 별 컬렉션",
+        "ms_MY": "Koleksi setiap baris",
+        "th_TH": "คอลเลกชันต่อแถว",
+        "zh_CN": "每行显示数量",
+        "zh_TW": "每行顯示數量"
+      }
+    },
+    {
+      "type": "select",
+      "id": "image_ratio",
+      "options": [
+        {
+          "value": "portrait",
+          "label": { "en_US": "Portrait", "zh_TW": "肖像", "zh_CN": "肖像", "ms_MY": "Potret" }
+        },
+        {
+          "value": "landscape",
+          "label": { "en_US": "Landscape", "zh_TW": "横向", "zh_CN": "横向", "ms_MY": "Melintang" }
+        },
+        {
+          "value": "square",
+          "label": { "en_US": "Square", "zh_TW": "正方", "zh_CN": "正方", "ms_MY": "Segi empat sama" }
+        },
+        {
+          "value": "circle",
+          "label": { "en_US": "Circle", "zh_TW": "圓形", "zh_CN": "圆形", "ms_MY": "Bulat" }
+        },
+        {
+          "value": "16-9",
+          "label": "16:9"
+        }
+      ],
+      "default": "square",
+      "label": { "en_US": "Image Ratio", "zh_TW": "圖片比例", "zh_CN": "图片比例", "ms_MY": "Nisbah Imej" }
+    },
+    {
+      "type": "checkbox",
+      "id": "show_add_to_cart_button",
+      "default": true,
+      "label": {
+        "en_US": "Show add to cart button",
+        "zh_TW": "顯示加入購物車按鈕", 
+        "zh_CN": "显示加入购物车按钮", 
+        "ms_MY": "Tunjukkan butang tambah ke troli"
+      }
+    },
+    {
+      "type": "checkbox",
+      "id": "show_secondary_image",
+      "default": false,
+      "label": {
+        "en_US": "Show secondary image",
+        "zh_TW": "顯示次要圖片", 
+        "zh_CN": "显示次要图片", 
+        "ms_MY": "Tunjukkan imej sekunder"
+      }
+    },
+    {
+      "type": "checkbox",
+      "id": "show_product_info",
+      "default": true,
+      "label": {
+        "en_US": "Show Product Info", 
+        "zh_TW": "顯示產品資料", 
+        "zh_CN": "显示产品资料", 
+        "ms_MY": "Tunjuk info Produk"
+      }
+    }
+  ]
+}
+{% endschema %}

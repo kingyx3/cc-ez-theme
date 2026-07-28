@@ -1,0 +1,217 @@
+<link rel="preload" href="{{ 'splide.min.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<link rel="preload" href="{{ 'component-slider.css?v2' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+
+<style>
+  {% for block_handle in section.blocks_order %}
+    {% assign blocks = section.blocks %}
+    {% assign block = blocks[block_handle] %}
+    {% assign slide = block.settings %}
+  [data-slide-id="slide-{{ section.__key }}-{{ forloop.index }}"] .slider__content{
+    color: {{slide.content_text_color}};
+    background-color: {{slide.content_bg_color}};
+  }
+  [data-slide-id="slide-{{ section.__key }}-{{ forloop.index }}"] .slider__content .btn{
+    background-color: {{slide.content_text_color}};
+    border-color: {{slide.content_text_color}};
+    color: {{slide.button_text_color}};
+  }
+  {% endfor %}
+
+  .btn-padding-top{
+    padding-top:14px;
+  }
+</style>
+
+<div class="slider-section">
+  <div id="slider-{{ section.__key }}" class="splide slider-component">
+    <div class="splide__track">
+      <ul class="splide__list">
+        {% for block_handle in section.blocks_order %}
+          {% assign blocks = section.blocks %}
+          {% assign block = blocks[block_handle] %}
+          {% assign slide = block.settings %}
+          {% if slide.img_url or slide.title or slide.desc or slide.button_text %}
+            <li data-slide-id="slide-{{ section.__key }}-{{ forloop.index }}" {% if section.settings.autoplay != '0' %}data-splide-interval="{{ section.settings.autoplay }}"{% endif %} class="splide__slide">
+              <div class="split-slideshow__slider split-slideshow__slider--{{slide.content_position}}">
+                {% if slide.img_url %}
+                <div class="slider__image-wrapper">
+                  {% if slide.link_url %} <a href="{{ slide.link_url }}"> {% endif %}
+                    {% if slide.img_mobile_url %} <img src="{{ slide.img_mobile_url | img_url: '550x' }}" alt="{{ slide.title | escape }} | {{ shop.name }}" class="slide-mobile-img" width="100%" loading="lazy"> {% endif %}
+                    <img 
+                      srcset="{{ slide.img_url | img_url: '550x' }} 550w, {{ slide.img_url | img_url: '710x' }} 710w, {{ slide.img_url | img_url: '1500' }} 1500w"
+                      src="{{ slide.img_url | img_url: '550x' }}"
+                      sizes="(min-width: 990px) 950px,
+                            (min-width: 750px) 710px,
+                            550px"
+                      alt="{{ slide.title | escape }} | {{ shop.name }}" 
+                      width="100%" loading="lazy">
+                  {% if slide.link_url %} </a> {% endif %}
+                </div>
+                {% endif %}
+                {% if slide.title or slide.desc or slide.button_text %}
+                <div class="slider__content">
+                  <div>
+                    {% if slide.title %}
+                      <h2 class="h1">{{slide.title}}</h2>
+                    {% endif %}
+                    {% if slide.desc %}
+                      <p>{{slide.desc}}</p>
+                    {% endif %}
+                    {% if slide.button_text %}
+                      <a href="{{ slide.link_url }}" class="btn">{{slide.button_text}}</a>
+                    {% endif %}
+                  </div>
+                </div>
+                {% endif %}
+              </div>
+            </li>
+          {% endif %}
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+
+</div>
+
+
+{{ 'splide.min.js' | asset_url | script_tag }}
+
+<script>
+
+  document.addEventListener( 'DOMContentLoaded', function() {
+    if(document.querySelector('#slider-{{ section.__key }}')){
+      var splide = new Splide( '#slider-{{ section.__key }}',{
+        type   : 'fade', 
+        {% if section.settings.autoplay != '0' %}autoplay: true,{% endif %}
+        pauseOnHover: false,
+        pagination: {% if section.blocks_order.size > 1 %}true{% else %}false{% endif %},
+        rewind: true
+      });
+      
+      splide.mount();
+    }
+  } );
+    
+</script>
+
+
+{% schema %}
+{
+  "name": { "en_US": "Slider", "zh_TW": "圖片輪播", "zh_CN": "图片轮播", "ms_MY": "slaid" },
+  "max_blocks": 6,
+  "settings": [
+    {
+      "type": "select",
+      "id": "autoplay",
+      "default": "4000",
+      "label": { "en_US": "Autoplay", "zh_TW": "自動播放", "zh_CN": "自动播放", "ms_MY": "Automain" },
+      "options": [
+        {
+          "value": "0",
+          "label": { "en_US": "Off", "zh_TW": "關", "zh_CN": "关", "ms_MY": "padam" }
+        },
+        {
+          "value": "2000",
+          "label": { "en_US": "2 seconds", "zh_TW": "2秒", "zh_CN": "2秒", "ms_MY": "2 saat" }
+        },
+        {
+          "value": "3000",
+          "label": { "en_US": "3 seconds", "zh_TW": "3秒", "zh_CN": "3秒", "ms_MY": "3 saat" }
+        },
+        {
+          "value": "4000",
+          "label": { "en_US": "4 seconds", "zh_TW": "4秒", "zh_CN": "4秒", "ms_MY": "4 saat" }
+        },
+        {
+          "value": "5000",
+          "label": { "en_US": "5 seconds", "zh_TW": "5秒", "zh_CN": "5秒", "ms_MY": "5 saat" }
+        }
+      ]
+    }
+  ],
+  "blocks": [
+    {
+      "type": "slide",
+      "name": { "en_US": "Slide", "zh_TW": "輪播", "zh_CN": "幻灯片", "ms_MY": "slaid" },
+      "settings": [
+        {
+          "type": "image",
+          "id": "img_url",
+          "default": "https://cdn.store-assets.com/s/1276375/f/10810717.jpg",
+          "label": { "en_US": "Slide image", "zh_TW": "輪播圖片", "zh_CN": "幻灯片图片", "ms_MY": "Imej Slaid" }
+        },
+        {
+          "type": "image",
+          "id": "img_mobile_url",
+          "label": { "en_US": "Slide mobile image (optional)", "zh_TW": "輪播手機圖片 (可選)", "zh_CN": "幻灯片手机图片 (可选)", "ms_MY": "Imej mudah alih (pilihan)" }
+        },
+        {
+          "type": "text",
+          "id": "title",
+          "default": "THE MANADALOR",
+          "label": { "en_US": "Slide title", "zh_TW": "標題", "zh_CN": "标题", "ms_MY": "tajuk" }
+        },
+        {
+          "type": "text",
+          "id": "desc",
+          "label": { "en_US": "Text", "zh_TW": "文字", "zh_CN": "文字", "ms_MY": "Teks" }
+        },
+        {
+          "type": "text",
+          "id": "button_text",
+          "label": { "en_US": "Button", "zh_TW": "按鈕", "zh_CN": "按钮", "ms_MY": "Butang" }
+        },
+        {
+          "type": "text",
+          "id": "link_url",
+          "label": { "en_US": "Slide link", "zh_TW": "連接", "zh_CN": "链接", "ms_MY": "Slide link" }
+        },
+        {
+          "type": "select",
+          "id": "content_position",
+          "default": "left",
+          "label": { "en_US": "Content position", "zh_TW": "內容位置", "zh_CN": "内容位置", "ms_MY": "Kedudukan kandungan" },
+          "options": [
+            {
+              "value": "left",
+              "label": { "en_US": "Left", "zh_TW": "左邊", "zh_CN": "左边", "ms_MY": "Kiri" }
+            },
+            {
+              "value": "right",
+              "label": { "en_US": "Right", "zh_TW": "右邊", "zh_CN": "右边", "ms_MY": "Kanan" }
+            }
+          ]
+        },
+        {
+          "id": "content_text_color",
+          "type": "color",
+          "label": { "en_US": "Color", "zh_TW": "文字色", "zh_CN": "文字色", "ms_MY": "Warna badan" },
+          "default": "#FFFFFF"
+        },
+        {
+          "id": "button_text_color",
+          "type": "color",
+          "label": { "en_US": "Button text Color", "zh_TW": "按鈕文字顏色", "zh_CN": "按鈕文字颜色", "ms_MY": "Warna butang" },
+          "default": "#000000"
+        },
+        {
+          "type": "color",
+          "default": "rgba(0,0,0,0.1)",
+          "label": { "en_US": "Background Color", "zh_TW": "背景顏色", "zh_CN": "背景颜色", "ms_MY": "Warna latar belakang" },
+          "id": "content_bg_color"
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": { "en_US": "Slider", "zh_TW": "圖片輪播", "zh_CN": "图片轮播", "ms_MY": "slaid" },
+      "blocks": [
+        {
+          "type": "slide"
+        }
+      ]
+    }
+  ]
+}
+{% endschema %}

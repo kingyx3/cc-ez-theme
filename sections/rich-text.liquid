@@ -1,0 +1,115 @@
+{{ 'component-rte.css' | asset_url | stylesheet_tag }}
+{{ 'section-rich-text.css' | asset_url | stylesheet_tag }}
+
+<div class="rich-text {% if section.settings.full_width %} rich-text--full-width{% endif %}">
+  <div class="rich-text__blocks">
+    {% for block_handle in section.blocks_order %}
+      {% assign blocks = section.blocks %}
+      {% case blocks[block_handle].type %}
+        {% when 'heading' %}
+          <h2 class="{{ blocks[block_handle].settings.heading_size }}">{{ blocks[block_handle].settings.heading | escape }}</h2>
+        {% when 'text' %}
+          <div class="rich-text__text rte">{{ blocks[block_handle].settings.text }}</div>
+        {% when 'button' %}
+          <a {% if blocks[block_handle].settings.button_link == blank %}aria-disabled="true"{% else %} href="{{ blocks[block_handle].settings.button_link }}"{% endif %} class="button{% if blocks[block_handle].settings.button_style_secondary %} button--secondary{% else %} button--primary{% endif %}">
+            {{ blocks[block_handle].settings.button_label | escape }}
+          </a>
+      {% endcase %}
+    {% endfor %}
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": { "en_US": "Rich Text", "zh_TW": "精選區塊", "zh_CN": "精选区块", "ms_MY": "Teks Kaya" },
+  "max_blocks": 3,
+  "blocks": [
+    {
+      "type": "heading",
+      "name": { "en_US": "Heading", "zh_TW": "標題", "zh_CN": "标题", "ms_MY": "Tajuk" },
+      "limit": 1,
+      "settings": [
+        {
+          "type": "text",
+          "id": "heading",
+          "default": { "en_US": "Talk about your brand", "zh_TW": "關於你的品牌", "zh_CN": "关于你的品牌", "ms_MY": "Berkongsi tentang jenama anda" } ,
+          "label": { "en_US": "Talk about your brand", "zh_TW": "關於你的品牌", "zh_CN": "关于你的品牌", "ms_MY": "Berkongsi tentang jenama anda" }
+        },
+        {
+          "type": "select",
+          "id": "heading_size",
+          "options": [
+            {
+              "value": "h2",
+              "label": { "en_US": "Medium", "zh_TW": "中", "zh_CN": "中", "ms_MY": "Sederhana" }
+            },
+            {
+              "value": "h1",
+              "label": { "en_US": "Large", "zh_TW": "大", "zh_CN": "大", "ms_MY": "Besar" }
+            },
+            {
+              "value": "h0",
+              "label": { "en_US": "Extra Large", "zh_TW": "更大", "zh_CN": "更大", "ms_MY": "Lebih Besar" }
+            }
+          ],
+          "default": "h1",
+          "label": { "en_US": "Heading Size", "zh_TW": "標題大小", "zh_CN": "标题大小", "ms_MY": "Saiz Tajuk" }
+        }
+      ]
+    },
+    {
+      "type": "text",
+      "name": { "en_US": "Text", "zh_TW": "文字", "zh_CN": "文字", "ms_MY": "Teks" },
+      "limit": 1,
+      "settings": [
+        {
+          "type": "text",
+          "id": "text",
+          "default": "Share information about your brand with your customers. Describe a product, make announcements, or welcome customers to your store.",
+          "label": { "en_US": "Text", "zh_TW": "文字", "zh_CN": "文字", "ms_MY": "Teks" }
+        }
+      ]
+    },
+    {
+      "type": "button",
+      "name": { "en_US": "Button", "zh_TW": "按鈕", "zh_CN": "按钮", "ms_MY": "Butang" },
+      "limit": 1,
+      "settings": [
+        {
+          "type": "text",
+          "id": "button_label",
+          "default": { "en_US": "Button Label", "zh_TW": "按鈕內文", "zh_CN": "按钮内文", "ms_MY": "Label Butang" },
+          "label": "Button label"
+        },
+        {
+          "type": "text",
+          "id": "button_link",
+          "label": { "en_US": "Button Link", "zh_TW": "按鈕連結", "zh_CN": "按钮连结", "ms_MY": "Link Butang" }
+        },
+        {
+          "type": "checkbox",
+          "id": "button_style_secondary",
+          "default": false,
+          "label": "Use outline button style"
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": { "en_US": "Rich Text", "zh_TW": "精選區塊", "zh_CN": "精选区块", "ms_MY": "Teks Kaya" },
+      "blocks": [
+        {
+          "type": "heading"
+        },
+        {
+          "type": "text"
+        },
+        {
+          "type": "button"
+        }
+      ]
+    }
+  ]
+}
+{% endschema %}

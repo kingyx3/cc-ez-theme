@@ -1,0 +1,176 @@
+<form action="/cart" class="cart__contents critical-hidden" method="post" id="cart-form">
+  <input type="hidden" name="_token" value="{% csrf %}">
+
+  <cart-items class="page-width{% if cart.item_count <= 0 or cart.item_count == null %} is-empty{% endif %}">
+    <div class="title-wrapper-with-link">
+      <h1 class="title title--primary">{{ 'cart.general.title' | t }}</h1>
+      <a href="/collections/all" class="underlined-link">{{ 'products.product.continue_shopping' | t }}</a>
+    </div>
+
+    <div class="cart__warnings">
+      <h1 class="cart__empty-text">{{ 'cart.general.empty' | t }}</h1>
+      <a href="/collections/all" class="button">
+        {{ 'products.product.continue_shopping' | t }}
+      </a>
+    </div>
+
+    <!-- Cart error -->
+    {% if cart.error and cart.error.messages.size > 0 %}
+      <div>
+        {% if cart.error_html != blank %}
+          <div class="note errors">{{ cart.error_html }}</div>
+        {% else %}
+          <ul class="note errors">
+            {% assign cart_errors = cart.error %}
+            {% if cart.errors_code %}
+              {% assign cart_errors = cart.errors_code %}
+            {% endif %}
+            {% for error in cart_errors %}
+              {% if error.code == 'cart_item_stock' or error.code == 'cart_item_not_available' or error.code == 'cart_item_not_free_gift' or error.code == 'cart_item_deleted' %}
+                <div>{{ 'error.checkout.' | append: error.code | t: error.value.value_1, error.value.value_2 }}</div>
+              {% else %}
+                <div style="font-weight:bold">{{ 'error.checkout.' | append: error.code | t: error.value.value_1, error.value.value_2 }}</div>
+              {% endif %}
+            {% endfor %}
+          </ul>
+        {% endif %}
+      </div>
+    {% endif %}
+    
+    <div class="cart_form__error note errors hidden">
+      <div class="js-error-content"></div>
+    </div>
+
+    <div class="cart__items" id="main-cart-items">
+      <div class="js-contents">
+          <table class="cart-items">
+            <thead>
+                <tr>
+                  <th class="caption-with-letter-spacing" colspan="2" scope="col">{{ 'customer.order.product' | t }}</th>
+                  <th class="medium-hide large-up-hide right caption-with-letter-spacing" colspan="1" scope="col">{{ 'cart.label.total' | t }}</th>
+                  <th class="cart-items__heading--wide small-hide caption-with-letter-spacing" colspan="1" scope="col">{{ 'cart.label.quantity' | t }}</th>
+                  <th class="small-hide right caption-with-letter-spacing" colspan="1" scope="col">{{ 'cart.label.total' | t }}</th>
+                </tr>
+            </thead>
+            <tbody>
+              {% for item in cart.items %}
+                {% include 'cart-item' %}
+              {% endfor %}
+            </tbody>
+          </table>
+      </div>
+    </div>
+  </cart-items>
+
+  <div class="page-width{% if cart.item_count <= 0 or cart.item_count == null %} is-empty{% endif %}" id="main-cart-footer">
+    <div class="cart__footer">
+      <div class="cart__blocks">
+        {% if cart.discount_applications %}
+        	{% assign discount_code_application =  cart.discount_applications | map: 'type' %}
+        {% endif %}
+
+        {% if cart.settings.is_voucher_enabled %}
+        {% unless discount_code_application contains 'discount_code' %}
+          {% if shop.customer_rewards_enabled %}
+            <div class="voucher-toggle-wrapper">
+              <div class="voucher-toggle" onclick="document.querySelector('vouchers-modal').open()">
+                <div class="voucher-toggle-content">
+                  <small class="voucher-toggle-title font-weight-bold">{{ 'checkout.general.vouchers' | t }}</small>
+                  <small class="text-muted text-xs">{{ 'checkout.general.apply_before_checkout' | t }}</small>
+                </div>
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-chevron-right ml-auto" width="24" height="24" viewBox="0 0 24 24" stroke-width="1.5" stroke="#2c3e50" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                  <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
+                  <polyline points="9 6 15 12 9 18"></polyline>
+                </svg>
+              </div>
+            </div>
+          {% else %}
+            <discount-input>
+              <div class="field">
+                <input type="text" id="input-discount_code" class="search__input field__input" name="voucher_code" placeholder="{{ 'checkout.general.discount_code' | t }}">
+                <label class="field__label" for="input-discount_code">{{ 'checkout.general.discount_code' | t }}</label>
+                <button type="button" name="apply" class="button button--secondary">{{ 'checkout.general.apply' | t }}</button>
+              </div>
+              <div class="form__message hidden" tabindex="-1" autofocus>
+                {% include 'svg-definitions' with 'icon-error' %}
+                <div class="js-error-content"></div>
+              </div>
+            </discount-input>
+          {% endif %}
+        {% endunless %}
+        {% endif %}
+
+        <!-- Cart discount -->
+        {% for discount_application in cart.discount_applications %}
+        {% if discount_application.type == 'discount_code' or discount_application.target_selection == 'all' or discount_application.target_selection == 'bundled' %}
+            <div>
+              <div class="totals">
+                <h3 class="totals__subtotal">
+                  {{ 'checkout.general.discount' | t }} 
+                  <small class="text-secondary">
+                    (<span class="subtotal-discount-label">{{ discount_application.title | escape }}{% if discount_application.type == "discount_code" %} - {{discount_application.code}}{% endif %}</span>) 
+                    {% if discount_application.type == "discount_code" %}
+                      <discount-remove-button>
+                        <a class="remove_voucher_btn" data-discount_id="{{discount_application.code}}">
+                          <svg class="svg-icon" id="Es_1" data-name="Es 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 486.4 486.4"><path d="M443.33,72.28H343.46V56A52.85,52.85,0,0,0,290.67,3.2H195.73A52.85,52.85,0,0,0,142.94,56V72.28H43.07a13.32,13.32,0,1,0,0,26.64H67.15V412A71.34,71.34,0,0,0,138.4,483.2H348A71.34,71.34,0,0,0,419.25,412v-313h24.08a13.32,13.32,0,0,0,0-26.64ZM169.58,56a26.2,26.2,0,0,1,26.15-26.16h94.94A26.21,26.21,0,0,1,316.82,56V72.28H169.58Zm223,356A44.69,44.69,0,0,1,348,456.56H138.4A44.7,44.7,0,0,1,93.79,412v-313H392.71V412Z"/><path d="M243.2,398.59a12.23,12.23,0,0,0,12.29-12.28V169.11a12.29,12.29,0,0,0-24.58,0v217.1A12.31,12.31,0,0,0,243.2,398.59Z"/><path d="M157.46,398.59a13.77,13.77,0,0,0,13.83-13.83V170.65a13.84,13.84,0,0,0-27.67,0V384.76A13.84,13.84,0,0,0,157.46,398.59Z"/><path d="M328.94,398.59a13.77,13.77,0,0,0,13.84-13.83V170.65a13.84,13.84,0,0,0-27.67,0V384.76A13.77,13.77,0,0,0,328.94,398.59Z"/></svg>
+                        </a>
+                      </discount-remove-button>
+                    {% endif %}
+                  </small>
+                </h3>
+                <div class="totals__subtotal-value" {% if discount_application.total_allocated_amount <= 0 %}style="margin: 0px;"{% endif %}>
+                  <div class="loading-overlay hidden" {% if discount_application.total_allocated_amount <= 0 %}style="transform: translate(-50%,-70%);"{% endif %}>
+                    <div class="loading-overlay__spinner">
+                       <svg aria-hidden="true" focusable="false" role="presentation" class="spinner" viewBox="0 0 66 66" xmlns="http://www.w3.org/2000/svg">
+                          <circle class="path" fill="none" stroke-width="6" cx="33" cy="33" r="30"></circle>
+                       </svg>
+                    </div>
+                 </div>
+                 {% if discount_application.total_allocated_amount > 0 %}
+                  <span>- {{ discount_application.total_allocated_amount | money: cart.currency }}</span>
+                 {% endif %}
+                </div>
+              </div>
+            </div>
+        {% endif %}
+        {% endfor %}
+
+        <div>
+            <div class="totals">
+              <h3 class="totals__subtotal">{{ 'cart.general.subtotal' | t }}</h3>
+              <p class="totals__subtotal-value">{{ cart.total_price | money: cart.currency }}</p>
+            </div>
+            {% if cart.total_discounts > 0 %}
+              <div class="totals">
+                {% assign savings = cart.total_discounts %}
+                <p class="totals__subtotal-value">{{cart.currency}} {{ 'cart.general.savings_html' | t: savings }}</p>
+              </div>
+            {% endif %}
+            <div></div>
+            <small class="tax-note caption-large rte">{{ 'cart.general.shipping_at_checkout' | t }}</small>
+        </div>
+        <div class="cart__ctas">
+            <input type="hidden" name="current_currency" value="{{cart.currency.code}}">
+            <input type="text" name="greeting_card_message" id="greetingCardMessage" class="hp hide hidden" tabindex="-1" autocomplete="off">
+            <input type="text" name="product_ids" id="productIds" class="hp hide hidden" tabindex="-1" autocomplete="off">
+
+            <noscript>
+              <button type="submit" name="update" class="cart__update-button button button--secondary">
+                {{ 'cart.general.update' | t }}
+              </button>
+            </noscript>
+            <button type="submit" id="checkout" class="cart__checkout-button button" name="checkout" value="true">
+              {{ 'cart.general.checkout' | t }}
+            </button>
+            {% if shop.express_enabled %}
+              <button type="submit" name="expresscheckout" class="button button--secondary">{{ 'cart.general.express_checkout' | t }}</button>
+            {% endif %}
+        </div>
+        {% if additional_checkout_buttons %}
+            <div class="cart__ctas">{{ content_for_additional_checkout_buttons }}</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+</form>

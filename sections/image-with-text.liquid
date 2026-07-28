@@ -1,0 +1,152 @@
+<link rel="preload" href="{{ 'section-image-with-text.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+
+<style>
+  #section-{{ section.__key }} .text-section{
+    background-color: {{section.settings.background_color}};
+    color: {{section.settings.text_color}};
+  }
+
+  #section-{{ section.__key }} .text-section .btn{
+    background-color: {{section.settings.text_color}};
+    color: {{section.settings.background_color}};
+  }
+</style>
+
+<div class="spaced-section page-width">
+  <div id="section-{{ section.__key }}" class="img-with-text-section {% if section.settings.image_position == 'left' %}reverse-side{% endif %}">
+    <div class="text-section {% if section.settings.image_width == 'one-third'%}one-third-{% elsif section.settings.image_width == 'half' %}half-{% else %}two-third-{% endif %}text-section" {% if section.settings.image == "" %}style="width:100%;padding:40px;"{% endif %}>
+      <div class="img-with-text-subtitle">{{section.settings.subtitle}}</div>
+      <div class="img-with-text-title">{{section.settings.content_title}}</div>
+      <p class="img-with-text-rich-text" style="">{{section.settings.rich_text}}</p>
+      <a href="{{section.settings.button_link}}" class="btn">{{section.settings.button_label}}</a>
+    </div>
+    {% if section.settings.image != "" %}
+      <a href="{{section.settings.button_link}}" class="img-wrapper {% if section.settings.image_width == 'one-third'%}one-third-{% elsif section.settings.image_width == 'half' %}half-{% else %}two-third-{% endif %}wrapper-width">
+          <img 
+            srcset="{{ section.settings.image | img_url: '550x' }} 550w, {{ section.settings.image | img_url: '710x' }} 710w, {{ section.settings.image | img_url: '950x' }} 950w"
+            src="{{ section.settings.image | img_url: '550x' }}"
+            sizes="(min-width: 990px) 950px,
+                  (min-width: 750px) 710px,
+                  550px"
+            alt="{{ section.settings.title | escape }} | {{ shop.name }}" />
+      </a>
+    {% endif %}
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": { "en_US": "Image with text", "zh_TW": "文字與圖片", "zh_CN": "文字与图片", "ms_MY": "Imej dengan Teks" },
+  "max_blocks": 6,
+  "settings": [
+    {
+      "type": "image",
+      "id": "image",
+      "label": { "en_US": "Image", "zh_TW": "圖片", "zh_CN": "图片", "ms_MY": "Imej" },
+      "default": "https://cdn.store-assets.com/s/943566/f/8657512.jpeg"
+    },
+    {
+      "type": "select",
+      "id": "image_width",
+      "options": [
+        {
+          "value": "one-third",
+          "label": { "en_US": "1/3" }
+        },
+        {
+          "value": "half",
+          "label": { "en_US": "1/2" }
+        },
+        {
+          "value": "two-third",
+          "label": { "en_US": "2/3" }
+        }
+      ],
+      "default": "one-third",
+      "label": { "en_US": "Image Width", "zh_TW": "圖片比例", "zh_CN": "图片比例", "ms_MY": "Nisbah Imej" }
+    },
+    {
+      "type": "text",
+      "id": "subtitle",
+      "default": { "en_US": "Improved"},
+      "label": { "en_US": "Subtitle", "zh_TW": "副標題 2", "zh_CN": "副标题 2", "ms_MY": "Sarikata" }
+    },
+    {
+      "type": "text",
+      "id": "content_title",
+      "default": { "en_US": "Image with text", "zh_TW": "文字與圖片", "zh_CN": "文字与图片", "ms_MY": "Imej dengan Teks"},
+      "label": { "en_US": "Title", "zh_TW": "標題", "zh_CN": "标题", "ms_MY": "tajuk" }
+    },
+    {
+      "type": "text",
+      "id": "rich_text",
+      "default": { "en_US": "Pair large text with a full-width image to draw attention to an important detail of your brand or product line."},
+      "label": { "en_US": "Rich Text", "zh_TW": "文字", "zh_CN": "文字", "ms_MY": "Teks" }
+    },
+    {
+      "type": "text",
+      "id": "button_label",
+      "label": { "en_US": "Button Label", "zh_TW": "連結文字", "zh_CN": "连结文字", "ms_MY": "Teks pautan" }
+    },
+    {
+      "type": "text",
+      "id": "button_link",
+      "label": { "en_US": "Button Link", "zh_TW": "連結", "zh_CN": "连结", "ms_MY": "URL pautan" }
+    },
+    {
+      "type": "select",
+      "id": "image_position",
+      "options": [
+        {
+          "value": "left",
+          "label": { "en_US": "Image on left", "zh_TW": "圖片靠左", "zh_CN": "图片靠左", "ms_MY": "Imej di Kiri" }
+        },
+        {
+          "value": "right",
+          "label": { "en_US": "Image on right", "zh_TW": "圖片靠右", "zh_CN": "图片靠右", "ms_MY": "Imej di Kanan" }
+        }
+      ],
+      "default": "left",
+      "label": { "en_US": "Image Position", "zh_TW": "圖片顯示方式", "zh_CN": "图片显示方式", "ms_MY": "Paparan pilihan Imej" }
+    },
+    {
+      "type": "color",
+      "id": "background_color",
+      "label": {
+        "en_US": "Background Color",
+        "ja_JP": "背景",
+        "ko_KR": "배경",
+        "th_TH": "พื้นหลัง",
+        "vi": "Nền",
+        "zh_CN": "背景颜色",
+        "zh_TW": "背景色"
+      },
+      "default": "#FFF"
+    },
+    {
+      "type": "color",
+      "id": "text_color",
+      "label": {
+        "en_US": "Text Color",
+        "zh_CN": "文字颜色",
+        "zh_TW": "文字色",
+        "ms_MY": "Warna Teks"
+      },
+      "default": "#000"
+    }
+  ],
+  "presets": [
+    {
+      "name": { "en_US": "Image with Text", "zh_TW": "圖片與文字", "zh_CN": "图片与文字", "ms_MY": "Imej dengan Teks" },
+      "blocks": [
+        {
+          "type": "image-with-text"
+        },
+        {
+          "type": "image-with-text"
+        }
+      ]
+    }
+  ]
+}
+{% endschema %}

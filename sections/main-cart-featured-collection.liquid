@@ -1,0 +1,219 @@
+<link rel="preload" href="{{ 'component-card.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<link rel="preload" href="{{ 'component-price.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<link rel="preload" href="{{ 'component-product-grid.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<link rel="preload" href="{{ 'component-loading-overlay.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+
+<link rel="preload" href="{{ 'component-slider.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<link rel="preload" href="{{ 'template-collection.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+
+{% assign collection_id = section.settings.collection__id %}
+{% assign collection = collections[collection_id] %}
+
+ 
+{% assign products_to_display = collection.product_count %}
+
+{% if products_to_display > section.settings.products_to_show %}
+  {% assign products_to_display = section.settings.products_to_show %}
+  {% assign more_in_collection = true %}
+{% endif %}
+
+
+<div id="section-{{ section.__key }}" class="collection page-width page-margin{% if section.settings.swipe_on_mobile == true and products_to_display > 2 and section.settings.products_to_show > 2 %} page-width-desktop{% endif %}">
+  <div class="title-wrapper-with-link {% if products_to_display > 2 and section.settings.swipe_on_mobile and section.settings.products_to_show > 2 %} title-wrapper--self-padded-tablet-down{% endif %}">
+    <h2 class="title">
+      {% if section.settings.title %} 
+        {{section.settings.title}}
+      {% else %}
+        {{ collection.title | escape }}
+      {% endif %}
+    </h2>
+
+    {% if section.settings.show_view_all and section.settings.swipe_on_mobile and more_in_collection %}
+      <a href="{{ collection.url }}" class="link underlined-link large-up-hide">{{ 'general.view_all' | t }}</a>
+    {% endif %}
+  </div>
+
+  <slider-component class="slider-mobile-gutter">
+    <ul class="grid grid--2-col product-grid{% if products_to_display == 4 or section.settings.collection == blank %} grid--3-col-tablet grid--{{section.settings.products_per_row}}-col-desktop{% else %} grid--3-col-tablet{% endif %}{% if products_to_display > 5 %} grid--one-third-max grid--{{section.settings.products_per_row}}-col-desktop grid--quarter-max{% endif %}{% if products_to_display > 2 and section.settings.swipe_on_mobile and section.settings.products_to_show > 2 %} slider slider--tablet grid--peek{% endif %}{% if section.settings.show_view_all == false or section.settings.products_to_display < section.settings.products_to_show %} negative-margin{% endif %}{% if section.settings.show_view_all and section.settings.products_to_display > section.settings.products_to_show %} negative-margin--small{% endif %}" role="list">
+      {% for product in collection.products limit: section.settings.products_to_show %}
+        <li class="grid__item{% if products_to_display > 2 and section.settings.swipe_on_mobile and section.settings.products_to_show > 2 %} slider__slide{% endif %}">
+          {% include 'product-card', show_secondary_image: section.settings.show_secondary_image, show_add_to_cart_button: section.settings.show_add_to_cart_button, image_ratio: section.settings.image_ratio, show_product_info: section.settings.show_product_info  %}
+        </li>
+      {% endfor %}
+    </ul>
+    {% if products_to_display > 2 and section.settings.swipe_on_mobile and section.settings.products_to_show > 2 %}
+      <div class="slider-buttons no-js-hidden{% if products_to_display < 4 %} medium-hide{% endif %}{% if products_to_display < 3 %} small-hide{% endif %}">
+        <button type="button" class="slider-button slider-button--prev" name="previous">{% include 'svg-definitions' with 'icon-caret' %}</button>
+        <div class="slider-counter caption">
+          <span class="slider-counter--current">1</span>
+          <span aria-hidden="true"> / </span>
+          <span class="slider-counter--total">{{ products_to_display }}</span>
+        </div>
+        <button type="button" class="slider-button slider-button--next" name="next">{% include 'svg-definitions' with 'icon-caret' %}</button>
+      </div>
+    {% endif %}
+  </slider-component>
+
+  {% if section.settings.show_view_all and more_in_collection %}
+    <div class="center{% if section.settings.swipe_on_mobile %} small-hide medium-hide{% endif %}">
+      <a href="{{ collection.url }}" class="button">
+        {{ 'general.view_all' | t }}
+      </a>
+    </div>
+  {% endif %}
+</div>
+
+{% schema %}
+{
+  "name": {
+    "en_US": "Featured collection",
+    "zh_TW": "推薦商品區塊", 
+    "zh_CN": "推荐商品区块", 
+    "ms_MY": "Koleksi terpilih"
+  },
+  "tag": "section",
+  "class": "spaced-section",
+  "settings": [
+    {
+      "type": "text",
+      "id": "title",
+      "default": "Featured collection",
+      "label": {
+        "en_US": "Heading",
+        "ja_JP": "見出し",
+        "ko_KR": "제목",
+        "ms_MY": "Tajuk",
+        "th_TH": "ส่วนหัว",
+        "zh_CN": "标题",
+        "zh_TW": "標題"
+      }
+    },
+    {
+      "type": "collection",
+      "id": "collection__id",
+      "default": "feature-on-homepage",
+      "label": {
+        "en_US": "Collection",
+        "ja_JP": "コレクション",
+        "ko_KR": "컬렉션",
+        "ms_MY": "Koleksi",
+        "th_TH": "คอลเลกชัน",
+        "zh_CN": "商品目录",
+        "zh_TW": "商品目錄"
+      }
+    },
+    {
+      "type": "range",
+      "id": "products_per_row",
+      "min": 2,
+      "max": 5,
+      "step": 1,
+      "default": 4,
+      "label": {
+        "en_US": "Collections per row",
+        "ja_JP": "行あたりのコレクション数",
+        "ko_KR": "열 별 컬렉션",
+        "ms_MY": "Koleksi setiap baris",
+        "th_TH": "คอลเลกชันต่อแถว",
+        "zh_CN": "每行显示数量",
+        "zh_TW": "每行顯示數量"
+      }
+    },
+    {
+      "type": "range",
+      "id": "products_to_show",
+      "min": 2,
+      "max": 20,
+      "step": 2,
+      "default": 8,
+      "label": {
+        "en_US": "Products display",
+        "ja_JP": "行あたりのコレクション数",
+        "ko_KR": "열 별 컬렉션",
+        "ms_MY": "Koleksi setiap baris",
+        "th_TH": "คอลเลกชันต่อแถว",
+        "zh_CN": "商品显示总数",
+        "zh_TW": "商品顯示總數"
+      }
+    },
+    {
+      "type": "checkbox",
+      "id": "show_view_all",
+      "default": true,
+      "label": {
+        "en_US": "Show all button",
+        "zh_TW": "顯示所有按鈕", 
+        "zh_CN": "显示所有按钮", 
+        "ms_MY": "Tunjukkan semua butang"
+      }
+    },
+    {
+      "type": "select",
+      "id": "image_ratio",
+      "options": [
+        {
+          "value": "portrait",
+          "label": { "en_US": "Portrait", "zh_TW": "肖像", "zh_CN": "肖像", "ms_MY": "Potret" }
+        },
+        {
+          "value": "landscape",
+          "label": { "en_US": "Landscape", "zh_TW": "横向", "zh_CN": "横向", "ms_MY": "Melintang" }
+        },
+        {
+          "value": "square",
+          "label": { "en_US": "Square", "zh_TW": "正方形", "zh_CN": "正方形", "ms_MY": "Segi empat sama" }
+        },
+        {
+          "value": "circle",
+          "label": { "en_US": "Circle", "zh_TW": "圓形", "zh_CN": "圆形", "ms_MY": "Bulat" }
+        },
+        {
+          "value": "16-9",
+          "label": "16:9"
+        }
+      ],
+      "default": "square",
+      "label": { "en_US": "Image Ratio", "zh_TW": "圖片比例", "zh_CN": "图片比例", "ms_MY": "Nisbah Imej" }
+    },
+    {
+      "type": "checkbox",
+      "id": "show_secondary_image",
+      "default": false,
+      "label": {
+        "en_US": "Show secondary image",
+        "zh_TW": "顯示次要圖片", 
+        "zh_CN": "显示次要图片", 
+        "ms_MY": "Tunjukkan imej sekunder"
+      }
+    },
+    {
+      "type": "checkbox",
+      "id": "show_add_to_cart_button",
+      "default": true,
+      "label": {
+        "en_US": "Show add to cart button",
+        "zh_TW": "顯示加入購物車按鈕", 
+        "zh_CN": "显示加入购物车按钮", 
+        "ms_MY": "Tunjukkan butang tambah ke troli"
+      }
+    },
+    {
+      "type": "checkbox",
+      "id": "show_product_info",
+      "default": true,
+      "label": {
+        "en_US": "Show Product Info", 
+        "zh_TW": "顯示產品資料", 
+        "zh_CN": "显示产品资料", 
+        "ms_MY": "Tunjuk info Produk"
+      }
+    },
+    {
+      "type": "checkbox",
+      "id": "swipe_on_mobile",
+      "default": true,
+      "label": { "en_US": "Swipe on Mobile", "zh_TW": "手機版顯示滑動圖片", "zh_CN": "手机版显示滑动图片", "ms_MY": "Leret pada mudah alih" }
+    }
+  ]
+}
+{% endschema %}

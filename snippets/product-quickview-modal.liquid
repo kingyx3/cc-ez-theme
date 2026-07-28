@@ -1,0 +1,25 @@
+{{ 'section-main-product.css' | asset_url | stylesheet_tag }}
+{{ 'component-loading-overlay.css' | asset_url | stylesheet_tag }}
+{{ 'product-quickview.css' | asset_url | stylesheet_tag }}
+
+<product-quickview-modal>
+  <div id="product-quickview-modal" class="product-quickview-modal-wrapper focus-inset" aria-modal="true" role="dialog" tabindex="-1">
+    <button type="button" class="product-quickview-modal__close modal__close-button link link--text focus-inset" aria-label="{{ 'accessibility.close' | t }}">
+      {% include 'svg-definitions' with 'icon-close' %}
+    </button>
+
+    <div class="loading-overlay">	
+      <div class="loading-overlay__spinner">	
+        <svg aria-hidden="true" focusable="false" role="presentation" class="spinner" viewBox="0 0 66 66" xmlns="http://www.w3.org/2000/svg">	
+            <circle class="path" fill="none" stroke-width="6" cx="33" cy="33" r="30"></circle>	
+        </svg>	
+      </div>	
+    </div>	
+
+    <div class="product-quickview-modal__body" style="display: none;"></div>
+  </div>
+  <div class="product-quickview-modal-backdrop"></div>
+</product-quickview-modal>
+
+{{ 'product-form.js' | asset_url | script_tag }}
+{{ 'product-quickview.js' | asset_url | script_tag }}

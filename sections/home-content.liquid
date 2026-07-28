@@ -1,0 +1,38 @@
+
+<div class="page-width page-margin home-content-wrapper wrapper"> 
+  <div class="rte">
+    {{ settings.home_page_content.content }}
+  </div>
+  {% include 'related-product-items', recommend: settings.home_page_content %}
+</div>
+
+
+{% schema %}
+{
+  "name": {
+    "en_US": "Home Content",
+    "zh_CN": "商店叙述",
+    "zh_TW": "商店敘述"
+  },
+  "settings": [
+    {
+      "type": "header",
+      "label": {
+        "en_US": "Content from pages",
+        "zh_TW": "来自分页的内容", 
+        "zh_CN": "來自分頁的內容", 
+        "ms_MY": "Kandungan daripada halaman"
+      }
+    }
+  ],
+  "presets": [
+    {
+      "name": {
+        "en_US": "Home Content",
+        "zh_CN": "商店叙述",
+        "zh_TW": "商店敘述"
+      }
+    }
+  ]
+}
+{% endschema %}

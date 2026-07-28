@@ -1,0 +1,660 @@
+<style>
+    .filter-wrapper{
+        width: 100%;
+        max-width: 320px;
+      	overflow-y: auto;
+      	position: sticky;
+      	position: -webkit-sticky;
+        top: 20px;
+        height: 95dvh;
+        left: 0;
+    }
+    #main-collection-product-grid,
+    #pagination-container,
+    .pagination-wrapper{
+      width: 100%;
+    }
+  	@media screen and (min-width: 750px) {
+      .easystore-section-header-sticky ~ * .filter-wrapper{
+      	height: calc(90dvh - var(--header-bottom-position));
+      	top: calc(20px + var(--header-bottom-position));
+      }
+      .easystore-section-header-hidden ~ * .filter-wrapper{
+        top: 20px;
+        height: 95dvh;
+      }
+      #main-collection-product-grid{
+        height: 100%;
+        width: 75%;
+      	margin-left: 30px;
+      }
+      .float-filter-icon + aside{
+        width: calc(25% - 30px);
+      }
+    }
+    [filter-container-toggle]{
+      cursor: pointer;
+    }
+    .filter-close-row{
+      margin-bottom: 10px;
+    }
+
+    .filter-wrapper h4{
+		margin: 1.5em 0 0.5em;
+    }
+
+    .filter-wrapper .filter-collapsible{
+      border-bottom: 1px solid rgba(var(--color-base-text), 0.1);
+    }
+    .filter-wrapper .filter-collapsible > summary{
+      list-style: none;
+      cursor: pointer;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      padding: 0;
+      column-gap: 8px;
+    }
+    .filter-wrapper .filter-collapsible > summary::-webkit-details-marker{
+      display: none;
+    }
+    .filter-wrapper .filter-collapsible > summary h4{
+      margin: 1em 0;
+      grid-column: 1;
+    }
+    .filter-wrapper .filter-collapsible > summary::after{
+      content: '';
+      width: 8px;
+      height: 8px;
+      border-right: 1.5px solid currentColor;
+      border-bottom: 1.5px solid currentColor;
+      transform: rotate(45deg);
+      transition: transform 200ms ease;
+      margin-right: 4px;
+      grid-column: 2;
+      grid-row: 1 / span 2;
+      align-self: center;
+    }
+    .filter-wrapper .filter-collapsible[open] > summary::after{
+      transform: rotate(-135deg);
+    }
+    .filter-wrapper .filter-collapsible-content{
+      padding-bottom: 1em;
+    }
+    .filter-wrapper .filter-selected-summary{
+      display: block;
+      grid-column: 1;
+      font-size: 0.9em;
+      opacity: 0.7;
+      margin: -0.75em 0 1em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-width: 0;
+    }
+    .filter-wrapper .filter-collapsible[open] .filter-selected-summary{
+      display: none;
+    }
+    .filter-wrapper .filter-boolean-row{
+      border-bottom: 1px solid rgba(var(--color-base-text), 0.1);
+    }
+    .filter-wrapper .filter-boolean-row h4{
+      margin: 1em 0;
+    }
+    .price-range-inputs{
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+    }
+    .price-range-field{
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-width: 0;
+      gap: 4px;
+    }
+    .price-range-label{
+      font-size: 0.85em;
+      opacity: 0.7;
+    }
+    .price-range-input-wrap{
+      display: flex;
+      align-items: center;
+      border: 1px solid rgba(var(--color-base-text), 0.2);
+      border-radius: 4px;
+      padding: 4px 8px;
+      gap: 4px;
+    }
+    .price-range-input-wrap input[type="number"]{
+      border: none;
+      outline: none;
+      background: transparent;
+      padding: 0;
+      margin: 0;
+      width: 100%;
+      min-width: 0;
+      font-size: 0.95em;
+      -moz-appearance: textfield;
+      box-shadow: none;
+    }
+    .price-range-input-wrap input[type="number"]::-webkit-outer-spin-button,
+    .price-range-input-wrap input[type="number"]::-webkit-inner-spin-button{
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    .price-range-prefix,
+    .price-range-suffix{
+      font-size: 0.85em;
+      opacity: 0.7;
+      white-space: nowrap;
+    }
+    .price-range-separator{
+      padding-bottom: 0.3em;
+      opacity: 0.5;
+    }
+    .filter-wrapper label{
+		cursor: pointer;
+    }
+    .float-filter-icon{
+      position: sticky;
+      top: 25px;
+      right: 0;
+      z-index: 3;
+      margin-left: auto;
+    }
+  
+    .easystore-section-header-sticky ~ * .float-filter-icon{
+      top: calc(var(--header-bottom-position) + 20px);
+    }
+  
+    .easystore-section-header-hidden ~ * .float-filter-icon{
+      top: 25px;
+    }
+
+    #section-main-collection,
+    .collection.page-width{
+      	display: flex;
+      	flex-wrap: wrap;
+    }
+    .flex{
+      display: flex;
+    }
+
+    .filter-is-loading{
+      position: relative;
+    }
+  
+    .filter-is-loading > *{
+      opacity: 0.5;
+    }
+  
+    .filter-is-loading:before{
+      animation: loading var(--duration-long) infinite linear;
+      border: 0.5rem solid rgba(var(--color-button), 0.4);
+      border-left: 0.5rem solid rgb(var(--color-button));
+      border-radius: 100%;
+      box-sizing: content-box;
+      content: '';
+      display: block;
+      height: 4rem;
+      width: 4rem;
+      position: absolute;
+      top: 30vh;
+      left: 50%;
+      transform: translate(-50%, 0);
+      -webkit-transform: translate(-50%, 0);
+      z-index: 2;
+    }
+
+    @keyframes loading {
+      0% {
+        transform: rotate(0deg);
+      }
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+
+  
+    @media screen and (max-width: 749px) {
+      .filter-wrapper{
+        position: fixed;
+        top: 0;
+        left: initial;
+        right: 0;
+        bottom: 0;
+        height: 100%;
+        transform: translate(100%, 0);
+        -webkit-transform: translate(100%, 0);
+        z-index: 100005;
+        background-color: rgb(var(--color-background));
+        padding: 3rem 3rem 8rem;
+        transition: all 300ms ease-in-out;
+        -webkit-transition: all 300ms ease-in-out;
+        overflow-y: auto;
+      }
+      .filter-wrapper.is-active{
+        transform: translate(0, 0);
+        -webkit-transform: translate(0, 0);
+      }
+      .filter-wrapper.is-active + .filter-wrapper-backdrop{
+      	position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 100000;
+        background-color: rgba(var(--color-base-text),0.5);
+        display: block;
+      }
+      .collection.flex,
+      .collection.page-width,
+      #section-main-collection{
+        flex-wrap: wrap;
+        align-items: flex-start;
+      }
+      .float-filter-icon [filter-container-toggle]{
+        padding: 3px;
+        margin-bottom: 15px;
+        background-color: rgb(var(--color-background));
+        border-radius: 6px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        border: 1px solid rgba(var(--color-base-text),0.2);
+      }
+    }
+</style>
+
+
+<div class="filter-wrapper">
+  <div class="text-right filter-close-row">
+    <span filter-container-toggle class="medium-hide large-up-hide">
+      {% include 'svg-definitions' with 'icon-close', class: 'svg-icon' %}
+    </span>
+  </div>
+  
+  
+  <div class="flex flex-space-between flex-align-center">
+    <div>{{ 'collections.filter.filters' | t | default: 'Filters' }}</div>
+    <small><a href="#MainContent" onclick="resetFilter()">{{ 'collections.sorting.reset' | t }}</a></small>
+  </div>
+
+  <details class="filter-collapsible" data-filter-group="SortBy">
+    <summary>
+      <h4>{{ 'collections.sorting.title' | t }}</h4>
+      <span class="filter-selected-summary" data-sort-summary></span>
+    </summary>
+    <div class="filter-collapsible-content">
+      <input id="sorting-featured" type="radio" class="styled-checkbox" value="featured" name="SortBy" />
+      <label for="sorting-featured" style="display:inline">{{ 'collections.sorting.featured' | t }}</label>
+      <br>
+      <input id="sorting-title+asc" type="radio" class="styled-checkbox" value="title+asc" name="SortBy" />
+      <label for="sorting-title+asc" style="display:inline">{{ 'collections.sorting.az' | t }}</label>
+      <br>
+      <input id="sorting-title+desc" type="radio" class="styled-checkbox" value="title+desc" name="SortBy" />
+      <label for="sorting-title+desc" style="display:inline">{{ 'collections.sorting.za' | t }}</label>
+      <br>
+      <input id="sorting-price+asc" type="radio" class="styled-checkbox" value="price+asc" name="SortBy" />
+      <label for="sorting-price+asc" style="display:inline">{{ 'collections.sorting.price_ascending' | t }}</label>
+      <br>
+      <input id="sorting-price+desc" type="radio" class="styled-checkbox" value="price+desc" name="SortBy" />
+      <label for="sorting-price+desc" style="display:inline">{{ 'collections.sorting.price_descending' | t }}</label>
+      <br>
+      <input id="sorting-date+desc" type="radio" class="styled-checkbox" value="date+desc" name="SortBy" />
+      <label for="sorting-date+desc" style="display:inline">{{ 'collections.sorting.date_descending' | t }}</label>
+      <br>
+      <input id="sorting-date+asc" type="radio" class="styled-checkbox" value="date+asc" name="SortBy" />
+      <label for="sorting-date+asc" style="display:inline">{{ 'collections.sorting.date_ascending' | t }}</label>
+      <br>
+    </div>
+  </details>
+  
+  {% for filter in collection.filters %}
+	{% case filter.type %}
+	{% when 'price_range' %}
+        <details class="filter-collapsible" data-filter-group="price_range">
+          <summary>
+            <h4>{{ filter.label }}</h4>
+          </summary>
+          <div class="filter-collapsible-content">
+            <div class="price-range-inputs">
+              <label class="price-range-field">
+                <span class="price-range-label">{{ 'collections.filter.min' | t | default: 'Min' }}</span>
+                <span class="price-range-input-wrap">
+                  <span class="price-range-prefix">{{ shop.money_prefix }}</span>
+                  <input name="rangeOne" type="number" inputmode="numeric" value="{{ filter.min_value.value | round: shop.format_decimals }}" min="0" max="{{ filter.range_max | round: shop.format_decimals }}" step="1" placeholder="0" />
+                  <span class="price-range-suffix">{{ shop.money_suffix }}</span>
+                </span>
+              </label>
+              <span class="price-range-separator">-</span>
+              <label class="price-range-field">
+                <span class="price-range-label">{{ 'collections.filter.max' | t | default: 'Max' }}</span>
+                <span class="price-range-input-wrap">
+                  <span class="price-range-prefix">{{ shop.money_prefix }}</span>
+                  <input name="rangeTwo" type="number" inputmode="numeric" value="{{ filter.max_value.value | round: shop.format_decimals }}" min="0" max="{{ filter.range_max | round: shop.format_decimals }}" step="1" placeholder="{{ filter.range_max | round: shop.format_decimals }}" />
+                  <span class="price-range-suffix">{{ shop.money_suffix }}</span>
+                </span>
+              </label>
+            </div>
+          </div>
+        </details>
+    {% when 'list' %}
+        {% assign active_count = 0 %}
+        {% assign active_labels = '' %}
+        {% for option in filter.values %}
+          {% if option.active %}
+            {% assign active_count = active_count | plus: 1 %}
+            {% if active_labels == '' %}
+              {% assign active_labels = option.label %}
+            {% else %}
+              {% assign active_labels = active_labels | append: ', ' | append: option.label %}
+            {% endif %}
+          {% endif %}
+        {% endfor %}
+        <details class="filter-collapsible" data-filter-group="{{ filter.param_name }}">
+          <summary>
+            <h4>{{ filter.label }}<span class="filter-active-count"{% if active_count == 0 %} hidden{% endif %}> ({{ active_count }})</span></h4>
+            <span class="filter-selected-summary"{% if active_count == 0 %} hidden{% endif %}>{{ active_labels }}</span>
+          </summary>
+          <div class="filter-collapsible-content">
+            {% for option in filter.values %}
+              <input id="{{ option.value }}" type="checkbox" {% if option.active %}checked{% endif %} class="styled-checkbox" data-type="{{filter.param_name}}" data-label="{{filter.label}}" value="{{ option.value }}" />
+              <label for="{{ option.value }}" style="display:inline">{{ option.label }}</label>
+              <br>
+            {% endfor %}
+          </div>
+        </details>
+    {% when 'boolean' %}
+        <div class="filter-boolean-row">
+          <label for="{{ filter.label }}" class="flex" style="justify-content: space-between;align-items: center;width: 100%;cursor: pointer;">
+            <h4>{{ filter.label }}</h4>
+            <input id="{{ filter.label }}" {% if option.active %}checked{% endif %} type="checkbox" class="styled-checkbox" data-type="purchasable" data-value="true" />
+          </label>
+        </div>
+	{% endcase %}
+  {% endfor %}
+</div>
+<div filter-container-toggle class="filter-wrapper-backdrop"></div>
+
+
+
+<script>
+    var rangeOne = document.querySelector('input[name="rangeOne"]') || {};
+    var rangeTwo = document.querySelector('input[name="rangeTwo"]') || {};
+    var brandCheckboxes = document.querySelectorAll('.styled-checkbox[data-type="brands"]');
+    var tagCheckboxes = document.querySelectorAll('.styled-checkbox[data-type="tags"]');
+    var variantCheckboxes = document.querySelectorAll('.styled-checkbox[data-type*="variant_type"]');
+    var metafieldCheckboxes = document.querySelectorAll('.styled-checkbox[data-type^="metafields["]');
+    var selectedVariantType = document.getElementById('selectedVariantType');
+    var purchasableCheckboxes = document.querySelectorAll('.styled-checkbox[data-type="purchasable"]');
+    var sortByRadio = document.querySelectorAll('.filter-wrapper [name="SortBy"]');
+    var filterToggle = document.querySelectorAll('[filter-container-toggle]');
+  
+	document.querySelector('.filter-wrapper [name="SortBy"][value="{{ collection.sort_by | default: collection.default_sort_by }}"]').setAttribute('checked',true)
+
+  
+    function getSelectedPurchasableValues(checkboxes) {
+        return Array.from(checkboxes)
+            .filter(function (checkbox) {
+                return checkbox.checked;
+            })
+            .map(function (checkbox) {
+                return checkbox.getAttribute('data-value');
+            });
+    }
+  
+    filterToggle.forEach(function (button) {
+        button.addEventListener('click', function () {
+            if(document.querySelector('.filter-wrapper.is-active')) {
+            	document.querySelector('.filter-wrapper').classList.remove('is-active')
+            } else {
+            	document.querySelector('.filter-wrapper').classList.add('is-active')
+            }
+				
+        });
+    });
+
+    sortByRadio.forEach(function (radio) {
+        radio.addEventListener('change', function () {
+            updateSortBySummary();
+            refreshSection();
+        });
+    });
+
+    variantCheckboxes.forEach(function (checkbox) {
+        checkbox.addEventListener('change', function () {
+            updateSelectedVariants();
+            refreshSection();
+        });
+    });
+
+    function updateSelectedVariants() {
+        var selectedVariants = getSelectedVariantValues(variantCheckboxes);
+    }
+
+    function getSelectedVariantValues(checkboxes) {
+        var formattedVariants = {};
+
+        checkboxes.forEach(function (checkbox) {
+            if (checkbox.checked) {
+                var type = checkbox.getAttribute('data-type');
+                var value = checkbox.value;
+
+                if (!formattedVariants[type]) {
+                  formattedVariants[type] = value;
+                }else{
+                  formattedVariants[type] += `,${value}`;
+                }
+            }
+        });
+      
+        return formattedVariants || null;
+    }
+  
+    function isDOMElement(obj) {
+        return obj instanceof Element || obj instanceof HTMLDocument;
+    }
+  
+
+    function _filter_debounce(fn, wait) {
+      let t;
+      return (...args) => {
+        clearTimeout(t);
+        t = setTimeout(() => fn.apply(this, args), wait);
+      };
+    }
+  const debouncedRefreshSection = _filter_debounce(refreshSection, 400);
+
+    document.addEventListener('DOMContentLoaded', function () {
+      
+      	document.querySelector('.template-collection').style.setProperty('--header-bottom-position', `${document.querySelector('#easystore-section-header').offsetHeight}px`);
+      
+      	document.querySelectorAll('.price-range-inputs input[type="number"]').forEach((input)=>{
+          input.addEventListener('input', function () {
+            debouncedRefreshSection()
+          });
+          input.addEventListener('change', function () {
+            var min = Number(rangeOne.value) || 0;
+            var max = Number(rangeTwo.value);
+            if (!isNaN(max) && min > max) {
+              if (input.name === 'rangeOne') rangeOne.value = max;
+              else rangeTwo.value = min;
+            }
+          });
+        });
+
+
+        brandCheckboxes.forEach(function (checkbox) {
+            checkbox.addEventListener('change', function () {
+                refreshSection();
+            });
+        });
+
+        tagCheckboxes.forEach(function (checkbox) {
+            checkbox.addEventListener('change', function () {
+                refreshSection();
+            });
+        });
+
+        purchasableCheckboxes.forEach(function (checkbox) {
+            checkbox.addEventListener('change', function () {
+                refreshSection();
+            });
+        });
+
+        metafieldCheckboxes.forEach(function (checkbox) {
+            checkbox.addEventListener('change', function () {
+                refreshSection();
+            });
+        });
+    });
+
+    function updateFilterActiveCount(paramName) {
+      var group = document.querySelector('.filter-collapsible[data-filter-group="' + paramName + '"]');
+      if (!group) return;
+      var checked = group.querySelectorAll('input[type="checkbox"]:checked');
+      var count = checked.length;
+      var badge = group.querySelector('.filter-active-count');
+      if (badge) {
+        badge.textContent = ' (' + count + ')';
+        if (count > 0) {
+          badge.removeAttribute('hidden');
+        } else {
+          badge.setAttribute('hidden', '');
+        }
+      }
+      var summary = group.querySelector('.filter-selected-summary');
+      if (summary) {
+        var labels = Array.prototype.map.call(checked, function (cb) {
+          var lbl = group.querySelector('label[for="' + cb.id + '"]');
+          return lbl ? lbl.textContent.trim() : cb.value;
+        });
+        summary.textContent = labels.join(', ');
+        if (count > 0) {
+          summary.removeAttribute('hidden');
+        } else {
+          summary.setAttribute('hidden', '');
+        }
+      }
+    }
+
+    document.querySelectorAll('.filter-collapsible').forEach(function (group) {
+      var paramName = group.getAttribute('data-filter-group');
+      group.addEventListener('change', function (e) {
+        if (e.target && e.target.matches('input[type="checkbox"]')) {
+          updateFilterActiveCount(paramName);
+        }
+      });
+    });
+
+    function updateSortBySummary() {
+      var summary = document.querySelector('[data-sort-summary]');
+      if (!summary) return;
+      var checked = document.querySelector('.filter-wrapper [name="SortBy"]:checked');
+      if (!checked) {
+        summary.textContent = '';
+        summary.setAttribute('hidden', '');
+        return;
+      }
+      var lbl = document.querySelector('label[for="' + checked.id + '"]');
+      summary.textContent = lbl ? lbl.textContent.trim() : checked.value;
+      summary.removeAttribute('hidden');
+    }
+    updateSortBySummary();
+
+    function refreshSection() {
+        var selectedBrands = getSelectedTagValues(brandCheckboxes);
+        var selectedTags = getSelectedTagValues(tagCheckboxes);
+        var formattedVariants = getSelectedVariantValues(variantCheckboxes);
+        var formattedMetafields = getSelectedVariantValues(metafieldCheckboxes);
+        Object.assign(formattedVariants, formattedMetafields);
+        var selectedPurchasable = getSelectedValues(purchasableCheckboxes);
+        var sortBy = document.querySelector('.filter-wrapper [name="SortBy"]:checked').value;
+        var currentUrl = window.location.origin + window.location.pathname;
+        var apiUrl = currentUrl + '/filtered_section_html';
+      
+      	document.querySelector('#main-collection-product-grid').classList.add('filter-is-loading');
+      
+        // Construct query parameters
+        var queryParams = new URLSearchParams({
+            min_price: rangeOne.value || '',
+            max_price: rangeTwo.value || '',
+            sort: sortBy || '',
+            brands: selectedBrands || '',
+            tags: selectedTags || '',
+            purchasable: selectedPurchasable || ''
+        });
+      
+        Object.entries(formattedVariants).forEach(formattedVariant => {
+          const [key, value] = formattedVariant
+          queryParams.append(`${key}`, value)
+        });
+
+        // Append query parameters to the apiUrl
+        var apiUrlWithParams = `${apiUrl}?${queryParams}`;
+
+        var queryString = queryParams.toString();
+        // Set window.location.search to the new query string
+        window.history.replaceState({}, '', window.location.pathname + '?' + queryString);
+      
+      	fetch(apiUrlWithParams, {
+          method: 'GET',
+          headers: {
+            "Content-Type": "application/json",
+            "X-Requested-With": "XMLHttpRequest",
+          },
+      	})
+      	.then((response) => {
+      		return response.json();
+      	})
+      	.then((response) => {
+          document.querySelector('#main-collection-product-grid').classList.remove('filter-is-loading');
+      		document.querySelector('#main-collection-product-grid').innerHTML = response.filtered_product_list;
+      		document.querySelector('#pagination-container').innerHTML = response.pagination;
+          window.scrollTo({top: document.querySelector('.collection-hero__title').offsetTop, behavior: "smooth"});
+      	})
+      	.catch((error) => {
+          document.querySelector('#main-collection-product-grid').classList.remove('filter-is-loading');
+      		console.log('Error refreshing section:', error);
+          window.scrollTo({top: document.querySelector('.collection-hero__title').offsetTop, behavior: "smooth"});
+      	})
+    }
+
+    function getSelectedValues(checkboxes) {
+        return Array.from(checkboxes)
+            .filter(function (checkbox) {
+                return checkbox.checked;
+            })
+            .map(function (checkbox) {
+                return checkbox.getAttribute('data-value');
+            })
+      		.join(",");
+    }
+
+    function getSelectedTagValues(checkboxes) {
+        return Array.from(checkboxes)
+            .filter(function (checkbox) {
+                return checkbox.checked;
+            })
+            .map(function (checkbox) {
+                return checkbox.value;
+            })
+      		.join(",");
+    }
+
+    function resetFilter() {
+      document.querySelector('[name=SortBy][value=featured]').checked = true;
+      document.querySelectorAll('.filter-wrapper [type=checkbox]').forEach(function(checkbox) {
+          checkbox.checked = false;
+      });
+      if(rangeOne && rangeOne.tagName) rangeOne.value = 0;
+      if(rangeTwo && rangeTwo.tagName) rangeTwo.value = rangeTwo.getAttribute('max');
+      document.querySelectorAll('.filter-collapsible').forEach(function (group) {
+        updateFilterActiveCount(group.getAttribute('data-filter-group'));
+      });
+      updateSortBySummary();
+      refreshSection();
+    }
+
+</script>

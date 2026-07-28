@@ -1,0 +1,1209 @@
+<style>
+  header {
+    --logo-width: {{ section.settings.logo_max_width }}px;
+  }
+  .header-wrapper,
+  .header-wrapper .list-menu--disclosure,
+  .header-wrapper .search-modal{
+    background-color: {{ section.settings.header_bg_color }};
+  }
+  .header-wrapper .search-modal .field__input{
+    background-color: rgb(var(--color-background));
+  }
+  .header-wrapper summary .icon-caret,
+  .header-wrapper .header__menu-item a,
+  .header-wrapper .list-menu__item,
+  .header-wrapper .link--text{
+    color: {{ section.settings.color_text }};
+  }
+  .header__logo_secondary{
+    display: none;
+  }
+  
+  .search-modal__form{
+    position: relative;
+  }
+  
+  .dropdown {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    width: 100%;
+    padding: 5px 0;
+    background-color: #fff;
+    color:#000;
+    z-index: 1000;
+    border-bottom-left-radius: 15px;
+    border-bottom-right-radius: 15px;
+    border: 1px solid rgba(var(--color-foreground), 1);
+    border-top: none;
+    overflow-x: hidden;
+    overflow-y: auto;
+    max-height: 350px;
+  }
+  
+  .dropdown-item {
+    padding: 0.4rem 2rem;
+    cursor: pointer;
+    line-height: 1.4;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  
+  .dropdown-item:hover{
+    background-color: #f3f3f3;
+  }
+  
+  .search__input.is-focus{
+    border-radius: 15px;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    border: 1px solid rgba(var(--color-foreground), 1);
+    border-bottom: none;
+    box-shadow: none;
+  }
+  
+  .clear-all {
+    text-align: right;
+    padding: 0 2rem 0.2rem;
+    line-height: 1;
+    font-size: 70%;
+    margin-bottom: -2px;
+  }
+  
+  .clear-all:hover{
+    background-color: #fff;
+  }
+  
+  .search-input-focus .easystore-section-header-hidden{
+    transform: none;
+  }
+  .referral-notification {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    width: 280px;
+    z-index: 1000;
+    padding: 16px;
+    margin-top: 8px;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+  
+  .referral-notification::before {
+    content: '';
+    position: absolute;
+    top: -8px;
+    right: 20px;
+    width: 0;
+    height: 0;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-bottom: 8px solid white;
+  }
+  
+  .referral-notification::after {
+    content: '';
+    position: absolute;
+    top: -9px;
+    right: 20px;
+    width: 0;
+    height: 0;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-bottom: 8px solid #e0e0e0;
+  }
+  
+  .referral-notification h4 {
+    margin: 0 0 8px 0;
+    color: #2196F3;
+    font-size: 16px;
+    font-weight: 600;
+  }
+  
+  .referral-notification p {
+    margin: 0 0 12px 0;
+    color: #666;
+  }
+  
+  .referral-notification .referral-code {
+    background: #f5f5f5;
+    padding: 8px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 13px;
+    text-align: center;
+    margin: 8px 0;
+    border: 1px solid #ddd;
+  }
+  
+  .referral-notification .close-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: none;
+    border: none;
+    font-size: 18px;
+    color: #999;
+    cursor: pointer;
+    padding: 0;
+    width: 20px;
+    height: 20px;
+    line-height: 1;
+  }
+  
+  .referral-notification .close-btn:hover {
+    color: #333;
+  }
+  
+  .referral-notification .action-btn {
+    background: #2196F3;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    margin-right: 8px;
+    margin-top: 8px;
+  }
+  
+  .referral-notification .action-btn:hover {
+    background: #1976D2;
+  }
+  
+  .referral-notification .dismiss-btn {
+    background: transparent;
+    color: #666;
+    border: 1px solid #ddd;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    margin-top: 8px;
+  }
+  
+  .referral-notification .dismiss-btn:hover {
+    background: #f5f5f5;
+  }
+  .referral-modal__dialog {
+    transform: translate(-50%, 0);
+    transition: transform var(--duration-default) ease, visibility 0s;
+    z-index: 10000;
+    position: fixed;
+    top: 20vh;
+    left: 50%;
+    width: 100%;
+    max-width: 350px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    border-radius: 12px;
+    background-color: #fff;
+    color: #000;
+    padding: 20px;
+    text-align: center;
+  }
+
+  .modal-overlay.referral-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    z-index: 2001;
+    display: block;
+    opacity: 1;
+    transition: opacity var(--duration-default) ease, visibility 0s;
+  }
+</style>
+
+{% if section.settings.transparent_header %}
+  <style>
+    .template-index .header__logo_secondary + .header__heading-logo,
+    .template-index .easystore-section-header-sticky .header__logo_secondary{
+      display: none;
+    }
+    .template-index .header__logo_secondary,
+    .template-index .easystore-section-header-sticky .header__logo_secondary + .header__heading-logo{
+      display: block;
+    }
+    .template-index .header-wrapper {
+      position: absolute;
+      width: 100%;
+    }
+    .template-index .header-wrapper {
+      background-color: transparent;
+    }
+
+    .template-index #easystore-section-header:not(.easystore-section-header-sticky) .header__icon .icon{
+      color: {{ section.settings.secondary_color_text }};
+    }
+    .template-index .easystore-section-header-sticky .header-wrapper{
+      background-color: {{ section.settings.header_bg_color }};
+    }
+    @media screen and (min-width: 990px) {
+      .template-index div:not(.easystore-section-header-sticky) nav > .list-menu > li > a,
+      .template-index div:not(.easystore-section-header-sticky) nav > .list-menu > li > details-disclosure > details > summary *{
+        color: {{ section.settings.secondary_color_text }};
+      }
+    }
+  </style>
+{% endif %}
+
+<link rel="preload" href="{{ 'section-header.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<link rel="preload" href="{{ 'component-list-menu.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<link rel="preload" href="{{ 'component-menu-drawer.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<link rel="preload" href="{{ 'component-cart-notification.css?v1.1' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+
+<script src="{{ 'cart-notification.js' | asset_url }}" defer="defer"></script>
+<script src="{{ 'details-modal.js' | asset_url }}" defer="defer"></script>
+
+<svg xmlns="http://www.w3.org/2000/svg" class="hidden">
+  <symbol id="icon-search" viewbox="0 0 18 19" fill="none">
+    <path fill-rule="evenodd" clip-rule="evenodd" d="M11.03 11.68A5.784 5.784 0 112.85 3.5a5.784 5.784 0 018.18 8.18zm.26 1.12a6.78 6.78 0 11.72-.7l5.4 5.4a.5.5 0 11-.71.7l-5.41-5.4z" fill="currentColor"/>
+  </symbol>
+
+  <symbol id="icon-close" class="icon icon-close" fill="none" viewBox="0 0 18 17">
+    <path d="M.865 15.978a.5.5 0 00.707.707l7.433-7.431 7.579 7.282a.501.501 0 00.846-.37.5.5 0 00-.153-.351L9.712 8.546l7.417-7.416a.5.5 0 10-.707-.708L8.991 7.853 1.413.573a.5.5 0 10-.693.72l7.563 7.268-7.418 7.417z" fill="currentColor">
+  </symbol>
+</svg>
+
+
+<div id="easystore-section-header">
+  <{% if section.settings.enable_sticky_header %}sticky-header{% else %}div{% endif %} class="header-wrapper header-wrapper--border-bottom">
+    <header class="header header--{{section.settings.align_logo}} page-width header--has-menu" itemscope itemtype="http://schema.org/Organization">
+      <div class="header__left-icon header__icons large-up-hide">
+        <header-drawer data-breakpoint="tablet">
+          <details class="menu-drawer-container menu-opening">
+            <summary class="header__icon header__icon--menu header__icon--summary link link--text focus-inset" aria-label="Menu" role="button" aria-expanded="true" aria-controls="menu-drawer">
+              <span>
+                {% include 'svg-definitions' with 'icon-hamburger' %}
+                {% include 'svg-definitions' with 'icon-close' %}
+              </span>
+            </summary>
+            <div id="menu-drawer" class="menu-drawer motion-reduce" tabindex="-1">
+              <div class="menu-drawer__inner-container">
+                <div class="menu-drawer__navigation-container">
+                  <nav class="menu-drawer__navigation">
+                    <ul class="menu-drawer__menu list-menu" role="list">
+                      {% for link in contents.main-menu.links %}
+                      {% assign parent_handle = link.handle %}
+                        {% if contents[parent_handle].links != '' %}
+                          {% assign parent = contents[parent_handle].links %}
+                          <li>
+                            <details>
+                                  <summary class="menu-drawer__menu-item list-menu__item link link--text focus-inset" role="button" aria-expanded="false" aria-controls="link-Bags">
+                                    <a href="{{ link.url }}" {% if link.new_page == "true" %} target="_blank" {% endif %} class="link--text list-menu__item menu-drawer__menu-item">
+                                      {{ link.title | escape }}
+                                    </a>
+                                    {% include 'svg-definitions' with 'icon-arrow' %}
+                                    {% include 'svg-definitions' with 'icon-caret' %}
+                                  </summary>
+                                  <div class="menu-drawer__submenu motion-reduce" tabindex="-1">
+                                    <div class="menu-drawer__inner-submenu">
+                                      <button class="menu-drawer__close-button link link--text focus-inset" aria-expanded="true">
+                                        {% include 'svg-definitions' with 'icon-arrow' %}
+                                        {{ link.title | escape }}
+                                      </button>
+                                      <ul class="menu-drawer__menu list-menu" role="list" tabindex="-1">
+                                        {% for parentlink in parent %}
+                                          {% assign child_handle = parentlink.handle %}
+                                          {% if contents[child_handle].links != '' %}
+                                            {% assign child = contents[child_handle].links %}
+                                            <li>
+                                              <details>
+                                                    <summary class="menu-drawer__menu-item list-menu__item link link--text focus-inset" role="button" aria-expanded="false" aria-controls="link-Bags">
+                                                      <a href="{{ parentlink.url }}" {% if parentlink.new_page == "true" %} target="_blank" {% endif %} class="link--text list-menu__item menu-drawer__menu-item">
+                                                        {{ parentlink.title | escape }}
+                                                      </a>
+                                                      {% include 'svg-definitions' with 'icon-arrow' %}
+                                                      {% include 'svg-definitions' with 'icon-caret' %}
+                                                    </summary>
+                                                    <div class="menu-drawer__submenu motion-reduce" tabindex="-1">
+                                                      <div class="menu-drawer__inner-submenu">
+                                                        <button class="menu-drawer__close-button link link--text focus-inset" aria-expanded="true">
+                                                          {% include 'svg-definitions' with 'icon-arrow' %}
+                                                          {{ parentlink.title | escape }}
+                                                        </button>
+                                                        <ul class="menu-drawer__menu list-menu" role="list" tabindex="-1">
+                                                          {% for childlink in child %}
+                                                            {% assign grand_handle = childlink.handle %}
+                                                            {% if contents[grand_handle].links != '' %}
+                                                              {% assign grand = contents[grand_handle].links %}
+                                                              <li>
+                                                                <details>
+                                                                  <summary class="menu-drawer__menu-item list-menu__item link link--text focus-inset" role="button" aria-expanded="false" aria-controls="link-Bags">
+                                                                    <a href="{{ childlink.url }}" {% if childlink.new_page == "true" %} target="_blank" {% endif %} class="link--text list-menu__item menu-drawer__menu-item">
+                                                                      {{ childlink.title | escape }}
+                                                                    </a>
+                                                                    {% include 'svg-definitions' with 'icon-arrow' %}
+                                                                    {% include 'svg-definitions' with 'icon-caret' %}
+                                                                  </summary>
+                                                                  <div class="menu-drawer__submenu motion-reduce" tabindex="-1">
+                                                                    <div class="menu-drawer__inner-submenu">
+                                                                      <button class="menu-drawer__close-button link link--text focus-inset" aria-expanded="true">
+                                                                        {% include 'svg-definitions' with 'icon-arrow' %}
+                                                                        {{ childlink.title | escape }}
+                                                                      </button>
+                                                                      <ul class="menu-drawer__menu list-menu" role="list" tabindex="-1">
+                                                                        {% for grandlink in grand %}
+                                                                          <li>
+                                                                            <a href="{{ grandlink.url }}" {% if grandlink.new_page == "true" %} target="_blank" {% endif %} class="link--text list-menu__item menu-drawer__menu-item focus-inset">
+                                                                              {{ grandlink.title | escape }}
+                                                                            </a>
+                                                                          </li>
+                                                                        {% endfor %}
+                                                                      </ul>
+                                                                    </div>
+                                                                  </div>
+                                                                </details>
+                                                              </li>
+                                                            {% else %}
+                                                              <li>
+                                                                <a href="{{ childlink.url }}" {% if childlink.new_page == "true" %} target="_blank" {% endif %} class="menu-drawer__menu-item link link--text list-menu__item focus-inset">
+                                                                  {{ childlink.title | escape }}
+                                                                </a>
+                                                              </li>
+                                                            {% endif %}
+                                                          {% endfor %}
+                                                          
+                                                        </ul>
+                                                      </div>
+                                                    </div>
+                                              </details>
+                                            </li>
+                                          {% else %}
+                                            <li>
+                                              <a href="{{ parentlink.url }}" {% if parentlink.new_page == "true" %} target="_blank" {% endif %} class="menu-drawer__menu-item link link--text list-menu__item focus-inset">
+                                                {{ parentlink.title | escape }}
+                                              </a>
+                                            </li>
+                                          {% endif %}
+                                        {% endfor %}
+                                        
+                                      </ul>
+                                    </div>
+                                  </div>
+                            </details>
+                          </li>
+                        {% else %}
+                          <li>
+                            <a href="{{ link.url }}" {% if link.new_page == "true" %} target="_blank" {% endif %} class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
+                              {{ link.title | escape }}
+                            </a>
+                          </li>
+                        {% endif %}
+                      {% endfor %}
+                    </ul>
+                  </nav>
+  
+                  <div class="menu-drawer__utility-links">
+  
+                    {% include 'currency-picker', class: 'menu-drawer__account disclosure' %}
+  
+                    {% if shop.customer_accounts_enabled %}
+                    {% if customer %}
+                    {% for link in contents.after-login.links %}
+                      <a href="{{link.url}}" class="menu-drawer__account link link--text focus-inset h5">
+                        {% if link.url == '/account' %} {% include 'svg-definitions' with 'icon-account' %} {% endif %}
+                        {% if link.url == '/account/logout' %} {% include 'svg-definitions' with 'icon-arrow' %} {% endif %}
+                        {{link.title}}
+                      </a>
+                    {% endfor %}
+                    {% else %}
+                    {% for link in contents.before-login.links %}
+                      <a href="{{link.url}}" class="menu-drawer__account link link--text focus-inset h5">
+                        {% if link.url == '/account/login' %} {% include 'svg-definitions' with 'icon-account' %} {% endif %}
+                        {% if link.url == '/account/register' %} {% include 'svg-definitions' with 'icon-plus' %} {% endif %}
+                        {{link.title}}
+                      </a>
+                    {% endfor %}
+                    {% endif %}
+                    {% endif %}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </details>
+        </header-drawer>
+        {% include 'search-modal' %}
+      </div>
+  
+      {% if section.settings.logo %}
+        <a href="/" class="header__heading-link link link--text focus-inset" itemprop="url">
+          {% if section.settings.transparent_header %}
+            <img src="{{ section.settings.logo_secondary }}" class="header__heading-logo header__logo_secondary" alt="{{ shop.name }}" loading="lazy">
+          {% endif %}
+          <img src="{{ section.settings.logo }}" class="header__heading-logo" alt="{{ shop.name }}" loading="lazy" itemprop="logo">
+        </a>
+      {% else %}
+        <h1 class="header__heading">
+          {{ shop.name }}
+        </h1>
+      {% endif %}
+      <nav class="header__inline-menu">
+        <ul class="list-menu list-menu--inline" role="list">
+          {% for link in contents.main-menu.links %}
+            {% assign parent_handle = link.handle %}
+              {% if contents[parent_handle].links != '' %}
+                {% assign parent = contents[parent_handle].links %}
+                <li>
+                  <details-disclosure>
+                    <details>
+                      <summary class="header__menu-item list-menu__item link focus-inset">
+                        <a href="{{ link.url }}" {% if link.new_page == "true" %} target="_blank" {% endif %} >{{ link.title | escape }}</a>
+                        {% include 'svg-definitions' with 'icon-caret' %}
+                      </summary>
+                      <ul class="header__submenu list-menu list-menu--disclosure caption-large motion-reduce" role="list" tabindex="-1">
+                        
+                        {% for parentlink in parent %}
+                        {% assign child_handle = parentlink.handle %}
+                          {% if contents[child_handle].links != '' %}
+                            {% assign child = contents[child_handle].links %}
+                            <li>
+                              <details-disclosure>
+                                <details>
+                                  <summary class="header__menu-item link link--text list-menu__item focus-inset caption-large">
+                                    <a href="{{ parentlink.url }}" {% if parentlink.new_page == "true" %} target="_blank" {% endif %}>{{ parentlink.title | escape }}</a>
+                                    {% include 'svg-definitions' with 'icon-caret' , class : 'rotate-90' %}
+                                  </summary>
+                                  <ul class="header__submenu list-menu list-menu--disclosure motion-reduce">
+                                    {% for childlink in child %}
+                                      {% assign grand_handle = childlink.handle %}
+                                      {% if contents[grand_handle].links != '' %}
+                                        {% assign grand = contents[grand_handle].links %}
+                                        <li>
+                                          <details-disclosure>
+                                            <details>
+                                              <summary class="header__menu-item link link--text list-menu__item focus-inset caption-large">
+                                                <a href="{{ childlink.url }}" {% if childlink.new_page == "true" %} target="_blank" {% endif %}>
+                                                  {{ childlink.title | escape }}
+                                                </a>
+                                                {% include 'svg-definitions' with 'icon-caret' , class : 'rotate-90' %}
+                                              </summary>
+                                              <ul class="header__submenu list-menu list-menu--disclosure motion-reduce">
+                                              {% for grandlink in grand %}
+                                                <li>
+                                                  <a href="{{ grandlink.url }}" {% if grandlink.new_page == "true" %} target="_blank" {% endif %} class="header__menu-item list-menu__item link link--text focus-inset caption-large">{{ grandlink.title | escape }}</a>
+                                                </li>
+                                              {% endfor %}
+                                              </ul>
+                                            </details>
+                                          </details-disclosure>
+                                        </li>
+                                      {% else %}
+                                        <li>
+                                          <a href="{{ childlink.url }}" {% if childlink.new_page == "true" %} target="_blank" {% endif %} class="header__menu-item list-menu__item link link--text focus-inset caption-large">{{ childlink.title | escape }}</a>
+                                        </li>
+                                      {% endif %}
+                                    {% endfor %}
+                                  </ul>
+                                </details>
+                              </details-disclosure>
+                            </li>
+                            
+                          {% else %}
+                            
+                            <li>
+                              <a href="{{parentlink.url}}" {% if parentlink.new_page == "true" %} target="_blank" {% endif %} class="header__menu-item list-menu__item link link--text focus-inset caption-large">
+                                {{ parentlink.title | escape }}
+                              </a>
+                            </li>
+                          {% endif %}
+                        {% endfor %}
+                      </ul>
+                    </details>
+                  </details-disclosure>
+                </li>
+              {% else %}
+                <li>
+                  <a href="{{ link.url }}" {% if link.new_page == "true" %} target="_blank" {% endif %} class="header__menu-item header__menu-item list-menu__item link link--text focus-inset">
+                    {{ link.title | escape }}
+                  </a>
+                </li>
+              {% endif %}
+            {% endfor %}
+            
+            {% if shop.customer_accounts_enabled %}
+              {% if customer %}
+                {% for link in contents.after-login.links %}
+                  {% if link.url != '/account' and link.url != '/account/logout' %}
+                      <li><a href="{{link.url}}" {% if link.new_page %} target="_blank" {% endif %} class="header__menu-item header__menu-item list-menu__item link link--text focus-inset">{{link.title}}</a></li>
+                  {% endif %}
+                {% endfor %}
+              {% else %}
+                {% for link in contents.before-login.links %}
+                  {% if link.url != '/account/login' and link.url != '/account/register' %}
+                  <li><a href="{{link.url}}" {% if link.new_page %} target="_blank" {% endif %} class="header__menu-item header__menu-item list-menu__item link link--text focus-inset">{{link.title}}</a></li>
+                  {% endif %}
+                {% endfor %}
+              {% endif %}
+            {% endif %}
+        </ul>
+      </nav>
+      <div class="header__icons">
+        <div class="medium-hide small-hide">
+          {% include 'search-modal' %}
+        </div>
+        
+        {% if shop.customer_accounts_enabled %}
+          {% if customer %}
+            <div class="header__icon header__icon--account link link--text focus-inset small-hide medium-hide">   
+              <details-disclosure>
+                <details>
+                  <summary class="full-unstyled-link link focus-inset">
+                    <a href="/account" class="header__icon link link--text focus-inset p-2">
+                      {% include 'svg-definitions' with 'icon-account' %}
+                    </a>
+                  </summary>
+                  <ul class="header__submenu list-menu list-menu--disclosure caption-large motion-reduce" role="list" tabindex="-1" style="margin-left: -60px;">
+                    {% for link in contents.drop-down-after-login.links %}
+                      {% assign navigation = 'customer.account.navigation.' | append: link.handle %}
+                      {% if link.url != '/account/logout' %}
+                        <li>
+                          <a href="{{ link.url }}" class="header__menu-item list-menu__item link link--text focus-inset caption-large">{{ navigation | t }}</a>
+                        </li>
+                      {% endif %}
+                    {% endfor %}
+                    <li>
+                      <a href="/account/logout" class="header__menu-item list-menu__item link link--text focus-inset caption-large">{{ "customer.account.navigation.logout" | t }}</a>
+                    </li>
+                  </ul>
+                </details>
+              </details-disclosure>
+            </div>
+          {% else %}
+            <div class="header__icon header__icon--account link link--text focus-inset small-hide medium-hide" style="position: relative;">
+              <a href="/account/login" class="header__icon link link--text focus-inset p-2">
+                {% include 'svg-definitions' with 'icon-account' %}
+              </a>
+
+              <!-- Referral Notification Popup for Desktop -->
+              <div id="referralNotification" class="referral-notification" style="display: none;">
+                <button class="close-btn" onclick="dismissReferralNotification()">&times;</button>
+                <div style="text-align: center; margin-bottom: 16px;">
+                  <div style="width: 100px; height: 100px; margin: 0 auto;">
+                    <img src="https://resources.easystore.co/storefront/icons/channels/vector_referral_program.svg">
+                  </div>
+                </div>
+                <p id="referralSignupMessage" style="text-align: center; font-size: 14px; color: #666; margin: 0 0 20px 0;">
+                  {{ 'customer.account.referral.signup_message' | t }}
+                </p>
+                <div style="text-align: center;">
+                  <button class="btn" onclick="goToSignupPage()" style="width: 100%;">
+                    {{ 'customer.account.referral.signup_button' | t }}
+                  </button>
+                </div>
+              </div>
+            </div>
+          {% endif %}
+        {% elsif contents.extra-account-option.links %}
+          <div class="header__icon header__icon--account link link--text focus-inset small-hide medium-hide">
+            {% for link in contents.extra-account-option.links %}
+              {% assign navigation = 'customer.account.navigation.' | append: link.handle %}
+              <details-disclosure>
+                <details>
+                  <summary class="full-unstyled-link link focus-inset">
+                    <a href="{{link.url}}" class="header__icon link link--text focus-inset">
+                      {% include 'svg-definitions' with 'icon-history' %}
+                    </a>
+                  </summary>
+                </details>
+              </details-disclosure>
+            {% endfor %} 
+          </div>
+        {% endif %}
+
+        <a href="/cart" class="header__icon header__icon--cart link link--text focus-inset" id="cart-icon-bubble">
+          {% include 'svg-definitions' with 'icon-cart' %}
+          <div class="cart-count-bubble {% if cart.item_count <= 0 or cart.item_count == null %}hidden{% endif %}">
+            <span aria-hidden="true" class="js-content-cart-count">{{cart.item_count}}</span>
+          </div>
+        </a>
+
+        {% if shop.customer_accounts_enabled %}
+          {% if customer == null %}
+          <!-- Referral Notification Modal for Mobile -->
+          <details-modal class="referral-modal" id="referralMobileModal">
+            <details>
+              <summary class="referral-modal__toggle" aria-haspopup="dialog" aria-label="Open referral modal" style="display: none;">
+              </summary>
+              <div class="modal-overlay referral-modal-overlay"></div>
+              <div class="referral-modal__dialog" role="dialog" aria-modal="true" aria-label="Referral notification">
+                <div class="referral-modal__content">
+                  <button type="button" class="modal__close-button" aria-label="Close" onclick="closeMobileReferralModal()" style="position: absolute; top: 16px; right: 16px; background: none; border: none; font-size: 24px; cursor: pointer;">
+                    &times;
+                  </button>
+                  
+                  <div style="margin-bottom: 24px;">
+                    <div style="width: 120px; height: 120px; margin: 0 auto 20px;">
+                      <img src="https://resources.easystore.co/storefront/icons/channels/vector_referral_program.svg" style="width: 100%; height: 100%;">
+                    </div>
+                  </div>
+                  
+                  <p id="referralSignupMessageMobile" style="font-size: 16px; color: #333; margin: 0 0 30px 0; line-height: 1.5;">
+                    {{ 'customer.account.referral.signup_message' | t }}
+                  </p>
+                  
+                  <button type="button" class="btn" onclick="goToSignupPageFromMobile()" style="width: 100%;">
+                    {{ 'customer.account.referral.signup_button' | t }}
+                  </button>
+                </div>
+              </div>
+            </details>
+          </details-modal>
+          {% endif %}
+        {% endif %}
+      </div>
+    </header>
+  </{% if section.settings.enable_sticky_header %}sticky-header{% else %}div{% endif %}>
+  {% include 'cart-notification' %}
+</div>
+
+
+<script>
+
+  class StickyHeader extends HTMLElement {
+    constructor() {
+      super();
+    }
+
+    connectedCallback() {
+      this.header = document.getElementById('easystore-section-header');
+      this.headerBounds = {};
+      this.currentScrollTop = 0;
+      this.preventReveal = false;
+
+      this.onScrollHandler = this.onScroll.bind(this);
+      this.hideHeaderOnScrollUp = () => this.preventReveal = true;
+
+      this.addEventListener('preventHeaderReveal', this.hideHeaderOnScrollUp);
+      window.addEventListener('scroll', this.onScrollHandler, false);
+
+      this.createObserver();
+    }
+
+    disconnectedCallback() {
+      this.removeEventListener('preventHeaderReveal', this.hideHeaderOnScrollUp);
+      window.removeEventListener('scroll', this.onScrollHandler);
+    }
+
+    createObserver() {
+      let observer = new IntersectionObserver((entries, observer) => {
+        this.headerBounds = entries[0].intersectionRect;
+        observer.disconnect();
+      });
+
+      observer.observe(this.header);
+    }
+
+    onScroll() {
+      const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+
+      if (scrollTop > this.currentScrollTop && scrollTop > this.headerBounds.bottom) {
+        requestAnimationFrame(this.sticky.bind(this));
+      } else if (scrollTop < this.currentScrollTop && scrollTop > this.headerBounds.bottom) {
+        if (!this.preventReveal) {
+          requestAnimationFrame(this.reveal.bind(this));
+        } else {
+          window.clearTimeout(this.isScrolling);
+
+          this.isScrolling = setTimeout(() => {
+            this.preventReveal = false;
+          }, 66);
+
+          requestAnimationFrame(this.sticky.bind(this));
+        }
+      } else if (scrollTop <= this.headerBounds.top) {
+        requestAnimationFrame(this.reset.bind(this));
+      }
+
+
+      this.currentScrollTop = scrollTop;
+    }
+
+    sticky() {
+      this.header.classList.add('easystore-section-header-sticky');
+      this.closeMenuDisclosure();
+      this.closeSearchModal();
+    }
+
+    reveal() {
+      this.header.classList.add('easystore-section-header-sticky');
+    }
+
+    reset() {
+      this.header.classList.remove('easystore-section-header-sticky', 'animate');
+    }
+
+    closeMenuDisclosure() {
+      this.disclosures = this.disclosures || this.header.querySelectorAll('details-disclosure');
+      this.disclosures.forEach(disclosure => disclosure.close());
+    }
+
+    closeSearchModal() {
+      this.searchModal = this.searchModal || this.header.querySelector('details-modal');
+      this.searchModal.close(false);
+    }
+  }
+
+  customElements.define('sticky-header', StickyHeader);
+
+  
+  class DetailsDisclosure extends HTMLElement{
+    constructor() {
+      super();
+      this.mainDetailsToggle = this.querySelector('details');
+      // this.mainDetailsToggle.addEventListener('focusout', this.onFocusOut.bind(this));
+      this.mainDetailsToggle.addEventListener('mouseover', this.open.bind(this));
+      this.mainDetailsToggle.addEventListener('mouseleave', this.close.bind(this));
+    }
+
+    onFocusOut() {
+      setTimeout(() => {
+        if (!this.contains(document.activeElement)) this.close();
+      })
+    }
+
+    open() {
+      this.mainDetailsToggle.setAttribute('open',1)
+    }
+
+    close() {
+      this.mainDetailsToggle.removeAttribute('open')
+    }
+  }
+
+  customElements.define('details-disclosure', DetailsDisclosure);
+
+  function clearAll() {
+    localStorage.removeItem('searchHistory'); 
+    
+    var customer = {{ customer | json }};
+    if(customer) {
+      // Your logic to clear all data or call an endpoint
+      fetch('/account/search_histories', {
+          method: 'DELETE',
+          headers: {
+            "Content-Type": "application/json",
+            "X-Requested-With": "XMLHttpRequest"
+          },
+          body: JSON.stringify({
+            _token: "{% csrf %}"
+          }),
+      })
+      .then(response => response.json())
+    }
+  }
+  // End - delete search history from local storage
+  
+  // search history dropdown  
+  var searchInputs = document.querySelectorAll('.search__input');
+  
+  if(searchInputs.length > 0) {
+    
+    searchInputs.forEach((searchInput)=> {
+    
+      searchInput.addEventListener('focus', function() {
+        var searchDropdown = searchInput.closest('form').querySelector('#searchDropdown');
+        searchDropdown.innerHTML = ''; // Clear existing items
+  
+        // retrieve data from local storage
+        var searchHistoryData = JSON.parse(localStorage.getItem('searchHistory')) || [];
+  
+        // Convert JSON to string
+        var search_history_json = JSON.stringify(searchHistoryData);
+  
+        // Set the value of the hidden input
+        searchInput.closest('form').querySelector(".hidden_search_history").value = search_history_json;
+  
+        // create dropdown items
+        var clearAllItem = document.createElement('div');
+        clearAllItem.className = 'dropdown-item clear-all';
+        clearAllItem.textContent = 'Clear';
+        clearAllItem.addEventListener('click', function() {
+          clearAll();
+          searchDropdown.style.display = 'none';
+          searchInput.classList.remove('is-focus');
+        });
+        searchDropdown.appendChild(clearAllItem);
+  
+        // create dropdown items
+        searchHistoryData.forEach(function(item) {
+          var dropdownItem = document.createElement('div');
+          dropdownItem.className = 'dropdown-item';
+          dropdownItem.textContent = item.term;
+          dropdownItem.addEventListener('click', function() {
+            searchInput.value = item.term;
+            searchInput.closest('form').submit();
+            searchDropdown.style.display = 'none';
+          });
+          searchDropdown.appendChild(dropdownItem);
+        });
+  
+        if(searchHistoryData.length > 0){
+          // display the dropdown
+          searchInput.classList.add('is-focus');
+          document.body.classList.add('search-input-focus');
+          searchDropdown.style.display = 'block';
+        }
+      });
+  
+      searchInput.addEventListener("focusout", (event) => {
+        var searchDropdown = searchInput.closest('form').querySelector('#searchDropdown');
+        searchInput.classList.remove('is-focus');
+        searchDropdown.classList.add('transparent');
+        setTimeout(()=>{
+          searchDropdown.style.display = 'none';
+          searchDropdown.classList.remove('transparent');
+          document.body.classList.remove('search-input-focus');
+        }, 400);
+      });
+    })
+  }
+  // End - search history dropdown
+
+  // referral notification popup
+  const referralMessageTemplate = '{{ "customer.account.referral.signup_message" | t: "__CURRENCY_CODE__", "__CREDIT_AMOUNT__" }}';
+  const shopCurrency = '{{ shop.money_prefix }}';
+
+  function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+    return null;
+  }
+
+  function removeCookie(name) {
+    document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+  }
+
+  function showReferralNotification() {
+    const referralCode = getCookie('customer_referral_code');
+    
+    {% if customer and customer.customer_referral and customer.customer_referral.referral_code %}
+    const customerReferralCode = '{{ customer.customer_referral.referral_code }}';
+    {% else %}
+    const customerReferralCode = null;
+    {% endif %}
+    
+    const activeReferralCode = referralCode || customerReferralCode;
+    const referralData = JSON.parse(localStorage.getItem('referral_notification_data')) || {};
+    
+    if (referralData.timestamp && referralData.expirationDays) {
+      const expirationTime = referralData.timestamp + (referralData.expirationDays * 24 * 60 * 60 * 1000);
+      if (Date.now() > expirationTime) {
+        localStorage.removeItem('referral_notification_data');
+        return;
+      }
+    }
+    
+    if (referralData.dismissed) return;
+    
+    if (activeReferralCode) {
+      if (referralData.creditAmount) {
+        displayReferralNotification(referralData.creditAmount);
+      } else {
+        fetchReferralCampaignData(activeReferralCode);
+      }
+    }
+  }
+    
+  function fetchReferralCampaignData(referralCode) {
+    fetch(`/customer/referral_program/campaigns/${referralCode}`)
+      .then(response => {
+        if (!response.ok) {
+          throw new Error('Network response was not ok');
+        }
+        return response.json();
+      })
+      .then(data => {
+        let refereeCreditAmount = null;
+        if (data.data.campaign && data.data.campaign.referral_rules) {
+          const refereeRule = data.data.campaign.referral_rules.find(rule => 
+            rule.target_type === 'referee' && 
+            rule.event_name === 'customer/create' && 
+            rule.entitlement && 
+            rule.entitlement.type === 'credit'
+          );
+          
+          if (refereeRule) {
+            refereeCreditAmount = refereeRule.entitlement.amount;
+          }
+        }
+        
+        const referralData = JSON.parse(localStorage.getItem('referral_notification_data')) || {};
+        referralData.creditAmount = refereeCreditAmount;
+        referralData.dismissed = referralData.dismissed || false;
+        referralData.timestamp = Date.now();
+        referralData.expirationDays = 3;
+        localStorage.setItem('referral_notification_data', JSON.stringify(referralData));
+        
+        displayReferralNotification(refereeCreditAmount);
+      })
+      .catch(error => {
+        removeCookie('customer_referral_code');
+      });
+  }
+    
+  function displayReferralNotification(creditAmount = null) {
+    const isMobile = innerWidth <= 749;
+    
+    if (isMobile) {
+      const mobileModal = document.querySelector('#referralMobileModal details');
+      const mobileMessageElement = document.getElementById('referralSignupMessageMobile');
+      
+      if (mobileModal && mobileMessageElement) {
+        if (creditAmount) {
+          const finalMessage = referralMessageTemplate
+            .replace('__CREDIT_AMOUNT__', creditAmount)
+            .replace('__CURRENCY_CODE__', shopCurrency);
+          
+          mobileMessageElement.textContent = finalMessage;
+        }
+        
+        mobileModal.setAttribute('open', '');
+      }
+    } else {
+      const notification = document.getElementById('referralNotification');
+      
+      if (notification) {
+        if (creditAmount) {
+          const messageElement = document.getElementById('referralSignupMessage');
+          if (messageElement) {
+            const finalMessage = referralMessageTemplate
+              .replace('__CREDIT_AMOUNT__', creditAmount)
+              .replace('__CURRENCY_CODE__', shopCurrency);
+            
+            messageElement.textContent = finalMessage;
+          }
+        }
+        
+        notification.style.display = 'block';
+      }
+    }
+  }
+
+  showReferralNotification();
+
+  addEventListener('beforeunload', function() {
+    const referralData = JSON.parse(localStorage.getItem('referral_notification_data')) || {};
+    
+    if (referralData.creditAmount !== undefined) {
+      referralData.creditAmount = null;
+      localStorage.setItem('referral_notification_data', JSON.stringify(referralData));
+    }
+  });
+
+  function closeReferralNotification() {
+    const notification = document.getElementById('referralNotification');
+    if (notification) {
+      notification.style.display = 'none';
+    }
+  }
+
+  function dismissReferralNotification() {
+    const referralData = JSON.parse(localStorage.getItem('referral_notification_data')) || {};
+    
+    referralData.dismissed = true;
+    referralData.timestamp = referralData.timestamp || Date.now();
+    referralData.expirationDays = referralData.expirationDays || 3;
+    
+    localStorage.setItem('referral_notification_data', JSON.stringify(referralData));
+    
+    closeReferralNotification();
+  }
+
+  function goToSignupPage() {
+    location.href = '/account/register';
+    dismissReferralNotification();
+  }
+
+  function closeMobileReferralModal() {
+    const mobileModal = document.querySelector('#referralMobileModal details');
+    if (mobileModal) {
+      mobileModal.removeAttribute('open');
+    }
+    
+    const referralData = JSON.parse(localStorage.getItem('referral_notification_data')) || {};
+    referralData.dismissed = true;
+    referralData.timestamp = referralData.timestamp || Date.now();
+    referralData.expirationDays = referralData.expirationDays || 3;
+    localStorage.setItem('referral_notification_data', JSON.stringify(referralData));
+  }
+
+  function goToSignupPageFromMobile() {
+    location.href = '/account/register';
+    closeMobileReferralModal();
+  }
+  // End - referral notification popup
+</script>
+
+{% schema %}
+{
+  "name": {
+    "en_US": "Header",
+    "ja_JP": "ヘッダー",
+    "ko_KR": "머리글",
+    "ms_MY": "Pengepala",
+    "th_TH": "ส่วนหัว",
+    "zh_CN": "顶端主选单",
+    "zh_TW": "頂端主選單"
+  },
+  "settings": [
+    {
+      "type": "select",
+      "id": "align_logo",
+      "label": {
+        "en_US": "Logo alignment",
+        "ja_JP": "ロゴアラインメント",
+        "ko_KR": "로고 정렬",
+        "ms_MY": "Penjajaran logo",
+        "th_TH": "การจัดวางโลโก้",
+        "zh_CN": "logo 对齐方式",
+        "zh_TW": "Logo 位置"
+      },
+      "default": "middle-left",
+      "options": [
+        {
+          "value": "middle-left",
+          "label": {
+            "en_US": "Left",
+            "ja_JP": "左",
+            "ko_KR": "왼쪽",
+            "ms_MY": "Kiri",
+            "th_TH": "ด้านซ้าย",
+            "zh_CN": "靠左",
+            "zh_TW": "靠左"
+          }
+        },
+        {
+          "value": "top-center",
+          "label": {
+            "en_US": "Centered",
+            "ja_JP": "中央揃え",
+            "ko_KR": "센터 맞추기",
+            "ms_MY": "Ditengah",
+            "th_TH": "ตรงกลาง",
+            "zh_CN": "置中",
+            "zh_TW": "置中"
+          }
+        }
+      ]
+    },
+    {
+      "type": "image",
+      "id": "logo",
+      "label": {
+        "en_US": "Logo image",
+        "ja_JP": "ロゴ画像",
+        "ko_KR": "로고 이미지",
+        "ms_MY": "Imej logo",
+        "th_TH": "รูปภาพโลโก้",
+        "zh_CN": "网站 Logo",
+        "zh_TW": "網站 Logo"
+      }
+    },
+    {
+      "type": "range",
+      "id": "logo_max_width",
+      "label": {
+        "en_US": "Custom logo width",
+        "ja_JP": "ロゴの幅をカスタムする",
+        "ko_KR": "사용자 지정 로고 폭",
+        "ms_MY": "Lebar logo tersuai",
+        "th_TH": "ความกว้างของโลโก้แบบกำหนดเอง",
+        "zh_CN": "Logo 宽度",
+        "zh_TW": "Logo 寬度"
+      },
+      "min": 50,
+      "max": 250,
+      "step": 5,
+      "unit": {
+        "en_US": "px",
+        "ja_JP": "px",
+        "ko_KR": "px",
+        "ms_MY": "px",
+        "th_TH": "px",
+        "zh_CN": "px",
+        "zh_TW": "像素"
+      },
+      "default": 100
+    },
+    {
+      "type": "color",
+      "id": "header_bg_color",
+      "label": {
+        "en_US": "Bar",
+        "ja_JP": "バー",
+        "ko_KR": "바",
+        "ms_MY": "Bar",
+        "th_TH": "แถบ",
+        "zh_CN": "主选单底色",
+        "zh_TW": "主選單底色"
+      },
+      "default": "#7796a8"
+    },
+    {
+      "type": "color",
+      "id": "color_text",
+      "label": {
+        "en_US": "Text",
+        "ja_JP": "テキスト",
+        "ko_KR": "텍스트",
+        "ms_MY": "Teks",
+        "th_TH": "ข้อความ",
+        "zh_CN": "内文字体颜色",
+        "zh_TW": "內文字體顏色"
+      },
+      "default": "#fff"
+    },
+    {
+      "type": "checkbox",
+      "label": {
+        "en_US": "Transparent header",
+        "ja_JP": "透明ヘッダー",
+        "ko_KR": "투명 헤더",
+        "ms_MY": "Pengepala lutsinar",
+        "th_TH": "ส่วนหัวโปร่งใส",
+        "zh_CN": "透明顶端主选单",
+        "zh_TW": "透明頂端主選單"
+      },
+      "id": "transparent_header"
+    },
+    {
+      "type": "image",
+      "id": "logo_secondary",
+      "label": {
+        "en_US": "Transparent header logo",
+        "ja_JP": "透明なヘッダーのロゴ",
+        "ko_KR": "투명 헤더 로고",
+        "ms_MY": "Logo pengepala lutsinar",
+        "th_TH": "โลโก้ส่วนหัวโปร่งใส",
+        "zh_CN": "透明顶端网站 Logo",
+        "zh_TW": "透明頂端網站 Logo"
+      }
+    },
+    {
+      "type": "color",
+      "id": "secondary_color_text",
+      "label": {
+        "en_US": "Transparent header text",
+        "ja_JP": "透明なヘッダーテキスト",
+        "ko_KR": "투명한 헤더 텍스트",
+        "ms_MY": "Teks pengepala lutsinar",
+        "th_TH": "ข้อความส่วนหัวโปร่งใส",
+        "zh_CN": "透明顶端文字体颜色",
+        "zh_TW": "透明頂端文字體顏色"
+      },
+      "default": "#fff"
+    }
+  ]
+}
+{% endschema %}

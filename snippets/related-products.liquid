@@ -1,0 +1,23 @@
+<div id="recommend-products-content" class="wrapper"></div>
+
+<script>
+  console.log("Product recommendation enabled.");
+
+  const url_params = new URLSearchParams(window.location.search);
+  
+  fetch(`{{ product.url }}/recommend?${url_params.toString()}`, {
+      method: 'GET'
+    })
+    .then(response => response.json())
+    .then((res) => {
+      if(res.status == "success"){
+        console.log("Success");
+        document.querySelector('#recommend-products-content').innerHTML = res.html;
+        EasyStore.Currencies.convertAll()
+      }
+      else{
+        console.log("Not Success");
+      }
+    })
+
+</script>

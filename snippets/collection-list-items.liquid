@@ -1,0 +1,51 @@
+
+{% assign all_sections_settings = settings.sections %}
+{% assign section_settings = all_sections_settings[section_key].settings %}
+{% assign products_to_display = collection.product_count %}
+
+<div id="collection-{{collection.id}}" class="collection-list-wrapper {% if section_settings.swipe_on_mobile == false or products_to_display <= 2 or section_settings.products_to_show <= 2 %}title-wrapper--self-padded-tablet-down{% endif %}">
+  <slider-component class="slider-mobile-gutter">
+    <ul class="collection-list product-grid grid grid--2-col grid--3-col-tablet grid--{{section_settings.grid}}-col-desktop grid--quarter-max{% if products_to_display > 2 and section_settings.swipe_on_mobile and section_settings.products_to_show > 2 %} slider slider--tablet grid--peek{% endif %}" role="list">
+      {% for product in collection.products limit: section_settings.products_to_show %}
+        <li class="grid__item slider__slide">
+          {% include 'product-card', show_secondary_image: section_settings.show_secondary_image, show_add_to_cart_button: section_settings.show_add_to_cart_button, image_ratio: section_settings.image_ratio, show_product_info: section_settings.show_product_info %}
+        </li>
+      {% endfor %}
+      {% if products_to_display > section_settings.products_to_show and section_settings.swipe_on_mobile %}
+        <li class="grid__item slider__slide large-up-hide d-flex flex-align-center flex-justify-center">
+          <div class="p-3">
+            <a href="{{ collection.url }}" class="button button--tertiary">
+              {{ 'general.view_all' | t }}
+            </a>
+          </div>
+        </li>
+      {% endif %}
+    </ul>
+    {% if products_to_display > 2 and section_settings.swipe_on_mobile and section_settings.products_to_show > 2 %}
+      <div class="slider-buttons no-js-hidden{% if products_to_display < 4 %} medium-hide{% endif %}{% if products_to_display < 3 %} small-hide{% endif %}">
+        <button
+          type="button"
+          class="slider-button slider-button--prev"
+          name="previous">{% include 'svg-definitions' with 'icon-caret' %}</button>
+        <div class="slider-counter caption">
+          <span class="slider-counter--current">1</span>
+          <span aria-hidden="true">
+            /
+          </span>
+          <span class="slider-counter--total">{{ products_to_display }}</span>
+        </div>
+        <button
+          type="button"
+          class="slider-button slider-button--next"
+          name="next">{% include 'svg-definitions' with 'icon-caret' %}</button>
+      </div>
+    {% endif %}
+  </slider-component>
+  {% if products_to_display > section_settings.products_to_show %}
+    <div class="center{% if section_settings.swipe_on_mobile %} small-hide medium-hide{% endif %}">
+      <a href="{{ collection.url }}" class="button">
+        {{ 'general.view_all' | t }}
+      </a>
+    </div>
+  {% endif %}
+</div>

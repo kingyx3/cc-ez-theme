@@ -1,0 +1,510 @@
+{{ 'component-card.css' | asset_url | stylesheet_tag }}
+{{ 'component-price.css' | asset_url | stylesheet_tag }}
+{{ 'component-product-grid.css' | asset_url | stylesheet_tag }}
+{{ 'section-collection-list.css' | asset_url | stylesheet_tag }}
+{{ 'component-loading-overlay.css' | asset_url | stylesheet_tag }}
+{{ 'component-slider.css' | asset_url | stylesheet_tag }}
+
+<style>
+  #collection-list_{{ section.__key }} .product-card-wrapper {
+    background-color: {{ section.settings.product_bg_color}};
+  }
+  .collection_skeleton-card{
+    background-color: rgba(200, 200, 200, 0.1);
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .collection_skeleton-loading,
+  .collection_skeleton-loading:empty{
+    display: block;
+    height: 23px;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    background-image: linear-gradient(90deg, #F0F0F0 0px, rgba(215, 215, 215, 0.8) 40px, #F0F0F0 80px);
+    background-size: 600px;
+    animation: shine-lines 0.8s infinite ease-in;
+    color: transparent !important;
+    border-color: transparent;
+  }
+  .collection_skeleton-loading:last-child,
+  .collection_skeleton-loading:empty:last-child{
+    margin-bottom: 0px;
+  }
+  .collection_skeleton-card .collection_skeleton-card-img{
+    padding-bottom: 100%;
+  }
+  .collection_skeleton-card-wrapper{
+    margin-top: 50px;
+  }
+  @media screen and (max-width: 989px) {
+    .collection_list-container {
+      margin-top: -20px;
+    }
+    .collection_skeleton-loading,
+    .collection_skeleton-loading:empty{
+      height: 15px;
+      margin-bottom: 10px;
+    }
+  }
+  @keyframes shine-lines {
+    0%{
+      background-position: -30px;
+    }
+    80% {
+      background-position: 380px;
+    }
+    100% {
+      background-position: 550px;
+    }
+  }
+
+</style>
+
+<div id="collection-list_{{ section.__key }}" class="section-collection-list spaced-section page-width page-width-desktop">
+  <div class="title-wrapper-with-link{% if section.settings.title == blank %} title-wrapper-with-link--no-heading{% endif %}">
+    <h2 class="title title-wrapper--self-padded-tablet-down {% if section.settings.title == blank %} title--no-heading{% endif %}">{{ section.settings.title }}</h2>
+    <div class="scroller-wrapper featured-collections__tablist-wrapper">
+      <ul class="featured-collections__tablist" role="tablist">
+        {% for block_handle in section.blocks_order %}
+          {% assign blocks = section.blocks %}
+          {% assign collection_id = blocks[block_handle].settings.collection__id %}
+          {% assign collection = collections[collection_id] %}
+
+          {% if collection.id %}
+            <li
+              onclick="toggleCollectionListTab('{{ section.__key }}','{{collection.id}}', '{{ block_handle }}')"
+              id="collection_title-{{collection.id}}"
+              class="featured-collections-tab__item  {% if forloop.index == 1 %}featured-collections-tab__item--active{% endif %}"
+              role="tab"
+              aria-selected="true">
+              <span class="featured-collections__item-title">{{ collection.title | escape }}</span>
+            </li>
+          {% endif %}
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+
+  <div id="collection-list-wrapper_{{ section.__key }}" class="collection_list-container">
+    <div class="collection_skeleton-card-wrapper title-wrapper--self-padded-tablet-down hide">
+      <div class="grid grid--2-col grid--3-col-tablet grid--{{section.settings.grid}}-col-desktop grid--quarter-max">
+        {% for i in (1..4) %}
+          <div class="grid__item {% if i != 1 and i != 2 %}small-hide medium-hide{% endif %}">
+            <div class="collection_skeleton-card">
+              <div class="collection_skeleton-loading collection_skeleton-card-img"></div>
+              <div class="collection_skeleton-loading" style="width: 40%;"></div>
+              <div class="collection_skeleton-loading"></div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% assign first_block = section.blocks_order[0] %}
+    {% assign blocks = section.blocks %}
+    {% assign collection_id = blocks[first_block].settings.collection__id %}
+    {% if collection_id %}
+      {% assign collection = collections[collection_id] %}
+      {% assign products_to_display = collection.product_count %}
+
+      <div id="collection-{{collection.id}}" class="collection-list-wrapper {% if section.settings.swipe_on_mobile == false or products_to_display <= 2 or section.settings.products_to_show <= 2 %}title-wrapper--self-padded-tablet-down{% endif %}">
+        <slider-component class="slider-mobile-gutter">
+          <ul class="collection-list product-grid grid grid--2-col grid--3-col-tablet grid--{{section.settings.grid}}-col-desktop grid--quarter-max{% if products_to_display > 2 and section.settings.swipe_on_mobile and section.settings.products_to_show > 2 %} slider slider--tablet grid--peek{% endif %}" role="list">
+            {% for product in collection.products limit: section.settings.products_to_show %}
+              <li class="grid__item slider__slide">
+                {% include 'product-card', show_secondary_image: section.settings.show_secondary_image, show_add_to_cart_button: section.settings.show_add_to_cart_button, image_ratio: section.settings.image_ratio, show_product_info: section.settings.show_product_info %}
+              </li>
+            {% endfor %}
+            {% if products_to_display > section.settings.products_to_show and section.settings.swipe_on_mobile %}
+              <li class="grid__item slider__slide large-up-hide d-flex flex-align-center flex-justify-center">
+                <div class="p-3">
+                  <a href="{{ collection.url }}" class="button button--tertiary">
+                    {{ 'general.view_all' | t }}
+                  </a>
+                </div>
+              </li>
+            {% endif %}
+          </ul>
+          {% if products_to_display > 2 and section.settings.swipe_on_mobile and section.settings.products_to_show > 2 %}
+            <div class="slider-buttons no-js-hidden{% if products_to_display < 4 %} medium-hide{% endif %}{% if products_to_display < 3 %} small-hide{% endif %}">
+              <button
+                type="button"
+                class="slider-button slider-button--prev"
+                name="previous">{% include 'svg-definitions' with 'icon-caret' %}</button>
+              <div class="slider-counter caption">
+                <span class="slider-counter--current">1</span>
+                <span aria-hidden="true">
+                  /
+                </span>
+                <span class="slider-counter--total">{{ products_to_display }}</span>
+              </div>
+              <button
+                type="button"
+                class="slider-button slider-button--next"
+                name="next">{% include 'svg-definitions' with 'icon-caret' %}</button>
+            </div>
+          {% endif %}
+        </slider-component>
+        {% if products_to_display > section.settings.products_to_show %}
+          <div class="center{% if section.settings.swipe_on_mobile %} small-hide medium-hide{% endif %}">
+            <a href="{{ collection.url }}" class="button">
+              {{ 'general.view_all' | t }}
+            </a>
+          </div>
+        {% endif %}
+      </div>
+    {% else %}
+      <!-- Placeholder -->
+      <style>
+        .collection-placeholder-wrapper {
+          position: relative;
+        }
+        .collection-placeholder-wrapper .card {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -40%);
+          padding: 30px;
+          background: #F8F9FA;
+          color: #000;
+          box-shadow: 0 5px 30px #bbb;
+          opacity: 0;
+          z-index: 10;
+          transition: all 200ms ease-out;
+          width: 650px;
+          max-width: 90%;
+        }
+        .collection-placeholder-wrapper .collection-placeholder-grid {
+          transition: all 200ms ease-out;
+        }
+        .collection-placeholder-wrapper:hover .collection-placeholder-grid {
+          opacity: 0.4;
+        }
+        .collection-placeholder-wrapper:hover .card {
+          opacity: 1;
+          transform: translate(-50%, -50%);
+        }
+        @media screen and (max-width: 500px) {
+          .collection-placeholder-wrapper .collection-placeholder-grid {
+            opacity: 0.4;
+          }
+          .collection-placeholder-wrapper .card {
+            opacity: 1;
+            transform: translate(-50%, -50%);
+          }
+        }
+      </style>
+      <div class="collection-placeholder-wrapper">
+        <ul class="collection-placeholder-grid grid grid--2-col grid--4-col-desktop grid--quarter-max">
+          {% for i in (1..8) %}
+            <li class="grid__item text-center">
+              {% capture placeholder_image_url %}https://themes.easystore.co/onboarding/placeholder/products/frame/product-frame-{{ i }}.png{% endcapture %}
+              <a href="https://{{GLOBALS.ADMIN_DOMAIN}}/products/" class="full-unstyled-link">
+                <img src="{{ placeholder_image_url }}" width="100%">
+                <div>
+                  {{ 'home_page.onboarding.product_title' | t: i }}
+                </div>
+                <div>
+                  {{ shop.money_prefix }} 19.99 {{ shop.money_suffix }}
+                </div>
+              </a>
+            </li>
+          {% endfor %}
+        </ul>
+
+        <div class="card card--outline text-center">
+          <h3>{{ 'home_page.onboarding.modal_title' | t }}</h3>
+          <p>{{ 'home_page.onboarding.no_product_html' | t }}</p>
+          <p>
+            <a class="btn btn--primary" href="https://{{GLOBALS.ADMIN_DOMAIN}}/products/new">{{ 'home_page.onboarding.add_product' | t }}</a>
+          </p>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+
+</div>
+
+<script>
+  // Check initialize
+  if (!window._collectionList_renderedBlocks) window._collectionList_renderedBlocks = new Map();
+  if (!window._collectionList_selectedBlock) window._collectionList_selectedBlock = new Map();
+  
+  window._collectionList_renderedBlocks.set("{{ section.__key }}", new Set(["{{ first_block }}"]));
+  window._collectionList_selectedBlock.set("{{ section.__key }}", "{{ first_block }}");
+
+  function toggleCollectionListTab(sectionId, CollectionId, blockId) {
+    const renderedBlock = window._collectionList_renderedBlocks.get(sectionId);
+    const sectionSelector = `#collection-list_${sectionId}`;
+    const allTitles = document.querySelectorAll(`${sectionSelector} .featured-collections-tab__item`);
+    const allCollections = document.querySelectorAll(`${sectionSelector} .collection-list-wrapper`);
+    const loading = document.querySelector(`#collection-list-wrapper_${sectionId} .collection_skeleton-card-wrapper`);
+
+    // Remove active class from all titles
+    allTitles.forEach(el => el.classList.remove("featured-collections-tab__item--active"));
+
+    // Add active class to the selected title
+    const activeTitle = document.querySelector(`${sectionSelector} #collection_title-${CollectionId}`);
+    if (activeTitle) activeTitle.classList.add("featured-collections-tab__item--active");
+    window._collectionList_selectedBlock.set(sectionId, blockId);
+
+    // Hide all collections
+    allCollections.forEach(el => el.classList.add("hide"));
+
+    // Check if the block is already rendered
+    if (renderedBlock.has(blockId)) {
+      const targetCollection = document.querySelector(`${sectionSelector} #collection-${CollectionId}`);
+      if (targetCollection) {
+        loading.classList.add('hide')
+        targetCollection.classList.remove("hide");
+      }
+    } else {
+      loading.classList.remove('hide')
+      renderedBlock.add(blockId);
+
+      // Get the current URL search parameters
+      let urlParams = new URLSearchParams(window.location.search);
+
+      // Check if the 'preview_theme_id' parameter exists
+      let previewThemeId = urlParams.get('preview_theme_id');
+
+      // Base collection list parameters
+      let collectionListParams = new URLSearchParams({ section_key: sectionId });
+
+      // If 'preview_theme_id' exists, add it to the parameters
+      if (previewThemeId) {
+          collectionListParams.append('preview_theme_id', previewThemeId);
+      }
+
+      // Fetch and render the collection block
+      fetch(`collections/${CollectionId}/collection_list_section_html?${collectionListParams}`, { method: "GET" })
+        .then(response => response.json())
+        .then(res => {
+          if (res.collection_list_items_html) {
+            let wrapper = document.querySelector(`#collection-list-wrapper_${sectionId}`),
+                seletedBlock =  window._collectionList_selectedBlock.get(sectionId);
+            if (wrapper) {
+              if(seletedBlock == blockId) loading.classList.add('hide')
+              wrapper.insertAdjacentHTML("beforeend", res.collection_list_items_html);
+              if(EasyStore !== undefined && EasyStore.Currencies !== undefined) EasyStore.Currencies.convertAll();
+              if(seletedBlock != blockId) document.querySelector(`${sectionSelector} #collection-${CollectionId}`).classList.add("hide");
+            }
+          }
+        })
+        .catch(error => {
+          renderedBlock.delete(blockId);
+          console.error("Error fetching collection list:", error);
+        });
+    }
+  }
+</script>
+
+
+{% schema %}
+  {
+    "name": {
+      "en_US": "Collection List",
+      "zh_TW": "目錄列表",
+      "zh_CN": "目录列表",
+      "ms_MY": "Senarai Koleksi"
+
+    },
+    "max_blocks": 6,
+    "settings": [
+      {
+        "type": "text",
+        "id": "title",
+        "label": {
+          "en_US": "Heading",
+          "zh_TW": "欄位標題",
+          "zh_CN": "栏位标题",
+          "ms_MY": "tajuk"
+        },
+        "default": {
+          "en_US": "Collection list",
+          "zh_TW": "目錄列表",
+          "zh_CN": "目录列表",
+          "ms_MY": "Senarai koleksi"
+        }
+      },
+      {
+        "type": "range",
+        "id": "grid",
+        "label": {
+          "en_US": "Collections per row",
+          "ja_JP": "行あたりのコレクション数",
+          "ko_KR": "열 별 컬렉션",
+          "ms_MY": "Koleksi setiap baris",
+          "th_TH": "คอลเลกชันต่อแถว",
+          "zh_CN": "目录每行显示数量",
+          "zh_TW": "目錄每行顯示數量"
+        },
+        "min": 2,
+        "max": 5,
+        "step": 1,
+        "default": 4
+      },
+      {
+        "type": "range",
+        "id": "products_to_show",
+        "min": 2,
+        "max": 16,
+        "step": 2,
+        "default": 8,
+        "label": {
+          "en_US": "Products display",
+          "ja_JP": "行あたりのコレクション数",
+          "ko_KR": "열 별 컬렉션",
+          "ms_MY": "Koleksi setiap baris",
+          "th_TH": "คอลเลกชันต่อแถว",
+          "zh_CN": "商品展示总数",
+          "zh_TW": "商品展示總數"
+        }
+      },
+      {
+        "type": "select",
+        "id": "image_ratio",
+        "options": [
+          {
+            "value": "portrait",
+            "label": {
+              "en_US": "Portrait",
+              "zh_TW": "直向",
+              "zh_CN": "直向",
+              "ms_MY": "Potret"
+            }
+          },
+          {
+            "value": "landscape",
+            "label": {
+              "en_US": "Landscape",
+              "zh_TW": "横向",
+              "zh_CN": "横向",
+              "ms_MY": "Melintang"
+            }
+          },
+          {
+            "value": "square",
+            "label": {
+              "en_US": "Square",
+              "zh_TW": "正方形",
+              "zh_CN": "正方形",
+              "ms_MY": "Segi empat sama"
+            }
+          },
+          {
+            "value": "circle",
+            "label": {
+              "en_US": "Circle",
+              "zh_TW": "圓形",
+              "zh_CN": "圆形",
+              "ms_MY": "Bulat"
+            }
+          }, {
+            "value": "16-9",
+            "label": "16:9"
+          }
+        ],
+        "default": "square",
+        "label": {
+          "en_US": "Image Ratio",
+          "zh_TW": "圖片比例",
+          "zh_CN": "图片比例",
+          "ms_MY": "Nisbah Imej"
+        }
+      }, {
+        "type": "checkbox",
+        "id": "show_secondary_image",
+        "default": false,
+        "label": {
+          "en_US": "Show secondary image",
+          "zh_TW": "顯示次要圖像",
+          "zh_CN": "显示次要图像",
+          "ms_MY": "Tunjukkan imej sekunder"
+        }
+      }, {
+        "type": "checkbox",
+        "id": "show_add_to_cart_button",
+        "default": true,
+        "label": {
+          "en_US": "Show add to cart button",
+          "zh_TW": "顯示加入購物車按鈕",
+          "zh_CN": "显示加入购物车按钮",
+          "ms_MY": "Tunjukkan butang tambah ke troli"
+        }
+      }, {
+        "type": "checkbox",
+        "id": "show_product_info",
+        "default": true,
+        "label": {
+          "en_US": "Show Product Info",
+          "zh_TW": "顯示產品資料",
+          "zh_CN": "显示产品资料",
+          "ms_MY": "Tunjuk info Produk"
+        }
+      }, {
+        "type": "checkbox",
+        "id": "swipe_on_mobile",
+        "default": true,
+        "label": {
+          "en_US": "Swipe on Mobile",
+          "zh_TW": "手機版顯示滑動圖片",
+          "zh_CN": "手机版显示滑动图片",
+          "ms_MY": "Leret pada mudah alih"
+        }
+      }, {
+        "type": "color",
+        "id": "product_bg_color",
+        "default": "rgba(245, 245, 245, 1)",
+        "label": {
+          "en_US": "Product background color",
+          "zh_TW": "產品背景色",
+          "zh_CN": "产品背景色",
+          "ms_MY": "Warna latar belakang produk"
+        }
+      }
+    ],
+    "blocks": [
+      {
+        "type": "featured_collection",
+        "name": {
+          "en_US": "Collection",
+          "zh_CN": "收藏",
+          "zh_TW": "商品系列",
+          "ms_MY": "Koleksi"
+        },
+        "settings": [
+          {
+            "type": "collection",
+            "id": "collection__id",
+            "label": {
+              "en_US": "Collection",
+              "ja_JP": "コレクション",
+              "ko_KR": "컬렉션",
+              "ms_MY": "Koleksi",
+              "th_TH": "คอลเลกชัน",
+              "zh_CN": "目录",
+              "zh_TW": "目錄"
+            }
+          }
+        ]
+      }
+    ],
+    "presets": [
+      {
+        "name": {
+          "en_US": "Collection List",
+          "zh_TW": "目錄列表",
+          "zh_CN": "目录列表",
+          "ms_MY": "Senarai Koleksi"
+        },
+        "blocks": [
+          {
+            "type": "featured_collection"
+          }, {
+            "type": "featured_collection"
+          }
+        ]
+      }
+    ]
+  }
+{% endschema %}
