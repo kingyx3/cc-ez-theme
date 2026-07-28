@@ -276,6 +276,23 @@
 
 
 <div id="easystore-section-header">
+  {% if section.settings.message %}
+    <div
+      class="announcement-bar"
+      role="region"
+      aria-label="Store announcement"
+      style="--announcement-background: {{ section.settings.color_bg }}; --announcement-color: {{ section.settings.announcement_text_color }};"
+    >
+      {% if section.settings.message_link != blank %}
+        <a class="announcement-bar__link" href="{{ section.settings.message_link }}">
+          <span>{{ section.settings.message_text | escape }}</span>
+          <span aria-hidden="true">→</span>
+        </a>
+      {% else %}
+        <p class="announcement-bar__text">{{ section.settings.message_text | escape }}</p>
+      {% endif %}
+    </div>
+  {% endif %}
   <{% if section.settings.enable_sticky_header %}sticky-header{% else %}div{% endif %} class="header-wrapper header-wrapper--border-bottom">
     <header class="header header--{{section.settings.align_logo}} page-width header--has-menu" itemscope itemtype="http://schema.org/Organization">
       <div class="header__left-icon header__icons large-up-hide">
@@ -1057,6 +1074,45 @@
     "zh_TW": "頂端主選單"
   },
   "settings": [
+    {
+      "type": "checkbox",
+      "id": "message",
+      "default": true,
+      "label": {
+        "en_US": "Show announcement"
+      }
+    },
+    {
+      "type": "text",
+      "id": "message_text",
+      "default": "New releases just landed — shop the latest drop.",
+      "label": {
+        "en_US": "Announcement text"
+      }
+    },
+    {
+      "type": "text",
+      "id": "message_link",
+      "label": {
+        "en_US": "Announcement link"
+      }
+    },
+    {
+      "type": "color",
+      "id": "color_bg",
+      "default": "#131722",
+      "label": {
+        "en_US": "Announcement background"
+      }
+    },
+    {
+      "type": "color",
+      "id": "announcement_text_color",
+      "default": "#FFFFFF",
+      "label": {
+        "en_US": "Announcement text"
+      }
+    },
     {
       "type": "select",
       "id": "align_logo",
