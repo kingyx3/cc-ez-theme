@@ -1,0 +1,196 @@
+<!doctype html>
+<!--[if lt IE 7]><html class="no-js lt-ie9 lt-ie8 lt-ie7" lang="en"> <![endif]-->
+<!--[if IE 7]><html class="no-js lt-ie9 lt-ie8" lang="en"> <![endif]-->
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en"> <![endif]-->
+<!--[if IE 9 ]><html class="ie9 no-js"> <![endif]-->
+<!--[if (gt IE 9)|!(IE)]><!--> <html class="no-js"> <!--<![endif]-->
+<head>
+
+  <!-- Basic page needs ================================================== -->
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+
+  {% if settings.favicon_img %}
+  <link rel="icon" href="{{ settings.favicon_img }}" />
+  {% endif %}
+
+  <!-- Title and description ================================================== -->
+  <title>
+  {{ page_title | escape }}{% if current_tags %}{% assign meta_tags = current_tags | join: ', ' %} &ndash; {{ 'general.meta.tags' | t: meta_tags }}{% endif %}{% if current_page != 1 and current_page != blank %} &ndash; {{ 'general.meta.page' | t: current_page }}{% endif %}{% unless page_title contains shop.name %} &ndash; {{ shop.name | escape }}{% endunless %}
+  </title>
+
+  {% if page_description %}
+  <meta name="description" content="{{ page_description | escape }}">
+  {% endif %}
+
+  <!-- Social meta ================================================== -->
+  {% include 'social-meta-tags' %}
+
+  <!-- Helpers ================================================== -->
+  <link rel="canonical" href="{{ canonical_url }}">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+  <meta name="theme-color" content="{{ settings.colors_accent_1 }}">
+  
+  {{ '//ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js' | script_tag }}
+  
+  <!-- Header hook for plugins ================================================== -->
+  {{ content_for_header }}
+  
+  
+  <script src="{{ 'global.js' | asset_url }}" defer="defer"></script>
+
+  {% comment %}
+    If you store has customer accounts disabled, you can remove the following JS file
+  {% endcomment %}
+  {% if template contains 'customers' %}
+    {{ 'shop_common.js' | global_asset_url | script_tag }}
+    {{ 'customer_area.js' | global_asset_url | script_tag }}
+  {% endif %}
+  <script>
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+
+  ga('create', '{{ GA_code }}', 'auto','myTracker');
+  ga('myTracker.send', 'pageview');
+
+  </script>
+  
+  {{ 'storefront.js' | global_asset_url | script_tag }}
+  
+
+  <!-- CSS ================================================== -->
+  <style>
+      @font-face {
+        font-family: '{{ settings.type_body_font.font_family }}';
+        font-style: normal;
+        font-weight: {{ settings.type_body_font.variant }};
+        src: local('{{ settings.type_body_font.font_family }} {{ settings.type_body_font.variant }}'), local('{{ settings.type_body_font.font_family }}-{{ settings.type_body_font.variant }}'), url({{settings.type_body_font.variant_file}}) format('truetype');
+      }
+
+      @font-face {
+        font-family: '{{ settings.type_header_font.font_family }}';
+        font-style: normal;
+        font-weight: {{ settings.type_header_font.variant }};
+        src: local('{{ settings.type_header_font.font_family }} {{ settings.type_header_font.variant }}'), local('{{ settings.type_header_font.font_family }}-{{ settings.type_header_font.variant }}'), url({{settings.type_header_font.variant_file}}) format('truetype');
+      }
+
+      :root {
+        --font-body-family: '{{ settings.type_body_font.font_family }}', {{ settings.type_body_font.category }};
+        --font-body-style: {{ settings.body_font_style }};
+        --font-body-weight: {{ settings.body_font_weight }};
+
+        --font-heading-family: '{{ settings.type_header_font.font_family }}', {{ settings.type_header_font.category }};
+        --font-heading-style: {{ settings.header_font_style }};
+        --font-heading-weight: {{ settings.header_font_weight }};
+
+        --color-heading-text: {{ settings.colors_text | color_extract: 'red' }},{{ settings.colors_text | color_extract: 'green' }},{{ settings.colors_text | color_extract: 'blue' }};
+        --color-base-text: {{ settings.colors_text | color_extract: 'red' }},{{ settings.colors_text | color_extract: 'green' }},{{ settings.colors_text | color_extract: 'blue' }};
+        --color-base-background-1: {{ settings.colors_background_1 | color_extract: 'red' }},{{ settings.colors_background_1 | color_extract: 'green' }},{{ settings.colors_background_1 | color_extract: 'blue' }};
+        --color-base-background-2: {{ settings.colors_background_1 | color_extract: 'red' }},{{ settings.colors_background_1 | color_extract: 'green' }},{{ settings.colors_background_1 | color_extract: 'blue' }};
+        
+        --color-base-solid-button-labels: {{ settings.colors_solid_button_labels | color_extract: 'red' }},{{ settings.colors_solid_button_labels | color_extract: 'green' }},{{ settings.colors_solid_button_labels | color_extract: 'blue' }};
+        --color-base-outline-button-labels: {{ settings.colors_outline_button_labels | color_extract: 'red' }},{{ settings.colors_outline_button_labels | color_extract: 'green' }},{{ settings.colors_outline_button_labels | color_extract: 'blue' }};
+        
+        --color-base-accent-1: {{ settings.colors_accent_1 | color_extract: 'red' }},{{ settings.colors_accent_1 | color_extract: 'green' }},{{ settings.colors_accent_1 | color_extract: 'blue' }};
+        --color-base-accent-2: {{ settings.colors_accent_1 | color_extract: 'red' }},{{ settings.colors_accent_1 | color_extract: 'green' }},{{ settings.colors_accent_1 | color_extract: 'blue' }};
+        --payment-terms-background-color: {{ settings.colors_background_1 | color_extract: 'red' }},{{ settings.colors_background_1 | color_extract: 'green' }},{{ settings.colors_background_1 | color_extract: 'blue' }};
+
+        --gradient-base-background-1: {{ settings.colors_background_1 | color_extract: 'red' }},{{ settings.colors_background_1 | color_extract: 'green' }},{{ settings.colors_background_1 | color_extract: 'blue' }};
+        --gradient-base-background-2: {{ settings.colors_background_1 | color_extract: 'red' }},{{ settings.colors_background_1 | color_extract: 'green' }},{{ settings.colors_background_1 | color_extract: 'blue' }};
+        --gradient-base-accent-1: {{ settings.colors_accent_1 | color_extract: 'red' }},{{ settings.colors_accent_1 | color_extract: 'green' }},{{ settings.colors_accent_1 | color_extract: 'blue' }};
+        --gradient-base-accent-2: {{ settings.colors_accent_1 | color_extract: 'red' }},{{ settings.colors_accent_1 | color_extract: 'green' }},{{ settings.colors_accent_1 | color_extract: 'blue' }};
+
+        --page-width: {{ settings.page_width | divided_by: 10 }}rem;
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: inherit;
+      }
+
+      html {
+        box-sizing: border-box;
+        font-size: 62.5%;
+        height: 100%;
+      }
+
+      body {
+        display: grid;
+        grid-template-rows: auto auto 1fr auto;
+        grid-template-columns: 100%;
+        min-height: 100%;
+        margin: 0;
+        font-size: 1.5rem;
+        letter-spacing: 0.06rem;
+        line-height: 1.8;
+        font-family: var(--font-body-family);
+        font-style: var(--font-body-style);
+        font-weight: var(--font-body-weight);
+        {% if settings.body_bg_image != "" and settings.body_bg_image != null %}
+        background-image: url('{{ settings.body_bg_image }}');
+        background-position: {{ settings.bg_img_position }};
+        {% if settings.bg_img_repeat == false %}
+          background-repeat: no-repeat;
+        {% endif %}
+        {% endif %}
+      }
+
+      @media screen and (min-width: 750px) {
+        body {
+          font-size: 1.6rem;
+        }
+      }
+   </style>
+  
+  {{ 'base.css' | asset_url | stylesheet_tag }}
+
+  
+  {% app_snippet 'global/head' %}
+
+  <script>document.documentElement.className = document.documentElement.className.replace('no-js', 'js');</script>
+</head>
+
+<body id="{{ page_title | handle }}" class="{% if customer %}customer-logged-in {% endif %}template-{{ template | replace: '.', ' ' | truncatewords: 1, '' | handle }}" >
+	
+  {% app_snippet 'global/body_start' %}
+	
+ 	{% section 'header' %}
+  <main id="MainContent" class="content-for-layout focus-none" role="main" tabindex="-1">
+    {% app_snippet 'global/content_top' %}
+    {{ content_for_layout }}
+    {% app_snippet 'global/content_bottom' %}
+  </main>
+ 	{% section 'footer' %}
+  
+
+  {% include 'currencies' %}
+
+  <script>
+
+    window.variantStrings = {
+      addToCart: `{{ 'products.product.add_to_cart' | t }}`,
+      updateCart: `{{ 'cart.general.update' | t }}`,
+      soldOut: `{{ 'products.product.sold_out' | t }}`,
+      unavailable: `{{ 'products.product.unavailable' | t }}`,
+    }
+
+    window.accessibilityStrings = {
+      shareSuccess: `{{ 'general.social.copied_success_message' | t }}`,
+    }
+    
+    window.promotionStrings = {
+      title: `{{ 'products.product.promotion' | t }}`,
+    }
+    
+    window.productSettings = {
+      variantOptionsDisplay: `{{ settings.sections.main-product.settings.variant_options_display | _default: 'radio' }}`,
+    }
+  </script>
+
+  {% include 'product-quickview-modal' %}
+  {% app_snippet 'global/body_end' %}
+</body>
+</html>

@@ -1,0 +1,139 @@
+<link rel="preload" href="{{ 'component-card.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<link rel="preload" href="{{ 'component-price.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<link rel="preload" href="{{ 'component-product-grid.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<div style="text-align: center; display: flex; flex-direction: column; align-items: center; margin: 0rem 2rem;">
+  <h1>{{ 'general.404.oops' | t }}</h1>
+  <p>{{ 'general.404.oops_description' | t }}</p>
+  
+  <p>{{ 'general.404.search_description' | t }}</p>
+  <div class="template-search__search" style="width: 100%; max-width: 500px;">
+    <form action="/search" method="get" role="search" class="search">
+      <div class="field">
+        <input
+          class="search__input field__input"
+          id="Search-In-Template"
+          type="search"
+          name="q"
+          value="{{ search.terms | escape }}"
+          placeholder="{{ 'general.search.placeholder' | t }}"
+          autocomplete="off"
+        >
+        <label class="field__label" for="Search-In-Template">{{ 'general.search.placeholder' | t }}</label>
+        <div class="dropdown" id="searchDropdown"></div>
+        <input type="hidden" name="search_history" class="hidden_search_history">
+
+        <button type="submit" class="search__button field__button" aria-label="{{ 'general.search.placeholder' | t }}">
+          <svg class="icon icon-search"><use xlink:href="#icon-search"></svg>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% assign product_count = top_products | size %}
+{% if product_count > 0 %}
+  <section class="product-section page-width spaced-section">
+    <product-recommendations>
+      <h2 class="product-recommendations__heading" style="text-align: center;">
+        {{ 'general.404.top_products_title' | t }}
+      </h2>
+      <ul class="grid grid--2-col product-grid grid--4-col-desktop grid--quarter-max" role="list">
+        {% for i in (1..product_count) %}
+          {% assign index = i | minus: 1 %}
+          {% assign product = top_products[index] %}
+         <li class="grid__item">
+            {% include 'product-card' with 'related-products', show_product_info: true %}
+          </li>
+        {% endfor %}
+      </ul>
+    </product-recommendations>
+  </section>
+{% endif %}
+
+<script>
+  function clearAll() {
+    localStorage.removeItem('searchHistory'); 
+    
+    var customer = {{ customer | json }};
+    if(customer) {
+      // Your logic to clear all data or call an endpoint
+      fetch('/account/search_histories', {
+          method: 'DELETE',
+          headers: {
+            "Content-Type": "application/json",
+            "X-Requested-With": "XMLHttpRequest"
+          },
+          body: JSON.stringify({
+            _token: "{% csrf %}"
+          }),
+      })
+      .then(response => response.json())
+    }
+  }
+  // End - delete search history from local storage
+  
+  // search history dropdown  
+  var searchInputs = document.querySelectorAll('.search__input');
+  
+  if(searchInputs.length > 0) {
+    
+    searchInputs.forEach((searchInput)=> {
+    
+      searchInput.addEventListener('focus', function() {
+        var searchDropdown = searchInput.closest('form').querySelector('#searchDropdown');
+        searchDropdown.innerHTML = ''; // Clear existing items
+  
+        // retrieve data from local storage
+        var searchHistoryData = JSON.parse(localStorage.getItem('searchHistory')) || [];
+  
+        // Convert JSON to string
+        var search_history_json = JSON.stringify(searchHistoryData);
+  
+        // Set the value of the hidden input
+        searchInput.closest('form').querySelector(".hidden_search_history").value = search_history_json;
+  
+        // create dropdown items
+        var clearAllItem = document.createElement('div');
+        clearAllItem.className = 'dropdown-item clear-all';
+        clearAllItem.textContent = 'Clear';
+        clearAllItem.addEventListener('click', function() {
+          clearAll();
+          searchDropdown.style.display = 'none';
+          searchInput.classList.remove('is-focus');
+        });
+        searchDropdown.appendChild(clearAllItem);
+  
+        // create dropdown items
+        searchHistoryData.forEach(function(item) {
+          var dropdownItem = document.createElement('div');
+          dropdownItem.className = 'dropdown-item';
+          dropdownItem.textContent = item.term;
+          dropdownItem.addEventListener('click', function() {
+            searchInput.value = item.term;
+            searchInput.closest('form').submit();
+            searchDropdown.style.display = 'none';
+          });
+          searchDropdown.appendChild(dropdownItem);
+        });
+  
+        if(searchHistoryData.length > 0){
+          // display the dropdown
+          searchInput.classList.add('is-focus');
+          document.body.classList.add('search-input-focus');
+          searchDropdown.style.display = 'block';
+        }
+      });
+  
+      searchInput.addEventListener("focusout", (event) => {
+        var searchDropdown = searchInput.closest('form').querySelector('#searchDropdown');
+        searchInput.classList.remove('is-focus');
+        searchDropdown.classList.add('transparent');
+        setTimeout(()=>{
+          searchDropdown.style.display = 'none';
+          searchDropdown.classList.remove('transparent');
+          document.body.classList.remove('search-input-focus');
+        }, 400);
+      });
+    })
+  }
+  // End - search history dropdown
+</script>

@@ -1,0 +1,1235 @@
+<link rel="preload" href="{{ 'customer.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<style>input::-webkit-calendar-picker-indicator{display: none;}</style>
+<style>
+  @media screen and (min-width: 990px) {
+    :is(.account, .order) > div:nth-of-type(2) > div:first-of-type + div{
+      min-width: 350px;
+      max-width: 380px;
+    }
+    .order-grid .grid__item:nth-child(3) {
+      display: none;
+    }
+  }
+  @media screen and (max-width: 990px) {
+    .section-wrapper{
+      display: flex;
+      flex-wrap: wrap-reverse;
+    }
+    .section-wrapper > div{
+      width: 100%;
+    }
+  }
+  .small-text {
+    font-size: 85%;
+  }
+  .complete-form {
+    margin-top: 40px;
+  }
+  @media screen and (max-width: 749px) {
+    .complete-form {
+      margin-top: 0;
+    }
+    
+    .order-grid.grid--1-col .grid__item {
+      width: 90%;
+    }
+  }
+  .mb-30 {
+    margin-bottom: 30px;
+  }
+  .customer .heading-nav_link{
+    display: inline-flex;
+    align-items: center;
+  }
+  .customer .heading-nav_link + .heading-nav_link{
+    margin-left: 15px;
+  }
+  .card-image{
+    margin-bottom: 15px;
+  }
+  .card-image img{
+    width: 100%; 
+    aspect-ratio: 5/3; 
+    object-fit: cover; 
+    background-color: white;
+    box-shadow: 0 0 5px 1px rgba(18, 18, 18, 0.05);
+    border-radius: 10px;
+  }
+
+  .member-card-wrapper{
+    max-width: 400px;
+    margin: auto;
+  }
+  .member-card{
+    position: relative;
+    width: 100%;
+    padding-bottom: 60%;
+    margin-bottom: 15px;
+    border-radius: 10px;
+    line-height: 1.2;
+    box-shadow: 0 0 5px 1px rgba(18, 18, 18, 0.05);
+    background-color: white;
+    background-size: cover;
+    background-repeat: no-repeat;
+    background-position: center center;
+  }
+
+  .member-card_title{
+    font-size: 30px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    max-width: 220px;
+    display: inline-block;
+    line-height: 1;
+  }
+
+  .card-type_simple{
+    background-color: #323131;
+    color: #fff;
+    background-color: {{customer.membership.membership_tier.card_background_color_code}};
+    color: {{customer.membership.membership_tier.card_font_color_code}};
+  }
+
+  .card-type_simple *{
+    color: #fff;
+    color: {{customer.membership.membership_tier.card_font_color_code}};
+  }
+  
+  .card-type_customize{
+    background-image: url('{{ customer.membership.membership_tier.card_image_url }}');
+  }
+  
+  .card-type_customize .qr-modal-toggle{
+    background: #fff;
+    color: #000;
+    padding: 2px;
+    border-radius: 5px;
+    box-shadow: 0 0 5px 1px rgba(18, 18, 18, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .member-card_detail{
+    position: absolute;
+    left: 20px;
+    right: 20px;
+    display:flex;
+    justify-content: space-between;
+    align-items: flex-end;
+  }
+  .member-card_detail:first-child{
+    top: 20px;
+  }
+  .member-card_detail:last-child{
+    bottom: 20px;
+    column-gap: 5px;
+  }
+  .membership-upgrade-progress {
+    border-radius: 5px; 
+    overflow: hidden; 
+    height: 8px; 
+    width: 100%;
+    background-color: rgb(var(--color-foreground), 0.1);
+  }
+  .membership-progress {
+    width: 0;
+    height: 10px;
+    display: block !important;
+    background-color: rgb(var(--color-foreground));
+    transition: width 0.5s ease-in-out;
+  }
+  .credit-point-wrapper .svg-icon{
+    margin-right: 0;
+  }
+  
+  .point-info {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .tooltip {
+    position: relative;
+    margin-left: 5px;
+  }
+  .tooltip .svg-icon {
+    height: 16px;
+    width: 16px;
+    fill: #888;
+    color: #888;
+  }
+  .tooltip .tooltip-content {
+    display: none;
+    z-index: -2;
+    opacity: 0;
+    position: absolute;
+    bottom: calc(100% + 5px);
+    left: 50%;
+    transform: translate(-50%, 0);
+    margin: 0;
+    background-color: rgba(0, 0, 0, 0.8);
+    color: #fff;
+    padding: 7px 10px;
+    line-height: 1.3;
+    font-size: 13px;
+    border-radius: 3px;
+    min-width: 200px;
+  }
+  .tooltip .tooltip-content::before {
+    content: '';
+    position: absolute;
+    bottom: -5px;
+    left: 50%;
+    transform: translate(-50%, 0);
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 5px solid rgba(0, 0, 0, 0.8);
+  }
+  .tooltip:hover .tooltip-content,
+  .tooltip:active .tooltip-content,
+  .tooltip:focus .tooltip-content {
+    display: block;
+    opacity: 1;
+    z-index: 3;
+  }
+</style>
+
+<link
+  rel="preload"
+  href="{{ 'component-slider.css' | asset_url }}"
+  as="style"
+  onload="this.onload=null;this.rel='stylesheet'">
+
+{{ 'qr-modal.css' | global_asset_url | stylesheet_tag }}
+
+<div class="customer account">
+  <div class="mb-30">
+    <h1>{{ 'customer.account.title' | t }}</h1>
+    <div>
+      {% for link in contents.after-login.links %}
+        {% if link.url == '/account/logout' %}
+          <a href="{{link.url}}" class="heading-nav_link">
+            <svg data-name="Layer 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15 15"><path d="M.57,7.36A.64.64,0,0,0,1.2,8H9L7.21,9.85a.63.63,0,0,0,0,.89h0a.63.63,0,0,0,.9,0L11,7.84A.63.63,0,0,0,11,7h0L8.11,4a.64.64,0,0,0-.91.89h0L9,6.72H1.2A.64.64,0,0,0,.57,7.36Z"/><path d="M12.67.52H2.33A1.83,1.83,0,0,0,.5,2.3V4.7a.64.64,0,1,0,1.27,0V2.3a.55.55,0,0,1,.55-.55H12.67a.56.56,0,0,1,.56.54h0V12.65a.56.56,0,0,1-.56.56H2.33a.56.56,0,0,1-.56-.56V10A.64.64,0,1,0,.5,10v2.64a1.83,1.83,0,0,0,1.83,1.83H12.67a1.83,1.83,0,0,0,1.83-1.83V2.3A1.83,1.83,0,0,0,12.67.52Z"/></svg>
+            {{ 'customer.account.navigation.logout' | t }}
+          </a>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+
+
+  <div class="section-wrapper">
+    <div>
+      <h2 class="small-hide">{{ 'customer.account.hi' | t }} {{ customer.name }}.</h2>
+      <div class="card-box mb-30">
+		<div class="account-navigation__list">
+          {% for link in contents.account_navigation.links %}
+            <a class="navigation-item heading-nav_link" href="{% if link.handle == 'orders' %}{{ link.url }}?filter=to_pay{% else %}{{ link.url }}{% endif %}">
+              <span class="navigation-icon d-flex">
+                {% if link.handle == 'details' %}{% include 'svg-definitions' with 'icon-profile' %}
+                {% elsif link.handle == 'addresses' %}{% include 'svg-definitions' with 'icon-book' %}
+                {% elsif link.handle == 'orders' %}{% include 'svg-definitions' with 'icon-order' %}
+                {% elsif link.handle == 'vouchers' %}{% include 'svg-definitions' with 'icon-discount' %}
+                {% elsif link.handle == 'recently_view' %}{% include 'svg-definitions' with 'icon-history' %}
+                {% else %}{% include 'svg-definitions' with 'icon-love' %}
+                {% endif %}
+              </span>
+              {% assign navigation = 'customer.account.navigation.' | append: link.handle %}
+              <div class="navigation-title">{{ navigation | t }}</div>
+              <span class="chevron d-flex">{% include 'svg-definitions' with 'icon-chevron-right' %}</span>
+            </a>
+          {% endfor %}
+        </div>
+      </div>
+      
+      
+      <h2 class="d-flex flex-wrap flex-space-between flex-align-center">
+        {{ "customer.account.recent_orders" | t }}
+        {% if customer.orders.size != 0 %}
+          <a href="/account/orders?filter=to_pay">{{ "customer.account.view_all" | t }}</a>
+        {% endif %}
+      </h2>
+      {% if customer.orders.size != 0 %}
+      <slider-component class="slider-mobile-gutter">
+      	<ul class="order-grid grid grid--1-col grid--2-col-tablet slider slider--tablet py-1">
+          {% for order in customer.recent_incomplete_order %}
+          <li class="grid__item slider__slide mt-0">
+            <div class="card-box order-card__wrapper" onclick="window.location.href = '{{ order.customer_url }}'">
+              <div>
+                {% if order.name != order.order_number %}
+                  <div class="small-text color-light-text">
+                    {{ order.order_number | escape }}
+                  </div>
+                {% endif %}
+                <div class="d-flex flex-wrap flex-space-between flex-align-center gap-x-2 gap-y-2">
+                <div class="d-flex flex-align-center gap-x-2">
+                  <div class="h3">{{ order.name }}</div>
+                  <div class="small-text color-light-text">{{ order.created_at | date: "%b %d, %Y" }}</div>
+                </div>
+                <div class="order-status d-flex gap-x-2">
+                  {% if order.is_cancelled == 1%}
+                    <span class="small-text label-tag label-tag-alert">{{ "customer.fulfillment_activity.cancelled" | t }}</span>
+                  {% else %}
+                    {% if order.financial_status_label == "Paid" %}
+                      <span class="small-text label-tag label-tag-success">{{ 'customer.financial_status.paid' | t }}</span>
+                    {% elsif order.financial_status_label == "Refunded" %}
+                      <span class="small-text label-tag label-tag-info">{{ 'customer.financial_status.refunded' | t }}</span>
+                    {% elsif order.financial_status_label == "Pending" %}
+                      <span class="small-text label-tag label-tag-pending">{{ 'customer.financial_status.pending' | t }}</span>
+                    {% elsif order.financial_status_label == "Partially_paid" %}
+                      <span class="small-text label-tag label-tag-pending">{{ 'customer.financial_status.partially_paid' | t }}</span>
+                    {% elsif order.financial_status_label == "Authorized" %}
+                      <span class="small-text label-tag label-default-dark">{{ 'customer.financial_status.authorized' | t }}</span>
+                    {% else %}
+                      <span class="small-text label-tag label-tag-warning">{{ 'customer.financial_status.unpaid' | t }}</span>
+                    {% endif %}
+
+                    {% if order.fulfillment_status_label == "Fulfilled" %}
+                      <span class="small-text label-tag label-tag-success">{{ 'customer.fulfillment_status.fulfilled' | t }}</span>
+                  	{% elsif order.fulfillment_status_label == "Returned" %}
+                      <span class="small-text label-tag label-tag-info">{{ 'customer.fulfillment_status.returned' | t }}</span>
+                    {% elsif order.fulfillment_status_label == "Partially fulfilled" %}
+                      <span class="small-text label-tag label-tag-pending">{{ 'customer.fulfillment_status.partially_fulfilled' | t }}</span>
+                    {% elsif order.fulfillment_status_label == "To process" %}
+                      <span class="small-text label-tag label-tag-pending">{{ 'customer.fulfillment_status.to_process' | t }}</span>
+                    {% elsif order.fulfillment_status_label == "Processed" %}
+                      <span class="small-text label-tag label-tag-pending">{{ 'customer.fulfillment_status.processed' | t }}</span>
+                    {% elsif order.fulfillment_status_label == "Packed" %}
+                      <span class="small-text label-tag label-tag-pending">{{ 'customer.fulfillment_status.packed' | t }}</span>
+                    {% elsif order.fulfillment_status_label == "Shipped" %}
+                      <span class="small-text label-tag label-tag-pending">{{ 'customer.fulfillment_status.shipped' | t }}</span>
+                    {% elsif order.fulfillment_status_label == "Ready for pickup" %}
+                      <span class="small-text label-tag label-tag-success">{{ 'customer.fulfillment_status.ready_for_pickup' | t }}</span>
+                    {% elsif order.fulfillment_status_label == "Delivered" %}
+                      <span class="small-text label-tag label-tag-success">{{ 'customer.fulfillment_status.delivered' | t }}</span>
+                    {% elsif order.fulfillment_status_label == "Customer picked up" %}
+                      <span class="small-text label-tag label-tag-success">{{ 'customer.fulfillment_status.customer_picked_up' | t }}</span>
+                    {% elsif order.fulfillment_status_label == "Partially shipped" %}
+                      <span class="small-text label-tag label-tag-pending">{{ 'customer.fulfillment_status.partially_shipped' | t }}</span>
+                    {% elsif order.fulfillment_status_label == "Partially packed" %}
+                      <span class="small-text label-tag label-tag-pending">{{ 'customer.fulfillment_status.partially_packed' | t }}</span>
+                    {% elsif order.fulfillment_status_label == "Partially processed" %}
+                      <span class="small-text label-tag label-tag-pending">{{ 'customer.fulfillment_status.partially_processed' | t }}</span>
+                    {% elsif order.fulfillment_status_label == "Partially delivered" %}
+                      <span class="small-text label-tag label-tag-pending">{{ 'customer.fulfillment_status.partially_delivered' | t }}</span>
+                    {% else %}
+                      <span class="small-text label-tag label-tag-warning">{{ 'customer.fulfillment_status.unfulfilled' | t }}</span>
+                    {% endif %}
+                  {% endif %}
+                </div>
+              </div>
+                {% if order.type == 'pickup' %}<div class="mt-1 small-text color-light-text d-flex flex-align-center" style="display: flex;gap: 3px;">{% include 'svg-definitions' with 'icon-location' %} {{ "checkout.detail.pickup" | t }}</div>{% endif %}
+
+                <div class="d-flex mt-3 mb-3 order-images__wrapper">
+                {% for item in order.images limit: 4 %}
+                <div class="order-image">
+                  <div class="media media--square" style="width: 100%; height: 100%;">
+                    {% if item.image == null %}
+                      <img src="/assets/images/products/no_image.png">
+                    {% else %}
+                      <img src="{{ item.image }}">
+                    {% endif %}
+                  </div>
+                </div>
+                {% endfor %}
+              </div>
+              </div>
+
+              <div class="h5 text-right">{{ 'customer.orders.total' | t }}: {{ order.total_price | money: order.currency_format }}</div>
+            </div>
+          </li>
+          {% endfor %}
+        </ul>
+        <div class="slider-buttons no-js-hidden{% if customer.recent_incomplete_order.size < 2 %} hide{% endif %} medium-hide small-hide slider-btn-margin-bottom">
+          <button
+            type="button"
+            class="slider-button slider-button--prev"
+            name="previous"
+            aria-label="{{ 'accessibility.previous_slide' | t }}">{% include 'svg-definitions' with 'icon-caret' %}</button>
+          <div class="slider-counter caption hide">
+            <span class="slider-counter--current">1</span>
+            <span aria-hidden="true">
+              /
+            </span>
+            <span class="visually-hidden">{{ 'accessibility.of' | t }}</span>
+            <span class="slider-counter--total">{{ customer.recent_incomplete_order.size }}</span>
+          </div>
+          <button
+            type="button"
+            class="slider-button slider-button--next"
+            name="next"
+            aria-label="{{ 'accessibility.next_slide' | t }}">{% include 'svg-definitions' with 'icon-caret' %}</button>
+        </div>
+      </slider-component>
+      {% else %}
+      <div class="card-box center" style="padding-top: 30px; padding-bottom: 45px;">
+        <div style="width: 130px; height: 130px; margin: 25px auto;">
+          <svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 182.72 196.97">
+            <ellipse cx="91.36" cy="172.57" rx="91.36" ry="24.4" style="fill: #f5f5f5; stroke-width: 0px;"/>
+            <path d="m34.35,80.71h118.53v91.16c0,.18-.07.36-.21.49-.13.13-.31.21-.49.21H35.05c-.19,0-.36-.07-.49-.21-.13-.13-.21-.31-.21-.49v-91.16Z" style="fill: #e5e5e5; stroke-width: 0px;"/>
+            <path d="m123.15,44.99h-55.11l-33.68,35.72h118.53l-29.73-35.72h-.01Z" style="fill: #dadada; stroke-width: 0px;"/>
+            <path d="m45.58,30.7l22.45,14.29-33.68,35.72-25.52-19.39,36.74-30.62h.01Z" style="fill: #ececec; stroke-width: 0px;"/>
+            <path d="m145.6,30.7l-22.45,14.29,29.74,35.72,29.46-19.39-36.74-30.62h0Z" style="fill: #ececec; stroke-width: 0px;"/>
+            <path d="m82.51,31.43c.63-.3,1.13-.83,1.38-1.49s.24-1.38-.04-2.03l-10.1-23.82c-.14-.34-.35-.64-.62-.9s-.58-.45-.92-.58c-.34-.13-.71-.19-1.07-.18-.37,0-.73.1-1.06.26l-1.95.92c-.33.16-.63.38-.87.65-.24.27-.43.59-.54.94-.12.35-.16.72-.13,1.08.03.37.13.72.3,1.04l12.05,22.9c.33.62.88,1.09,1.55,1.31.66.22,1.39.18,2.02-.12v.02Z" style="fill: #e5e5e5; stroke-width: 0px;"/>
+            <path d="m95.18,29.13c.46-.03.89-.24,1.2-.58s.47-.79.46-1.25l-.5-16.96c0-.24-.06-.48-.16-.69-.1-.22-.24-.41-.42-.57s-.39-.28-.62-.36-.47-.11-.71-.09l-1.41.1c-.24.02-.47.08-.69.19-.21.11-.4.26-.56.45-.15.18-.27.4-.34.63s-.09.47-.06.71l1.91,16.86c.05.46.28.88.63,1.17s.81.44,1.27.41v-.02Z" style="fill: #e5e5e5; stroke-width: 0px;"/>
+            <path d="m104.95,35.39c1.26.73,3.03.06,4.01-1.52l17.44-28.01c1.04-1.67.79-3.71-.54-4.49l-1.86-1.08c-1.34-.77-3.23.03-4.16,1.77l-15.57,29.09c-.88,1.64-.57,3.51.69,4.24h-.01Z" style="fill: #e5e5e5; stroke-width: 0px;"/>
+          </svg>
+        </div>
+        <p class="color-light-text mb-0">{{ 'customer.orders.none' | t }}</p>
+        <button class="btn" onclick="window.location.href = '/collections/all'">{{ 'products.product.continue_shopping' | t }}</button>
+      </div>
+      {% endif %}
+    </div>
+    
+    
+    <div>
+      {% if customer.is_optional_fields_filled == false %}
+        <div class="card card-box background-secondary mb-30 complete-form">
+          <div id="customer-attr-wrapper" style="max-width: 600px;margin: 0 auto;">
+            <h2 class="mb-0">{{ 'customer.setup.complete_profile' | t }}</h2>
+            <p>{{ 'customer.setup.complete_detail' | t }}</p>
+            <div id="error-content"></div>
+            <form action='/account/details' method='post' id='customer-attr-form' style="margin-top: 0;">
+              <input type="hidden" name="_token" value="{% csrf %}">
+              <div class="grid grid--2-col-desktop grid--1-col mb-0">
+                <div class="grid__item sm-mt-1">
+                  <div class="field on_focus">
+                    <div class="select">
+                      <select name="details[gender]" id="DetailGender" required>
+                        <option value disabled {% if customer.gender == blank %}selected{% endif %}>{{ 'customer.register.gender' | t }}</option>
+                        <option value="male" {% if customer.gender == 'male' %}selected{% endif %}>{{ 'customer.register.male' | t }}</option>
+                        <option value="female" {% if customer.gender == 'female' %}selected{% endif %}>{{ 'customer.register.female' | t }}</option>
+                      </select>
+                    </div>
+                    <label for="DetailGender">{{ 'customer.register.gender' | t }}</label>
+                  </div>
+                </div>
+                <div class="grid__item sm-mt-1">
+                  <div class="field">
+                    <input type="date" name="details[birthdate]" id="DetailBirthdate" value="{{customer.birthdate}}" placeholder="{{ 'customer.register.birthdate' | t }}" max="{{ "now" | date: "%Y%m%d" }}" {% if customer.birthdate_editable == false %}disabled{% endif %} required>
+                    <label for="DetailBirthdate">{{ 'customer.register.birthdate' | t }}</label>
+                  </div>
+                </div>
+                {% for attribute_setting in shop.attribute_settings %}
+                  {% if attribute_setting.input_type == "dropdown" %}
+                    <div class="grid__item sm-mt-1">
+                      <div class="field select on_focus">
+                        <select name="details[attributes][{{ attribute_setting.id }}]" id="DetailAttribute{{ attribute_setting.id }}" {% if attribute_setting.is_required %}required{% endif %}>
+                          {% assign select_title = attribute_setting.title | downcase  %}
+                          <option disabled {% if attribute_setting.value == blank %}selected{% endif %}>{{ 'customer.register.select_custom_attr' | t: select_title }}</option>
+                          {% for options in attribute_setting.options %}
+                            <option value="{{ options.value }}" {% if attribute_setting.value == options.value %}selected{% endif %}>{{ options.value }}</option>
+                          {% endfor %}
+                        </select>
+                        <label for="DetailAttribute{{ attribute_setting.id }}">{{ attribute_setting.title }}</label>
+                      </div>
+                    </div>
+                  {% elsif attribute_setting.input_type == "date" %}
+                    <div class="grid__item sm-mt-1" id="attribute-date-toggle-{{ attribute_setting.id }}">
+                      <div class="field">
+                        <input type="text" name="details[attributes][{{ attribute_setting.id }}]" id="DetailAttribute{{ attribute_setting.id }}" value="{{ attribute_setting.value }}" placeholder="Select {{ attribute_setting.title | downcase }}" max="{{ " now" | date: "%Y-%m-%d" }}" class="input-datepicker" {% if attribute_setting.is_required %}required{% endif %}>
+                        <label for="DetailAttribute{{ attribute_setting.id }}">{{ attribute_setting.title }}</label>
+                      </div>
+                    </div>
+                  {% else %}
+                    <div class="grid__item sm-mt-1">
+                      <div class="field">
+                        <input type="text" id="DetailAttribute{{ attribute_setting.id }}" class="address_form" name="details[attributes][{{ attribute_setting.id }}]" value="{{ attribute_setting.value | escape }}" placeholder="{{ attribute_setting.title | downcase }}" autocapitalize="words" {% if attribute_setting.is_required %}required{% endif %}>
+                        <label for="DetailAttribute{{ attribute_setting.id }}">{{ attribute_setting.title }}</label>
+                      </div>  
+                    </div>
+                  {% endif %}
+                {% endfor %}
+              </div>
+              <div class="text-right">
+                <button id="submit-btn" type="submit" class="btn button mt-0">
+                  {{ 'customer.setup.complete' | t }}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+        
+        {{ 'flatpickr.min.css' | asset_url | stylesheet_tag }}
+        {{ 'flatpickr.min.js' | asset_url | script_tag }}
+        <script>
+          let attr_form = document.querySelector('#customer-attr-form'),
+              attr_wrapper = document.querySelector('#customer-attr-wrapper'),
+              submit_button = document.querySelector('#submit-btn'),
+              error_content = document.querySelector('#error-content');
+          attr_form.addEventListener('submit', function (e) {
+            e.preventDefault();
+            error_content.innerHTML = '';
+            submit_button.classList.add('btn--loading');
+    
+            let formData = new FormData(attr_form), 
+                data = {};
+            formData.forEach((value, key) => {
+              const keys = key.split(/\[|\]/).filter(Boolean);
+    
+              let current = data;
+              for (let i = 0; i < keys.length - 1; i++) {
+                const subKey = keys[i];
+                current[subKey] = current[subKey] || {};
+                current = current[subKey];
+              }
+    
+              current[keys[keys.length - 1]] = value;
+            });
+    
+            let jsonData = JSON.stringify(data);
+    
+            fetch('/account/details', {
+              method: 'POST',
+              body: jsonData, // Convert object to JSON string
+              headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+              }
+            })
+              .then(response => response.json())
+              .then(data => {
+                if (data.status === "success") {
+                  attr_wrapper.innerHTML = `
+                    <div class="text-center">
+                      <svg fill="#13ce66" width="100px" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M10.29 18.46a.59.59 0 0 0 .45-.21l8.71-9.63a.66.66 0 0 0 0-.92.65.65 0 0 0-.92 0l-8.27 9.14-4.82-4.32a.65.65 0 0 0-.88 1l5.29 4.81a.66.66 0 0 0 .44.13z"/><path d="M12 23.65A11.65 11.65 0 1 0 .35 12 11.67 11.67 0 0 0 12 23.65zm0-22A10.35 10.35 0 1 1 1.65 12 10.36 10.36 0 0 1 12 1.65z"/></svg>
+                      <h3>${data.message}</h3>
+                    </div>
+                  `;
+                } else {
+                  submit_button.classList.remove('btn--loading');
+                  if (data.errors) {
+                    let errors = data.errors,
+                        error_html = `<div class="errors note">`;
+                      errors.forEach(msg => {error_html += `<div>${msg}</div>`})
+                    error_html += `</div>`;
+                      
+                    error_content.innerHTML = error_html;
+                      
+                      
+                  }
+                }
+              })
+              .catch(error => {
+                submit_button.classList.remove('btn--loading');
+                if (error && error.message) error_content.innerHTML = `<div class="errors note">${error.message}</div>`;
+              });
+          });
+    
+          
+          flatpickr.localize({
+            weekdays: {
+                shorthand: ["{{ 'date_formats.days.sun' | t }}", "{{ 'date_formats.days.mon' | t }}", "{{ 'date_formats.days.tue' | t }}", "{{ 'date_formats.days.wed' | t }}", "{{ 'date_formats.days.thu' | t }}", "{{ 'date_formats.days.fri' | t }}", "{{ 'date_formats.days.sat' | t }}"],
+                longhand: ["{{ 'date_formats.days.sun' | t }}", "{{ 'date_formats.days.mon' | t }}", "{{ 'date_formats.days.tue' | t }}", "{{ 'date_formats.days.wed' | t }}", "{{ 'date_formats.days.thu' | t }}", "{{ 'date_formats.days.fri' | t }}", "{{ 'date_formats.days.sat' | t }}"],
+            },
+            months: {
+                shorthand: ["{{ 'date_formats.months.jan' | t }}","{{ 'date_formats.months.feb' | t }}","{{ 'date_formats.months.mar' | t }}","{{ 'date_formats.months.apr' | t }}","{{ 'date_formats.months.may' | t }}","{{ 'date_formats.months.jun' | t }}","{{ 'date_formats.months.jul' | t }}","{{ 'date_formats.months.aug' | t }}","{{ 'date_formats.months.sep' | t }}","{{ 'date_formats.months.oct' | t }}","{{ 'date_formats.months.nov' | t }}","{{ 'date_formats.months.dec' | t }}"],
+                longhand: ["{{ 'date_formats.months.jan' | t }}","{{ 'date_formats.months.feb' | t }}","{{ 'date_formats.months.mar' | t }}","{{ 'date_formats.months.apr' | t }}","{{ 'date_formats.months.may' | t }}","{{ 'date_formats.months.jun' | t }}","{{ 'date_formats.months.jul' | t }}","{{ 'date_formats.months.aug' | t }}","{{ 'date_formats.months.sep' | t }}","{{ 'date_formats.months.oct' | t }}","{{ 'date_formats.months.nov' | t }}","{{ 'date_formats.months.dec' | t }}"],
+            }
+          })
+          
+          let input_birthdate = flatpickr("#DetailBirthdate",{
+            maxDate: "today",
+            disableMobile: "true",
+            allowInput:true,
+            onOpen: function(selectedDates, dateStr, instance) {
+                document.querySelector("#DetailBirthdate").setAttribute('readonly', true);
+            },
+            onClose: function(selectedDates, dateStr, instance) {
+                document.querySelector("#DetailBirthdate").removeAttribute('readonly');
+                document.querySelector("#DetailBirthdate").blur();
+            }
+          });
+          
+          flatpickr(".input-datepicker",{
+            disableMobile: "true",
+            allowInput:true
+          });
+    
+          var customer_attributes = {{ customer.attributes | json }};
+          var attribute_settings = {{ shop.attribute_settings | json }};
+          if(typeof customer_attributes == 'object' && typeof attribute_settings == 'object'){
+            attribute_settings.forEach(function (attribute_setting) {
+              customer_attributes.forEach(function (customer_attribute) {
+                if(customer_attribute.customer_attribute_setting_id == attribute_setting.id) {
+                  document.querySelector('#DetailAttribute' + attribute_setting.id).value = customer_attribute.value;
+                }
+              });
+            });
+          }
+        </script>
+      {% endif %}
+      
+      
+      <qr-modal>
+        <div class="modal-box-wrapper page-width">
+          <div id="qr-modal" class="modal-box focus-inset" aria-modal="true" role="dialog" tabindex="-1">
+            <div class="modal-box__header">
+              <div class="modal-box__heading">
+                {{ 'customer.account.member_id' | t }}
+              </div>
+              <button type="button" class="modal-box__close modal__close-button link link--text focus-inset qr-close-style" aria-label="{{ 'accessibility.close' | t }}">
+              {% include 'svg-definitions' with 'icon-close' %}
+              </button>
+            </div>
+            <div class="modal-box__body">
+              <div class="center">
+                <img src="{{ customer.barcode_url }}">
+                <p class="text-center" style="margin-top: -12px; letter-spacing: 8px;">{{ customer.code }}</p>
+                <br>
+                <img class="modal-qrcode" src="{{ customer.qrcode_url }}">
+                <br>
+                <p class="mt-4" style="font-size: 85%;">{{ 'customer.account.identify_membership' | t }}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div id="modal-box-backdrop" class="modal-box__close"></div>
+      </qr-modal>
+
+      <h2 class="small-hide" style="margin-top: 0;">{{ 'customer.account.details' | t }}</h2>
+      {% if shop.is_membership_enabled and customer.membership.membership_tier %}
+        <div>
+          <div class="member-card-wrapper">
+            <div class="member-card card-type_{{customer.membership.membership_tier.card_type}}">
+              <div class="member-card_detail">
+                <div>
+                  {% if customer.membership.membership_tier.card_logo_image_url and customer.membership.membership_tier.card_type == 'simple' %}
+                    <img src="{{ customer.membership.membership_tier.card_logo_image_url }}" style="width: 60px;height: 60px;border-radius: 8px;object-fit: contain;">
+                  {% endif %}
+                </div>
+                <div>
+                  {% if customer.avatar_url %}
+                    <img src="{{ customer.avatar_url }}" style="width: 60px;height: 60px;border-radius: 8px;object-fit: cover;">
+                  {% endif %}
+                </div>
+              </div>
+              
+              <div class="member-card_detail">
+                <div>
+                  {% if customer.membership.membership_tier.card_type == 'simple' %}
+                    <details-modal>
+                      <details>
+                        <summary aria-haspopup="dialog" toggle-modal-member="" role="button" aria-expanded="false">
+							            <b class="member-card_title">{{ customer.membership.membership_tier.title }} <span>{% include 'svg-definitions' with 'icon-chevron-right', class:'svg-icon' %}</span></b>
+                        </summary>
+                        
+                        <style>
+                          .confirmation-modal__content.membership-detail * {
+                            color: #000;
+                          }
+                        </style>
+
+                        <div class="confirmation-modal modal__content" role="dialog" aria-modal="true">
+                          <div class="modal-overlay"></div>
+                          <div class="confirmation-modal__content membership-detail" member-detail-html="" tabindex="-1">
+                            <div>
+                              <div class="d-flex flex-space-between" style="align-items: flex-end;">
+                                <h2 style="margin-bottom: 5px;">{{ customer.membership.membership_tier.title }}</h2>
+                                <button type="button"
+                                  style="box-shadow: none;min-width: 1rem;min-height: 1rem;color: #000;margin-bottom: 5px;"
+                                  class="mt-0 modal__close-button link link--text focus-inset" aria-label="accessibility.close">
+                                  <svg class="icon icon-close" aria-hidden="true" focusable="false" role="presentation">
+                                    <use href="#icon-close">
+                                    </use>
+                                  </svg>
+                                </button>
+                              </div>
+                            </div>
+                            {% if customer.membership.membership_tier.default_renewal_condition %}
+                              <div class="small-text color-light-text" style="color: #666;">
+                                {% assign renewal_condition = customer.membership.membership_tier.default_renewal_condition %}
+                                {{ 'customer.account.auto_renewal_spend' | t }} {{ renewal_condition.spending_threshold | money: shop.money_format }}
+                              </div>
+                            {% endif %}
+                            <br>
+                            <div>
+                              <b class="mb-2" style="display: block;">{{ 'customer.account.benefits' | t }}</b>
+                              {% if customer.membership.membership_tier.point_settings %}
+                                <small class="block mb-2" style="display: block;">
+                                  {% assign point_title = customer.membership.membership_tier.point_settings.title | prepend: ' ' %}
+                                  {% assign earning_value = customer.membership.membership_tier.point_settings.earning_value | money: shop.money_format %}
+                                  {% assign earning_point = customer.membership.membership_tier.point_settings.earning_point | append: point_title %}
+                                  {{ 'customer.account.membership_tier_spends_earn_point' | t: earning_value, earning_point }}
+                                </small>
+                              {% endif %}
+                              {% for promo in customer.membership.membership_tier.promotions %}
+                                <small class="block mb-2" style="display: block;">
+                                  {{promo.title}}
+                                </small>
+                              {% endfor %}
+                            </div>
+                            <br><br>
+                            <div><a href="/memberships/tiers" class="button button--full-width">{{ 'customer.account.view_all_tiers' | t }}</a></div>
+                          </div>
+                        </div>
+                      </details>
+                    </details-modal>
+
+                    <div class="small-text color-light-text">
+                      {% if customer.membership.expired_at != null %}
+                          {{ 'customer.account.valid_till' | t }}: {{ customer.membership.expired_at | date: "%b %d, %Y" }} <br>
+                      {% else %}
+                          {{ 'customer.account.never_expire' | t }}
+                      {% endif %}
+                    </div>
+                  
+                  {% endif %}
+                </div>
+                
+                <div>
+                  <a onclick="document.querySelector('qr-modal').open()" class="qr-modal-toggle flex-center">{% include 'svg-definitions' with 'icon-qr' %}</a>
+                </div>
+              </div>
+            </div>
+
+            {% if customer.membership.membership_tier.default_renewal_condition and customer.membership.membership_tier.card_type == 'simple' %}
+              <div class="small-text color-light-text">
+                {% assign renewal_condition = customer.membership.membership_tier.default_renewal_condition %}
+                {{ 'customer.account.auto_renewal_spend' | t }} {{ renewal_condition.spending_threshold | money: shop.money_format }}
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      
+      	<div class="{% if customer.membership.membership_tier.card_type != 'simple' %}card-box{% endif %} mt-3 mb-30">
+          {% if customer.membership.membership_tier.card_type != 'simple' %}
+            <details-modal>
+              <details>
+                <summary aria-haspopup="dialog" toggle-modal-member="" role="button" aria-expanded="false">
+                  <div class="h3 mb-2">
+                    <svg class="svg-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18"><circle cx="9" cy="9" r="8" fill="#525252"/>
+                      <path d="M13.3,7.68a.19.19,0,0,1,0,.08l-.57,2.36a.28.28,0,0,1-.26.2L9,10.34H5.55a.27.27,0,0,1-.25-.21L4.72,7.77V7.69a.56.56,0,0,1,.16-1.1.56.56,0,0,1,.55.56.57.57,0,0,1-.2.44L6,8.33a1,1,0,0,0,.7.3,1,1,0,0,0,.78-.4L8.61,6.62a.55.55,0,1,1,.94-.39.61.61,0,0,1-.15.39h0l1.17,1.6a1,1,0,0,0,1.48.11l.72-.74a.57.57,0,0,1-.2-.44.56.56,0,0,1,.55-.56.56.56,0,0,1,.55.56A.56.56,0,0,1,13.3,7.68Zm-.64,3.49a.26.26,0,0,0-.26-.26H5.63a.26.26,0,0,0-.26.26v.65a.26.26,0,0,0,.26.26H12.4a.26.26,0,0,0,.26-.26Z" fill="#f5f5f5"/>
+                    </svg>
+                    {{ customer.membership.membership_tier.title }} <span>{% include 'svg-definitions' with 'icon-chevron-right', class:'svg-icon' %}</span>
+                  </div>
+                </summary>
+
+                <style>
+                  .confirmation-modal__content * {
+                    color: #000;
+                  }
+                </style>
+
+                <div class="confirmation-modal modal__content" role="dialog" aria-modal="true">
+                  <div class="modal-overlay"></div>
+                  <div class="confirmation-modal__content" member-detail-html="" tabindex="-1">
+                    <div>
+                      <div class="d-flex flex-space-between" style="align-items: flex-end;">
+                        <h2 style="margin-bottom: 5px;">{{ customer.membership.membership_tier.title }}</h2>
+                        <button type="button"
+                          style="box-shadow: none;min-width: 1rem;min-height: 1rem;color: #000;margin-bottom: 5px;"
+                          class="mt-0 modal__close-button link link--text focus-inset" aria-label="accessibility.close">
+                          <svg class="icon icon-close" aria-hidden="true" focusable="false" role="presentation">
+                            <use href="#icon-close">
+                            </use>
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                    {% if customer.membership.membership_tier.default_renewal_condition %}
+                      <div class="small-text color-light-text" style="color: #666;">
+                        {% assign renewal_condition = customer.membership.membership_tier.default_renewal_condition %}
+                        {{ 'customer.account.auto_renewal_spend' | t }} {{ renewal_condition.spending_threshold | money: shop.money_format }}
+                      </div>
+                    {% endif %}
+                    <br>
+                    <div>
+                      <b class="mb-2" style="display: block;">{{ 'customer.account.benefits' | t }}</b>
+                      {% if customer.membership.membership_tier.point_settings %}
+                        <small class="block mb-2" style="display: block;">
+                          {% assign point_title = customer.membership.membership_tier.point_settings.title | prepend: ' ' %}
+                          {% assign earning_value = customer.membership.membership_tier.point_settings.earning_value | money: shop.money_format %}
+                          {% assign earning_point = customer.membership.membership_tier.point_settings.earning_point | append: point_title %}
+                          {{ 'customer.account.membership_tier_spends_earn_point' | t: earning_value, earning_point }}
+                        </small>
+                      {% endif %}
+                      {% for promo in customer.membership.membership_tier.promotions %}
+                        <small class="block mb-2" style="display: block;">
+                          {{promo.title}}
+                        </small>
+                      {% endfor %}
+                    </div>
+                    <br>
+                    <div><a href="/memberships/tiers" class="button button--full-width">{{ 'customer.account.view_all_tiers' | t }}</a></div>
+                  </div>
+                </div>
+              </details>
+            </details-modal>
+          {% endif %}
+          {% if customer.membership.next_tier != null %}
+          <div class="mt-3 mb-3" style="{% if customer.membership.membership_tier.card_type == 'simple' %}max-width: 400px; margin: auto;{% endif %}">
+            <div class="membership-upgrade-progress">
+              <div class="membership-progress" id="memberProgress"></div>
+            </div>
+            <div class="small-text color-light-text mt-1" style="line-height: 1.2;">
+              {% assign upgrade_remaining = customer.membership.remaining_spending_to_upgrade | money: shop.money_format %}
+              {{ 'customer.account.upgrade_membership' | t: upgrade_remaining, customer.membership.next_tier.title }}
+            </div>
+          </div>
+          {% endif %}
+          {% if customer.membership.membership_tier.card_type != 'simple' %}
+            <div class="small-text color-light-text">
+              {% if customer.membership.expired_at != null %}
+                  {{ 'customer.account.membership_expiry' | t }}: {{ customer.membership.expired_at | date: "%b %d, %Y" }}
+              {% else %}
+                  {{ 'customer.account.membership_expiry' | t }}: {{ 'customer.account.never_expire' | t }}
+              {% endif %}
+            </div>
+            {% if customer.membership.membership_tier.default_renewal_condition %}
+            <div class="small-text color-light-text">
+              {% assign renewal_condition = customer.membership.membership_tier.default_renewal_condition %}
+              {{ 'customer.account.auto_renewal_spend' | t }}: {{ renewal_condition.spending_threshold | money: shop.money_format }}
+            </div>
+            {% endif %}
+          {% endif %}
+        </div>
+      {% else %}
+      	<div class="card-box mb-30">
+          <div class="d-flex flex-align-center flex-space-between">
+            <div class="d-flex flex-align-center">
+              <img src="{{ customer.avatar_url }}" class="avatar-img">
+              <div class="ml-2">
+                <div class="h3">{{ customer.name }}</div>
+                {% if customer.default_address.phone %}
+                  <div style="line-height: 1.3;">{{ customer.default_address.phone }}</div>
+                {% endif %}
+              </div>
+            </div>
+            <a id="barcodeBtn" onclick="document.querySelector('qr-modal').open()">{% include 'svg-definitions' with 'icon-qr' %}</a>
+          </div>
+      	</div>
+      {% endif %}
+      
+      
+      {% if shop.is_credit_enabled or shop.is_point_enabled %}
+      <div class="card-box mb-30 credit-point-wrapper" style="padding-left: 0; padding-right: 0;">
+        {% if shop.is_credit_enabled and shop.is_point_enabled %}
+        <div class="grid grid--2-col" style="margin: 0;">
+          <div class="grid__item text-center" style="padding: 0 2rem;">
+            <div class="h3">{{ customer.total_credit | money: shop.money_format }}</div>
+            <a href="/account/credits/histories" class="small-text color-light-text" style="line-height: 1.3;text-decoration: none;">{{ 'customer.orders.store_credit' | t }} <span>{% include 'svg-definitions' with 'icon-chevron-right', class:'svg-icon' %}</span></a>
+          </div>
+          <div class="grid__item text-center" style="padding: 0 2rem; border-left: 1px solid rgba(var(--color-foreground), 0.08);">
+            <div class="point-info">
+              <div class="h3">{{ customer.total_point | money: point_settings.point_format }}</div>
+              {% if customer.total_locked_points > 0 %}
+              	<span class="tooltip">
+                  <svg
+                    class="svg-icon tooltip-icon"
+                    width="14px"
+                    id="Layer_1"
+                    data-name="Layer 1"
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"><path d="M12,9.58a1,1,0,0,0-1,1v8a1,1,0,0,0,2,0v-8A1,1,0,0,0,12,9.58Z" /><circle
+                      cx="12"
+                      cy="6.8"
+                      r="1.48" /><path d="M12,.85A11.15,11.15,0,1,0,23.15,12,11.16,11.16,0,0,0,12,.85Zm0,21A9.85,9.85,0,1,1,21.85,12,9.86,9.86,0,0,1,12,21.85Z" /></svg>
+                  <div class="tooltip-content">
+                    {% assign locked_point = customer.total_locked_points | money: point_settings.point_format %}
+                    {{ 'customer.account.locked_point_tooltip' | t: locked_point }}
+                  </div>
+              	</span>
+              {% endif %}
+            </div>
+            <a href="/account/points/histories" class="small-text color-light-text" style="line-height: 1.3;text-decoration: none;">{{ 'customer.orders.point' | t }} <span>{% include 'svg-definitions' with 'icon-chevron-right', class:'svg-icon' %}</span></a>
+          </div>
+        </div>
+        {% else %}
+        <div style="padding: 0 2rem;">
+          {% if shop.is_credit_enabled %}
+            <a href="/account/credits/histories" class="h4" style="line-height: 1.3;text-decoration: none;">{{ 'customer.orders.store_credit' | t }} <span>{% include 'svg-definitions' with 'icon-chevron-right', class:'svg-icon' %}</span></a>
+          	<div class="h3 ml-1" style="line-height: 1.3;">{{ customer.total_credit | money: shop.money_format }}</div>
+          {% else %}
+            <a href="/account/points/histories" class="h4" style="line-height: 1.3;text-decoration: none;">{{ 'customer.orders.point' | t }} <span>{% include 'svg-definitions' with 'icon-chevron-right', class:'svg-icon' %}</span></a>
+          	<div class="point-info ml-1">
+              <div class="h3" style="line-height: 1.3;">{{ customer.total_point | money: point_settings.point_format }}</div>
+              {% if customer.total_locked_points > 0 %}
+              	<span class="tooltip">
+                  <svg
+                    class="svg-icon tooltip-icon"
+                    width="14px"
+                    id="Layer_1"
+                    data-name="Layer 1"
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"><path d="M12,9.58a1,1,0,0,0-1,1v8a1,1,0,0,0,2,0v-8A1,1,0,0,0,12,9.58Z" /><circle
+                      cx="12"
+                      cy="6.8"
+                      r="1.48" /><path d="M12,.85A11.15,11.15,0,1,0,23.15,12,11.16,11.16,0,0,0,12,.85Zm0,21A9.85,9.85,0,1,1,21.85,12,9.86,9.86,0,0,1,12,21.85Z" /></svg>
+                  <div class="tooltip-content">
+                    {% assign locked_point = customer.total_locked_points | money: point_settings.point_format %}
+                    {{ 'customer.account.locked_point_tooltip' | t: locked_point }}
+                  </div>
+              	</span>
+              {% endif %}
+          	</div>
+          {% endif %}
+        </div>
+        {% endif %}
+      </div>
+        {% if shop.is_point_enabled and customer.expiring_points.size > 0 %}
+          {% assign expired_date = customer.expiring_points[0].expired_at | date: "%b %d, %Y" %}
+          <div class="card-box flex flex-align-center flex-center" style="gap: 6px;">
+            <span>{% include 'svg-definitions' with 'icon-info', class:'svg-icon' %}</span>
+            <div class="small-text color-light-text" style="line-height: 1.3;">
+              {{ customer.expiring_points[0].amount | money: point_settings.point_format }}
+              {{ 'customer.account.expiry_at' | t: expired_date }}
+            </div>
+          </div>
+        {% endif %}
+      {% endif %}
+      
+      {% if customer.customer_referral %}
+      <!-- Referral program card -->
+      <div class="card-box mb-30">
+        <details-modal>
+          <details>
+            <summary aria-haspopup="dialog" toggle-modal-referral="" role="button" aria-expanded="false" onclick="loadReferralRewards()">
+              <div class="h3 mb-2">
+                <svg id="Layer_2" xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 24 24" width="24" height="24" style="vertical-align: middle;">
+                  <g id="FSGB47">
+                    <path d="M21.374,5.126c-.64-.65-1.64-1.15-2.5-1.24-1.7-.18-2.78.47-3.4,1.08-.62-.61-1.69-1.27-3.39-1.08-.86.09-1.87.59-2.51,1.24-.85.89-1.27,2.05-1.19,3.33-.62-.57-1.67-1.13-3.25-.95-.86.09-1.86.59-2.5,1.25-1.07,1.1-1.45,2.62-1.08,4.28.66,3,4.22,5.55,5.75,6.51l.15.09q.85.51,1.07.51t1.08-.51l.18-.1c.99-.63,2.85-1.93,4.21-3.61.03-.04.06-.07.08-.11.06.04.12.08.17.11l.15.09q.86.5,1.08.5.23,0,1.1-.51l.15-.09c.99-.63,2.86-1.94,4.21-3.61.79-.97,1.3-1.95,1.51-2.9h.01c.36-1.65-.03-3.17-1.08-4.28ZM14.034,12.706c-.07.32-.19.65-.36.99-.21.41-.48.83-.83,1.26,0,.01-.01.02-.02.03-1.22,1.5-2.94,2.7-3.82,3.27l-.16.09c-.09.06-.21.12-.32.19-.1-.07-.22-.13-.31-.19l-.13-.08c-1.05-.66-4.51-3.03-5.07-5.56-.18-.81-.2-1.98.69-2.91.39-.4,1.07-.74,1.59-.79.14-.02.27-.03.4-.03,1.54,0,2.1,1.05,2.16,1.18.15.31.5.48.84.4.06-.02.12-.04.17-.07.12-.06.22-.15.29-.26.02-.02.04-.06.06-.09.04-.07.27-.51.82-.82.39-.23.96-.39,1.74-.31.51.05,1.18.39,1.57.79.9.93.87,2.1.69,2.91ZM20.984,9.086c-.16.72-.57,1.49-1.21,2.28-1.22,1.5-2.94,2.7-3.83,3.27l-.14.08c-.09.05-.21.13-.33.19-.11-.06-.22-.13-.31-.18l-.14-.08c-.03-.02-.07-.05-.11-.08.28-.51.48-1.03.59-1.53v-.01c.36-1.65-.02-3.17-1.08-4.27-.63-.66-1.64-1.16-2.5-1.24-.81-.1-1.48.01-2.02.2.07-.53.29-1.06.75-1.54.39-.4,1.07-.75,1.58-.8.15-.01.28-.02.41-.02,1.54,0,2.09,1.05,2.16,1.17.15.32.5.49.84.4.2-.04.36-.16.46-.32.02-.03.04-.06.05-.09.07-.14.72-1.34,2.57-1.14.5.05,1.18.39,1.56.79.9.94.88,2.1.7,2.92Z"/>
+                  </g>
+                </svg>
+                {{ 'customer.account.referral.title' | t }} <span>{% include 'svg-definitions' with 'icon-chevron-right', class:'svg-icon' %}</span>
+              </div>
+            </summary>
+
+            <div class="confirmation-modal modal__content" role="dialog" aria-modal="true">
+              <div class="modal-overlay"></div>
+              <div class="confirmation-modal__content" member-detail-html="" tabindex="-1" style="padding: 24px; text-align: center;">
+                <div>
+                  <div class="d-flex flex-space-between">
+                    <h2>{{ 'customer.account.referral.modal.title' | t }}</h2>
+                    <button type="button"
+                      style="box-shadow: none;min-width: 1rem;min-height: 1rem;color: #000;"
+                      class="mt-0 modal__close-button link link--text focus-inset" aria-label="accessibility.close">
+                      <svg class="icon icon-close" aria-hidden="true" focusable="false" role="presentation">
+                        <use href="#icon-close">
+                        </use>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+                
+                <style>
+                  /* Hide scrollbar for the modal content */
+                  .confirmation-modal__content div[style*="overflow-y: scroll"] {
+                    /* Hide scrollbar for Chrome, Safari and Opera */
+                    scrollbar-width: none; /* Firefox */
+                    -ms-overflow-style: none; /* Internet Explorer 10+ */
+                  }
+                  
+                  .confirmation-modal__content div[style*="overflow-y: scroll"]::-webkit-scrollbar {
+                    display: none; /* WebKit */
+                  }
+                </style>
+
+                <div style="max-height: 55vh; overflow-y: scroll;">
+                  <!-- How it works -->
+                  <div style="text-align: left;">
+                    <b style="display: block; margin-bottom: 10px;">{{ 'customer.account.referral.modal.how_it_works' | t }}</b>
+
+                    <!-- Step 1 -->
+                    <div style="display: flex; align-items: center; margin-bottom: 12px; gap: 12px;">
+                      <div style="width: 40px; height: 40px; background-color: #f5f5f5; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px;">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+                          <path d="M2.5,11.18a.75.75,0,0,1,0-1.5H4a.75.75,0,1,1,0,1.5ZM3.76,5.12a.74.74,0,0,0-1.06,0,.75.75,0,0,0,0,1.06l1,1a.73.73,0,0,0,.53.22.74.74,0,0,0,.53-.22.75.75,0,0,0,0-1.06Zm0,8.52-1,1a.75.75,0,0,0,0,1.06.79.79,0,0,0,.53.22.77.77,0,0,0,.53-.22l1-1a.75.75,0,0,0-1.06-1.06ZM23,10.4v.13c-.06,2.46-1.66,3.58-3.14,3.58h-.7a2,2,0,0,1-1.48.7h-.4c.27,3,0,4.49-.25,5.09a1.07,1.07,0,0,1-.87.69l-.33,0a4.27,4.27,0,0,1-2.45-.94,1.16,1.16,0,0,1-.33-1.35,7,7,0,0,0,.21-2.86,8.68,8.68,0,0,0-2.8,1.37,2,2,0,0,1-1.56.77C6.34,17.61,6,13.11,6,10.43s.39-7.18,3-7.18A2,2,0,0,1,10.45,4c.37.3,2.61,2,7.23,2a2,2,0,0,1,1.45.67h.73c1.47,0,3.06,1.11,3.14,3.54Zm-15.55,0c0,3.13.65,5.68,1.45,5.68s1.45-2.55,1.45-5.68S9.7,4.75,8.9,4.75,7.45,7.29,7.45,10.43Zm4.4,0a18.79,18.79,0,0,1-.4,4.11,16,16,0,0,1,6.2-1.23.53.53,0,0,0,.5-.43,11.06,11.06,0,0,0,.28-2.45A11,11,0,0,0,18.15,8a.52.52,0,0,0-.5-.43,15.82,15.82,0,0,1-6.2-1.24A18.88,18.88,0,0,1,11.85,10.43Zm3.94,4.51a10.47,10.47,0,0,0-1,.17,9.34,9.34,0,0,1-.21,3.54,2.61,2.61,0,0,0,1.18.46A13.38,13.38,0,0,0,15.79,14.94Zm5.71-4.53h0c0-2.11-1.43-2.18-1.64-2.18h-.13a12.37,12.37,0,0,1,.2,2.21,13.29,13.29,0,0,1-.19,2.18h.12c.21,0,1.62-.08,1.64-2.18h0Z"/>
+                        </svg>
+                      </div>
+                      <div>
+                        <div>{{ 'customer.account.referral.modal.step1_title' | t }}</div>
+                        <span class="small-text color-light-text" id="step1-description" style="color: #666;">{{ 'customer.account.referral.modal.step1_description' | t }}</span>
+                      </div>
+                    </div>
+
+                    <!-- Step 2 -->
+                    <div style="display: flex; align-items: center; margin-bottom: 12px; gap: 12px;">
+                      <div style="width: 40px; height: 40px; background-color: #f5f5f5; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px;">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+                          <path d="M21.17,7.19a2,2,0,0,0-1.56-.74H6.44L6.18,5A2,2,0,0,0,4.27,3.4H2.87a.75.75,0,1,0,0,1.5h1.4a.45.45,0,0,1,.44.34l1.61,9.23a.5.5,0,0,0,0,.13l.18,1.05a2,2,0,0,0,2,1.62h9.94a2,2,0,0,0,2-1.64l1.14-6.78A2,2,0,0,0,21.17,7.19ZM19,15.36a.5.5,0,0,1-.5.41H8.52A.5.5,0,0,1,8,15.38L6.73,8H19.61a.52.52,0,0,1,.4.19.55.55,0,0,1,.1.44Zm-8-5.17v3.35a.75.75,0,0,1-1.5,0V10.19a.75.75,0,1,1,1.5,0Zm3.31,0v3.35a.75.75,0,0,1-1.5,0V10.19a.75.75,0,0,1,1.5,0Zm3.32,0v3.35a.75.75,0,0,1-1.5,0V10.19a.75.75,0,0,1,1.5,0Zm1.59,8.93a1.06,1.06,0,1,1-1.5,0A1.05,1.05,0,0,1,19.15,19.12Zm-9.84,0a1.07,1.07,0,1,1-1.51,0A1.06,1.06,0,0,1,9.31,19.12Z"/>
+                        </svg>
+                      </div>
+                      <div>
+                        <div>{{ 'customer.account.referral.modal.step2_title' | t }}</div>
+                        <span class="small-text color-light-text" id="step2-description" style="color: #666;">{{ 'customer.account.referral.modal.step2_description' | t }}</span>
+                      </div>
+                    </div>
+
+                    <!-- Step 3 -->
+                    <div style="display: flex; align-items: center; margin-bottom: 12px; gap: 12px;">
+                      <div style="width: 40px; height: 40px; background-color: #f5f5f5; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px;">
+                        <svg id="Layer_2" data-name="Layer 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+                          <path d="M19.56,6.61h-2a2.65,2.65,0,0,0,.23-1.06A2.56,2.56,0,0,0,15.22,3,3.81,3.81,0,0,0,12,5.26,3.78,3.78,0,0,0,8.74,3,2.56,2.56,0,0,0,6.18,5.55a2.65,2.65,0,0,0,.23,1.06h-2A1.69,1.69,0,0,0,2.75,8.3v1.89a1.7,1.7,0,0,0,1.69,1.7h.2v6.49A2.64,2.64,0,0,0,7.28,21h9.44a2.64,2.64,0,0,0,2.64-2.63V11.89h.2a1.7,1.7,0,0,0,1.69-1.7V8.3A1.69,1.69,0,0,0,19.56,6.61ZM15.24,4.49h0a1.06,1.06,0,1,1,0,2.12H13C13.54,5.31,14.37,4.49,15.24,4.49ZM7.68,5.55A1.06,1.06,0,0,1,8.75,4.49h0c.85,0,1.68.82,2.19,2.12H8.74A1.06,1.06,0,0,1,7.68,5.55ZM4.25,10.19V8.3a.2.2,0,0,1,.19-.19h6.81v2.28H4.44A.2.2,0,0,1,4.25,10.19Zm1.89,8.19V11.89h5.11v7.62h-4A1.14,1.14,0,0,1,6.14,18.38Zm11.72,0a1.14,1.14,0,0,1-1.14,1.13h-4V11.89h5.11Zm1.89-8.19a.2.2,0,0,1-.19.2H12.75V8.11h6.81a.2.2,0,0,1,.19.19Z"/>
+                        </svg>
+                      </div>
+                      <div>
+                        <div>{{ 'customer.account.referral.modal.step3_title' | t }}</div>
+                        <span class="small-text color-light-text" id="step3-description" style="color: #666;">{{ 'customer.account.referral.modal.step3_description' | t }}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Reward History -->
+                  <div id="reward-history-section" style="text-align: left; margin: 20px 0; padding: 0 5px; display: none;">
+                    <b style="display: block; margin-bottom: 16px;">{{ 'customer.account.referral.modal.reward_history' | t }}</b>
+                    <div class="card-box mb-30 credit-point-wrapper" style="padding-left: 0; padding-right: 0;">
+                      <div class="grid grid--2-col" style="margin: 0;">
+                        <div class="grid__item text-center" style="padding: 0 1rem;">
+                          <div class="h3" id="friends-referred-count"></div>
+                          <div class="small-text color-light-text" style="color: #666;">{{ 'customer.account.referral.modal.friends_referred' | t }}</div>
+                        </div>
+                        <div class="grid__item text-center" style="padding: 0 1rem; border-left: 1px solid rgba(var(--color-foreground), 0.08);">
+                          <div class="h3" id="credit-earned-amount"></div>
+                          <div class="small-text color-light-text" style="color: #666;">{{ 'customer.account.referral.modal.credit_earned' | t }}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- Share Button -->
+                <button type="button" class="button button--full-width mb-0" id="referral-share-btn" onclick="shareReferralLink()">
+                  {{ 'customer.account.referral.share_button' | t }}
+                </button>
+              </div>
+            </div>
+          </details>
+        </details-modal>
+        
+        <span class="small-text color-light-text">
+          {{ 'customer.account.referral.description' | t }}
+        </span>
+        
+        <div class="field mt-2" style="margin-bottom: 16px;">
+          <div style="display: flex; gap: 8px;">
+            <input type="text"
+                  class="field__input"
+                  id="ReferralLinkInput"
+                  value="{{ customer.customer_referral.referral_url }}"
+                  readonly
+                  style="padding-right: 40px;"
+            >
+            <label for="ReferralLinkInput">{{ 'customer.account.referral.referral_link' | t }}</label>
+            <div onclick="shareReferralLink('copy')" style="position: absolute; right: 14px; bottom: 0; cursor: pointer;" >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20">
+                <path d="M16.58,7.35H4.44A1.69,1.69,0,0,0,2.75,9v8.9a1.69,1.69,0,0,0,1.69,1.68H16.58a1.69,1.69,0,0,0,1.69-1.68V9A1.69,1.69,0,0,0,16.58,7.35Zm.19,10.59a.18.18,0,0,1-.19.18H4.44a.18.18,0,0,1-.19-.18V9a.19.19,0,0,1,.19-.19H16.58a.19.19,0,0,1,.19.19ZM21.25,6.22V15.9a.75.75,0,1,1-1.5,0V6.22a.35.35,0,0,0-.35-.34H6.48a.75.75,0,0,1-.75-.76.74.74,0,0,1,.75-.74H19.4A1.84,1.84,0,0,1,21.25,6.22Z"/>
+              </svg>
+            </div>
+          </div>
+        </div>
+        <div id="copy-message" class="hidden" style="color: #28a745; font-size: 12px; margin-top: 8px; display: flex; align-items: center; gap: 4px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="display: none;" id="success-icon">
+            <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm4.3 7.61l-4.57 6a1 1 0 0 1-.79.39 1 1 0 0 1-.79-.39l-2.44-3.11a1 1 0 0 1 .16-1.4 1 1 0 0 1 1.4.16L11.92 13l3.92-5.15a1 1 0 0 1 1.46 1.21z"/>
+          </svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="display: none;" id="error-icon">
+            <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm3.5 13.5a1 1 0 0 1-1.4 0L12 13.41 9.9 15.5a1 1 0 0 1-1.4-1.4L10.59 12 8.5 9.9a1 1 0 0 1 1.4-1.4L12 10.59l2.1-2.09a1 1 0 0 1 1.4 1.4L13.41 12l2.09 2.1a1 1 0 0 1 0 1.4z"/>
+          </svg>
+          <span id="copy-message-text"></span>
+        </div>
+        
+        <button type="button" class="button button--full-width" onclick="shareReferralLink()" style="margin-bottom: 0;">
+          {{ 'customer.account.referral.share_button' | t }}
+        </button>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{{ 'qr_modal.js' | global_asset_url | script_tag }}
+
+<script>
+  var progress = document.getElementById("memberProgress");
+
+  if (progress) {
+    setTimeout(function() {
+        progress.style.width = {{ customer.membership.upgrade_progress }} + "%";
+    }, 300);
+  }
+  
+  function shareReferralLink(action = 'share') {
+    const referralInput = document.getElementById('ReferralLinkInput');
+    const copyMessage = document.getElementById('copy-message');
+    const copyMessageText = document.getElementById('copy-message-text');
+    const successIcon = document.getElementById('success-icon');
+    const errorIcon = document.getElementById('error-icon');
+    const referralUrl = referralInput ? referralInput.value : "{{ customer.customer_referral.referral_url }}";
+    const shareTitle = "{{ shop.name }}";
+
+    if (action === 'copy') {
+      if (referralInput && copyMessage && copyMessageText) {
+        navigator.clipboard.writeText(referralUrl).then(function() {
+          copyMessageText.textContent = "{{ 'customer.account.referral.copy_success' | t }}";
+          copyMessage.classList.remove('hidden');
+          copyMessage.style.color = '#28a745'; 
+          
+          if (successIcon) successIcon.style.display = 'block';
+          if (errorIcon) errorIcon.style.display = 'none';
+          
+          setTimeout(function() {
+            copyMessage.classList.add('hidden');
+            if (successIcon) successIcon.style.display = 'none';
+          }, 3000);
+        }).catch(function(error) {
+          copyMessageText.textContent = "{{ 'customer.account.referral.copy_error' | t }}";
+          copyMessage.classList.remove('hidden');
+          copyMessage.style.color = '#dc3545'; 
+          
+          if (errorIcon) errorIcon.style.display = 'block';
+          if (successIcon) successIcon.style.display = 'none';
+          
+          setTimeout(function() {
+            copyMessage.classList.add('hidden');
+            if (errorIcon) errorIcon.style.display = 'none';
+          }, 3000);
+        });
+      }
+    } else if (action === 'share' && navigator.share) {
+      const shareMessage = "{{ 'customer.account.referral.share_message' | t: '__SHOP_NAME__' }}";
+      navigator.share({
+        title: shareTitle,
+        text: shareMessage.replace('__SHOP_NAME__', shareTitle),
+        url: referralUrl
+      }).catch(function(error) {
+        console.log('Error sharing:', error);
+      });
+    } else {
+      shareReferralLink('copy');
+    }
+  }
+  
+  function loadReferralRewards() {
+    fetch('/customer/referral_program/campaigns/{{ customer.customer_referral.referral_code }}' , {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest'
+      }
+    })
+    .then(response => response.json())
+    .then(data => {
+      updateRewardHistory(data);
+    })
+    .catch(error => {
+      console.error('Error loading referral rewards:', error);
+    });
+  }
+
+  function updateRewardHistory(data) {
+    const rewardHistorySection = document.getElementById('reward-history-section');
+    
+    if (data && data.data.campaign) {
+      const campaign = data.data.campaign;
+      const totalReferees = campaign.total_referees || 0;
+      const creditAmount = campaign.rewards && campaign.rewards.credit ? campaign.rewards.credit.amount || 0 : 0;
+      
+      // Update step descriptions with actual values
+      updateStepDescriptions(campaign);
+      
+      // Hide reward history if no referees and no rewards
+      if (totalReferees === 0 && creditAmount === 0) {
+        if (rewardHistorySection) {
+          rewardHistorySection.style.display = 'none';
+        }
+        return;
+      }
+      
+      // Show reward history section if it was hidden
+      if (rewardHistorySection) {
+        rewardHistorySection.style.display = 'block';
+      }
+      
+      // Update friends referred count
+      const friendsCountElement = document.getElementById('friends-referred-count');
+      if (friendsCountElement) {
+        friendsCountElement.textContent = totalReferees;
+      }
+      
+      // Update credit earned amount by replacing the entire innerHTML
+      const creditAmountElement = document.getElementById('credit-earned-amount');
+      if (creditAmountElement) {
+        // Create a temporary element to get properly formatted money string
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = "{{ 0 | money: shop.money_format }}";
+        const zeroFormatted = tempDiv.textContent;
+        const formattedAmount = zeroFormatted.replace(0, creditAmount);
+        
+        creditAmountElement.textContent = formattedAmount;
+      }
+    } else {
+      // Hide section if no data
+      if (rewardHistorySection) {
+        rewardHistorySection.style.display = 'none';
+      }
+    }
+  }
+
+  function updateStepDescriptions(campaign) {
+    const step1Element = document.getElementById('step1-description');
+    const step2Element = document.getElementById('step2-description');
+    const step3Element = document.getElementById('step3-description');
+    
+    if (campaign && campaign.referral_rules) {
+      // Find referee credit amount (what friends get)
+      const refereeRule = campaign.referral_rules.find(rule => 
+        rule.target_type === 'referee' && 
+        rule.event_name === 'customer/create' && 
+        rule.entitlement && 
+        rule.entitlement.type === 'credit'
+      );
+      
+      // Find referrer credit amount (what customer gets)
+      const referrerRule = campaign.referral_rules.find(rule => 
+        rule.target_type === 'referrer' && 
+        rule.event_name === 'order/create' && 
+        rule.entitlement && 
+        rule.entitlement.type === 'credit'
+      );
+      
+      // Find minimum spend requirement
+      const minSpendRule = campaign.referral_rules.find(rule => 
+        rule.target_type === 'referrer' && 
+        rule.event_name === 'order/create' && 
+        rule.prerequisite && 
+        rule.prerequisite.value
+      );
+      
+      const refereeCreditAmount = refereeRule ? refereeRule.entitlement.amount : 0;
+      const referrerCreditAmount = referrerRule ? referrerRule.entitlement.amount : 0;
+      const minSpend = minSpendRule ? minSpendRule.prerequisite.value : 0;
+      
+      // Format amounts with currency
+      const formatMoney = (amount) => {
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = "{{ 0 | money: shop.money_format }}";
+        const zeroFormatted = tempDiv.textContent;
+        return zeroFormatted.replace('0', amount);
+      };
+
+      // Update step 1 description
+      if (step1Element) {
+        const step1Template = "{{ 'customer.account.referral.modal.step1_description' | t: '__REFEREE_CREDIT__' }}";
+        const step1Text = step1Template.replace('__REFEREE_CREDIT__', formatMoney(refereeCreditAmount));
+        step1Element.textContent = step1Text;
+      } 
+      
+      // Update step 2 description
+      if (step2Element) {
+        if (minSpend > 0) {
+          const step2Template = "{{ 'customer.account.referral.modal.step2_description' | t: '__MIN_SPEND__' }}";
+          const step2Text = step2Template.replace('__MIN_SPEND__', formatMoney(minSpend));
+          step2Element.textContent = step2Text;
+        } else {
+          step2Element.textContent = "{{ 'customer.account.referral.modal.step2_description2' | t }}";
+        }
+      }
+      
+      // Update step 3 description
+      if (step3Element) {
+        const step3Template = "{{ 'customer.account.referral.modal.step3_description' | t: '__REFERRER_CREDIT__' }}";
+        const step3Text = step3Template.replace('__REFERRER_CREDIT__', formatMoney(referrerCreditAmount));
+        step3Element.textContent = step3Text;
+      }
+    }
+  }
+</script>

@@ -1,0 +1,621 @@
+<link rel="preload" href="{{ 'customer.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<style>input::-webkit-calendar-picker-indicator{display: none;}</style>
+
+<style>
+  @media screen and (max-width: 750px){
+    .card-box .grid .grid__item {
+        margin-top: 0.5rem;
+    }
+  }
+  .mt-4{
+    margin-top: 3rem !important;
+  }
+</style>
+
+<div class="customer account">
+  <div>
+    {% app_snippet 'account/content_top' %}
+
+    <h1 class="d-flex flex-space-between flex-wrap">
+      {{ 'customer.addresses.title' | t }}
+      <a href="javascript:void(0)" class="button mt-2" onclick="toggleNewForm(); return false;">{{ 'customer.addresses.add_new' | t }}</a>
+    </h1>
+    <p><a href="/account">← {{ 'customer.account.return' | t }}</a></p>
+    
+  </div>
+
+  <div>
+    <div style="padding-left: 0;">
+      <div class="section-width-control" id="AddAddress" {% if form.errors == blank %}style="display: none;"{% endif %}>
+        <h2 class="text-center">{{ 'customer.addresses.add_new' | t }}</h2>
+        <div class="card-box" style="max-width: 600px;margin: 0 auto;">
+          <form action='/account/addresses' method='post' id='address_form_new' style="margin-top: 0;">
+            <input type="hidden" name="_token" value="{% csrf %}">
+            <div>
+                {{ form.errors | default_errors }}
+  
+                <div class="grid grid--2-col mb-0 address-contact-info">
+                  <div class="grid__item address-input-firstName">
+                    <div class="field">
+                      <input type="text" id="AddressFirstNameNew" class="address_form" name="address[first_name]" value="{{form.first_name}}" autocapitalize="words" placeholder="{{ 'customer.addresses.first_name' | t }}">
+                      <label for="AddressFirstNameNew">{{ 'customer.addresses.first_name' | t }}</label>
+                    </div>
+                  </div>
+                  <div class="grid__item address-input-lastName">
+                    <div class="field">
+                      <input type="text" id="AddressLastNameNew" class="address_form" name="address[last_name]" value="{{form.last_name}}" autocapitalize="words" placeholder="{{ 'customer.addresses.last_name' | t }}">
+                      <label for="AddressLastNameNew">{{ 'customer.addresses.last_name' | t }}</label>
+                    </div>
+                  </div>
+                  <div class="grid__item">
+                    <div class="field">
+                      <input type="tel" id="AddressPhoneNew" class="address_form" name="address[phone]" value="{{form.phone}}" placeholder="{{ 'customer.addresses.phone' | t }}">
+                      <label for="AddressPhoneNew">{{ 'customer.addresses.phone' | t }}</label>
+                    </div>
+                  </div>
+                  <div class="grid__item">
+                    <div class="field">
+                      <input type="text" id="AddressCompanyNew" class="address_form" name="address[company]" value="{{form.company}}" autocapitalize="words" placeholder="{{ 'customer.addresses.company' | t }}">
+                      <label for="AddressCompanyNew">{{ 'customer.addresses.company' | t }}</label>
+                    </div>
+                  </div>
+                </div>
+  
+                <div class="grid grid--1-col address-line-info">
+    
+                  <div class="grid__item address-line-wrapper">
+                    <div class="field">
+                      <input type="text" id="AddressAddress1New" class="address_form" name="address[address1]" value="{{form.address1}}" autocapitalize="words" placeholder="{{ 'customer.addresses.address1' | t }}">
+                      <label for="AddressAddress1New">{{ 'customer.addresses.address1' | t }}</label>
+                    </div>
+                    <div class="field mt-4">
+                      <input type="text" id="AddressAddress2New" class="address_form" name="address[address2]" value="{{form.address2}}" autocapitalize="words" placeholder="{{ 'customer.addresses.address2' | t }}">
+                      <label for="AddressAddress2New">{{ 'customer.addresses.address2' | t }}</label>
+                    </div>
+                  </div>
+    
+                  <div class="grid__item address-country-wrapper">
+                    <div class="grid grid--2-col mb-0">
+                      <div class="grid__item">
+                        <div class="field on_focus">
+                          <div class="select">
+                            <select id="AddressCountryNew" name="address[country]" data-form-id="address_form_new" data-default="{{form.country}}">{{ country_option_tags }}</select>
+                          </div>
+                          <label for="AddressCountryNew">{{ 'customer.addresses.country' | t }}</label>
+                        </div>
+                      </div>
+    
+                      <div class="grid__item" id="AddressProvinceContainerNew" style="display:none">
+                        <div class="field on_focus">
+                          <div class="select">
+                            <select id="AddressProvinceNew" class="address_form" name="address[province]" data-default="{{form.province}}"></select>
+                          </div>
+                          <label for="AddressProvinceNew" class="label-int">{{ 'customer.addresses.province' | t }}</label>
+                          <label for="AddressProvinceNew" class="label-tw" style="display: none;">{{ 'customer.addresses.province_tw' | t }}</label>
+                        </div>
+                      </div>
+    
+                      <div class="grid__item" id="AddressProvinceContainerNew2" style="display:none">
+                        <div class="field">
+                          <input type="text" id="AddressProvinceNew2" class="address_form" name="address[province_name]" value="{{form.province}}" placeholder="{{ 'customer.addresses.province' | t }}" />
+                          <label for="AddressProvinceNew2" class="label-int">{{ 'customer.addresses.province' | t }}</label>
+                          <label for="AddressProvinceNew2" class="label-tw" style="display: none;">{{ 'customer.addresses.province_tw' | t }}</label>
+                        </div>
+                      </div>
+    
+                      <div class="grid__item container-AddressCity">
+                        <div class="field">
+                          <input type="text" id="AddressCityNew" class="address_form" name="address[city]" value="{{form.city}}" autocapitalize="words" placeholder="{{ 'customer.addresses.city' | t }}">
+                          <label for="AddressCityNew" class="label-int">{{ 'customer.addresses.city' | t }}</label>
+                        </div>
+                      </div>
+    
+                      <div class="grid__item container-AddressDistrict" style="display: none;">
+                        <div class="field">
+                          <input type="text" id="AddressDistrictNew" class="address_form" name="address[district]" value="{{form.district}}" autocapitalize="words" placeholder="{{ 'customer.addresses.city_tw' | t }}">
+                          <label for="AddressDistrictNew" class="label-tw">{{ 'customer.addresses.city_tw' | t }}</label>
+                        </div>
+                      </div>
+    
+                      <div class="grid__item" id="AddressSubDistrictContainerNew" style="display:none">
+                        <div class="field">
+                          <input type="text" id="AddressSubDistrictNew" class="address_form" name="address[sub_district]" value="{{form.sub_district}}" autocapitalize="words" placeholder="{{ 'customer.addresses.sub_district' | t }}">
+                          <label for="AddressSubDistrictNew" class="label-int">{{ 'customer.addresses.sub_district' | t }}</label>
+                        </div>
+                      </div>
+    
+                      <div class="grid__item" id="AddressVillageContainerNew" style="display:none">
+                        <div class="field">
+                          <input type="text" id="AddressVillageNew" class="address_form" name="address[village]" value="{{form.village}}" autocapitalize="words" placeholder="{{ 'customer.addresses.village' | t }}">
+                          <label for="AddressVillageNew" class="label-int">{{ 'customer.addresses.village' | t }}</label>
+                        </div>
+                      </div>
+    
+                      <div class="grid__item">
+                        <div class="field">
+                          <input type="text" id="AddressZipNew" class="address_form" name="address[zip]" value="{{form.zip}}" autocapitalize="characters" placeholder="{{ 'customer.addresses.zip' | t }}">
+                          <label for="AddressZipNew">{{ 'customer.addresses.zip' | t }}</label>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+  
+                  <div class="grid__item">
+                    <input type='checkbox' id='address_default_address_new' name='address[default]' />
+                    <label for="address_default_address_new" class="inline">{{ 'customer.addresses.set_default' | t }}</label>
+                  </div>
+    
+                </div>
+    
+    
+                <p class="text-right">
+                  <a href="javascript:void(0)" onclick="toggleNewForm(); return false;" class="button button--secondary">{{ 'customer.addresses.cancel' | t }}</a>&nbsp;&nbsp;
+                  <input type="submit" class="button" value="{{ 'customer.addresses.add' | t }}">
+                </p>
+            </div>
+          </form>
+        </div>
+        <br> <br>
+      </div>
+  
+  
+      <div class="grid grid--3-col-desktop grid--1-col">
+        {% for address in customer.addresses %}
+          <div class="grid__item">
+            <div class="card-box">
+              <h3 class="mb-0">
+                {{ address.first_name | capitalize }} {{address.last_name | capitalize }}
+                {% if address.id == customer.default_address.id %}({{ 'customer.addresses.default' | t }}){% endif %}
+              </h3>
+              {% if address.phone %} {{ address.phone }}<br> {% endif %}
+      
+              <div class="color-light-text mt-1 mb-2" style="line-height: 1.4;">
+                {% if address.company %} {{ address.company }}<br> {% endif %}
+                {% if address.street %} {{ address.street }}<br> {% endif %}
+                {% if address.address2 %} {{ address.address2 }}<br> {% endif %}
+                {% if address.zip %}{{ address.zip }} {% endif %}{{ address.city | capitalize }}<br>
+                {% if address.village %} {{ address.village }}<br>{% endif %}
+                {% if address.sub_district %} {{ address.sub_district }}<br>{% endif %}
+                {% if address.district %} {{ address.district }}<br>{% endif %}
+                {% if address.province %} {{ address.province }}<br>{% endif %}
+                {{ address.country }}
+              </div>
+              <p>
+                <b> {{ 'customer.addresses.edit' | t | edit_customer_address_link: address.id }} </b>&nbsp;|&nbsp;
+                {{ 'customer.addresses.delete' | t | delete_customer_address_link: address.id }}
+                {% assign form = address %}
+              </p>
+              <div class="section-width-control" id="EditAddress_{{address.id}}" {% if form.errors == blank %}style="display:none;"{% endif %}>
+                <div class="card small-gutter">
+                  <form action='/account/addresses/{{form.id}}' method='post' id='address_form_{{form.id}}'>
+                    <input type="hidden" name="_token" value="{% csrf %}">
+                    <div>
+      
+                        <h4>{{ 'customer.addresses.edit_address' | t }}</h4>
+                        {{ form.errors | default_errors }}
+                        <div class="grid grid--2-col mb-0 address-contact-info">
+                          <div class="grid__item address-input-firstName">
+                            <div class="field">
+                              <input type="text" id="AddressFirstName_{{form.id}}" class="address_form" name="address[first_name]" value="{{form.first_name}}" placeholder="{{ 'customer.addresses.first_name' | t }}" autocapitalize="words" maxlength="45">
+                              <label for="AddressFirstName_{{form.id}}">{{ 'customer.addresses.first_name' | t }}</label>
+                            </div>
+                          </div>
+      
+                          <div class="grid__item address-input-lastName">
+                            <div class="field">
+                              <input type="text" id="AddressLastName_{{form.id}}" class="address_form" name="address[last_name]" value="{{form.last_name}}" placeholder="{{ 'customer.addresses.last_name' | t }}" autocapitalize="words" maxlength="45">
+                              <label for="AddressLastName_{{form.id}}">{{ 'customer.addresses.last_name' | t }}</label>
+                            </div>
+                          </div>
+  
+                          <div class="grid__item">
+                            <div class="field">
+                              <input type="tel" id="AddressPhone_{{form.id}}" class="address_form" name="address[phone]" value="{{form.phone}}" placeholder="{{ 'customer.addresses.phone' | t }}" maxlength="45">
+                              <label for="AddressPhone_{{form.id}}">{{ 'customer.addresses.phone' | t }}</label>
+                            </div>
+                          </div>
+  
+                          <div class="grid__item">
+                            <div class="field">
+                              <input type="text" id="AddressCompany_{{form.id}}" class="address_form" name="address[company]" value="{{form.company}}" placeholder="{{ 'customer.addresses.company' | t }}" autocapitalize="words" maxlength="255">
+                              <label for="AddressCompany_{{form.id}}">{{ 'customer.addresses.company' | t }}</label>
+                            </div>
+                          </div>
+                        </div>
+  
+                        <div class="grid grid--1-col-desktop grid--1-col mb-0 address-line-info">
+        
+                          <div class="grid__item address-line-wrapper">
+                            <div class="field">
+                              <input type="text" id="AddressAddress1_{{form.id}}" class="address_form" name="address[address1]" value="{{form.address1}}" placeholder="{{ 'customer.addresses.address1' | t }}" autocapitalize="words" maxlength="255">
+                              <label for="AddressAddress1_{{form.id}}">{{ 'customer.addresses.address1' | t }}</label>
+                            </div>
+  
+                            <div class="field mt-4">
+                              <input type="text" id="AddressAddress2_{{form.id}}" class="address_form" name="address[address2]" value="{{form.address2}}" placeholder="{{ 'customer.addresses.address2' | t }}" autocapitalize="words" maxlength="255">
+                              <label for="AddressAddress2_{{form.id}}">{{ 'customer.addresses.address2' | t }}</label>
+                            </div>
+                            
+                          </div>
+                        
+                          <div class="grid__item address-country-wrapper">
+                            <div class="grid grid--2-col mb-0">
+                              <div class="grid__item">
+                                <div class="field on_focus">
+                                  <div class="select">
+                                    <select id="AddressCountry_{{form.id}}" name="address[country]" data-form-id="address_form_{{form.id}}" data-default="{{form.country}}">{{ country_option_tags }}</select>
+                                  </div>
+                                  <label for="AddressCountry_{{form.id}}">{{ 'customer.addresses.country' | t }}</label>
+                                </div>
+                              </div>
+
+                              <div class="grid__item" id="AddressProvinceContainer_{{form.id}}" style="display:none">
+                                <div class="field on_focus">
+                                  <div class="select">
+                                    <select id="AddressProvince_{{form.id}}" class="address_form" name="address[province]" data-default="{{form.province}}"></select>
+                                  </div>
+                                  <label for="AddressProvince_{{form.id}}" class="label-int">{{ 'customer.addresses.province' | t }}</label>
+                                  <label for="AddressProvince_{{form.id}}" class="label-tw" style="display: none;">{{ 'customer.addresses.province_tw' | t }}</label>
+                                </div>
+                              </div>
+
+                              <div class="grid__item" id="AddressProvinceContainer_{{form.id}}2" style="display:none">
+                                <div class="field">
+                                  <input type="text" id="AddressProvince_{{form.id}}2" class="address_form" name="address[province_name]" value="{{form.province}}" placeholder="{{ 'customer.addresses.province' | t }}" />
+                                  <label for="AddressProvince_{{form.id}}2" class="label-int">{{ 'customer.addresses.province' | t }}</label>
+                                  <label for="AddressProvince_{{form.id}}2" class="label-tw" style="display: none;">{{ 'customer.addresses.province_tw' | t }}</label>
+                                </div>
+                              </div>
+
+                              <div class="grid__item container-AddressCity">
+                                <div class="field">
+                                  <input type="text" id="AddressCity_{{form.id}}" class="address_form" name="address[city]" value="{{form.city}}" placeholder="{{ 'customer.addresses.city' | t }}" autocapitalize="words" maxlength="45">
+                                  <label for="AddressCity_{{form.id}}" class="label-int">{{ 'customer.addresses.city' | t }}</label>
+                                  <label for="AddressCity_{{form.id}}" class="label-tw" style="display: none;">{{ 'customer.addresses.city_tw' | t }}</label>
+                                </div>
+                              </div>
+
+                              <div class="grid__item container-AddressDistrict" style="display: none;">
+                                <div class="field">
+                                  <input type="text" id="AddressDistrict_{{form.id}}" class="address_form" name="address[district]" value="{{form.district}}" placeholder="{{ 'customer.addresses.city' | t }}" autocapitalize="words" maxlength="45">
+                                  <label for="AddressDistrict_{{form.id}}" class="label-tw">{{ 'customer.addresses.city_tw' | t }}</label>
+                                </div>
+                              </div>
+
+                              <div class="grid__item" id="AddressSubDistrictContainer_{{form.id}}" style="display:none">
+                                <div class="field">
+                                  <input type="text" id="AddressSubDistrict_{{form.id}}" class="address_form" name="address[sub_district]" value="{{form.sub_district}}" autocapitalize="words" placeholder="{{ 'customer.addresses.sub_district' | t }}">
+                                  <label for="AddressSubDistrict_{{form.id}}" class="label-int">{{ 'customer.addresses.sub_district' | t }}</label>
+                                </div>
+                              </div>
+
+                              <div class="grid__item" id="AddressVillageContainer_{{form.id}}" style="display:none">
+                                <div class="field">
+                                  <input type="text" id="AddressVillage_{{form.id}}" class="address_form" name="address[village]" value="{{form.village}}" autocapitalize="words" placeholder="{{ 'customer.addresses.village' | t }}">
+                                  <label for="AddressVillage_{{form.id}}" class="label-int">{{ 'customer.addresses.village' | t }}</label>
+                                </div>
+                              </div>
+
+                              <div class="grid__item">
+                                <div class="field">
+                                  <input type="text" id="AddressZip_{{form.id}}" class="address_form" name="address[zip]" value="{{form.zip}}" placeholder="{{ 'customer.addresses.zip' | t }}" autocapitalize="characters" maxlength="45">
+                                  <label for="AddressZip_{{form.id}}">{{ 'customer.addresses.zip' | t }}</label>
+                                </div>
+                              </div>
+
+                            </div>
+                          </div>
+  
+                          <div class="grid__item">
+                            {{ form.set_as_default_checkbox }}
+                            <label for="address_default_address_{{form.id}}" class="inline">{{ 'customer.addresses.set_default' | t }}</label>
+                          </div>
+                        </div>
+      
+                        <p class="text-right">
+                          <a href="javascript:void(0)" onclick="toggleForm({{form.id}}); return false;" class="button button--secondary">{{ 'customer.addresses.cancel' | t }}</a>&nbsp;&nbsp;
+                          <input type="submit" class="button" value="{{ 'customer.addresses.update' | t }}">
+                        </p>
+      
+      
+                      </div>
+                    </form>
+                </div>
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    
+      {% if paginate.pages > 1 %}
+        <div class="text-center">
+          {% include 'pagination' %}
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+
+  
+<style>
+  .grid__item .card-box{
+    height: 100%;
+  }
+</style>
+
+<script>
+  let selector = document.querySelector.bind(document),
+      selectorAll = document.querySelectorAll.bind(document);
+  
+  // Initialize observers on address selectors
+  new EasyStore.CountryProvinceSelector('AddressCountryNew', 'AddressProvinceNew', {
+    hideElement: 'AddressProvinceContainerNew',
+    hideElement_sub_district: 'AddressSubDistrictContainerNew',
+    hideElement_village: 'AddressVillageContainerNew'
+  });
+
+
+  // Setup province selector on each customer address
+  {% for address in customer.addresses %}
+    new EasyStore.CountryProvinceSelector('AddressCountry_{{address.id}}', 'AddressProvince_{{address.id}}', {
+      hideElement: 'AddressProvinceContainer_{{address.id}}',
+      hideElement_sub_district: 'AddressSubDistrictContainer_{{address.id}}',
+      hideElement_village: 'AddressVillageContainer_{{address.id}}'
+    });
+  {% endfor %}
+
+  // Modified contents of customer_area.js (global asset)
+  function toggleForm(id) {
+    var editEl = document.getElementById('EditAddress_'+id);
+    editEl.style.display = editEl.style.display == 'none' ? '' : 'none';
+    return false;
+  };
+
+  function toggleNewForm() {
+    var el = document.getElementById('AddAddress');
+    el.style.display = el.style.display == 'none' ? '' : 'none';
+    return false;
+  };
+
+  function destroy(id, confirm_msg) {
+    if (confirm(confirm_msg || {{ 'customer.addresses.delete_confirm' | t | json }})) {
+      EasyStore.postLink('/account/addresses/'+id, {'parameters': {'_method': 'delete', '_token': '{% csrf %}'}});
+    }
+  };
+    
+  function addressFormat(this_el) {
+    var country = this_el.value,
+          form_id = this_el.getAttribute('data-form-id'),
+          input_firstName = selector('#'+form_id+' .address-input-firstName'),
+          input_lastName = selector('#'+form_id+' .address-input-lastName'),
+          input_city = selector('#'+form_id+' .container-AddressCity'),
+          input_district = selector('#'+form_id+' .container-AddressDistrict'),
+          label_tw = selector('#'+form_id+' .label-tw'),
+          label_int = selector('#'+form_id+' .label-int'),
+          address_lines = selector('#'+form_id+' .address-line-wrapper'),
+          address_country = selector('#'+form_id+' .address-country-wrapper'),
+          contact_info_wrapper = selector('#'+form_id+' .address-contact-info'),
+          address_line_wrapper = selector('#'+form_id+' .address-line-info');
+
+      if(country == 'TW'){
+        contact_info_wrapper.insertBefore(input_lastName,contact_info_wrapper.firstChild)
+        address_line_wrapper.insertBefore(address_country,address_line_wrapper.firstChild)
+        label_tw.style.display = '';
+        input_district.style.display = '';
+        label_int.style.display = 'none';
+        input_city.style.display = 'none';
+        var _cityInp = input_city.querySelector('input'); if (_cityInp) _cityInp.value = '';
+        address_country.classList.add('pb-0');
+      }else{
+        contact_info_wrapper.insertBefore(input_firstName,contact_info_wrapper.firstChild)
+        address_line_wrapper.insertBefore(address_lines,address_line_wrapper.firstChild)
+        label_tw.style.display = 'none';
+        input_district.style.display = 'none';
+        var _distInp = input_district.querySelector('input'); if (_distInp) _distInp.value = '';
+        label_int.style.display = '';
+        input_city.style.display = '';
+        address_country.classList.remove('pb-0');
+      }
+  };
+
+  selectorAll('select[name="address[country]"]').forEach((el)=>{
+    addressFormat(el);
+  });
+
+  selectorAll('select[name="address[country]"]').forEach(countrySelect => countrySelect.addEventListener("change", ()=>{
+    addressFormat(countrySelect)
+  }))
+  // Dynamic district / sub-district dropdowns (mirrors checkout updateAddressFormat behaviour)
+  // Uses vanilla XHR + EasyStore.addListener — no jQuery dependency.
+
+  function _addrGetField(container) {
+    return container.classList.contains('field') ? container : container.querySelector('.field');
+  }
+
+  function _addrResetSubDistrict(suffix) {
+    var container = document.getElementById('AddressSubDistrictContainer' + suffix);
+    if (!container) return;
+    var wrap = container.querySelector('div.select');
+    if (wrap) {
+      var inp = document.createElement('input');
+      inp.type = 'text'; inp.className = 'address_form';
+      inp.id = 'AddressSubDistrict' + suffix; inp.name = 'address[sub_district]';
+      inp.setAttribute('autocapitalize', 'words');
+      inp.placeholder = {{ 'customer.addresses.sub_district' | t | json }};
+      wrap.parentNode.replaceChild(inp, wrap);
+      var f = _addrGetField(container); if (f) f.classList.remove('on_focus');
+    } else {
+      var ei = container.querySelector('input'); if (ei) ei.value = '';
+    }
+    container.style.display = 'none';
+  }
+
+  function _addrResetDistrict(formEl, suffix) {
+    [
+      { cls: '.container-AddressCity',     id: 'AddressCity' + suffix,     name: 'address[city]',     placeholder: {{ 'customer.addresses.city' | t | json }} },
+      { cls: '.container-AddressDistrict', id: 'AddressDistrict' + suffix, name: 'address[district]', placeholder: {{ 'customer.addresses.city_tw' | t | json }} }
+    ].forEach(function(cfg) {
+      var container = formEl.querySelector(cfg.cls);
+      if (!container) return;
+      var wrap = container.querySelector('div.select');
+      if (wrap) {
+        var inp = document.createElement('input');
+        inp.type = 'text'; inp.className = 'address_form';
+        inp.id = cfg.id; inp.name = cfg.name;
+        inp.setAttribute('autocapitalize', 'words');
+        inp.placeholder = cfg.placeholder;
+        wrap.parentNode.replaceChild(inp, wrap);
+        var f = _addrGetField(container); if (f) f.classList.remove('on_focus');
+      } else {
+        var ei = container.querySelector('input'); if (ei) ei.value = '';
+      }
+    });
+  }
+
+  function _addrFetchDistricts(provinceCode, formEl, suffix, countryCode) {
+    if (!provinceCode) return;
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', '/sf/provinces/' + encodeURIComponent(provinceCode) + '/districts', true);
+    xhr.onreadystatechange = function() {
+      if (xhr.readyState !== 4 || xhr.status !== 200) return;
+      var res; try { res = JSON.parse(xhr.responseText); } catch(e) { return; }
+      if (!res.districts || !res.districts.length) return;
+
+      var isTW = countryCode === 'TW';
+      var targetContainer = formEl.querySelector(isTW ? '.container-AddressDistrict' : '.container-AddressCity');
+      if (!targetContainer) return;
+
+      if (isTW) {
+        var cityC = formEl.querySelector('.container-AddressCity');
+        if (cityC) { var ci = cityC.querySelector('input'); if (ci) ci.value = ''; cityC.style.display = 'none'; }
+        targetContainer.style.display = '';
+      }
+
+      var sel = document.createElement('select');
+      sel.id = isTW ? 'AddressDistrict' + suffix : 'AddressCity' + suffix;
+      sel.className = 'address_form address-district-select';
+      sel.name = isTW ? 'address[district]' : 'address[city]';
+
+      res.districts.forEach(function(d) {
+        var opt = document.createElement('option');
+        opt.value = d.name; opt.text = d.name; opt.setAttribute('data-code', d.code);
+        sel.appendChild(opt);
+      });
+
+      // District change → sub-districts
+      sel.addEventListener('change', function() {
+        _addrResetSubDistrict(suffix);
+        var selected = sel.options[sel.selectedIndex];
+        var code = selected && selected.getAttribute('data-code');
+        if (code) _addrFetchSubDistricts(code, suffix);
+      });
+
+      var fieldEl = _addrGetField(targetContainer); if (fieldEl) fieldEl.classList.add('on_focus');
+      var existing = targetContainer.querySelector('input');
+      var savedValue = existing ? existing.value : '';
+      if (existing) {
+        var wrap = document.createElement('div'); wrap.className = 'select'; wrap.appendChild(sel);
+        existing.parentNode.replaceChild(wrap, existing);
+      }
+
+      // Select saved value if present, otherwise fall back to first option
+      var matchedOpt = null;
+      if (savedValue) {
+        for (var i = 0; i < sel.options.length; i++) {
+          if (sel.options[i].value === savedValue) { sel.selectedIndex = i; matchedOpt = sel.options[i]; break; }
+        }
+      }
+      var activeOpt = matchedOpt || sel.options[0];
+      var activeCode = activeOpt && activeOpt.getAttribute('data-code');
+      if (activeCode) _addrFetchSubDistricts(activeCode, suffix);
+    };
+    xhr.send();
+  }
+
+  function _addrFetchSubDistricts(districtCode, suffix) {
+    if (!districtCode) return;
+    var container = document.getElementById('AddressSubDistrictContainer' + suffix);
+    if (!container) return;
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', '/sf/districts/' + encodeURIComponent(districtCode) + '/sub-districts', true);
+    xhr.onreadystatechange = function() {
+      if (xhr.readyState !== 4 || xhr.status !== 200) return;
+      var res; try { res = JSON.parse(xhr.responseText); } catch(e) { return; }
+      if (!res.sub_districts || !res.sub_districts.length) { container.style.display = 'none'; return; }
+
+      var sel = document.createElement('select');
+      sel.id = 'AddressSubDistrict' + suffix;
+      sel.className = 'address_form address-subdistrict-select';
+      sel.name = 'address[sub_district]';
+
+      res.sub_districts.forEach(function(s) {
+        var opt = document.createElement('option'); opt.value = s.name; opt.text = s.name; sel.appendChild(opt);
+      });
+
+      var fieldEl = _addrGetField(container); if (fieldEl) fieldEl.classList.add('on_focus');
+      var existing = container.querySelector('input');
+      var savedValue = existing ? existing.value : '';
+      if (existing) {
+        var wrap = document.createElement('div'); wrap.className = 'select'; wrap.appendChild(sel);
+        existing.parentNode.replaceChild(wrap, existing);
+      }
+      if (savedValue) {
+        for (var i = 0; i < sel.options.length; i++) {
+          if (sel.options[i].value === savedValue) { sel.selectedIndex = i; break; }
+        }
+      }
+      container.style.display = '';
+    };
+    xhr.send();
+  }
+
+  // Bind province change + country reset directly to each form's elements
+  function _addrInitDistrictBehavior(provinceEl, countryEl, suffix) {
+    var formEl = provinceEl;
+    while (formEl && formEl.tagName !== 'FORM') formEl = formEl.parentNode;
+    if (!formEl) return;
+
+    EasyStore.addListener(provinceEl, 'change', function() {
+      _addrResetSubDistrict(suffix);
+      _addrResetDistrict(formEl, suffix);
+      _addrFetchDistricts(provinceEl.value, formEl, suffix, countryEl.value);
+    });
+
+    EasyStore.addListener(countryEl, 'change', function() {
+      _addrResetSubDistrict(suffix);
+      _addrResetDistrict(formEl, suffix);
+      // countryHandler has already rebuilt province options by the time this runs,
+      // so provinceEl.value is the auto-selected first province
+      if (provinceEl.value) {
+        _addrFetchDistricts(provinceEl.value, formEl, suffix, countryEl.value);
+      }
+    });
+
+    // Initialize on page load if province already has a value
+    if (provinceEl.value) {
+      _addrFetchDistricts(provinceEl.value, formEl, suffix, countryEl.value);
+    }
+  }
+
+  _addrInitDistrictBehavior(
+    document.getElementById('AddressProvinceNew'),
+    document.getElementById('AddressCountryNew'),
+    'New'
+  );
+
+  {% for address in customer.addresses %}
+  _addrInitDistrictBehavior(
+    document.getElementById('AddressProvince_{{address.id}}'),
+    document.getElementById('AddressCountry_{{address.id}}'),
+    '_{{address.id}}'
+  );
+  {% endfor %}
+
+
+    
+</script>
+
+ <!-- endpaginate %} -->
+{% app_snippet 'account/content_bottom' %}

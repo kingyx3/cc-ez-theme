@@ -1,0 +1,272 @@
+<link rel="stylesheet" href="/assets/css/store-locator.css?v3.1">
+
+{% if locations.size > 0 %}
+  <div class="store-locator-heading page-width">
+   <h1 class="section-header__title">{{ 'general.store_locator.title' | t }}</h1>
+   <b>{{ 'general.store_locator.select_state' | t }}</b>
+   <div class="store-locator-search">
+     <div class="select">
+       <select id="province-select" class="select__select">
+         <option value="all">{{ 'general.store_locator.all' | t }}</option>
+       </select>
+     </div>
+   </div>
+  </div>
+  <div class='store-locator-section no-watermark page-width'>
+      <div class="store-locator-grid">
+        {% for location in locations %}
+          <div class="store-locator-grid_item" data-province="{{location.province}}">
+              <div class="store-selector-item">
+                <div class="location-detail">
+                  <strong>
+                    {{location.name}}
+                  </strong>
+                  {% if location.phone %} <a href="tel:{{location.email}}">{{location.phone}}</a> <br> {% endif %}
+                  {% if location.email %} <a href="mailto:{{location.email}}">{{location.email}}</a> <br> {% endif %}
+
+                  <address>
+                    {% if location.address1 %} {{location.address1}} <br> {% endif %}
+                    {% if location.address2 %} {{location.address2}} <br> {% endif %}
+                    {{location.city}}, {{location.zip}}<br>
+                    {{location.province}} , {{location.country}} <br>
+
+                    <div id="business-hour-{{forloop.index0}}"></div>
+                  </address>
+
+                </div><br>
+                <a class="button button--tertiary" href="https://www.google.com/maps?q={{ location.formatted }}" target="_blank">{{ 'general.store_locator.navigate' | t }}</a>
+              </div>
+          </div>
+        {% endfor %}
+      </div>
+  </div>
+
+{% else %}
+  <center class='no-watermark'>
+    <br><img src="https://s3-ap-southeast-1.amazonaws.com/eesb.public/images/location-not-found.svg" width="500px"><br>
+    <p class="h2">{{ 'general.store_locator.location_not_found' | t }}</p><br><br>
+  </center>
+{% endif %}
+
+{% if paginate.pages > 1 %}
+  {% include 'pagination' %}
+{% endif %}
+
+{% if locations.size > 0 %}
+<script>
+
+  var locations = {{locations | json}};
+
+  const ordering = { mon: 1, tue: 2, wed: 3, thur: 4, fri: 5, sat: 6, sun: 7 }
+
+  const formatDay = day => day.replace(day[0], day[0].toUpperCase())
+
+  const convertTime = time => {
+
+    if(!time.includes(":")) time += ":00"
+
+    time = time.toString ().match (/^([01]\d|2[0-3])(:)([0-5]\d)(:[0-5]\d)?$/) || [time];
+
+    if (time.length > 1) {
+      time = time.slice (1);
+      time[5] = +time[0] < 12 ? 'am' : 'pm';
+      time[0] = +time[0] % 12 || 12;
+    }
+
+    return time.join ('');
+  }
+
+  const checkTimeFormat = value => {
+
+    if(value.split(':').length == 3) {
+      return value.slice(0, value.length - 3)
+    }
+    return value
+  }
+
+  const formatTime = time => {
+
+    var start = convertTime(checkTimeFormat(time.start))
+    var end = convertTime(checkTimeFormat(time.end))
+
+    return `${start} - ${end}`
+  }
+
+  const getToday = businessHour => {
+
+    var today = new Date().getDay()
+
+    var today = Object.keys(businessHour).filter(key => ordering[key] === today)[0];
+
+    return today
+
+  }
+
+  const checkOpen = businessHour => {
+
+    var today = getToday(businessHour)
+
+    var result = businessHour.everyday;
+
+    if(today !== undefined) result = businessHour[today]
+
+    if (result === 'closed') return false
+
+    var { start, end } = result
+
+    start = start.split(':')
+    if(start.length > 2) start.pop()
+    start = parseInt(start.join(''))
+
+    end = end.split(':')
+    if(end.length > 2) end.pop()
+    end = parseInt(end.join(''))
+
+    var now = new Date()
+    now = parseInt(`${now.getHours()}${String(now.getMinutes()).padStart(2, "0")}`)
+
+    if(now < start || now >= end) {
+      return false
+    }
+
+    return true
+
+  }
+
+
+
+  var provinceSelect = document.getElementById('province-select'),
+      locationItem = document.querySelectorAll("[data-province]")
+  provinceSelect.addEventListener("change", function(){
+    locationItem.forEach(function(item){
+      if(item.getAttribute('data-province') != provinceSelect.value && provinceSelect.value != 'all'){
+        item.style.display = "none";
+      }else{
+        item.style.display = "";
+      }
+    });
+  });
+
+
+
+  for(var i = 0; i < locations.length; i++) {
+
+    // Update provinceSelect Option
+    var provinceOptionExist = false
+    for (x = 0; x < provinceSelect.length; ++x){
+      if (provinceSelect.options[x].value == locations[i].province){
+        provinceOptionExist = true
+      }
+    }
+    if(!provinceOptionExist){
+      var opt = document.createElement('option');
+      opt.appendChild( document.createTextNode(locations[i].province) );
+      opt.value = locations[i].province;
+      provinceSelect.appendChild(opt);
+    }
+
+    var node = document.getElementById(`business-hour-${i}`)
+    var businessHour = JSON.parse(locations[i].business_hour)
+
+    var dropdown = document.createElement("div")
+    dropdown.className = "dropdown"
+    dropdown.setAttribute("data-toggle","0")
+
+    var dropdownToggle = document.createElement("span")
+    dropdownToggle.className = "dropdown-toggle"
+
+    var caret = document.createElement("span")
+    caret.className = "caret"
+
+    var dropdownMenu = document.createElement("ul")
+    dropdownMenu.className = "dropdown-menu list-unstyled"
+
+    if(Object.keys(businessHour).length <= 0) {
+
+      dropdownToggle.innerHTML = `<span style="color: green; font-weight: bold;">Open</span>`
+
+      var li = document.createElement("li")
+      var a = document.createElement("a")
+      a.innerHTML = "Open for 24 hours"
+      li.appendChild(a)
+      dropdownMenu.appendChild(li)
+
+    }
+
+    else if("everyday" in businessHour) {
+
+      dropdownToggle.innerHTML = `<span style="color: red; font-weight: bold;">Closed</span>`
+
+      if(checkOpen(businessHour)) {
+        dropdownToggle.innerHTML = `<span style="color: green; font-weight: bold;">Open</span> ⋅ Closes ${convertTime(businessHour.everyday.end)}`
+      }
+
+      var li = document.createElement("li")
+      var a = document.createElement("a")
+      a.innerHTML = `Everyday: ${formatTime(businessHour.everyday)}`
+      li.appendChild(a)
+      dropdownMenu.appendChild(li)
+    }
+
+    else {
+
+      dropdownToggle.innerHTML = `<span style="color: red; font-weight: bold;">Closed</span>`
+
+      var today = getToday(businessHour)
+
+      if(checkOpen(businessHour)) {
+        dropdownToggle.innerHTML = `<span style="color: green; font-weight: bold;">Open</span> ⋅ Closes ${convertTime(businessHour[today].end)}`
+      }
+
+      var listItems = []
+
+      for(var day in businessHour) {
+
+        var li = document.createElement("li")
+        var a = document.createElement("a")
+        a.innerHTML = `${formatDay(day)}: ${businessHour[day] === 'closed' ? 'Closed': formatTime(businessHour[day])}`
+        li.appendChild(a)
+
+        listItems[ordering[day]] = li
+
+      }
+
+      listItems.forEach(el => el != undefined && dropdownMenu.appendChild(el))
+
+    }
+
+    dropdown.appendChild(dropdownToggle)
+    dropdown.appendChild(caret)
+    dropdown.appendChild(dropdownMenu)
+
+
+
+    node.appendChild(dropdown)
+
+
+  }
+
+  var dropdowns = document.querySelectorAll("[data-toggle]");
+  dropdowns.forEach(function(btn){
+    btn.addEventListener('click', function(el) {
+       if(btn.getAttribute('data-toggle') != '0'){
+        btn.setAttribute("data-toggle", "0")
+      }else{
+       btn.setAttribute("data-toggle", "1")
+     }
+   });
+  });
+
+  window.addEventListener('click', function(e){
+    dropdowns.forEach(function(btn){
+      if (!btn.contains(e.target)){
+        btn.setAttribute("data-toggle", "0")
+      }
+    });
+  });
+
+
+</script>
+
+{% endif %}
+

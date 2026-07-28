@@ -1,0 +1,790 @@
+<link rel="preload" href="{{ 'customer.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<style>
+  input::-webkit-calendar-picker-indicator{
+    display: none;
+  }
+  .info_order-number{
+    font-size: 2rem;
+    font-family: var(--font-heading-family);
+    line-height: 1.4;
+  }
+  .info_order-number + h2{
+    margin-top: 0px;
+  }
+</style>
+
+<div class="customer order">
+  <svg style="display:none">
+    <symbol id="icon-discount" viewBox="0 0 12 12">
+      <path fill-rule="evenodd" clip-rule="evenodd" d="M7 0h3a2 2 0 012 2v3a1 1 0 01-.3.7l-6 6a1 1 0 01-1.4 0l-4-4a1 1 0 010-1.4l6-6A1 1 0 017 0zm2 2a1 1 0 102 0 1 1 0 00-2 0z" fill="currentColor">
+    </symbol>
+  </svg>
+
+  {% app_snippet 'account/content_top' %}
+
+  <div>
+    <h1>{{ 'customer.account.title' | t }}</h1>
+    {% if order.guest == false %}
+      <a href="/account/orders?filter={{ order.status }}">← {{ 'customer.account.return_order' | t }}</a>
+    {% endif %}
+  </div>
+
+  <div>
+    <div>
+      {% if order.name != order.order_number %}
+          <div class="info_order-number color-light-text">{{ order.order_number }}</div>
+      {% endif %}
+      <h2 {% if order.cancelled %}style="color: red;"{% endif %}>
+        {{ 'customer.order.title' | t: order.name }} 
+        <small class="order-date ml-1">{{ order.created_at | date: "%b %d, %Y" }}</small>
+        {% if order.type == 'pickup' %}<small class="order-date ml-1 flex-align-center" style="display: inline-flex;">{% include 'svg-definitions' with 'icon-location' %} {{ "checkout.detail.pickup" | t }}</small>{% endif %}
+      </h2>
+        
+      <div class="d-flex flex-align-center gap-x-2 mt-1">
+        {% if order.cancelled %}
+          <span class="small-text label-tag label-tag-alert">{{ "customer.fulfillment_activity.cancelled" | t }}</span>
+        {% else %}
+          {% if order.financial_status_label == "Paid" %}
+            <span class="small-text label-tag label-tag-success">{{ 'customer.financial_status.paid' | t }}</span>
+          {% elsif order.financial_status_label == "Refunded" %}
+            <span class="small-text label-tag label-tag-info">{{ 'customer.financial_status.refunded' | t }}</span>
+          {% elsif order.financial_status_label == "Pending" %}
+            <span class="small-text label-tag label-tag-pending">{{ 'customer.financial_status.pending' | t }}</span>
+          {% elsif order.financial_status_label == "Partially paid" %}
+            <span class="small-text label-tag label-tag-pending">{{ 'customer.financial_status.partially_paid' | t }}</span>
+          {% elsif order.financial_status_label == "Authorized" %}
+            <span class="small-text label-tag label-default-dark">{{ 'customer.financial_status.authorized' | t }}</span>
+          {% else %}
+            <span class="small-text label-tag label-tag-warning">{{ 'customer.financial_status.unpaid' | t }}</span>
+          {% endif %}
+
+          {% if order.fulfillment_status_label == "Fulfilled" %}
+            <span class="small-text label-tag label-tag-success">{{ 'customer.fulfillment_status.fulfilled' | t }}</span>
+          {% elsif order.fulfillment_status_label == "Returned" %}
+            <span class="small-text label-tag label-tag-info">{{ 'customer.fulfillment_status.returned' | t }}</span>
+          {% elsif order.fulfillment_status_label == "Partially fulfilled" %}
+            <span class="small-text label-tag label-tag-pending">{{ 'customer.fulfillment_status.partially_fulfilled' | t }}</span>
+          {% elsif order.fulfillment_status_label == "To process" %}
+            <span class="small-text label-tag label-tag-pending">{{ 'customer.fulfillment_status.to_process' | t }}</span>
+          {% elsif order.fulfillment_status_label == "Processed" %}
+            <span class="small-text label-tag label-tag-pending">{{ 'customer.fulfillment_status.processed' | t }}</span>
+          {% elsif order.fulfillment_status_label == "Packed" %}
+            <span class="small-text label-tag label-tag-pending">{{ 'customer.fulfillment_status.packed' | t }}</span>
+          {% elsif order.fulfillment_status_label == "Shipped" %}
+            <span class="small-text label-tag label-tag-pending">{{ 'customer.fulfillment_status.shipped' | t }}</span>
+          {% elsif order.fulfillment_status_label == "Ready for pickup" %}
+            <span class="small-text label-tag label-tag-success">{{ 'customer.fulfillment_status.ready_for_pickup' | t }}</span>
+          {% elsif order.fulfillment_status_label == "Delivered" %}
+            <span class="small-text label-tag label-tag-success">{{ 'customer.fulfillment_status.delivered' | t }}</span>
+          {% elsif order.fulfillment_status_label == "Customer picked up" %}
+            <span class="small-text label-tag label-tag-success">{{ 'customer.fulfillment_status.customer_picked_up' | t }}</span>
+          {% elsif order.fulfillment_status_label == "Partially shipped" %}
+            <span class="small-text label-tag label-tag-pending">{{ 'customer.fulfillment_status.partially_shipped' | t }}</span>
+          {% elsif order.fulfillment_status_label == "Partially packed" %}
+            <span class="small-text label-tag label-tag-pending">{{ 'customer.fulfillment_status.partially_packed' | t }}</span>
+          {% elsif order.fulfillment_status_label == "Partially processed" %}
+            <span class="small-text label-tag label-tag-pending">{{ 'customer.fulfillment_status.partially_processed' | t }}</span>
+          {% elsif order.fulfillment_status_label == "Partially delivered" %}
+            <span class="small-text label-tag label-tag-pending">{{ 'customer.fulfillment_status.partially_delivered' | t }}</span>
+          {% else %}
+            <span class="small-text label-tag label-tag-warning">{{ 'customer.fulfillment_status.unfulfilled' | t }}</span>
+          {% endif %}
+        {% endif %}
+      </div>
+      <br>
+
+
+      <div class="mt-1 text-right">
+        <small>{{ 'checkout.general.product_with' | t }} <span style="color: red;">*</span> {{ 'checkout.general.taxable_product' | t }}</small>
+      </div>
+      
+      <!--   Order details     -->
+      <div class="flex-table">
+        {% assign remappedLineItems = '' %}
+      	{% for line_item in order.line_items %}
+        {% assign remappedLineItems = remappedLineItems | append: '{"variant_id":"' | append: line_item.variant_id | append: '","price":"' | append: line_item.price | append: '","variant_title":"' | append: line_item.variant_title | append: '","image":"' | append: line_item.image_url | append: '","title":"' | append: line_item.title | append: '","is_available":"' | append: line_item.is_available | append: '"},' %}
+        <div class="flex-table-tr">
+          <div class="d-flex flex-space-between sm-flex-wrap gap-x-2">
+			<!-- left section -->
+            <div>
+              <div class="d-flex gap-x-2">
+                <div class="media media--square flex-shrink-0" style="width: 100px; height: 100px; padding-bottom: 0; overflow: visible;">
+                  <a href="{{ line_item.product.url }}">
+                    <img src="{{ line_item.image_url }}" alt="{{ line_item.product_name | escape }}">
+                    <div class="product-qty-badge">{{ line_item.quantity }}</div>
+                  </a>
+                </div>
+                <div class="ml-2">
+                  <div>
+                    <a class="h3" href="{{ line_item.product.url }}">{{ line_item.title }}</a>
+                    {% if line_item.taxable %}<span style="color: red;">*</span>{% endif %}
+                  </div>
+                  <div>{{line_item.variant_title}}</div>
+                {% if line_item.line_item_group != null and line_item.line_item_group.title != null %}
+                  <div class="color-light-text">
+                    {{ 'checkout.general.part_of_bundle' | t: line_item.line_item_group.title }}
+                  </div>
+                {% endif %}
+                  <!-- <div>{{ line_item.sku }}</div> -->
+                  <div><small>{{ line_item.price | money: order.currency_format }}</small></div>
+                </div> 
+              </div>
+              {% if line_item.fulfillment %}
+                <div class="note">
+                  {% assign fulfilled_at = line_item.fulfillment.created_at | date: "%b %d" %}
+                  {{ 'customer.order.fulfilled_at' | t: fulfilled_at }}
+                  {% if line_item.fulfillment.tracking_number %}
+                    <a href="{{ line_item.fulfillment.tracking_url }}">{{ line_item.fulfillment.tracking_company }} #{{ line_item.fulfillment.tracking_number}}</a>
+                  {% endif %}
+                </div>
+              {% endif %}
+            </div>
+			<!-- right section -->
+            <div style="flex: 1;" class="price-label">
+              <div>{{ line_item.final_line_price | money: order.currency_format }}</div>
+              {% if line_item.original_line_price > line_item.final_line_price %}
+                <small><s style="display: block;opacity: 0.4;">{{ line_item.original_line_price | money: order.currency_format }}</s></small>
+              {% endif %}
+              
+              {% if line_item.returned_quantity > 0 %}
+              <span class="small-text label-tag label-tag-info">{{ line_item.returned_quantity }} {{ 'customer.fulfillment_status.returned' | t }}</span>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+        {% assign remappedLineItems = '[' | append: remappedLineItems | append: ']' | remove: ',]' | append: ']' %}
+        
+		<!-- pricing section -->
+        <div class="flex-table-tr">
+          <div class="d-flex flex-space-between flex-align-center gap-x-2">
+            <div>{{ 'customer.order.subtotal' | t }}</div>
+            <div class="price-label">{{ order.line_items_subtotal_price | money: order.currency_format }}</div>
+          </div>
+          
+          {% for discount in order.discounts %}
+          <div class="d-flex flex-space-between flex-align-center gap-x-2">
+            <div>{{ discount.code }} {{ 'customer.order.discount' | t }}</div>
+            <div class="price-label">{{ discount.savings | money: order.currency_format }}</div>
+          </div>
+          {% endfor %}
+          
+          {% if order.total_cart_level_discounts > 0 %}
+          <div class="d-flex flex-space-between flex-align-center gap-x-2">
+            <div>{{ discount.code }} {{ 'customer.order.discount' | t }}</div>
+            <div class="price-label">- ({{ order.total_cart_level_discounts | money: order.currency_format }})</div>
+          </div>
+          {% endif %}
+          
+          {% for shipping_method in order.shipping_methods %}
+          <div class="d-flex flex-space-between flex-align-center gap-x-2">
+            <div>{{ 'customer.order.shipping' | t }} ({{ shipping_method.title }})</div>
+            <div class="price-label">{{ shipping_method.price | money: order.currency_format }}</div>
+          </div>
+          {% endfor %}
+          
+          {% if order.shipping_discount > 0 %}
+          <div class="d-flex flex-space-between flex-align-center gap-x-2">
+            <div>{{ 'checkout.general.shipping_discount' | t }}</div>
+            <div class="price-label">- ({{ order.shipping_discount | money: order.currency_format }})</div>
+          </div>
+          {% endif %}
+          
+          {% for tax_line in order.tax_lines %}
+          <div class="d-flex flex-space-between flex-align-center gap-x-2">
+            <div>{{ 'customer.order.tax' | t }} ({{ tax_line.title }} {{ tax_line.rate | times: 100 }}%)</div>
+            <div class="price-label">{{ tax_line.price | money: order.currency_format }}</div>
+          </div>
+          {% endfor %}
+          
+          {% if order.credit_used > 0 %}
+          <div class="d-flex flex-space-between flex-align-center gap-x-2">
+            <div>{{ 'checkout.general.credit_applied' | t }}</div>
+            <div class="price-label">- ({{ order.credit_used | money: order.currency_format }})</div>
+          </div>
+          {% endif %}
+          
+          {% if order.order_points and order.order_points.amount > 0 %}
+          <div class="d-flex flex-space-between flex-align-center gap-x-2">
+            <div>{{ 'customer.order.point_applied' | t }} ({{order.order_points.amount | round}} {{order.point_settings.title}})</div>
+            <div class="price-label">- ({{ order.order_points.discount_amount | money: order.currency_format }})</div>
+          </div>
+          {% endif %}
+          
+          {% if order.order_rounding != 0 %}
+          <div class="d-flex flex-space-between flex-align-center gap-x-2">
+            <div>{{ 'checkout.general.order_rounding' | t }}</div>
+            <div class="price-label">
+              {% if order.order_rounding < 0 %}-{% endif %}
+              {{ order.order_rounding | abs | money: order.currency_format }}</div>
+          </div>
+          {% endif %}
+            
+          <div class="d-flex flex-space-between flex-align-center gap-x-2 mt-2">
+            <div class="h2"><strong>{{ 'customer.order.total' | t }}</strong></div>
+            <div class="price-label h2"><strong>{{ order.total_price | money: order.currency_format }}</strong></div>
+          </div>
+        </div>
+          
+        {% if order.credit_earned > 0 or order.point_earned and order.is_paid == true %}  
+        <div class="flex-table-tr">
+          {% if order.credit_earned > 0 and order.is_paid == true %}
+          <div class="d-flex flex-space-between flex-align-center gap-x-2">
+            <div>{{ 'customer.order.credit_earned' | t }}</div>
+            <div class="price-label">+ {{ order.credit_earned.amount | money: order.currency_format }}</div>
+          </div>
+          {% endif %}
+          
+          {% if order.point_earned and order.is_paid == true %}
+          <div class="d-flex flex-space-between flex-align-center gap-x-2">
+            <div>{{ 'customer.order.point_earned' | t }}</div>
+            <div class="price-label">+ {{ order.point_earned.amount | round }} {{order.point_settings.title}}</div>
+          </div>
+          {% endif %}
+        </div>
+        {% endif %}  
+          
+        {% if order.financial_status == "partially_paid" %}
+        <div class="flex-table-tr">
+          <div class="d-flex flex-space-between flex-align-center gap-x-2">
+            <div>{{ 'customer.order.paid_amount' | t }}</div>
+            <div class="price-label">{{order.total_paid_amount | money: order.currency_format}}</div>
+          </div>
+          <div class="d-flex flex-space-between flex-align-center gap-x-2">
+            <div>{{ 'customer.order.amount_due' | t }}</div>
+            <div class="price-label">{{order.total_unpaid_amount | money: order.currency_format}}</div>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+      
+        
+	<!--   Order action   -->
+      <div class="d-flex flex-wrap" style="justify-content: flex-end; gap: 15px; padding: 2.2rem 0;">
+        {% if order.is_paid == false and order.cancelled == 0 and order.cod_type != 1 %}
+        <div class="text-right" >
+          <button class="btn" style="margin: 0;" onclick="window.location.href = '/orders/{{order.cart_token}}/repayment'">{{ 'customer.order.pay' | t }}</button>
+        </div>
+        {% endif %}
+
+        {% if order.is_repurchasable == true %}
+        <div class="text-right" >
+          <button class="btn button {% if order.is_paid == false and order.cancelled == 0 or order.status == "to_receive" %}button--secondary{% endif %}" style="margin: 0;" data-repurchase-items="{{ remappedLineItems | escape }}" data-currency="{{ order.currency_format | json | escape }}" onclick="openRepurchaseModal(event, this)">{{ 'customer.order.buy_again' | t }}</button>
+          {% include 'repurchase-modal' %}
+        </div>
+        {% endif %}
+
+        {% if order.status == "to_receive" and order.fulfillment_status != "unfulfilled" %}
+        <details-modal>
+          <details>
+            <summary class="text-right" aria-haspopup="dialog">
+              <button class="btn" style="margin: 0;">{{ 'customer.order.receive' | t }}</button>
+            </summary>
+
+            <div class="confirmation-modal modal__content" role="dialog" aria-modal="true">
+              <div class="modal-overlay"></div>
+              <div class="confirmation-modal__content" tabindex="-1">
+                <div class="h3"><b>{{ 'customer.orders.receive.title' | t }}</b></div>
+
+                <div class="mt-4 mb-4">
+                  {{ 'customer.orders.receive.desc' | t }}
+                </div>
+
+                <div class="d-flex flex-align-center gap-x-2" style="justify-content: flex-end;">
+                  <button id="closeModal{{order.token}}" type="button" class="button button--secondary">
+                    {{ 'customer.orders.receive.cancel' | t }}
+                  </button>
+
+                  <button id="confirmOrder{{order.token}}" class="btn button">
+                    {{ 'customer.orders.receive.confirm' | t }}
+                  </button>
+
+                  <script>
+                    var confirmOrderBtn = document.getElementById('confirmOrder{{order.token}}');
+                    confirmOrderBtn.addEventListener('click', function (e) {
+                      var selfBtn = $(this);
+                      selfBtn.addClass('btn--loading');
+
+                      $.ajax({
+                        type: "PUT",
+                        dataType: 'json',
+                        url: "/sf/order/{{ order.token }}/fulfillment_update",
+                        data:{
+                            _token: "{% csrf %}",
+                        },
+                        success: function(response){
+                          window.location.reload();
+                          document.querySelector('#closeModal{{order.token}}').click();
+                          selfBtn.removeClass('btn--loading');
+                        },
+                        error: function(xhr){
+                          console.log(xhr);
+                          selfBtn.removeClass('btn--loading');
+                        },
+                      });
+                    });
+                  </script>
+                </div>
+              </div>
+            </div>
+          </details>
+        </details-modal>
+        {% endif %}
+      </div>
+    
+      {% app_snippet 'account/content_left_middle' %}
+
+      {% if fulfilments %}
+        <br>
+        <div class="mt-2">
+          {{ fulfilments | fulfilment_activity_html }}
+        </div>
+        <style>
+          .parcel-tracking-wrapper{
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+          }
+          .parcel-tracking-wrapper .parcel-details-toggle{
+            font-size: 0.85em;
+            padding: 5px 1px;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 3px;
+          }
+          .parcel-tracking-wrapper .parcel-details-toggle svg{
+            width: 1.4em;
+            height: 1.4em;
+            stroke-width: 0.12em;
+            margin: 0;
+          }
+          .parcel-tracking-wrapper .parcel-details-toggle.is-active svg{
+            transform: rotate(-180deg);
+          }
+          .parcel-tracking-wrapper.hide-details .parcel-status-wrapper:not(:first-child){
+            display: none;
+          }
+        </style>
+        <script>
+          document.addEventListener("DOMContentLoaded", () => {
+            let parcelWrappers = document.querySelectorAll(".parcel-tracking-wrapper");
+
+            if (parcelWrappers.length > 0) {
+              parcelWrappers.forEach(wrapper => {
+                if (wrapper.querySelectorAll(".parcel-status-wrapper").length <= 1) return;
+
+                wrapper.classList.add("hide-details");
+                let link = document.createElement("a");
+                link.className = "parcel-details-toggle";
+                link.href = "#";
+                link.innerHTML = `{{ 'general.show_details' | t }} <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6l6 -6"></path></svg>`;
+
+                link.onclick = (e) => {
+                    e.preventDefault();
+                    wrapper.classList.toggle("hide-details");
+                    link.classList.toggle("is-active");
+                    link.innerHTML = `${wrapper.classList.contains("hide-details") ? "{{ 'general.show_details' | t }}" : "{{ 'general.hide_details' | t }}"} <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6l6 -6"></path></svg>`;
+                };
+
+                wrapper.appendChild(link);
+              });
+            }
+          });
+        </script>
+      {% endif %}
+
+      {% if order.transfer_html %}
+      <hr/>
+      <div>
+        {{order.transfer_html}}
+      </div>
+      {% endif %}
+
+      {% app_snippet 'account/content_left' %}
+      
+    </div>
+
+    <div>
+
+      {% app_snippet 'account/content_right_top' %}
+
+      <div class="mb-4">
+        <h2>{{ 'customer.order.billing_address' | t }}</h2>
+          <div class="card-box">
+          <b>{{ order.billing_address.name }}</b><br>
+          {% if order.billing_address.phone %} {{ order.billing_address.phone }} <br> {% endif %}
+          <div class="color-light-text mt-1" style="line-height: 1.4;">
+            {% if order.billing_address.company %} {{ order.billing_address.company }} <br> {% endif %}
+            {% if order.billing_address.street %} {{ order.billing_address.street }} <br> {% endif %}
+            {% if order.billing_address.village %}
+              {{ order.billing_address.village }}<br>
+            {% endif %}
+            {% if order.billing_address.sub_district %}
+              {{ order.billing_address.sub_district }}<br>
+            {% endif %}
+            {% if order.billing_address.district %}
+              {{ order.billing_address.district }}<br>
+            {% endif %}
+            {% if order.billing_address.city %}
+              {{ order.billing_address.city }}<br>
+            {% endif %}
+            {% if order.billing_address.province %}
+              {{ order.billing_address.province }}<br>
+            {% endif %}
+            {% if order.billing_address.zip %}
+            {{ order.billing_address.zip | upcase }}<br>
+            {% endif %}
+            {{ order.billing_address.country }}
+          </div>
+        </div>
+      </div>
+
+      <div class="mb-4">
+      {% if order.type == "pickup" %}
+        <h2>{{ 'customer.order.pickup_location' | t }}</h2>
+      {% else %}
+        <h2>{{ 'customer.order.shipping_address' | t }}</h2>
+      {% endif %}
+        <div class="card-box">
+          <b>{{ order.shipping_address.name }}</b><br>
+          {% if order.shipping_address.phone %} {{ order.shipping_address.phone }}<br> {% endif %}
+          <div class="color-light-text mt-1" style="line-height: 1.4;">
+            {% if order.shipping_address.company %} {{ order.shipping_address.company }}<br> {% endif %}
+            {% if order.shipping_address.street %} {{ order.shipping_address.street }}<br> {% endif %}
+            {% if order.shipping_address.village %}
+              {{ order.shipping_address.village }}<br>
+            {% endif %}
+            {% if order.shipping_address.sub_district %}
+              {{ order.shipping_address.sub_district }}<br>
+            {% endif %}
+            {% if order.shipping_address.district %}
+              {{ order.shipping_address.district }}<br>
+            {% endif %}
+            {% if order.shipping_address.city %}
+              {{ order.shipping_address.city }}<br>
+            {% endif %}
+            {% if order.shipping_address.province %}
+              {{ order.shipping_address.province }}<br>
+            {% endif %}
+            {% if order.shipping_address.zip %}
+              {{ order.shipping_address.zip | upcase }}<br>
+            {% endif %}
+            {{ order.shipping_address.country }}
+            
+            {% if order.shipping_address.pickup_at %}
+            	<div><b>{{ order.shipping_address.pickup_at }}</b></div>
+            {% endif %}
+            
+            {% if order.barcode_image_url and order.is_pickup_from_store_location %}
+              <div style="text-align: center;margin-top: 15px;padding-top: 15px;border-top: 1px solid #eee;">
+                  <img src="{{order.barcode_image_url}}" width="240px" style="max-width: 100%;max-height: 100px;margin: 0 auto 5px;object-fit: contain;">
+                  <div>
+                  	<small class="text-secondary">{{ 'checkout.detail.show_barcode_counter' | t }}</small>
+                  </div>
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      {% if order.type == "pickup" %}
+      	<div class="mb-4">
+          <h2>{{ 'customer.order.receiver_information' | t }}</h2>
+          <div class="card-box">
+            <div class="color-light-text mt-1" style="line-height: 1.4;">
+              {% if order.shipping_address.receiver_first_name or order.shipping_address.receiver_last_name %}
+                {{ order.shipping_address.receiver_first_name }} {{ order.shipping_address.receiver_last_name }}<br>
+              {% endif %}
+              {% if order.shipping_address.receiver_phone %}
+                {{ order.shipping_address.receiver_phone }}<br>
+              {% endif %}
+              {% if order.shipping_address.receiver_email %}
+                {{ order.shipping_address.receiver_email }}<br>
+              {% endif %}
+            </div>
+          </div>
+      	</div>
+      {% endif %}
+
+      {% app_snippet 'account/content_right_middle' %}
+
+      <div class="mb-4">
+        <div class="title-edit-container">
+          <h2>{{ 'customer.order.remarks' | t }}</h2>
+          <p><a onclick="editRemark(); return false;">Edit</a></p>
+        </div>
+        <div id="edit-details" class="details">
+          <p name="remark">{{order.remark | escape }}</p>
+        </div>
+        <div id="edit-remark" class="text-right" style="display:none;">
+          <textarea name="remark" placeholder="{{ 'customer.order.add_a_remark' | t }}">{{order.remark | escape }}</textarea>
+          <button class="button btn" save-remark>{{ 'customer.order.save' | t }}</button>
+        </div>
+      </div>
+      
+      
+      {% if order.has_manual_payment == true %}
+      <div class="mb-4">
+        <div class="title-edit-container">
+          <h2>{{ 'checkout.payment_reference._' | t }}</h2>
+          <p><a onclick="editPayment(); return false;">Edit</a></p>
+        </div>
+        <div id="edit-payment" class="details">
+          <p name="payment">{{ order.ref_number | escape }}</p>
+        </div>
+        <div id="edit-reference" class="text-right field" style="display:none;">
+          <input type="text" class="form-control" name="reference_id" id="reference_id" placeholder="{{ 'checkout.payment_reference.reference_id' | t }}" value="{{ order.ref_number | escape }}" maxlength="255">
+          <label for="reference_id">{{ 'checkout.payment_reference.reference_id' | t }}</label>
+          <button type="button" class="button" id="submit_reference">{{ 'customer.order.save' | t }}</button>
+        </div>
+        <div class="form-success note" id="success_message" style="display:none"></div>
+        <div class="errors note" id="error_message" style="display:none;"></div>
+      </div>
+      {% endif %}
+
+
+      <div>
+        <h2 class="mb-2">{{'customer.attachment.attachment' | t}}</h2>
+        <div class="order-remark-wrapper card-box attachment-container">
+          <div class="attachment-wrapper">
+            {% if order.attachment != null %}
+              {% for attachment in order.attachment %}
+              <div id="attachment-row-{{attachment.id}}" class="attachment-list-item" >
+                <a href="{{attachment.url}}" target="_blank" class="attachment-link">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-file" width="24" height="24" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                    <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                    <path d="M14 3v4a1 1 0 0 0 1 1h4" />
+                    <path d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z" />
+                  </svg>
+                  {{ attachment.title }}.{{ attachment.extension }}
+                </a>
+                <a class="remove-attachment btn" onclick="removeAttachment({{attachment.id}})" attachment-id="{{attachment.id}}">
+                  <svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false" role="presentation" class="icon icon-close" fill="none" viewBox="0 0 18 17">
+                    <path d="M.865 15.978a.5.5 0 00.707.707l7.433-7.431 7.579 7.282a.501.501 0 00.846-.37.5.5 0 00-.153-.351L9.712 8.546l7.417-7.416a.5.5 0 10-.707-.708L8.991 7.853 1.413.573a.5.5 0 10-.693.72l7.563 7.268-7.418 7.417z" fill="currentColor">
+                    </path>
+                  </svg>
+                </a>
+              </div>
+              {% endfor %}
+            {% endif %}
+          </div>
+          <div style="width: 100%;">
+            <label class="button button--secondary button--icon mt-2">
+              <svg class="upload-icon svg-icon" id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19.33,9.77A5.8,5.8,0,0,0,8.48,7.36a2.87,2.87,0,0,0-1.54-.44A2.92,2.92,0,0,0,4,9.82a4.16,4.16,0,0,0,1.49,8.05H9.12a.65.65,0,1,0,0-1.3H5.51a2.86,2.86,0,0,1-.65-5.65l.61-.14-.12-.62a1.66,1.66,0,0,1,0-.32,1.62,1.62,0,0,1,2.88-1l.72.88.4-1.07a4.51,4.51,0,0,1,8.73,1.57L18,11l.64,0a2.79,2.79,0,0,1-.11,5.57H14.69a.65.65,0,0,0,0,1.3h3.87a4.09,4.09,0,0,0,.77-8.1Z"></path><path d="M11.93,21.32a.65.65,0,0,0,.65-.65V13.73l1.08,1.09a.7.7,0,0,0,.46.19.66.66,0,0,0,.46-.19.64.64,0,0,0,0-.92l-2.19-2.2h0l-.45-.46-.46.46h0l-2.2,2.2a.65.65,0,0,0,.92.92l1.09-1.09v6.94A.65.65,0,0,0,11.93,21.32Z"></path></svg>
+              {{ "checkout.payment_reference.tap_to_upload" | t }}
+              <input type="file" id="file_input" name="file" value="Browse" class="hidden">
+            </label>
+          </div>
+        </div>
+        <div class="note errors attachment-error" style="color: red;"></div>
+      </div>
+
+      {% app_snippet 'account/content_right' %}
+
+      
+      
+    </div>
+  </div>
+
+
+  {% app_snippet 'account/content_bottom' %}
+
+</div>
+
+
+<script>
+  let this_el = document.querySelector.bind(document),
+      all_this_el = document.querySelectorAll.bind(document);
+        
+  var ref_number = "{{ order.ref_number | escape }}";
+  this_el('.attachment-error').style.display = "none";
+
+  
+  this_el("#file_input").addEventListener("change", ()=>{
+    var button = this_el("[name='upload']");
+    
+    var form_data = new FormData();
+    var file_data = this_el("#file_input").files[0];
+    form_data.append("file", file_data);
+    form_data.append("order_token", "{{ order.token }}");
+    form_data.append("_token", "{% csrf %}");
+
+
+    fetch('/orders/{{ order.token }}/attachment/upload', {
+      method: 'POST',
+      headers: {
+        "X-Requested-With": "XMLHttpRequest"
+      },
+      body: form_data,
+    })
+    .then(response => response.json())
+    .then((res) => {
+      if(res.status == "success"){
+        this_el(".attachment-wrapper").innerHTML += `
+          <div id="attachment-row-`+res.data.id+`" class="attachment-list-item" >
+            <a href="`+res.data.url+`" target="_blank">`+res.data.title+`.`+res.data.extension+`</a>
+            <a class="remove-attachment btn" onclick="removeAttachment(`+res.data.id+`)" value="`+res.data.id+`" style="text-align: right">
+              <svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false" role="presentation" class="icon icon-close" fill="none" viewBox="0 0 18 17">
+                <path d="M.865 15.978a.5.5 0 00.707.707l7.433-7.431 7.579 7.282a.501.501 0 00.846-.37.5.5 0 00-.153-.351L9.712 8.546l7.417-7.416a.5.5 0 10-.707-.708L8.991 7.853 1.413.573a.5.5 0 10-.693.72l7.563 7.268-7.418 7.417z" fill="currentColor">
+                </path>
+              </svg>
+            </a>
+          </div>`;
+        
+        this_el(".attachment-error").empty().hide();
+        this_el(".attachment-error").innerHTML = "";
+        this_el(".attachment-error").style.display = "none";
+      }
+      else{
+        this_el(".attachment-error").innerHTML = res.data;
+        this_el(".attachment-error").style.display = "block";
+      }
+    })
+    .catch((x, t, m) => {
+      if(m == "Request Entity Too Large"){
+        this_el(".attachment-error").innerHTML = "{{'customer.attachment.file_too_large' | t}}";
+        this_el(".attachment-error").style.display = "block";
+      }
+      if(t == "timeout"){
+        this_el(".attachment-error").innerHTML = "{{'customer.attachment.upload_fail' | t}}";
+        this_el(".attachment-error").style.display = "block";
+      }
+    })
+  });
+  
+  
+  // Remove attachment
+  function removeAttachment(id) {
+    var selected_row = document.getElementById('attachment-row-'+id),
+        c = confirm("{{ 'checkout.payment_reference.delete_attachment_confirm' | t }}");
+
+    if(c == true){
+      fetch("/orders/{{ order.token }}/attachment/"+id, {
+        method: 'DELETE',
+        headers: {
+          "Content-Type": "application/json",
+          "X-Requested-With": "XMLHttpRequest"
+        },
+        body: JSON.stringify({
+          order_token: "{{ order.token }}",
+          _token: "{% csrf %}"
+        }),
+      })
+      .then(response => response.json())
+      .then((res) => {
+        if(res.status == "success"){
+          selected_row.remove();
+        }
+      })
+      .catch((error) => {console.log(error)})
+
+    }
+  };
+
+  function editPayment() {
+    var editBtn = document.getElementById('edit-payment');
+    var editEl = document.getElementById('edit-reference');
+    editBtn.style.display = editBtn.style.display == 'none' ? '' : 'none';
+    editEl.style.display = editEl.style.display == 'none' ? '' : 'none';
+    return false;
+  };
+
+  if(this_el("#submit_reference")){
+    this_el("#submit_reference").addEventListener("click", ()=>{
+      this_el("#submit_reference").classList.add('btn--loading');
+      var reference_id = this_el("input[name='reference_id']").value;
+      var cart_token = "{{ order.cart_token }}";
+  
+      this_el("#submit_reference").disabled = true;
+      this_el("#error_message").style.display = "none"; 
+      this_el("#error_message").innerHTML = "";
+      this_el("#success_message").style.display = "none"; 
+      this_el("#success_message").innerHTML = "";
+  
+      fetch("/payments/reference", {
+          method: 'POST',
+          headers: {
+            "Content-Type": "application/json",
+            "X-Requested-With": "XMLHttpRequest"
+          },
+          body: JSON.stringify({
+            cart_token: cart_token,
+            reference_id: reference_id,
+            _token: "{% csrf %}"
+          }),
+      })
+      .then(response => response.json())
+      .then((res) => {
+        if(res.status == "success"){
+          this_el("#submit_reference").classList.remove('btn--loading');
+          var editBtn = document.getElementById('edit-payment');
+          var editEl = document.getElementById('edit-reference');
+          editBtn.style.display = editBtn.style.display == 'none' ? '' : 'none';
+          editEl.style.display = editEl.style.display == 'none' ? '' : 'none';
+          location.reload();
+          ref_number = reference_id;
+          this_el("#submit_reference").classList.add('hidden')
+          this_el("#submit_reference").disabled = false
+  
+          this_el("input[name='reference_id']").disabled = true;
+  
+          this_el("#success_message").innerHTML = "<p>{{ 'checkout.payment_reference.update_reference_success' | t }}</p>"
+          this_el("#success_message").style.display = "block"; 
+        }
+        else{
+          this_el("#submit_reference").disabled = false;
+  
+          this_el("#error_message").innerHTML = "<p>{{ 'checkout.payment_reference.update_reference_fail' | t }}</p>"
+          this_el("#error_message").style.display = "block"; 
+        }
+      })
+      .catch((error) => {
+          this_el("#error_message").innerHTML = "<p>{{ 'checkout.payment_reference.update_reference_fail' | t }}</p>"
+          this_el("#error_message").style.display = "block"
+          this_el('#submit_reference').disabled = false 
+      })
+  
+  
+    });
+  }
+
+  function editRemark() {
+    var editBtn = document.getElementById('edit-details');
+    var editEl = document.getElementById('edit-remark');
+    editBtn.style.display = editBtn.style.display == 'none' ? '' : 'none';
+    editEl.style.display = editEl.style.display == 'none' ? '' : 'none';
+    return false;
+  };
+
+  this_el("[save-remark]").addEventListener("click", ()=>{
+    this_el("[save-remark]").classList.add('btn--loading');
+
+    fetch("/account/orders/{{ order.token }}/remark", {
+      method: 'PUT',
+      headers: {
+        "Content-Type": "application/json",
+        "X-Requested-With": "XMLHttpRequest"
+      },
+      body: JSON.stringify({
+        remark: this_el("textarea[name=remark]").value,
+        order_token: "{{ order.token }}",
+        _token: "{% csrf %}"
+      }),
+    })
+    .then(response => response.json())
+    .then((res) => {
+      if(res.status == "success"){
+        this_el("[save-remark]").classList.remove('btn--loading');
+        var editBtn = document.getElementById('edit-details');
+        var editEl = document.getElementById('edit-remark');
+        editBtn.style.display = editBtn.style.display == 'none' ? '' : 'none';
+        editEl.style.display = editEl.style.display == 'none' ? '' : 'none';
+        location.reload();
+      }
+    })
+    .catch((error) => {console.log(error)})
+
+  });
+
+</script>

@@ -1,0 +1,276 @@
+<link rel="preload" href="{{ 'component-card.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<link rel="preload" href="{{ 'component-price.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<link rel="preload" href="{{ 'component-product-grid.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+
+<style>
+  .search__input.field__input {
+    padding-right: 5rem;
+  }
+
+  .search__button .icon {
+    height: 1.8rem;
+    width: 1.8rem;
+  }
+
+  /* Remove extra spacing for search inputs in Safari */
+  input::-webkit-search-decoration {
+    -webkit-appearance: none;
+  }
+
+  .template-search__search {
+    margin: 0 auto;
+    max-width: 47.8rem;
+  }
+
+  .template-search__search .search {
+    margin-top: 3rem;
+  }
+
+  .template-search__results {
+    margin-top: 6rem;
+  }
+
+  .template-search--empty {
+    padding-bottom: 18rem;
+  }
+
+  .template-search .grid__item--small:not(:last-child) {
+    padding-bottom: 0.5rem;
+  }
+
+  @media screen and (min-width: 750px) {
+    .template-search__results {
+      margin-top: 9rem;
+    }
+
+    .template-search .grid__item--small:not(:last-child) {
+      padding-bottom: 1rem;
+    }
+  }
+
+  .search__button .icon {
+    height: 1.8rem;
+  }
+
+  .search-modal__form{
+    position: relative;
+  }
+  
+  .dropdown {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    width: 100%;
+    padding: 5px 0;
+    background-color: #fff;
+    color:#000;
+    z-index: 1000;
+    border-bottom-left-radius: 15px;
+    border-bottom-right-radius: 15px;
+    border: 1px solid rgba(var(--color-foreground), 1);
+    border-top: none;
+    overflow-x: hidden;
+    overflow-y: auto;
+    max-height: 350px;
+  }
+  
+  .dropdown-item {
+    padding: 0.4rem 2rem;
+    cursor: pointer;
+    line-height: 1.4;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  
+  .dropdown-item:hover{
+    background-color: #f3f3f3;
+  }
+  
+  .search__input.is-focus{
+    border-radius: 15px;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    border: 1px solid rgba(var(--color-foreground), 1);
+    border-bottom: none;
+    box-shadow: none;
+  }
+  
+  .clear-all {
+    text-align: right;
+    padding: 0 2rem 0.2rem;
+    line-height: 1;
+    font-size: 70%;
+    margin-bottom: -2px;
+  }
+  
+  .clear-all:hover{
+    background-color: #fff;
+  }
+  
+  .search-input-focus .easystore-section-header-hidden{
+    transform: none;
+  }
+</style>
+
+<svg xmlns="http://www.w3.org/2000/svg" class="hidden">
+  <symbol id="icon-search" viewbox="0 0 18 19" fill="none">
+    <path fill-rule="evenodd" clip-rule="evenodd" d="M11.03 11.68A5.784 5.784 0 112.85 3.5a5.784 5.784 0 018.18 8.18zm.26 1.12a6.78 6.78 0 11.72-.7l5.4 5.4a.5.5 0 11-.71.7l-5.41-5.4z" fill="currentColor"/>
+  </symbol>
+
+  <symbol id="icon-close" class="icon icon-close" fill="none" viewBox="0 0 18 17">
+    <path d="M.865 15.978a.5.5 0 00.707.707l7.433-7.431 7.579 7.282a.501.501 0 00.846-.37.5.5 0 00-.153-.351L9.712 8.546l7.417-7.416a.5.5 0 10-.707-.708L8.991 7.853 1.413.573a.5.5 0 10-.693.72l7.563 7.268-7.418 7.417z" fill="currentColor">
+  </symbol>
+</svg>
+
+<div class="template-search spaced-section{% unless search.performed and search.results.size > 0 %} template-search--empty{% endunless %}">
+  <div class="page-width">
+    <div class="center">
+      {% if search.performed and search.results_count == 0 %}
+        <h1 class="h2">{{ 'general.search.no_results_html' | t: search.terms | escape }}</h1>
+      {% elsif search.performed and search.terms != null and search.terms != '' %}
+        <h1 class="h2">{{ 'general.search.results_for_html' | t: search.terms | escape }}</h1>
+      {% else %}
+        <h1 class="h2">{{ 'general.search.title' | t }}</h1>
+      {% endif %}
+    </div>
+
+
+    <div class="template-search__search">
+      <form action="/search" method="get" role="search" class="search">
+        <div class="field">
+          <input
+            class="search__input field__input"
+            id="Search-In-Template"
+            type="search"
+            name="q"
+            value="{{ search.terms | escape }}"
+            placeholder="{{ 'general.search.placeholder' | t }}"
+            autocomplete="off"
+          >
+          <label class="field__label" for="Search-In-Template">{{ 'general.search.placeholder' | t }}</label>
+          <div class="dropdown" id="searchDropdown"></div>
+          <input type="hidden" name="search_history" class="hidden_search_history"> 
+              
+          <button type="submit" class="search__button field__button" aria-label="{{ 'general.search.placeholder' | t }}">
+            <svg class="icon icon-search">
+              <use xlink:href="#icon-search">
+            </svg>
+          </button>
+        </div>
+      </form>
+    </div>
+    <br>
+        
+    {% if search.performed and search.results_count > 0 %}
+      <ul class="grid grid--2-col product-grid grid--3-col-tablet grid--one-third-max grid--4-col-desktop grid--quarter-max negative-margin" role="list">
+        {% for item in search.results %}
+        {% assign product = item %}
+          <li class="grid__item">
+            {% include 'product-card' with 'search-result', show_product_info: true  %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+
+
+    {% if search.performed and search.results_count > 0 and paginate.pages > 1 %}
+      {% include 'pagination' %}
+    {% endif %}
+
+
+  </div>
+</div>
+
+<script>
+  var _search_history_listings = {{ update_search_history.data.search_history_listings | json }}
+  if(_search_history_listings != "") localStorage.setItem('searchHistory', JSON.stringify(_search_history_listings));
+    
+  function clearAll() {
+    localStorage.removeItem('searchHistory'); 
+    
+    var customer = {{ customer | json }};
+    if(customer) {
+      // Your logic to clear all data or call an endpoint
+      fetch('/account/search_histories', {
+          method: 'DELETE',
+          headers: {
+            "Content-Type": "application/json",
+            "X-Requested-With": "XMLHttpRequest"
+          },
+          body: JSON.stringify({
+            _token: "{% csrf %}"
+          }),
+      })
+      .then(response => response.json())
+    }
+  }
+  // End - delete search history from local storage
+  
+  // search history dropdown  
+  var searchInputs = document.querySelectorAll('.search__input');
+  
+  if(searchInputs.length > 0) {
+    
+    searchInputs.forEach((searchInput)=> {
+    
+      searchInput.addEventListener('focus', function() {
+        var searchDropdown = searchInput.closest('form').querySelector('#searchDropdown');
+        searchDropdown.innerHTML = ''; // Clear existing items
+  
+        // retrieve data from local storage
+        var searchHistoryData = JSON.parse(localStorage.getItem('searchHistory')) || [];
+  
+        // Convert JSON to string
+        var search_history_json = JSON.stringify(searchHistoryData);
+  
+        // Set the value of the hidden input
+        searchInput.closest('form').querySelector(".hidden_search_history").value = search_history_json;
+  
+        // create dropdown items
+        var clearAllItem = document.createElement('div');
+        clearAllItem.className = 'dropdown-item clear-all';
+        clearAllItem.textContent = 'Clear';
+        clearAllItem.addEventListener('click', function() {
+          clearAll();
+          searchDropdown.style.display = 'none';
+          searchInput.classList.remove('is-focus');
+        });
+        searchDropdown.appendChild(clearAllItem);
+  
+        // create dropdown items
+        searchHistoryData.forEach(function(item) {
+          var dropdownItem = document.createElement('div');
+          dropdownItem.className = 'dropdown-item';
+          dropdownItem.textContent = item.term;
+          dropdownItem.addEventListener('click', function() {
+            searchInput.value = item.term;
+            searchInput.closest('form').submit();
+            searchDropdown.style.display = 'none';
+          });
+          searchDropdown.appendChild(dropdownItem);
+        });
+  
+        if(searchHistoryData.length > 0){
+          // display the dropdown
+          searchInput.classList.add('is-focus');
+          document.body.classList.add('search-input-focus');
+          searchDropdown.style.display = 'block';
+        }
+      });
+  
+      searchInput.addEventListener("focusout", (event) => {
+        var searchDropdown = searchInput.closest('form').querySelector('#searchDropdown');
+        searchInput.classList.remove('is-focus');
+        searchDropdown.classList.add('transparent');
+        setTimeout(()=>{
+          searchDropdown.style.display = 'none';
+          searchDropdown.classList.remove('transparent');
+          document.body.classList.remove('search-input-focus');
+        }, 400);
+      });
+    })
+  }
+  // End - search history dropdown
+</script>

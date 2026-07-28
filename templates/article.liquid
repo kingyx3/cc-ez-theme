@@ -1,0 +1,94 @@
+<link rel="preload" href="{{ 'blog.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<link rel="preload" href="{{ 'article.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+
+{% assign number_of_comments = article.comments_count %}
+
+{% if comment and comment.created_at %}
+  {% assign number_of_comments = article.comments_count | plus: 1 %}
+{% endif %}
+
+
+{% comment %}{% include 'breadcrumb' %}{% endcomment %}
+  <meta itemscope itemprop="mainEntityOfPage"  itemType="https://schema.org/WebPage" itemid="{{shop.url}}{{article.url}}"/>
+  <meta itemprop="dateModified" content='{{ article.updated_at }}'>
+  <div itemprop="publisher" itemscope itemtype="https://schema.org/Organization">
+    <meta itemprop="url" content="{{ shop.url }}">
+    <div itemprop="logo" itemscope itemtype="https://schema.org/ImageObject">
+      <meta itemprop="url" content="{{ settings.logo_img }}">
+      <meta itemprop="width" content="600">
+      <meta itemprop="height" content="60">
+    </div>
+    <meta itemprop="name" content="{% if article.author %}{{ article.author }}{% else %}{{ shop.name | escape}}{% endif %}">
+  </div>
+  
+  <section>
+    <article class="article-template" >
+      {% if article.image.src %}
+      <div class="article-template__hero-container">
+        <div class="article-template__hero-adapt media" itemprop="image" style="padding-bottom: 40%;">
+          <img src="{{ article.image.src }}" alt="{{ article.title | escape}}">
+        </div>
+      </div>
+      {% endif %}
+      <header class="page-width page-width--narrow">
+        <h1 class="article-template__title" itemprop="headline">{{ article.title | escape}}</h1>
+        <span class="circle-divider caption-with-letter-spacing" itemprop="dateCreated pubdate datePublished"><time datetime="{{ article.published_at | date: '%Y-%m-%d' }}">{{ article.published_at | date: "%b %d, %y" }}</time></span>
+      </header>
+      <div class="article-template__social-sharing page-width page-width--narrow">
+        {% include 'social-sharing' %}
+      </div>
+      <div class="article-template__content page-width page-width--narrow overflow-auto" itemprop="articleBody">
+        {{ article.body_html }}
+        {% include 'related-product-items', recommend: article %}
+      </div>
+      <div class="element-margin center">
+        <a href="{{ blog.url }}" class="article-template__link link animate-arrow spaced-section">
+          <span class="icon-wrap">
+            <svg viewBox="0 0 14 10" fill="none" aria-hidden="true" focusable="false" role="presentation" class="icon icon-arrow" xmlns="http://www.w3.org/2000/svg">
+              <path fill-rule="evenodd" clip-rule="evenodd" d="M8.537.808a.5.5 0 01.817-.162l4 4a.5.5 0 010 .708l-4 4a.5.5 0 11-.708-.708L11.793 5.5H1a.5.5 0 010-1h10.793L8.646 1.354a.5.5 0 01-.109-.546z" fill="currentColor"></path>
+            </svg>
+          </span>
+          {{ 'general.back' | t }}
+        </a>
+      </div>
+    </article>
+  </section>
+
+
+  <script type="application/ld+json">
+    {
+      "@context": "http://schema.org",
+      "@type": "Article",
+      "articleBody": "{{ article.content | strip_html  }}",
+      "mainEntityOfPage": {
+        "@type": "WebPage",
+        "@id": "{{ shop.url | append: page.url  }}"
+      },
+      "headline": "{{ article.title  }}",
+      {% if article.excerpt != blank %}
+        "description": "{{ article.excerpt | strip_html  }}",
+      {% endif %}
+      {% if article.image %}
+        "image": [
+          "{{ article.image.src }}"
+        ],
+      {% endif %}
+      "datePublished": "{{ article.published_at | date: '%Y-%m-%d' }}",
+      "dateCreated": "{{ article.created_at | date: '%Y-%m-%d' }}",
+      "author": {
+        "@type": "Person",
+        "url": "{{ shop.url }}",
+        "name": "{{ article.author }}"
+      },
+      "publisher": {
+        "@type": "Organization",
+        {% if settings.logo_img %}
+          "logo": {
+            "@type": "ImageObject",
+            "url": "{{ settings.logo_img }}"
+          },
+        {% endif %}
+        "name": "{{ shop.name }}"
+      }
+    }
+    </script>

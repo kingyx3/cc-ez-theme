@@ -1,0 +1,282 @@
+<link rel="preload" href="{{ 'customer.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<style>input::-webkit-calendar-picker-indicator{display: none;}</style>
+<style>
+  div.flex-table-tr {
+    cursor: pointer;
+  }
+  
+  .order-image {
+    width: 100px;
+    height: 100px;
+    padding-bottom: 0;
+  }
+  
+  .order-right {
+    height: 100px;
+  }
+  
+  @media screen and (max-width: 990px) {
+    div.flex-table-tr {
+      padding: 1.6rem;
+    }
+    
+    .order-image {
+      width: 80px;
+      height: 80px;
+    }
+    
+    .order-right {
+      height: 80px;
+      padding-top: 0;
+      margin-left: auto;
+    }
+    
+    .customer button.order-button {
+      padding: 0.9rem 1.9rem;
+      min-width: 10rem;
+      min-height: unset;
+      font-size: 85%;
+    }
+  }
+</style>
+<link
+  rel="preload"
+  href="{{ 'component-slider.css' | asset_url }}"
+  as="style"
+  onload="this.onload=null;this.rel='stylesheet'">
+
+
+<div class="customer account">
+  <div style="margin-bottom: 20px;">
+    <h1>{{ 'customer.orders.title' | t }}</h1>
+    <a href="/account">← {{ 'general.back' | t }}</a>
+  </div>
+
+  <div class="section-wrapper">
+	<div>
+      <slider-component class="order-tab slider-mobile-gutter">
+        <ul class="order-tab__slider grid slider slider--tablet pl-0 mt-0 mb-0">
+          {% for tab in customer.paginate.filter.tabs %}
+          {% assign selectedTab = customer.paginate.filter.current_tab %}
+          <li id="{{ tab.status }}" class="grid__item slider__slide {% if tab.status == selectedTab %}active{% endif %}" data-target="{{ tab.status }}" onclick="switchTab('{{ tab.status }}')">
+            {% assign tab_name = 'customer.orders.tab.' | append: tab.status %}
+            <div>{{ tab_name | t }} {% if tab.count > 0 %}<span class="order-count">{{ tab.count }}</span>{% endif %}</div>
+            
+            <span>|</span>
+          </li>
+          {% endfor %}
+        </ul>
+      </slider-component>
+      
+      {% if customer.orders.size != 0 %}
+        <div class="flex-table">
+            {% for order in customer.orders %}
+              <div onclick="window.location.href = '/account/orders/{{ order.token }}'" class="flex-table-tr">
+                {% if order.name != order.order_number %}
+                  <div class="small-text color-light-text">
+                    {{ order.order_number | escape }}
+                  </div>
+                {% endif %}
+                <div class="d-flex flex-align-center flex-space-between flex-wrap gap-y-2">
+                    <div class="d-flex flex-align-center gap-x-2">
+                      <a class="h3" href="/account/orders/{{ order.token }}">{{ order.name | escape }}</a>
+                      <div class="small-text color-light-text" data-label="{{ 'customer.orders.date' | t }}">{{ order.created_at | date: "%b %d, %Y" }}</div>
+                      {% if order.type == 'pickup' %}<div class="small-text color-light-text d-flex flex-align-center" style="gap: 3px;">{% include 'svg-definitions' with 'icon-location' %} {{ "checkout.detail.pickup" | t }}</div>{% endif %}
+                    </div>
+                    <div class="order-status d-flex flex-align-center gap-x-2">
+                    {% if order.is_cancelled == 1%}
+                      <span class="small-text label-tag label-tag-alert">{{ "customer.fulfillment_activity.cancelled" | t }}</span>
+                    {% else %}
+                      {% if order.financial_status_label == "Paid" %}
+                        <span class="small-text label-tag label-tag-success">{{ 'customer.financial_status.paid' | t }}</span>
+                      {% elsif order.financial_status_label == "Refunded" %}
+                        <span class="small-text label-tag label-tag-info">{{ 'customer.financial_status.refunded' | t }}</span>
+                      {% elsif order.financial_status_label == "Pending" %}
+                        <span class="small-text label-tag label-tag-pending">{{ 'customer.financial_status.pending' | t }}</span>
+                      {% elsif order.financial_status_label == "Partially paid" %}
+                        <span class="small-text label-tag label-tag-pending">{{ 'customer.financial_status.partially_paid' | t }}</span>
+                      {% elsif order.financial_status_label == "Authorized" %}
+                        <span class="small-text label-tag label-default-dark">{{ 'customer.financial_status.authorized' | t }}</span>
+                      {% else %}
+                        <span class="small-text label-tag label-tag-warning">{{ 'customer.financial_status.unpaid' | t }}</span>
+                      {% endif %}
+
+                      {% if order.fulfillment_status_label == "Fulfilled" %}
+                        <span class="small-text label-tag label-tag-success">{{ 'customer.fulfillment_status.fulfilled' | t }}</span>
+                      {% elsif order.fulfillment_status_label == "Returned" %}
+                        <span class="small-text label-tag label-tag-info">{{ 'customer.fulfillment_status.returned' | t }}</span>
+                      {% elsif order.fulfillment_status_label == "Partially fulfilled" %}
+                        <span class="small-text label-tag label-tag-pending">{{ 'customer.fulfillment_status.partially_fulfilled' | t }}</span>
+                      {% elsif order.fulfillment_status_label == "To process" %}
+                        <span class="small-text label-tag label-tag-pending">{{ 'customer.fulfillment_status.to_process' | t }}</span>
+                      {% elsif order.fulfillment_status_label == "Processed" %}
+                        <span class="small-text label-tag label-tag-pending">{{ 'customer.fulfillment_status.processed' | t }}</span>
+                      {% elsif order.fulfillment_status_label == "Packed" %}
+                        <span class="small-text label-tag label-tag-pending">{{ 'customer.fulfillment_status.packed' | t }}</span>
+                      {% elsif order.fulfillment_status_label == "Shipped" %}
+                        <span class="small-text label-tag label-tag-pending">{{ 'customer.fulfillment_status.shipped' | t }}</span>
+                      {% elsif order.fulfillment_status_label == "Ready for pickup" %}
+                        <span class="small-text label-tag label-tag-success">{{ 'customer.fulfillment_status.ready_for_pickup' | t }}</span>
+                      {% elsif order.fulfillment_status_label == "Delivered" %}
+                        <span class="small-text label-tag label-tag-success">{{ 'customer.fulfillment_status.delivered' | t }}</span>
+                      {% elsif order.fulfillment_status_label == "Customer picked up" %}
+                        <span class="small-text label-tag label-tag-success">{{ 'customer.fulfillment_status.customer_picked_up' | t }}</span>
+                      {% elsif order.fulfillment_status_label == "Partially shipped" %}
+                        <span class="small-text label-tag label-tag-pending">{{ 'customer.fulfillment_status.partially_shipped' | t }}</span>
+                      {% elsif order.fulfillment_status_label == "Partially packed" %}
+                        <span class="small-text label-tag label-tag-pending">{{ 'customer.fulfillment_status.partially_packed' | t }}</span>
+                      {% elsif order.fulfillment_status_label == "Partially processed" %}
+                        <span class="small-text label-tag label-tag-pending">{{ 'customer.fulfillment_status.partially_processed' | t }}</span>
+                      {% elsif order.fulfillment_status_label == "Partially delivered" %}
+                        <span class="small-text label-tag label-tag-pending">{{ 'customer.fulfillment_status.partially_delivered' | t }}</span>
+                      {% else %}
+                        <span class="small-text label-tag label-tag-warning">{{ 'customer.fulfillment_status.unfulfilled' | t }}</span>
+                      {% endif %}
+                    {% endif %}
+                    </div>
+                </div>
+
+                <div class="d-flex flex-align-center flex-space-between flex-wrap gap-x-2 gap-y-2 mt-4 text-right">
+                  <div class="d-flex gap-x-2 gap-y-2">
+                    {% assign max_items = 5 %}
+                    {% assign index = 1 %}
+                    {% for item in order.line_items limit: max_items %}
+                    <div class="order-image media media--square">
+                      <div>
+                          {% assign remaining_items = order.line_items | size | minus: index %}
+                          {% if item.image == null %}
+                            <img src="/assets/images/products/no_image.png">
+                          {% else %}
+                            <img src="{{ item.image }}" alt="{{ item.title | escape }}">
+                          {% endif %}
+
+                          <span class="image-overlay-qty {% if index == 5 and remaining_items > 0 %}desktop-show{% endif %} {% if index == 2 and remaining_items > 0 %}mobile-show{% endif %}">
+                            + {{ remaining_items }} 
+                          </span>
+                          {% assign index = index | plus: 1 %}
+                      </div>
+                    </div>
+                    {% endfor %}
+                  </div>
+                  <div class="order-right">
+                    <div class="h4">{{order.currency_format.format_prefix}} {{ order.total_price }} {{order.currency_format.format_suffix}}</div>
+                      {% if order.is_paid == false and order.is_cancelled == 0 and order.cod_type != 1 and selectedTab != 'to_receive' %}
+                        <button class="order-button button mt-2 mb-0" onclick="handleClickPay(event, '{{order.cart_token}}')">{{ 'customer.order.pay' | t }}</button>
+                      {% endif %}
+                    
+                      {% if order.is_repurchasable == true and selectedTab != 'to_receive' %}
+                        <button class="order-button button mt-2 mb-0" data-repurchase-items="{{ order.line_items | json | escape }}" data-currency="{{ order.currency_format | json | escape }}" onclick="openRepurchaseModal(event, this)">{{ 'customer.order.buy_again' | t }}</button>
+                      {% endif %}
+                    
+                      {% if selectedTab == 'to_receive' %}
+                      <details-modal onclick="event.stopPropagation();">
+                        <details>
+                          <summary class="order-button button mt-2 mb-0" aria-haspopup="dialog">
+                            {{ 'customer.order.receive' | t }}
+                          </summary>
+
+                          <div class="confirmation-modal modal__content" role="dialog" aria-modal="true">
+                            <div class="modal-overlay"></div>
+                            <div class="confirmation-modal__content" tabindex="-1">
+                              <div class="h3"><b>{{ 'customer.orders.receive.title' | t }}</b></div>
+               
+
+                              <div class="mt-4 mb-4">
+                                {{ 'customer.orders.receive.desc' | t }}
+                              </div>
+
+                              <div class="d-flex flex-align-center gap-x-2" style="justify-content: flex-end;">
+                                <button id="closeModal{{order.token}}" type="button" class="button button--secondary">
+                                  {{ 'customer.orders.receive.cancel' | t }}
+                                </button>
+                                
+                                <button id="confirmOrder{{order.token}}" class="btn button">
+                                  {{ 'customer.orders.receive.confirm' | t }}
+                                </button>
+
+                                <script>
+                                  var confirmOrderBtn = document.getElementById('confirmOrder{{order.token}}');
+                                  confirmOrderBtn.addEventListener('click', function (e) {
+                                    var selfBtn = $(this);
+      								              selfBtn.addClass('btn--loading');
+                                    
+                                    $.ajax({
+                                      type: "PUT",
+                                      dataType: 'json',
+                                      url: "/sf/order/{{ order.token }}/fulfillment_update",
+                                      data:{
+                                          _token: "{% csrf %}",
+                                      },
+                                      success: function(response){
+                                        window.location.replace('/account/orders?filter=completed');
+                                        document.querySelector('#closeModal{{order.token}}').click();
+                                        selfBtn.removeClass('btn--loading');
+                                      },
+                                      error: function(xhr){
+                                        console.log(xhr);
+                                        selfBtn.removeClass('btn--loading');
+                                      },
+                                    });
+                                  });
+                                </script>
+                              </div>
+                            </div>
+                          </div>
+                        </details>
+                      </details-modal>
+                      {% endif %}
+                  </div>
+                </div>
+              </div>
+            {% endfor %}
+          
+          	{% include 'repurchase-modal' %}
+        </div>
+      
+      {% else %}
+        <div class="card-box center" style="padding-top: 30px; padding-bottom: 45px;">
+          <div style="width: 130px; height: 130px; margin: 25px auto;">
+            <svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 182.72 196.97">
+              <ellipse cx="91.36" cy="172.57" rx="91.36" ry="24.4" style="fill: #f5f5f5; stroke-width: 0px;"/>
+              <path d="m34.35,80.71h118.53v91.16c0,.18-.07.36-.21.49-.13.13-.31.21-.49.21H35.05c-.19,0-.36-.07-.49-.21-.13-.13-.21-.31-.21-.49v-91.16Z" style="fill: #e5e5e5; stroke-width: 0px;"/>
+              <path d="m123.15,44.99h-55.11l-33.68,35.72h118.53l-29.73-35.72h-.01Z" style="fill: #dadada; stroke-width: 0px;"/>
+              <path d="m45.58,30.7l22.45,14.29-33.68,35.72-25.52-19.39,36.74-30.62h.01Z" style="fill: #ececec; stroke-width: 0px;"/>
+              <path d="m145.6,30.7l-22.45,14.29,29.74,35.72,29.46-19.39-36.74-30.62h0Z" style="fill: #ececec; stroke-width: 0px;"/>
+              <path d="m82.51,31.43c.63-.3,1.13-.83,1.38-1.49s.24-1.38-.04-2.03l-10.1-23.82c-.14-.34-.35-.64-.62-.9s-.58-.45-.92-.58c-.34-.13-.71-.19-1.07-.18-.37,0-.73.1-1.06.26l-1.95.92c-.33.16-.63.38-.87.65-.24.27-.43.59-.54.94-.12.35-.16.72-.13,1.08.03.37.13.72.3,1.04l12.05,22.9c.33.62.88,1.09,1.55,1.31.66.22,1.39.18,2.02-.12v.02Z" style="fill: #e5e5e5; stroke-width: 0px;"/>
+              <path d="m95.18,29.13c.46-.03.89-.24,1.2-.58s.47-.79.46-1.25l-.5-16.96c0-.24-.06-.48-.16-.69-.1-.22-.24-.41-.42-.57s-.39-.28-.62-.36-.47-.11-.71-.09l-1.41.1c-.24.02-.47.08-.69.19-.21.11-.4.26-.56.45-.15.18-.27.4-.34.63s-.09.47-.06.71l1.91,16.86c.05.46.28.88.63,1.17s.81.44,1.27.41v-.02Z" style="fill: #e5e5e5; stroke-width: 0px;"/>
+              <path d="m104.95,35.39c1.26.73,3.03.06,4.01-1.52l17.44-28.01c1.04-1.67.79-3.71-.54-4.49l-1.86-1.08c-1.34-.77-3.23.03-4.16,1.77l-15.57,29.09c-.88,1.64-.57,3.51.69,4.24h-.01Z" style="fill: #e5e5e5; stroke-width: 0px;"/>
+            </svg>
+          </div>
+          <p class="color-light-text mb-0">{{ 'customer.orders.empty' | t }}</p>
+          <button class="btn" onclick="window.location.href = '/collections/all'">{{ 'products.product.continue_shopping' | t }}</button>
+        </div>
+      {% endif %}
+      
+      {% if paginate.pages > 1 %}
+        <div class="text-center">
+          {% include 'pagination' %}
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const activeTab = "{{ selectedTab }}";
+    const targetElement = document.getElementById(`${activeTab}`);
+
+    if (targetElement) {
+      targetElement.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }
+  });
+  
+  function switchTab(tab) {
+    window.location.replace('/account/orders?filter=' + tab);
+  }
+  
+  function handleClickPay(event, cart_token) {
+    event.stopPropagation(); 
+    window.location.href = '/orders/' + cart_token + '/repayment';
+  }
+</script>

@@ -1,0 +1,169 @@
+{% app_snippet 'login/content_top' %}
+
+<link rel="preload" href="{{ 'customer.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<style>input::-webkit-calendar-picker-indicator{display: none;}</style>
+
+{% assign account_placeholder = 'customer.login.email' %}
+{%if shop.phone_account_enabled == true %}
+  {% assign account_placeholder = 'customer.login.email_or_phone' %}
+{% endif %}
+
+<div class="customer login">
+  <h1 id="recover" tabindex="-1">
+    {{ 'customer.recover_password.title' | t }}
+  </h1>
+  <div>
+    <p>
+      {{ 'customer.recover_password.subtext' | t }}
+    </p>
+    
+    <form action="/account/recover" method="post">
+      <input type="hidden" name="_token" value="{% csrf %}">
+      {% if form.errors %}
+        {{ form.errors | default_errors }}
+      {% endif %}
+
+      <div class="field">
+        <input type="text"
+          value=""
+          name="email_or_phone"
+          id="RecoverEmail"
+          autocorrect="off"
+          autocapitalize="off"
+          autocomplete="email"
+          placeholder="{{ account_placeholder | t }}"
+          required
+        >
+        <label for="RecoverEmail">
+          {{ account_placeholder | t }}
+        </label>
+      </div>
+
+      <button>
+        {{ 'customer.recover_password.submit' | t }}
+      </button>
+
+      <a href="#login">
+        {{ 'customer.recover_password.cancel' | t }}
+      </a>
+    </form>
+  </div>
+
+  <h1 id="login" tabindex="-1">
+    {{ 'customer.login.title' | t }}
+  </h1>
+  <div>
+    {% assign message = 'customer.verify.success' %}
+    {% if form.verified_successfully %}
+      {% assign message = 'customer.verify.success' %}
+    {% endif %}
+
+    {% if form.account_registered %}
+      {% assign message = 'customer.register.success' %}
+    {% endif %}
+
+    {% if form.posted_successfully %}
+      {% assign message = 'customer.recover_password.success' %}
+    {% endif %}
+
+    {% if reset_status %}
+      {% assign message = 'customer.reset_password.success' %}
+    {% endif %}
+    
+    {% if form.activated_successfully %}
+      {% assign message = 'customer.activate_account.success' %}
+    {% endif %}
+
+    {% if form.verified_successfully or form.account_registered or form.posted_successfully or reset_status or form.activated_successfully %}
+      <div class="note form-success form__message" tabindex="-1" autofocus>
+        <svg aria-hidden="true" focusable="false" role="presentation" viewBox="0 0 13 13">
+          <path d="M6.5 12.35C9.73087 12.35 12.35 9.73086 12.35 6.5C12.35 3.26913 9.73087 0.65 6.5 0.65C3.26913 0.65 0.65 3.26913 0.65 6.5C0.65 9.73086 3.26913 12.35 6.5 12.35Z" fill="#428445" stroke="white" stroke-width="0.7"/>
+          <path d="M5.53271 8.66357L9.25213 4.68197" stroke="white"/>
+          <path d="M4.10645 6.7688L6.13766 8.62553" stroke="white"/>
+        </svg>
+        {{ message | t }}
+      </div>
+    {% endif %}
+
+
+
+    <form id="form-login" action="/account/login" method="post">
+      <input type="hidden" name="_token" value="{% csrf %}">
+
+      {% if form.errors %}
+        {{ form.errors | default_errors }}
+      {% endif %}
+
+      <div class="field">        
+        <input
+          type="text"
+          name="customer[email_or_phone]"
+          id="CustomerEmail"
+          autocomplete="email"
+          autocorrect="off"
+          autocapitalize="off"
+          placeholder="{{ account_placeholder | t }}"
+          required
+        >
+        <label for="CustomerEmail">
+          {{ account_placeholder | t }}
+        </label>
+      </div>
+
+      <div class="field">          
+        <input
+          type="password"
+          value=""
+          name="customer[password]"
+          id="CustomerPassword"
+          autocomplete="current-password"
+          placeholder="{{ 'customer.login.password' | t }}"
+          required
+        >
+        <label for="CustomerPassword">
+          {{ 'customer.login.password' | t }}
+        </label>
+      </div>
+
+
+      <button type="submit" class="btn">
+        {{ 'customer.login.sign_in' | t }}
+      </button>
+
+      <div class="button-snippet">
+        {% app_snippet 'login/button' %}
+      </div>
+
+      <a href="#recover" class="mb-2">
+        {{ 'customer.login.forgot_password' | t }}
+      </a>
+
+      {% if settings.is_self_registration_enabled %}
+        {{ 'layout.customer.create_account' | t | customer_register_link }}
+      {% endif %}
+      
+    </form>
+  </div>
+  
+  {% if shop.checkout.guest_login %}
+    <div>
+      <hr>
+      <h2>{{ 'customer.login.guest_title' | t }}</h2>
+      <form action="/account/guest">
+        <input type="hidden" name="_token" value="{% csrf %}">
+        <button>
+          {{ 'customer.login.guest_continue' | t }}
+        </button>
+      </form>
+    </div>
+  {% endif %}
+</div>
+
+
+{% app_snippet 'login/content_bottom' %}
+
+<script>
+  document.querySelector('#form-login').addEventListener('submit', (event)=>{
+    document.querySelector('#form-login .btn').classList.add('btn--loading','loading');
+  });
+</script>

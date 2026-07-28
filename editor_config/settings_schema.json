@@ -1,0 +1,282 @@
+{
+  "theme": "Aroma",
+  "theme_name": "Aroma",
+  "theme_author": "EasyStore",
+  "theme_version": "2.0.0",
+
+  "options": [
+    {
+      "label": { "en_US": "Typography", "zh_TW": "排版", "zh_CN": "排版", "ms_MY": "Tipografi" },
+      "type": "header",
+      "options": [
+        {
+          "label": { "en_US": "Heading", "zh_TW": "標題字體", "zh_CN": "标题字体", "ms_MY": "Tajuk" },
+          "type": "header"
+        },
+        {
+          "type": "font",
+          "id": "type_header_font"
+        },
+        {
+          "type": "select",
+          "id": "header_font_style",
+          "options": [
+            {
+              "label": { "en_US": "Italic", "zh_TW": "斜體", "zh_CN": "斜体", "ms_MY": "Italic" },
+              "value": "italic"
+            },
+            {
+              "label": { "en_US": "Normal", "zh_TW": "標準", "zh_CN": "标准", "ms_MY": "Biasa" },
+              "value": "normal"
+            }
+          ]
+        },
+        {
+          "type": "select",
+          "id": "header_font_weight",
+          "options": [
+            {
+              "label": { "en_US": "Thin", "zh_TW": "細體", "zh_CN": "细体", "ms_MY": "Nipis" },
+              "value": 300
+            },
+            {
+              "label": { "en_US": "Regular", "zh_TW": "一般", "zh_CN": "一般", "ms_MY": "Biasa" },
+              "value": 400
+            },
+            {
+              "label": { "en_US": "Medium", "zh_TW": "中等", "zh_CN": "中等", "ms_MY": "Sederhana" },
+              "value": 500
+            },
+            {
+              "label": { "en_US": "Bold", "zh_TW": "粗體", "zh_CN": "粗体", "ms_MY": "Mentah" },
+              "value": 700
+            }
+          ]
+        },
+        {
+          "label": { "en_US": "Body", "zh_TW": "文字字體", "zh_CN": "文字字体", "ms_MY": "Badan" },
+          "type": "header"
+        },
+        {
+          "type": "font",
+          "id": "type_body_font"
+        },
+        {
+          "type": "select",
+          "id": "body_font_style",
+          "options": [
+            {
+              "label": { "en_US": "Italic", "zh_TW": "斜體", "zh_CN": "斜体", "ms_MY": "Italic" },
+              "value": "italic"
+            },
+            {
+              "label": { "en_US": "Regular", "zh_TW": "一般", "zh_CN": "一般", "ms_MY": "Biasa" },
+              "value": "normal"
+            }
+          ]
+        },
+        {
+          "type": "select",
+          "id": "body_font_weight",
+          "options": [
+            {
+              "label": { "en_US": "Thin", "zh_TW": "細體", "zh_CN": "细体", "ms_MY": "Nipis" },
+              "value": 300
+            },
+            {
+              "label": { "en_US": "Regular", "zh_TW": "一般", "zh_CN": "一般", "ms_MY": "Biasa" },
+              "value": 400
+            },
+            {
+              "label": { "en_US": "Medium", "zh_TW": "中等", "zh_CN": "中等", "ms_MY": "Sederhana" },
+              "value": 500
+            },
+            {
+              "label": { "en_US": "Bold", "zh_TW": "粗體", "zh_CN": "粗体", "ms_MY": "Mentah" },
+              "value": 700
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": { "en_US": "Color", "zh_TW": "顏色", "zh_CN": "颜色", "ms_MY": "Warna" },
+      "type": "header",
+      "options": [
+        
+        {
+          "type": "color",
+          "label": { "en_US": "Body Color", "zh_TW": "一般內文字色", "zh_CN": "一般內文字色", "ms_MY": "Warna badan" },
+          "id": "colors_text"
+        },
+        
+        {
+          "type": "color",
+          "label": { "en_US": "Background Color", "zh_TW": "背景顏色", "zh_CN": "背景颜色", "ms_MY": "Warna latar belakang" },
+          "id": "colors_background_1"
+        },
+        
+        {
+          "type": "color",
+          "label": { "en_US": "Button color", "zh_TW": "按鈕顏色", "zh_CN": "按钮颜色", "ms_MY": "Warna butang" },
+          "id": "colors_accent_1"
+        },
+
+        {
+          "type": "color",
+          "label": { "en_US": "Button label color", "zh_TW": "按鈕字色", "zh_CN": "按钮字色", "ms_MY": "Warna label butang" },
+          "id": "colors_solid_button_labels"
+        },
+        
+        {
+          "type": "color",
+          "label": { "en_US": "Outline Button Color", "zh_TW": "外框型按鈕色", "zh_CN": "外框型按钮色", "ms_MY": "Warna Butang Garis Besar" },
+          "id": "colors_outline_button_labels"
+        }
+        
+      ]
+    },
+    {
+      "label": { "en_US": "Background", "zh_TW": "背景", "zh_CN": "背景", "ms_MY": "Latar Belakang" },
+      "type": "header",
+      "options" : [
+        {
+          "type": "image",
+          "label": { "en_US": "Background", "zh_TW": "背景", "zh_CN": "背景", "ms_MY": "Imej latar belakang" },
+          "id": "body_bg_image"
+        },
+        {
+          "type": "select",
+          "label": { "en_US": "Background Position", "zh_TW": "背景位置", "zh_CN": "背景位置", "ms_MY": "Kedudukan latar belakang" },
+          "id": "bg_img_position",
+          "options": [
+            {
+              "value": "top left",
+              "label": { "en_US": "Top Left", "zh_TW": "頂端置左", "zh_CN": "頂端置左", "ms_MY": "Kiri Atas" }
+            },
+            {
+              "value": "top center",
+              "label": { "en_US": "Top Center", "zh_TW": "頂端置中", "zh_CN": "頂端置中", "ms_MY": "Tengah Atas" }
+            },
+            {
+              "value": "top right",
+              "label": { "en_US": "Top Right", "zh_TW": "頂端置右", "zh_CN": "頂端置右", "ms_MY": "Kanan Atas" }
+            },
+            {
+              "value": "center left",
+              "label": { "en_US": "Center Left", "zh_TW": "中心靠左", "zh_CN": "中心靠左", "ms_MY": "Tengah Kiri" }
+            },
+            {
+              "value": "center center",
+              "label": { "en_US": "Center Center", "zh_TW": "中心置中", "zh_CN": "中心置中", "ms_MY": "Tengah Tengah" }
+            },
+            {
+              "value": "center right",
+              "label": { "en_US": "Center Right", "zh_TW": "中心靠右", "zh_CN": "中心靠右", "ms_MY": "Tengah Kanan" }
+            },
+            {
+              "value": "bottom left",
+              "label": { "en_US": "Bottom Left", "zh_TW": "底部靠左", "zh_CN": "底部靠左", "ms_MY": "Kiri Bawah" }
+            },
+            {
+              "value": "bottom center",
+              "label": { "en_US": "Bottom Center", "zh_TW": "底部置中", "zh_CN": "底部置中", "ms_MY": "Tengah Bawah" }
+            },
+            {
+              "value": "bottom right",
+              "label": { "en_US": "Bottom Right", "zh_TW": "底部靠右", "zh_CN": "底部靠右", "ms_MY": "Kanan Bawah" }
+            }
+          ]
+        },
+        {
+          "type": "checkbox",
+          "label": { "en_US": "Background Repeat", "zh_TW": "重複背景", "zh_CN": "重复背景", "ms_MY": "Ulangan latar belakang" },
+          "id": "bg_img_repeat",
+          "default": false
+        }
+      ]
+    },
+    {
+      "label": { "en_US": "Favicon", "zh_TW": "網站圖示", "zh_CN": "网站图示", "ms_MY": "Favicon" },
+      "type": "header",
+      "options" : [
+        {
+          "type": "image",
+          "label": { "en_US": "Favicon image", "zh_TW": "網站圖標圖像", "zh_CN": "网站图标图像", "ms_MY": "Imej Favicon" },
+          "id": "favicon_img"
+        }
+      ]
+    },
+    {
+      "label": { "en_US": "Layout", "zh_TW": "排版設計", "zh_CN": "排版设计", "ms_MY": "Susun atur" },
+      "type": "header",
+      "options" : [
+        {
+          "type": "range",
+          "label": { "en_US": "Maximum Width", "zh_TW": "版面最大寬度", "zh_CN": "版面最大宽度", "ms_MY": "Maximum Width" },
+          "id": "page_width",
+          "min": 1200,
+          "max": 1600,
+          "step": 50,
+          "unit": {
+            "en_US": "px",
+            "ja_JP": "px",
+            "ko_KR": "px",
+            "ms_MY": "px",
+            "th_TH": "px",
+            "zh_CN": "px",
+            "zh_TW": "像素"
+          }
+        }
+      ]
+    },
+    {
+      "label": { "en_US": "Image", "zh_TW": "圖片", "zh_CN": "图片", "ms_MY": "Imej" },
+      "type": "header",
+      "options" : [
+        {
+          "type": "checkbox",
+          "label": { 
+            "en_US": "Use images with original quality", 
+            "zh_TW": "使用原始畫質圖片", 
+            "zh_CN": "使用原始画质图片", 
+            "ms_MY": "Guna gambar asal" 
+          },
+          "default": false,
+          "id": "use_original_image"
+        },
+        {
+          "type": "image",
+          "label": { 
+            "en_US": "Link preview image", 
+            "zh_TW": "連結預覽圖", 
+            "zh_CN": "连结预览图", 
+            "ms_MY": "Pautan imej pratonton" 
+          },
+          "id": "meta_img"
+        }
+      ]
+    },
+    {
+      "label": { "en_US": "Checkout", "zh_TW": "結帳頁", "zh_CN": "结帐页", "ms_MY": "Checkout" },
+      "type": "header",
+      "options" : [
+        {
+          "type": "image",
+          "label": {
+            "en_US": "Logo Image",
+            "ja_JP": "ロゴ画像",
+            "ko_KR": "로고 이미지",
+            "ms_MY": "Imej logo",
+            "th_TH": "รูปภาพโลโก้",
+            "zh_CN": "logo 图片",
+            "zh_TW": "Logo 圖片"
+          },
+          "id": "logo_img"
+        }
+      ]
+    }
+    
+  ]
+
+}

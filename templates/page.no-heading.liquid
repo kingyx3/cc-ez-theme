@@ -1,0 +1,12 @@
+{% comment %}
+  Regular page content goes here.
+{% endcomment %}
+{% app_snippet 'page/content_top' %}
+
+<section class="spaced-section page-width">
+  <div class="rte">
+    {{ page.content }}
+    {% include 'related-product-items', recommend:page %}
+  </div>
+</section>
+{% app_snippet 'page/content_bottom' %}

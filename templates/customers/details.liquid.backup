@@ -1,0 +1,369 @@
+<link rel="preload" href="{{ 'customer.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<style>input::-webkit-calendar-picker-indicator{display: none;}</style>
+
+{% app_snippet 'account/content_top' %}
+
+<style>
+  .customer.account{
+    max-width: 1000px;
+  }
+  .card-box svg{
+    vertical-align: sub;
+    margin-right: 3px;
+  }
+  @media screen and (max-width: 750px) {
+    .sm-mt-1{
+      margin-top: 0.5rem;
+    }
+  }
+</style>
+
+<form action='/account/details' method='post' id='details_form' style="margin-top: 0;">
+  <input type="hidden" name="_token" value="{% csrf %}">
+
+  <div class="customer account">
+    <div>
+      <h1>{{ 'customer.account.title' | t }}</h1>
+      <a href="/account">← {{ 'general.back' | t }}</a>
+
+    </div>
+
+    <div style="margin-bottom: 4rem;">
+      <div>
+        <h2>{{ 'customer.account.details' | t }}</h2>
+
+          <div>
+              {{ form.errors | default_errors }}
+              {% if update_success %}
+                <div class="note form-success" id="UpdateSuccess">
+                  {{ 'customer.details.update_success' | t }}
+                </div>
+              {% endif %}
+
+              <div class="grid grid--2-col mb-0">
+
+                <div class="grid__item">
+                  <div class="field">
+                    <input type="text" id="DetailsFirstName" class="address_form" name="details[first_name]" value="{{ customer.first_name | escape }}" autocapitalize="words">
+                    <label for="DetailsFirstName">{{ 'customer.addresses.first_name' | t }}</label>
+                  </div>
+                </div>
+
+                <div class="grid__item">
+                  <div class="field">
+                    <input type="text" id="DetailLastName" class="address_form" name="details[last_name]" value="{{ customer.last_name | escape }}" autocapitalize="words">
+                    <label for="DetailLastName">{{ 'customer.addresses.last_name' | t }}</label>
+                  </div>
+                </div>
+                <div class="grid__item">
+                  <div class="field on_focus">
+                    <div class="select">
+                      <select name="details[gender]" id="DetailGender">
+                        <option value disabled {% if customer.gender == blank %}selected{% endif %}>{{ 'customer.register.gender' | t }}</option>
+                        <option value="male" {% if customer.gender == 'male' %}selected{% endif %}>{{ 'customer.register.male' | t }}</option>
+                        <option value="female" {% if customer.gender == 'female' %}selected{% endif %}>{{ 'customer.register.female' | t }}</option>
+                      </select>
+                    </div>
+                    <label for="DetailGender">{{ 'customer.register.gender' | t }}</label>
+                  </div>
+                </div>
+                <div class="grid__item">
+                  <div class="field">
+                    <input type="date" name="details[birthdate]" id="DetailBirthdate" value="{{customer.birthdate}}" placeholder="{{ 'customer.register.birthdate' | t }}" max="{{ "now" | date: "%Y%m%d" }}" {% if customer.birthdate_editable == false %}disabled{% endif %}>
+                    <label for="DetailBirthdate">{{ 'customer.register.birthdate' | t }}</label>
+                  </div>
+                </div>
+              </div>
+
+              <div class="grid grid--2-col-desktop grid--1-col">
+                <script>console.log({{shop.attribute_settings | json}});</script>
+
+                {% for attribute_setting in shop.attribute_settings %}
+                  {% if attribute_setting.input_type == "dropdown" %}
+                    <div class="grid__item sm-mt-1">
+                      <div class="field select on_focus">
+                        <select name="details[attributes][{{ attribute_setting.id }}]" id="DetailAttribute{{ attribute_setting.id }}" {% if attribute_setting.is_required %}required{% endif %}>
+                          {% assign select_title = attribute_setting.title | downcase  %}
+                          <option disabled {% if attribute_setting.value == blank %}selected{% endif %}>{{ 'customer.register.select_custom_attr' | t: select_title }}</option>
+                          {% for options in attribute_setting.options %}
+                            <option value="{{ options.value }}" {% if attribute_setting.value == options.value %}selected{% endif %}>{{ options.value }}</option>
+                          {% endfor %}
+                        </select>
+                        <label for="DetailAttribute{{ attribute_setting.id }}">{{ attribute_setting.title }}</label>
+                      </div>
+                    </div>
+                  {% elsif attribute_setting.input_type == "date" %}
+                    <div class="grid__item sm-mt-1" id="attribute-date-toggle-{{ attribute_setting.id }}">
+                      <div class="field">
+                        <input type="text" name="details[attributes][{{ attribute_setting.id }}]" id="DetailAttribute{{ attribute_setting.id }}" value="{{ attribute_setting.value }}" placeholder="Select {{ attribute_setting.title | downcase }}" max="{{ " now" | date: "%Y-%m-%d" }}" class="input-datepicker" {% if attribute_setting.is_required %}required{% endif %}>
+                        <label for="DetailAttribute{{ attribute_setting.id }}">{{ attribute_setting.title }}</label>
+                      </div>
+                    </div>
+                  {% else %}
+                    <div class="grid__item sm-mt-1">
+                      <div class="field">
+                        <input type="text" id="DetailAttribute{{ attribute_setting.id }}" class="address_form" name="details[attributes][{{ attribute_setting.id }}]" value="{{ attribute_setting.value | escape }}" placeholder="{{ attribute_setting.title | downcase }}" autocapitalize="words" {% if attribute_setting.is_required %}required{% endif %}>
+                        <label for="DetailAttribute{{ attribute_setting.id }}">{{ attribute_setting.title }}</label>
+                      </div>  
+                    </div>
+                  {% endif %}
+                {% endfor %}
+    
+                <div class="grid__item sm-mt-1">
+                  <div class="field">
+                    <input type="text" id="DetailEmail" class="address_form" name="details[email]" value="{{customer.cust_email}}" placeholder="{{ 'customer.login.email' | t }}">
+                    <label for="DetailEmail">{{ 'customer.login.email' | t }}</label>
+                  </div>
+                </div>
+    
+                <div class="grid__item sm-mt-1">
+                  <div class="field">
+                    <input type="text" id="DetailPhone" class="address_form" name="details[phone]" value="{{customer.phone | _default: customer.default_address.phone }}" placeholder="{{ 'customer.addresses.phone' | t }}">
+                    <label for="DetailPhone">{{ 'customer.addresses.phone' | t }}</label>
+                  </div>
+                </div>
+    
+              </div>
+    
+              <p class="text-right">
+                <a href="javascript:void(0)" onclick="window.history.back();" class="button button--secondary">{{ 'customer.addresses.cancel' | t }}</a>&nbsp;&nbsp;
+                <input type="submit" class="button" value="{{ 'customer.recover_password.submit' | t }}">
+              </p>
+          </div>
+
+        {% app_snippet 'account/content_left' %}
+
+        <div>
+          <h2>{{ 'customer.addresses.primary' | t }}</h2>
+    
+          <div class="card-box">
+    
+            <div class="h3">{{ customer.name | escape }}</div>
+            {% if customer.default_address.phone != "" %}
+              {{ customer.default_address.phone }}
+            {% endif %}
+      
+            {% if customer.default_address != nil %}
+              <div class="color-light-text mt-1" style="line-height: 1.4;">
+              {{ customer.default_address.address1 | escape }}<br>
+      
+              {% if customer.default_address.address2 %}
+                {{ customer.default_address.address2 | escape }}<br>
+              {% endif %}
+
+              {% if customer.default_address.village %} 
+                {{ customer.default_address.village | escape }}<br>
+              {% endif %}
+
+              {% if customer.default_address.sub_district %} 
+                {{ customer.default_address.sub_district | escape }}<br>
+              {% endif %}
+      
+              {% if customer.default_address.city %}
+                {{ customer.default_address.city | escape }}<br>
+              {% endif %}
+      
+              {% if customer.default_address.province_code %}
+                {{ customer.default_address.province_code | upcase }}<br>
+              {% endif %}
+      
+              {% if customer.default_address.zip %}
+                {{ customer.default_address.zip | upcase }}<br>
+              {% endif %}
+      
+              {% if customer.default_address.country %}
+                {{ customer.default_address.country }}<br>
+              {% endif %}
+      
+              </div>
+      
+            {% endif %}
+      
+            <div><a href="/account/addresses" class="mt-2">{{ 'customer.account.view_addresses' | t }} ({{ customer.addresses_count }})</a></div>
+          </div>
+    
+          {% app_snippet 'account/content_right' %}
+          
+        </div>
+        
+      </div>
+
+      
+
+    </div>
+
+
+    <div>
+      <h2>{{ 'customer.details.authentication' | t }}</h2>
+
+      <div class="note form-success" id="EmailVerify" style="display: none;">
+        {{ 'customer.details.verification_email_sent' | t }}
+      </div>
+
+      <div class="grid grid--3-col-desktop grid--1-col">
+        <div class="grid__item">
+          <div class="card-box">
+            <strong>
+              <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-lock" width="20" height="20" viewBox="0 0 24 24" stroke-width="1" stroke="#000000" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                <rect x="5" y="11" width="14" height="10" rx="2" />
+                <circle cx="12" cy="16" r="1" />
+                <path d="M8 11v-4a4 4 0 0 1 8 0v4" />
+              </svg>
+              {{ 'customer.login.password' | t }}
+            </strong><br>
+            <a href="javascript:void(0)" onclick="viewChangePW();" class="change_password">{{ 'customer.details.change_password' | t }}</a>
+            <div class="confirm_password" style="display: none;">
+              <div class="field">
+                <input type="password" placeholder="{{'customer.login.password' | t }}" id="DetailPassword" class="address_form" name="details[password1]">
+                <label for="DetailPassword">{{ 'customer.details.old_password' | t }}</label>
+              </div>
+    
+              <div class="field">
+                <input type="password" placeholder="{{'customer.details.new_password' | t }}" id="DetailPasswordConfirm" class="address_form" name="details[password2]">
+                <label for="DetailPasswordConfirm">{{ 'customer.details.new_password' | t }}</label>
+              </div>
+              <br>
+              <div class="text-right">
+                <a href="javascript:void(0)" onclick="viewChangePW();" class="button button--secondary button--small">{{ 'customer.addresses.cancel' | t }}</a>&nbsp;&nbsp;
+                <input type="submit" class="button button--small" value="{{ 'customer.recover_password.submit' | t }}">
+              </div>
+            </div>
+          </div>
+        </div>
+        {% for kv in customer.authentications %}
+          {% assign key = kv[0] %}
+          {% assign value = kv[1] %}
+          
+          {% if value.is_connected %}
+          <div class="grid__item">
+            <div class="card-box">
+              <strong>
+                {% if key == 'email' %}
+                  <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-mail" width="20" height="20" viewBox="0 0 24 24" stroke-width="1" stroke="#000000" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                    <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                    <rect x="3" y="5" width="18" height="14" rx="2" />
+                    <polyline points="3 7 12 13 21 7" />
+                  </svg>
+                {% elsif key == 'phone' %}
+                  <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-phone" width="20" height="20" viewBox="0 0 24 24" stroke-width="1" stroke="#000000" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                    <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                    <path d="M5 4h4l2 5l-2.5 1.5a11 11 0 0 0 5 5l1.5 -2.5l5 2v4a2 2 0 0 1 -2 2a16 16 0 0 1 -15 -15a2 2 0 0 1 2 -2" />
+                  </svg>
+                {% elsif key == 'facebook' %}
+                  <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-brand-facebook" width="20" height="20" viewBox="0 0 24 24" stroke-width="1" stroke="#000000" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                    <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                    <path d="M7 10v4h3v7h4v-7h3l1 -4h-4v-2a1 1 0 0 1 1 -1h3v-4h-3a5 5 0 0 0 -5 5v2h-3" />
+                  </svg>
+                {% else %}
+                  <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-social" width="20" height="20" viewBox="0 0 24 24" stroke-width="1" stroke="#000000" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                    <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                    <circle cx="12" cy="5" r="2" />
+                    <circle cx="5" cy="19" r="2" />
+                    <circle cx="19" cy="19" r="2" />
+                    <circle cx="12" cy="14" r="3" />
+                    <line x1="12" y1="7" x2="12" y2="11" />
+                    <line x1="6.7" y1="17.8" x2="9.5" y2="15.8" />
+                    <line x1="17.3" y1="17.8" x2="14.5" y2="15.8" />
+                  </svg>
+                {% endif %}
+
+                {% if key == 'phone' %}
+                	{{ 'customer.addresses.phone' | t | capitalize }}
+                {% else %}
+                	{{ key | capitalize }}
+                {% endif %}
+              </strong>
+              <p>
+                {{ value.account }}
+                <br>
+                {% if value.is_verified %}
+                  <span style="color: green;">{{ 'customer.details.verified' | t }}</span>
+                {% else %}
+                  {% comment %} <a style="cursor: pointer;" href="/account/request-verify?customer_id={{ customer.id }}&method={{ key }}">Verify now</a> {% endcomment %}
+                  <a id="request-verify-{{ customer.id }}" role="button" tabindex="0" style="cursor: pointer;" onclick="requestVerify('{{ customer.id }}', '{{ key }}')">{{ 'customer.details.verify_now' | t }}</a>
+                {% endif %}
+              </p>
+            </div>
+          </div>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+</form>
+
+
+<style>
+  .grid__item .card-box{
+    height: 100%;
+  }
+</style>
+
+
+{{ 'flatpickr.min.css' | asset_url | stylesheet_tag }}
+{{ 'flatpickr.min.js' | asset_url | script_tag }}
+
+<script type="text/javascript">
+
+  let this_el = document.querySelector.bind(document)
+
+  function viewChangePW(){
+    this_el(".change_password").style.display = this_el(".change_password").style.display == "none" ? "block" : "none";
+    this_el(".confirm_password").style.display = this_el(".confirm_password").style.display == "none" ? "block" : "none";
+  }
+
+  function requestVerify(customer_id, method) {
+
+    if(method == 'email') {
+      this_el(`#request-verify-${customer_id}`).style.display = "none";
+      this_el('#EmailVerify').style.display = "block";
+    }
+
+    fetch(`/account/request-verify?customer_id=${customer_id}&method=${method}`, {
+      method: 'GET'
+    })
+    .then(response => response.json())
+    .then((res) => {
+      if(res.redirect_to) {
+        window.location.replace(res.redirect_to)
+      }
+    })
+  }
+
+  flatpickr.localize({
+    weekdays: {
+        shorthand: ["{{ 'date_formats.days.sun' | t }}", "{{ 'date_formats.days.mon' | t }}", "{{ 'date_formats.days.tue' | t }}", "{{ 'date_formats.days.wed' | t }}", "{{ 'date_formats.days.thu' | t }}", "{{ 'date_formats.days.fri' | t }}", "{{ 'date_formats.days.sat' | t }}"],
+        longhand: ["{{ 'date_formats.days.sun' | t }}", "{{ 'date_formats.days.mon' | t }}", "{{ 'date_formats.days.tue' | t }}", "{{ 'date_formats.days.wed' | t }}", "{{ 'date_formats.days.thu' | t }}", "{{ 'date_formats.days.fri' | t }}", "{{ 'date_formats.days.sat' | t }}"],
+    },
+    months: {
+        shorthand: ["{{ 'date_formats.months.jan' | t }}","{{ 'date_formats.months.feb' | t }}","{{ 'date_formats.months.mar' | t }}","{{ 'date_formats.months.apr' | t }}","{{ 'date_formats.months.may' | t }}","{{ 'date_formats.months.jun' | t }}","{{ 'date_formats.months.jul' | t }}","{{ 'date_formats.months.aug' | t }}","{{ 'date_formats.months.sep' | t }}","{{ 'date_formats.months.oct' | t }}","{{ 'date_formats.months.nov' | t }}","{{ 'date_formats.months.dec' | t }}"],
+        longhand: ["{{ 'date_formats.months.jan' | t }}","{{ 'date_formats.months.feb' | t }}","{{ 'date_formats.months.mar' | t }}","{{ 'date_formats.months.apr' | t }}","{{ 'date_formats.months.may' | t }}","{{ 'date_formats.months.jun' | t }}","{{ 'date_formats.months.jul' | t }}","{{ 'date_formats.months.aug' | t }}","{{ 'date_formats.months.sep' | t }}","{{ 'date_formats.months.oct' | t }}","{{ 'date_formats.months.nov' | t }}","{{ 'date_formats.months.dec' | t }}"],
+    }
+  })
+
+  let input_birthdate = flatpickr("#DetailBirthdate",{
+    maxDate: "today",
+    disableMobile: "true"
+  });
+
+  flatpickr(".input-datepicker",{
+    disableMobile: "true",
+    allowInput:true
+  });
+
+  var customer_attributes = {{ customer.attributes | json }};
+  var attribute_settings = {{ shop.attribute_settings | json }};
+  if(typeof customer_attributes == 'object' && typeof attribute_settings == 'object'){
+    attribute_settings.forEach(function (attribute_setting) {
+      customer_attributes.forEach(function (customer_attribute) {
+        if(customer_attribute.customer_attribute_setting_id == attribute_setting.id) {
+          document.querySelector('#DetailAttribute' + attribute_setting.id).value = customer_attribute.value;
+        }
+      });
+    });
+  }
+</script>
+
+{% app_snippet 'account/content_bottom' %}

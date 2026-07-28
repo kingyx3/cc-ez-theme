@@ -1,0 +1,50 @@
+<link rel="preload" href="{{ 'blog.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<link rel="preload" href="{{ 'component-card.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+
+<div class="main-blog page-width">
+    <h1 class="title--primary">
+        {% if current_tags %}
+        {{ blog.title | link_to: blog.url }} &mdash; {{ current_tags.first }}
+        {% else %}
+        {{ blog.title }}
+        {% endif %}
+    </h1>
+    <div class="blog-articles">
+        {% for article in blog.articles %}
+        <div class="blog-articles__article article">
+            <article class="article-card {% if article.image == blank %} article-card--no-image{% endif %}">
+                <a href="{{ article.url }}" class="article-content motion-reduce">
+                    {% if article.image and article.image.src %}
+                        <div class="article-card__image-wrapper">
+                            <div class="article-card__image media media--landscape">
+                                <img src="{{ article.image.src }}" alt="{{ article.title }}" class="motion-reduce">
+                            </div>
+                        </div>
+                    {% endif %}
+                    <div class="article-card__info">
+                        <header class="article-card__header">
+                            <h2 class="article-card__title">
+                                {{ article.title }}
+                            </h2>
+                            <span class="circle-divider caption-with-letter-spacing">
+                                <time datetime="{{ article.published_at | date: '%Y-%m-%d' }}"> {{article.published_at | date: "%b %d, %y" }}</time>
+                            </span>
+                            {% if article.author %}
+                                <span class="caption-with-letter-spacing">
+                                    {{ article.author }}
+                                </span>
+                            {% endif %}
+                        </header>
+                        <p class="article-card__excerpt rte-width break">{{ article.description | strip_html | truncatewords: 30 }} </p>
+                    </div>
+                </a>
+            </article>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+{% if paginate.pages > 1 %}
+    {% include 'pagination' %}
+{% endif %}
+

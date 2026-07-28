@@ -1,0 +1,188 @@
+<link rel="preload" href="{{ 'customer.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<style>input::-webkit-calendar-picker-indicator{display: none;}</style>
+
+{% app_snippet 'register/content_top' %}
+
+
+
+<div class="customer register">
+  <h1>
+    {{ 'customer.register.title' | t }}
+  </h1>
+  <form id="form-register" method="post" action="/account/register">
+    <input type="hidden" name="_token" value="{% csrf %}">
+    
+    {% if form.errors %}
+      {{ form.errors | default_errors }}
+    {% endif %}
+    <div class="grid grid--2-col mb-0">
+      <div class="grid__item pb-0">
+        <div class="field">      
+          <input
+            type="text"
+            name="customer[first_name]"
+            id="RegisterForm-FirstName"
+            {% if form.first_name %}value="{{ form.first_name }}"{% endif %}
+            autocomplete="given-name"
+            placeholder="{{ 'customer.register.first_name' | t }}"
+            required
+          >
+          <label for="RegisterForm-FirstName">
+            {{ 'customer.register.first_name' | t }}
+          </label>
+        </div>
+      </div>
+      <div class="grid__item pb-0">
+        <div class="field">
+          <input
+            type="text"
+            name="customer[last_name]"
+            id="RegisterForm-LastName"
+            {% if form.last_name %}value="{{ form.last_name }}"{% endif %}
+            autocomplete="family-name"
+            placeholder="{{ 'customer.register.last_name' | t }}"
+            required
+          >
+          <label for="RegisterForm-LastName">
+            {{ 'customer.register.last_name' | t }}
+          </label>
+        </div>
+      </div>
+    </div>
+
+    
+
+
+    <div class="field">
+      <div class="select">
+        <select name="customer[gender]" id="RegisterForm-Gender" autocomplete="gender">
+          <option value disabled selected>{{ 'customer.register.gender' | t }}</option>
+          <option value="male">{{ 'customer.register.male' | t }}</option>
+          <option value="female">{{ 'customer.register.female' | t }}</option>
+        </select>
+      </div>
+    </div>
+    <div class="field">
+      <input type="text" name="customer[birthdate]" id="RegisterForm-Birthdate" autocomplete="birthdate" placeholder="{{ 'customer.register.birthdate' | t }}" max="{{ "now" | date: "%Y%m%d" }}">
+      <label for="RegisterForm-Birthdate">{{ 'customer.register.birthdate' | t }}</label>
+    </div>
+
+
+    {% for attribute_setting in shop.attribute_settings %}
+      <div class="field {% if attribute_setting.input_type == "dropdown" %}select on_focus{% endif %}">
+        {% if attribute_setting.input_type == "dropdown" %}
+          <select name="customer[attributes][{{ attribute_setting.id }}]" id="DetailAttribute{{ attribute_setting.id }}" {% if attribute_setting.is_required %}required{% endif %}>
+            {% assign select_title = attribute_setting.title | downcase  %}
+            <option value disabled selected>{{ 'customer.register.select_custom_attr' | t: select_title }}</option>
+            {% for option in attribute_setting.options %}
+            <option value="{{ option.value }}">{{ option.value }}</option>
+            {% endfor %}
+          </select>
+          <label for="DetailAttribute{{ attribute_setting.id }}" class="label--hidden">{{ attribute_setting.title }}</label>
+        {% elsif attribute_setting.input_type == "date" %}
+          <input type="text" name="customer[attributes][{{ attribute_setting.id }}]" id="DetailAttribute{{ attribute_setting.id }}" placeholder="{{ attribute_setting.title }}" max="{{ " now" | date: "%Y-%m-%d" }}" class="input-datepicker" {% if attribute_setting.is_required %}required{% endif %}>
+          <label for="DetailAttribute{{ attribute_setting.id }}" class="label--hidden">{{ attribute_setting.title }}</label>
+        {% else %}
+          <input type="text" name="customer[attributes][{{ attribute_setting.id }}]" id="DetailAttribute{{ attribute_setting.id }}" placeholder="{{ attribute_setting.title }}" autocapitalize="words" {% if attribute_setting.is_required %}required{% endif %}>
+          <label for="DetailAttribute{{ attribute_setting.id }}" class="label--hidden">{{ attribute_setting.title }}</label>
+        {% endif %}
+      </div>
+    {% endfor %}
+
+    {% assign account_placeholder = 'customer.register.email' %}
+    {% if shop.phone_account_enabled == true %}
+      {% assign account_placeholder = 'customer.register.email_or_phone' %}
+    {% endif %}
+    
+    <div class="field">      
+      <input
+        type="text"
+        name="customer[email_or_phone]"
+        id="RegisterForm-EmailOrPhone"
+        spellcheck="false"
+        autocapitalize="off"
+        autocomplete="email"
+        placeholder="{{ account_placeholder | t }}"
+        required
+        {% if form.errors contains "email_or_phone" %} class="error"{% elsif form.email_or_phone %} value="{{ form.email_or_phone }}"{% endif %}
+      >
+      <label for="RegisterForm-email">
+        {{ account_placeholder | t }}
+      </label>
+    </div>
+    <div class="field">     
+      <input
+        type="password"
+        name="customer[password]"
+        id="RegisterForm-password"
+        placeholder="{{ 'customer.register.password' | t }}"
+        required
+      >
+      <label for="RegisterForm-password">
+        {{ 'customer.register.password' | t }}
+      </label>
+    </div>
+
+    <input type="text" name="customer[display_name]" id="displayName" class="hide hidden" tabindex="-1" autocomplete="off">
+    <input type="password" name="customer[confirm_password]" id="confirmPassword" class="hide hidden" tabindex="-1" autocomplete="off">
+    <input type="email" name="customer[confirm_email]" id="confirmEmail" class="hide hidden" tabindex="-1" autocomplete="off">
+
+    <div>
+      <button type="submit" class="btn">
+        {{ 'customer.register.submit' | t }}
+      </button>
+    </div>
+
+    <a href="/account/login" class="mb-2">
+      {{ 'customer.login.sign_in' | t }}
+    </a>
+    
+    <div>
+      {% app_snippet 'register/button' %}
+    </div>
+
+    <p>
+      <small>
+        {{ shop.name | register_tos: contents.terms-policy.links }}
+      </small>
+    </p>
+
+
+  </form>
+</div>
+
+
+{{ 'flatpickr.min.css' | asset_url | stylesheet_tag }}
+{{ 'flatpickr.min.js' | asset_url | script_tag }}
+
+<script>
+  document.querySelector('#form-register').addEventListener('submit', (event)=>{
+    document.querySelector('#form-register .btn').classList.add('btn--loading','loading');
+  });
+
+  flatpickr.localize({
+    weekdays: {
+        shorthand: ["{{ 'date_formats.days.sun' | t }}", "{{ 'date_formats.days.mon' | t }}", "{{ 'date_formats.days.tue' | t }}", "{{ 'date_formats.days.wed' | t }}", "{{ 'date_formats.days.thu' | t }}", "{{ 'date_formats.days.fri' | t }}", "{{ 'date_formats.days.sat' | t }}"],
+        longhand: ["{{ 'date_formats.days.sun' | t }}", "{{ 'date_formats.days.mon' | t }}", "{{ 'date_formats.days.tue' | t }}", "{{ 'date_formats.days.wed' | t }}", "{{ 'date_formats.days.thu' | t }}", "{{ 'date_formats.days.fri' | t }}", "{{ 'date_formats.days.sat' | t }}"],
+    },
+    months: {
+        shorthand: ["{{ 'date_formats.months.jan' | t }}","{{ 'date_formats.months.feb' | t }}","{{ 'date_formats.months.mar' | t }}","{{ 'date_formats.months.apr' | t }}","{{ 'date_formats.months.may' | t }}","{{ 'date_formats.months.jun' | t }}","{{ 'date_formats.months.jul' | t }}","{{ 'date_formats.months.aug' | t }}","{{ 'date_formats.months.sep' | t }}","{{ 'date_formats.months.oct' | t }}","{{ 'date_formats.months.nov' | t }}","{{ 'date_formats.months.dec' | t }}"],
+        longhand: ["{{ 'date_formats.months.jan' | t }}","{{ 'date_formats.months.feb' | t }}","{{ 'date_formats.months.mar' | t }}","{{ 'date_formats.months.apr' | t }}","{{ 'date_formats.months.may' | t }}","{{ 'date_formats.months.jun' | t }}","{{ 'date_formats.months.jul' | t }}","{{ 'date_formats.months.aug' | t }}","{{ 'date_formats.months.sep' | t }}","{{ 'date_formats.months.oct' | t }}","{{ 'date_formats.months.nov' | t }}","{{ 'date_formats.months.dec' | t }}"],
+    }
+  })
+
+  let input_birthdate = flatpickr("#RegisterForm-Birthdate",{
+    maxDate: "today",
+    disableMobile: "true",
+    onOpen: (selectedDates, dateStr, instance)=>{
+      input_birthdate.setDate('{{ "now" | date: "%Y" | minus: 18 }}{{ "now" | date: "-%m-%d" }}')
+    }
+  });
+
+  flatpickr(".input-datepicker",{
+    disableMobile: "true",
+    allowInput:true
+  });
+</script>
+
+{% app_snippet 'register/content_bottom' %}
