@@ -3,11 +3,11 @@
   "presets": {
     "editor": {
       "colors_solid_button_labels": "#FFFFFF",
-      "colors_accent_1": "#000000",
+      "colors_accent_1": "#E4572E",
       "colors_text": "#000000",
-      "colors_outline_button_labels": "#051C62",
-      "colors_background_1": "#FFFFFF",
-      "gradient_background_1": "#FFFFFF",
+      "colors_outline_button_labels": "#131722",
+      "colors_background_1": "#F7F5F0",
+      "gradient_background_1": "#F7F5F0",
       "page_width": 1600,
       "body_bg_image": "",
       "bg_img_position": "top center",
@@ -51,11 +51,12 @@
             "align_logo": "middle-left",
             "logo_max_width": 110,
             "main_linklist": "main-menu",
-            "message": 0,
-            "home_page_only": true,
-            "message_text": "Announce something here",
-            "message_link": "",
-            "color_bg": "#FFFFFF",
+            "message": true,
+            "home_page_only": false,
+            "message_text": "New releases just landed — explore the latest drop.",
+            "message_link": "/collections/the-hobbit",
+            "color_bg": "#131722",
+            "announcement_text_color": "#FFFFFF",
             "color_text": "#000000",
             "enable_sticky_header": true,
             "header_bg_color": "rgba(255, 255, 255, 1)",
@@ -184,10 +185,13 @@
         },
         "1667498127486": {
           "settings": {
-            "title": "Popular",
+            "eyebrow": "CUSTOMER FAVORITES",
+            "title": "Best Sellers",
+            "subtitle": "The most-loved collectibles, all in one place.",
+            "accent_color": "#E4572E",
             "collection__id": "feature-on-homepage",
-            "products_per_row": 5,
-            "products_to_show": 20,
+            "products_per_row": 4,
+            "products_to_show": 8,
             "show_view_all": true,
             "image_ratio": "square",
             "show_secondary_image": true,
@@ -201,10 +205,13 @@
         },
         "1684403242688": {
           "settings": {
-            "title": "New Arrivals",
+            "eyebrow": "JUST LANDED",
+            "title": "New Releases",
+            "subtitle": "Fresh finds and recent drops worth discovering.",
+            "accent_color": "#3559D9",
             "collection__id": "the-hobbit",
-            "products_per_row": 5,
-            "products_to_show": 20,
+            "products_per_row": 4,
+            "products_to_show": 8,
             "show_view_all": true,
             "image_ratio": "square",
             "show_secondary_image": true,
@@ -250,9 +257,9 @@
         }
       },
       "content_for_index": [
-        "1684412368816",
+        "1667498127486",
         "1684403242688",
-        "1667498127486"
+        "1684412368816"
       ],
       "placeholder": {
         "featured_single_product": "https://s3-ap-southeast-1.amazonaws.com/eesb.themes/onboarding/candy/en_placeholder_featured-single-product.jpg",

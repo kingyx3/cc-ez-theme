@@ -23,6 +23,7 @@
         <div class="card__badge card__badge-top-right card__badge-float-edge">
           <span class="badge badge-circle badge--bottom-right addToClassList" data-variant-id="{{product.sole_variant_id}}" data-product-handle="{{product.handle}}" data-product-price="{{product.price}}" data-product-price-max="{{product.price_max}}" data-product-available="{{product.available}}" data-product-id="{{product.id}}" data-token="{% csrf %}" data-quantity="1" data-url="{{ product.url | within: collection | escape }}">	
             {% include 'svg-definitions' with 'icon-plus' %}
+            <span class="visually-hidden">{{ 'products.product.add_to_cart' | t }}: {{ product.title | escape }}</span>
           </span>
           <div class="loading-overlay hidden">
             <div class="loading-overlay__spinner">
@@ -61,6 +62,10 @@
         {% app_snippet 'collection/product_middle' %}
         <span class="caption-large light"></span>
         {% include 'price' %}
+        <span class="product-card__cta" aria-hidden="true">
+          <span>View details</span>
+          <span>→</span>
+        </span>
       </div>
       {% if settings.collection_show_variant_img %}
         <div class="card-information__wrapper d-flex flex-align-center">
@@ -99,4 +104,3 @@
     {% endif %}
   </a>
 </div>
-

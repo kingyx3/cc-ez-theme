@@ -16,26 +16,34 @@
   {% assign more_in_collection = true %}
 {% endif %}
 
-<style>
-  .title-center {
-    place-content: center;
-  }
-</style>
+<div
+  id="section-{{ section.__key }}"
+  class="sales-collection spaced-section page-width{% if section.settings.swipe_on_mobile == true and products_to_display > 2 and section.settings.products_to_show > 2 %} page-width-desktop{% endif %}{% if section.settings.title == '' %} mt-0{% endif %}"
+  style="--section-accent: {{ section.settings.accent_color }};"
+>
+  <div class="sales-collection__header{% if products_to_display > 2 and section.settings.swipe_on_mobile and section.settings.products_to_show > 2 %} title-wrapper--self-padded-tablet-down{% endif %}{% if section.settings.center_title == true %} sales-collection__header--center{% endif %}">
+    <div class="sales-collection__heading">
+      {% if section.settings.eyebrow != blank %}
+        <p class="sales-collection__eyebrow">{{ section.settings.eyebrow | escape }}</p>
+      {% endif %}
+      <h2 class="sales-collection__title{% if section.settings.title == '' %} title--no-heading{% endif %}">{{ section.settings.title | escape }}</h2>
+      {% if section.settings.subtitle != blank %}
+        <p class="sales-collection__subtitle">{{ section.settings.subtitle | escape }}</p>
+      {% endif %}
+    </div>
 
-
-<div id="section-{{ section.__key }}" class="spaced-section page-width{% if section.settings.swipe_on_mobile == true and products_to_display > 2 and section.settings.products_to_show > 2 %} page-width-desktop{% endif %}{% if section.settings.title == '' %} mt-0{% endif %}">
-  <div class="title-wrapper-with-link{% if section.settings.title == '' %} title-wrapper-with-link--no-heading mt-0{% endif %}{% if products_to_display > 2 and section.settings.swipe_on_mobile and section.settings.products_to_show > 2 %} title-wrapper--self-padded-tablet-down{% endif %}{% if section.settings.center_title == true %} title-center{% endif %}">
-    <h2 class="title{% if section.settings.title == '' %} title--no-heading{% endif %}">{{ section.settings.title }}</h2>
-
-    {% if section.settings.show_view_all and section.settings.swipe_on_mobile and more_in_collection %}
-      <a href="{{ collection.url }}" class="link underlined-link large-up-hide">{{ 'general.view_all' | t }}</a>
+    {% if section.settings.show_view_all and more_in_collection %}
+      <a href="{{ collection.url }}" class="sales-collection__link">
+        <span>{{ 'general.view_all' | t }}</span>
+        <span aria-hidden="true">→</span>
+      </a>
     {% endif %}
   </div>
 
   {% if collection_id and products_to_display > 0 %}
 
     <slider-component class="slider-mobile-gutter">
-      <ul class="grid grid--2-col product-grid{% if products_to_display == 4 or section.settings.collection == '' %} grid--3-col-tablet grid--{{section.settings.products_per_row}}-col-desktop{% else %} grid--3-col-tablet{% endif %}{% if products_to_display > 5 %} grid--one-third-max grid--{{section.settings.products_per_row}}-col-desktop grid--quarter-max{% endif %}{% if products_to_display > 2 and section.settings.swipe_on_mobile and section.settings.products_to_show > 2 %} slider slider--tablet grid--peek{% endif %}{% if section.settings.show_view_all == false or section.settings.products_to_display < section.settings.products_to_show %} negative-margin{% endif %}{% if section.settings.show_view_all and section.settings.products_to_display > section.settings.products_to_show %} negative-margin--small{% endif %}" role="list">
+      <ul class="sales-collection__grid grid grid--2-col product-grid{% if products_to_display == 4 or section.settings.collection == '' %} grid--3-col-tablet grid--{{section.settings.products_per_row}}-col-desktop{% else %} grid--3-col-tablet{% endif %}{% if products_to_display > 5 %} grid--one-third-max grid--{{section.settings.products_per_row}}-col-desktop grid--quarter-max{% endif %}{% if products_to_display > 2 and section.settings.swipe_on_mobile and section.settings.products_to_show > 2 %} slider slider--tablet grid--peek{% endif %}{% if section.settings.show_view_all == false or section.settings.products_to_display < section.settings.products_to_show %} negative-margin{% endif %}{% if section.settings.show_view_all and section.settings.products_to_display > section.settings.products_to_show %} negative-margin--small{% endif %}" role="list">
         {% for product in collection.products limit: section.settings.products_to_show %}
           <li class="grid__item{% if products_to_display > 2 and section.settings.swipe_on_mobile and section.settings.products_to_show > 2 %} slider__slide{% endif %}">
             {% include 'product-card', show_secondary_image: section.settings.show_secondary_image, show_add_to_cart_button: section.settings.show_add_to_cart_button, image_ratio: section.settings.image_ratio, show_product_info: section.settings.show_product_info %}
@@ -62,14 +70,6 @@
         </div>
       {% endif %}
     </slider-component>
-
-    {% if section.settings.show_view_all and more_in_collection %}
-      <div class="center{% if section.settings.swipe_on_mobile %} small-hide medium-hide{% endif %}">
-        <a href="{{ collection.url }}" class="button">
-          {{ 'general.view_all' | t }}
-        </a>
-      </div>
-    {% endif %}
 
   {% else %}
     <!-- Placeholder -->
@@ -156,6 +156,14 @@
     "settings": [
       {
         "type": "text",
+        "id": "eyebrow",
+        "default": "CURATED FOR YOU",
+        "label": {
+          "en_US": "Eyebrow"
+        }
+      },
+      {
+        "type": "text",
         "id": "title",
         "default": "Featured collection",
         "label": {
@@ -166,6 +174,22 @@
           "th_TH": "ส่วนหัว",
           "zh_CN": "商品分类标题",
           "zh_TW": "商品分類標題"
+        }
+      },
+      {
+        "type": "text",
+        "id": "subtitle",
+        "default": "Discover standout picks from the collection.",
+        "label": {
+          "en_US": "Supporting text"
+        }
+      },
+      {
+        "type": "color",
+        "id": "accent_color",
+        "default": "#E4572E",
+        "label": {
+          "en_US": "Accent color"
         }
       },
       {
