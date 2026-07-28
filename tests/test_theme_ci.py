@@ -24,8 +24,20 @@ class ThemeCITests(unittest.TestCase):
             (theme / directory).mkdir(parents=True, exist_ok=True)
 
         (theme / "assets" / "app.css").write_text("body {}\n", encoding="utf-8")
-        (theme / "config" / "settings.json").write_text(
+        (theme / "editor_assets" / "app.css").write_text(
+            "body {}\n", encoding="utf-8"
+        )
+        (theme / "config" / "settings_data.json").write_text(
             '{"current": {}}\n', encoding="utf-8"
+        )
+        (theme / "config" / "settings_schema.json").write_text(
+            "[]\n", encoding="utf-8"
+        )
+        (theme / "editor_config" / "settings_data.json").write_text(
+            '{"current": {}}\n', encoding="utf-8"
+        )
+        (theme / "editor_config" / "settings_schema.json").write_text(
+            "[]\n", encoding="utf-8"
         )
         (theme / "layout" / "theme.liquid").write_text(
             "{{ content_for_layout }}\n", encoding="utf-8"
@@ -52,10 +64,6 @@ class ThemeCITests(unittest.TestCase):
         )
         (theme / "templates" / "ignored.liquid.backup").write_text(
             "Not a runtime template\n", encoding="utf-8"
-        )
-        (theme / "editor_assets").mkdir()
-        (theme / "editor_assets" / "draft.css").write_text(
-            "Not a runtime asset\n", encoding="utf-8"
         )
         (theme / "README.md").write_text("Not shipped\n", encoding="utf-8")
         return theme
@@ -84,9 +92,10 @@ class ThemeCITests(unittest.TestCase):
         with zipfile.ZipFile(first_archive) as archive:
             names = archive.namelist()
         self.assertIn("layout/theme.liquid", names)
+        self.assertIn("editor_assets/app.css", names)
+        self.assertIn("editor_config/settings_schema.json", names)
         self.assertNotIn("README.md", names)
         self.assertNotIn("templates/ignored.liquid.backup", names)
-        self.assertFalse(any(name.startswith("editor_assets/") for name in names))
 
     def test_missing_and_non_directory_theme_paths(self) -> None:
         missing = self.root / "missing"
@@ -106,6 +115,25 @@ class ThemeCITests(unittest.TestCase):
         self.assertTrue(any("Missing required directory: assets/" in issue for issue in issues))
         self.assertTrue(
             any("Missing required file: layout/theme.liquid" in issue for issue in issues)
+        )
+
+    def test_asset_and_editor_asset_filenames_must_match(self) -> None:
+        theme = self.make_theme()
+        (theme / "assets" / "storefront-only.js").write_text(
+            "window.storefront = true;\n", encoding="utf-8"
+        )
+        (theme / "editor_assets" / "editor-only.js").write_text(
+            "window.editor = true;\n", encoding="utf-8"
+        )
+
+        issues = theme_ci.validate_theme(theme)
+        self.assertIn(
+            "editor_assets/: missing counterpart for assets/storefront-only.js",
+            issues,
+        )
+        self.assertIn(
+            "assets/: missing counterpart for editor_assets/editor-only.js",
+            issues,
         )
 
     def test_file_safety_encoding_and_json_errors(self) -> None:
@@ -205,6 +233,40 @@ class ThemeCITests(unittest.TestCase):
         with mock.patch.object(zipfile.ZipFile, "testzip", return_value="assets/app.css"):
             issues = theme_ci.validate_archive(archive)
         self.assertIn("Archive CRC failed for: assets/app.css", issues)
+
+    def test_archive_asset_and_editor_asset_filenames_must_match(self) -> None:
+        theme = self.make_theme()
+        archive = self.root / "theme.zip"
+        theme_ci.build_archive(theme, archive)
+
+        entries: list[tuple[str, str]] = []
+        with zipfile.ZipFile(archive) as source:
+            for info in source.infolist():
+                if info.is_dir() or info.filename in {
+                    "assets/app.css",
+                    "editor_assets/app.css",
+                }:
+                    continue
+                entries.append((info.filename, source.read(info).decode("utf-8")))
+        entries.extend(
+            [
+                ("assets/storefront-only.css", "body {}\n"),
+                ("editor_assets/editor-only.css", "body {}\n"),
+            ]
+        )
+        mismatch = self.make_zip("mismatch.zip", entries)
+
+        issues = theme_ci.validate_archive(mismatch)
+        self.assertIn(
+            "Archive editor_assets/ is missing counterpart for "
+            "assets/storefront-only.css",
+            issues,
+        )
+        self.assertIn(
+            "Archive assets/ is missing counterpart for "
+            "editor_assets/editor-only.css",
+            issues,
+        )
 
     def test_build_failure_paths(self) -> None:
         with self.assertRaises(ValueError):
