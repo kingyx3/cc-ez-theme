@@ -209,6 +209,8 @@ body {
 .sales-collection .product-card-wrapper .card-information {
   display: flex;
   flex: 1;
+  flex-direction: column;
+  align-items: stretch;
   padding: 1.6rem;
 }
 
@@ -219,11 +221,15 @@ body {
 }
 
 .sales-collection .card-information__text {
+  width: 100%;
+  max-width: none;
   padding-right: 0;
   color: var(--storefront-ink);
   font-size: 1.5rem;
   letter-spacing: -0.01em;
   line-height: 1.4;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
 }
 
 .sales-collection .card-information__wrapper > .price {
