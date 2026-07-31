@@ -477,62 +477,52 @@
                         <a href="{{ link.url }}" {% if link.new_page == "true" %} target="_blank" {% endif %} >{{ link.title | escape }}</a>
                         {% include 'svg-definitions' with 'icon-caret' %}
                       </summary>
-                      <ul class="header__submenu list-menu list-menu--disclosure caption-large motion-reduce" role="list" tabindex="-1">
-                        
+                      <ul class="header__submenu header__mega-menu list-menu list-menu--disclosure caption-large motion-reduce" role="list" tabindex="-1">
                         {% for parentlink in parent %}
-                        {% assign child_handle = parentlink.handle %}
-                          {% if contents[child_handle].links != '' %}
-                            {% assign child = contents[child_handle].links %}
-                            <li>
-                              <details-disclosure>
-                                <details>
-                                  <summary class="header__menu-item link link--text list-menu__item focus-inset caption-large">
-                                    <a href="{{ parentlink.url }}" {% if parentlink.new_page == "true" %} target="_blank" {% endif %}>{{ parentlink.title | escape }}</a>
-                                    {% include 'svg-definitions' with 'icon-caret' , class : 'rotate-90' %}
-                                  </summary>
-                                  <ul class="header__submenu list-menu list-menu--disclosure motion-reduce">
-                                    {% for childlink in child %}
-                                      {% assign grand_handle = childlink.handle %}
-                                      {% if contents[grand_handle].links != '' %}
-                                        {% assign grand = contents[grand_handle].links %}
-                                        <li>
-                                          <details-disclosure>
-                                            <details>
-                                              <summary class="header__menu-item link link--text list-menu__item focus-inset caption-large">
-                                                <a href="{{ childlink.url }}" {% if childlink.new_page == "true" %} target="_blank" {% endif %}>
-                                                  {{ childlink.title | escape }}
-                                                </a>
-                                                {% include 'svg-definitions' with 'icon-caret' , class : 'rotate-90' %}
-                                              </summary>
-                                              <ul class="header__submenu list-menu list-menu--disclosure motion-reduce">
-                                              {% for grandlink in grand %}
-                                                <li>
-                                                  <a href="{{ grandlink.url }}" {% if grandlink.new_page == "true" %} target="_blank" {% endif %} class="header__menu-item list-menu__item link link--text focus-inset caption-large">{{ grandlink.title | escape }}</a>
-                                                </li>
-                                              {% endfor %}
-                                              </ul>
-                                            </details>
-                                          </details-disclosure>
-                                        </li>
-                                      {% else %}
-                                        <li>
-                                          <a href="{{ childlink.url }}" {% if childlink.new_page == "true" %} target="_blank" {% endif %} class="header__menu-item list-menu__item link link--text focus-inset caption-large">{{ childlink.title | escape }}</a>
-                                        </li>
-                                      {% endif %}
-                                    {% endfor %}
-                                  </ul>
-                                </details>
-                              </details-disclosure>
-                            </li>
-                            
-                          {% else %}
-                            
-                            <li>
-                              <a href="{{parentlink.url}}" {% if parentlink.new_page == "true" %} target="_blank" {% endif %} class="header__menu-item list-menu__item link link--text focus-inset caption-large">
-                                {{ parentlink.title | escape }}
-                              </a>
-                            </li>
-                          {% endif %}
+                          {% assign child_handle = parentlink.handle %}
+                          {% assign child = contents[child_handle].links %}
+                          <li class="header__mega-menu-group">
+                            <a
+                              href="{{ parentlink.url }}"
+                              {% if parentlink.new_page == "true" %}target="_blank"{% endif %}
+                              class="header__mega-menu-heading link link--text focus-inset"
+                            >
+                              {{ parentlink.title | escape }}
+                              <span aria-hidden="true">→</span>
+                            </a>
+                            {% if child != '' %}
+                              <ul class="header__mega-menu-list" role="list">
+                                {% for childlink in child %}
+                                  {% assign grand_handle = childlink.handle %}
+                                  {% assign grand = contents[grand_handle].links %}
+                                  <li>
+                                    <a
+                                      href="{{ childlink.url }}"
+                                      {% if childlink.new_page == "true" %}target="_blank"{% endif %}
+                                      class="header__mega-menu-link link link--text focus-inset"
+                                    >
+                                      {{ childlink.title | escape }}
+                                    </a>
+                                    {% if grand != '' %}
+                                      <ul class="header__mega-menu-list header__mega-menu-list--nested" role="list">
+                                        {% for grandlink in grand %}
+                                          <li>
+                                            <a
+                                              href="{{ grandlink.url }}"
+                                              {% if grandlink.new_page == "true" %}target="_blank"{% endif %}
+                                              class="header__mega-menu-link header__mega-menu-link--nested link link--text focus-inset"
+                                            >
+                                              {{ grandlink.title | escape }}
+                                            </a>
+                                          </li>
+                                        {% endfor %}
+                                      </ul>
+                                    {% endif %}
+                                  </li>
+                                {% endfor %}
+                              </ul>
+                            {% endif %}
+                          </li>
                         {% endfor %}
                       </ul>
                     </details>
