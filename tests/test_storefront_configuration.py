@@ -124,45 +124,46 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertNotIn("#ff2636", carousell_icon)
         self.assertNotIn('fill="#fff"', carousell_icon)
 
-    def test_header_is_compact_and_filters_wishlist_links(self) -> None:
+    def test_header_restores_main_menu_hierarchy_and_filters_wishlist(self) -> None:
         header = (THEME_ROOT / "sections" / "header.liquid").read_text(
             encoding="utf-8"
         )
-        categories = (
+        categories_snippet = (
             THEME_ROOT / "snippets" / "navigation-categories.liquid"
-        ).read_text(encoding="utf-8")
-        navigation_source = header + categories
-        self.assertIn("category_links = contents.catalog.links", categories)
+        )
+        self.assertFalse(categories_snippet.exists())
+        self.assertNotIn("contents.catalog.links", header)
+        self.assertNotIn("navigation-categories", header)
+        self.assertGreaterEqual(
+            header.count("for link in contents.main-menu.links"), 2
+        )
         self.assertIn(
-            "candidate_links = contents[main_menu_link.handle].links",
-            categories,
+            "navigation_children = contents[navigation_link.handle].links",
+            header,
         )
-        self.assertNotIn("navigation_title == 'categories' and", categories)
-        self.assertGreaterEqual(
-            navigation_source.count("navigation_url contains 'wishlist'"), 5
-        )
-        self.assertGreaterEqual(
-            navigation_source.count("navigation_title contains 'wishlist'"),
-            5,
-        )
-        self.assertEqual(categories.count("child_url contains 'wishlist'"), 2)
-        self.assertEqual(categories.count("child_title contains 'wishlist'"), 2)
-        self.assertEqual(categories.count("grand_url contains 'wishlist'"), 2)
-        self.assertEqual(categories.count("grand_title contains 'wishlist'"), 2)
+        self.assertEqual(header.count("parent = contents[parent_handle].links"), 2)
+        self.assertEqual(header.count("for parentlink in parent"), 2)
         self.assertEqual(
-            categories.count("grand_links = contents[grand_handle].links"),
-            2,
+            header.count("if contents[child_handle].links != ''"), 2
         )
-        self.assertEqual(categories.count("for grand_link in grand_links"), 2)
+        self.assertEqual(header.count("for childlink in child"), 2)
+        self.assertEqual(
+            header.count("if contents[grand_handle].links != ''"), 2
+        )
+        self.assertEqual(header.count("for grandlink in grand"), 2)
+        self.assertGreaterEqual(
+            header.count("navigation_url contains 'wishlist'"), 10
+        )
+        self.assertGreaterEqual(
+            header.count("navigation_title contains 'wishlist'"), 10
+        )
         self.assertNotIn("{% continue %}", header)
-        self.assertNotIn("{% continue %}", categories)
         self.assertEqual(header.count('href="/collections/the-hobbit"'), 2)
         self.assertEqual(
             header.count('href="/collections/marvel-super-heroes"'), 2
         )
         self.assertEqual(header.count('href="/pages/about-us"'), 2)
-        self.assertIn("navigation_mode: 'mobile'", header)
-        self.assertIn("navigation_mode: 'desktop'", header)
+        self.assertEqual(header.count('class="header__nav-item--categories"'), 1)
         self.assertIn('class="header__nav-item--about"', header)
         self.assertEqual(self.sections["header"]["settings"]["logo_max_width"], 90)
 

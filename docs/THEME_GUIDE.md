@@ -258,12 +258,12 @@ fixed order:
 4. About Us (`/pages/about-us`)
 
 About Us is pushed to the right edge of the desktop navigation area. The
-Categories dropdown reads EasyStore's system collection hierarchy directly
-from `contents.catalog.links`; it does not depend on the navigator's display
-title. For compatibility with stores that do not expose `contents.catalog`,
-the theme falls back to the first hierarchical Main Menu navigator and then
-to the published Main Menu links. Wishlist links are filtered by both title
-and URL at every rendered header navigation level.
+Categories dropdown restores the original EasyStore hierarchy contract used
+before PR #9: it selects the Categories entry (or the first hierarchical
+entry) from `contents.main-menu.links`, keeps that real link as the disclosure
+root, and resolves every child level through `contents[link.handle].links`
+directly in `header.liquid`. Wishlist links are filtered by both title and URL
+at every rendered header navigation level.
 
 The theme controls:
 
@@ -279,19 +279,19 @@ The Categories menu follows EasyStore's configured handles through three
 nested collection levels on desktop and mobile, matching the original header
 hierarchy behavior.
 
-### Catalog behavior
+### Main Menu behavior
 
-EasyStore's system Catalog navigator automatically exposes published
-collections and their sub-collections. This can include both set collections
-and product-type collections even if they were not manually added to Main
-Menu.
+The Categories disclosure follows the hierarchy configured in EasyStore's
+Main Menu navigator. This keeps the root link, its URL, and all descendant
+handles in the same rendering scope as the original working header.
 
 For a curated storefront:
 
-1. Hide the system Catalog navigator.
-2. Create a custom Shop navigator.
-3. Add only the sales-relevant collection links.
-4. Group them under Shop by Set and Shop by Product Type.
+1. Keep a Categories entry in Main Menu and attach its child navigators.
+2. Add only the sales-relevant collection links beneath Categories.
+3. Group them by set or product type as needed.
+4. Publish the Main Menu after hierarchy changes so EasyStore exposes the
+   updated handles to the theme.
 
 ## 8. Product taxonomy
 
