@@ -110,7 +110,7 @@ Sections are configurable page components. Important sections include:
 | `main-product.liquid` | Product details and variants |
 | `main-collection.liquid` | Collection grid, sorting, and filters |
 | `main-cart.liquid` | Cart contents |
-| `footer.liquid` | Social links, payment methods, quick links, and brand copy |
+| `footer.liquid` | Social links, contact details, and policy links |
 
 Each configurable section ends with an EasyStore schema block. Keep schema
 JSON valid and include exactly one `{% schema %}` / `{% endschema %}` pair when
@@ -163,7 +163,7 @@ Homepage order is controlled by `content_for_index` in:
 The default order is:
 
 1. Best Sellers
-2. New Releases
+2. The Hobbit Collection
 3. Campaign image banner
 
 ### Best Sellers
@@ -171,14 +171,16 @@ The default order is:
 - Section type: `featured-collection`
 - Default title: `Best Sellers`
 - Default collection: `feature-on-homepage`
-- Default display: 8 products, 4 per desktop row
+- Default display: 6 products, 3 per desktop row
+- Homepage quick add: disabled
 
-### New Releases
+### The Hobbit Collection
 
 - Section type: `featured-collection`
-- Default title: `New Releases`
+- Default title: `The Hobbit Collection`
 - Default collection: `the-hobbit`
-- Default display: 8 products, 4 per desktop row
+- Default display: 6 products, 3 per desktop row
+- Homepage quick add: disabled
 
 ### Campaign banner
 
@@ -208,7 +210,7 @@ ordering remain collection responsibilities in EasyStore.
 - primary and secondary product images;
 - sale and sold-out badges;
 - title and price;
-- optional quick add;
+- optional quick add outside homepage featured collections;
 - variant thumbnails;
 - a view-details call to action.
 
@@ -225,7 +227,7 @@ When changing card layout, test:
 - sold-out products;
 - products with and without variant thumbnails;
 - two-column mobile grids;
-- four- and five-column desktop grids.
+- three-, four-, and five-column desktop grids.
 
 Avoid single-line truncation for product titles unless a deliberate design
 decision is documented. Trading-card product names commonly contain set,
@@ -262,6 +264,7 @@ EasyStore controls:
 The theme controls:
 
 - visual treatment;
+- a single-row desktop layout with the logo directly before navigation;
 - carets and disclosure behavior;
 - desktop dropdown positioning;
 - mobile drawer behavior;
@@ -310,7 +313,8 @@ Packs. Use tags for narrower operational detail.
 
 The store can use EasyStore's Wishlist integration to measure interest.
 Wishlist behavior belongs to the installed EasyStore app; the theme should
-leave app hooks intact.
+leave product-level app hooks intact. Wishlist destinations are deliberately
+filtered out of the desktop header navigation.
 
 For out-of-stock products, a free manual alternative is a theme-rendered
 WhatsApp interest link containing the product title, selected variant, and
@@ -388,8 +392,8 @@ communicates interaction.
 
 1. Update `content_for_index` in both settings-data files.
 2. Confirm every referenced section key exists.
-3. Keep Best Sellers and New Releases first unless the merchandising strategy
-   explicitly changes.
+3. Keep Best Sellers and The Hobbit Collection first unless the merchandising
+   strategy explicitly changes.
 
 ### Change a collection assignment
 

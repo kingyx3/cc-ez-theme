@@ -46,7 +46,7 @@
       <ul class="sales-collection__grid grid grid--2-col product-grid{% if products_to_display == 4 or section.settings.collection == '' %} grid--3-col-tablet grid--{{section.settings.products_per_row}}-col-desktop{% else %} grid--3-col-tablet{% endif %}{% if products_to_display > 5 %} grid--one-third-max grid--{{section.settings.products_per_row}}-col-desktop grid--quarter-max{% endif %}{% if products_to_display > 2 and section.settings.swipe_on_mobile and section.settings.products_to_show > 2 %} slider slider--tablet grid--peek{% endif %}{% if section.settings.show_view_all == false or section.settings.products_to_display < section.settings.products_to_show %} negative-margin{% endif %}{% if section.settings.show_view_all and section.settings.products_to_display > section.settings.products_to_show %} negative-margin--small{% endif %}" role="list">
         {% for product in collection.products limit: section.settings.products_to_show %}
           <li class="grid__item{% if products_to_display > 2 and section.settings.swipe_on_mobile and section.settings.products_to_show > 2 %} slider__slide{% endif %}">
-            {% include 'product-card', show_secondary_image: section.settings.show_secondary_image, show_add_to_cart_button: section.settings.show_add_to_cart_button, image_ratio: section.settings.image_ratio, show_product_info: section.settings.show_product_info %}
+            {% include 'product-card', show_secondary_image: section.settings.show_secondary_image, show_add_to_cart_button: false, image_ratio: section.settings.image_ratio, show_product_info: section.settings.show_product_info %}
           </li>
         {% endfor %}
       </ul>
@@ -113,8 +113,8 @@
       }
     </style>
     <div class="collection-placeholder-wrapper">
-      <ul class="collection-placeholder-grid grid grid--2-col grid--4-col-desktop grid--quarter-max">
-        {% for i in (1..8) %}
+      <ul class="collection-placeholder-grid grid grid--2-col grid--{{ section.settings.products_per_row }}-col-desktop">
+        {% for i in (1..section.settings.products_to_show) %}
           <li class="grid__item text-center">
             {% capture placeholder_image_url %}https://themes.easystore.co/onboarding/placeholder/products/frame/product-frame-{{ i }}.png{% endcapture %}
             <a href="https://{{GLOBALS.ADMIN_DOMAIN}}/products/" class="full-unstyled-link">
@@ -309,16 +309,6 @@
           "zh_TW": "顯示次要圖片",
           "zh_CN": "显示次要图像",
           "ms_MY": "Tunjukkan imej sekunder"
-        }
-      }, {
-        "type": "checkbox",
-        "id": "show_add_to_cart_button",
-        "default": true,
-        "label": {
-          "en_US": "Show add to cart button",
-          "zh_TW": "顯示加入購物車按鈕",
-          "zh_CN": "显示加入购物车按钮",
-          "ms_MY": "Tunjukkan butang tambah ke troli"
         }
       }, {
         "type": "checkbox",
