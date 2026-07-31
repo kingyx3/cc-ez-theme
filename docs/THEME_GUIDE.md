@@ -211,6 +211,11 @@ Product titles are allowed to use the full card width and wrap safely. Variant
 thumbnails belong below the primary information rather than competing with the
 title for horizontal space.
 
+Homepage featured collections use one section-level spacing margin only. The
+conversion stylesheet keeps their heading gap, grid row gap, card padding, and
+minimum information height compact on desktop and mobile; avoid adding a
+second `spaced-section` class inside the section wrapper.
+
 When changing card layout, test:
 
 - a short title;

@@ -13,6 +13,14 @@ body {
   background: #f7f5f0;
 }
 
+.template-index .spaced-section {
+  margin-top: clamp(1.6rem, 2.5vw, 3rem);
+}
+
+.template-index .spaced-section:last-child {
+  margin-bottom: clamp(1.6rem, 2.5vw, 3rem);
+}
+
 .announcement-bar {
   color: var(--announcement-color, #ffffff);
   background: var(--announcement-background, #131722);
@@ -124,8 +132,8 @@ body {
   --section-accent: #e4572e;
   position: relative;
   isolation: isolate;
-  padding-top: clamp(2.4rem, 4vw, 5rem);
-  padding-bottom: clamp(2.4rem, 4vw, 5rem);
+  padding-top: clamp(1.8rem, 2.5vw, 3.2rem);
+  padding-bottom: clamp(1.8rem, 2.5vw, 3.2rem);
 }
 
 .sales-collection::before {
@@ -148,7 +156,7 @@ body {
   align-items: end;
   justify-content: space-between;
   gap: 2rem;
-  margin-bottom: clamp(2.4rem, 3vw, 3.6rem);
+  margin-bottom: clamp(1.6rem, 2vw, 2.4rem);
 }
 
 .sales-collection__header--center {
@@ -180,7 +188,7 @@ body {
 
 .sales-collection__subtitle {
   max-width: 58ch;
-  margin: 1.2rem 0 0;
+  margin: 0.8rem 0 0;
   color: var(--storefront-muted);
   font-size: clamp(1.4rem, 1.4vw, 1.7rem);
   letter-spacing: 0;
@@ -212,10 +220,12 @@ body {
 
 .sales-collection__grid {
   align-items: stretch;
+  margin-bottom: 0;
 }
 
 .sales-collection__grid .grid__item {
   display: flex;
+  padding-bottom: 1rem;
 }
 
 .sales-collection .product-card-wrapper {
@@ -253,12 +263,12 @@ body {
   flex: 1;
   flex-direction: column;
   align-items: stretch;
-  padding: 1.6rem;
+  padding: 1.2rem 1.3rem 1.3rem;
 }
 
 .sales-collection .card-information__wrapper {
   display: flex;
-  min-height: 12rem;
+  min-height: 9rem;
   flex-direction: column;
 }
 
@@ -275,7 +285,7 @@ body {
 }
 
 .sales-collection .card-information__wrapper > .price {
-  margin-top: 0.9rem;
+  margin-top: 0.6rem;
   color: var(--storefront-ink);
   font-weight: 700;
 }
@@ -286,7 +296,7 @@ body {
   justify-content: space-between;
   gap: 1rem;
   margin-top: auto !important;
-  padding-top: 1.4rem;
+  padding-top: 0.8rem;
   color: var(--section-accent);
   font-size: 1.3rem;
   font-weight: 700;
@@ -353,15 +363,23 @@ body {
     letter-spacing: 0.08em;
   }
 
+  .template-index .spaced-section {
+    margin-top: 1.6rem;
+  }
+
+  .template-index .spaced-section:last-child {
+    margin-bottom: 1.6rem;
+  }
+
   .sales-collection {
-    padding-top: 3rem;
-    padding-bottom: 3rem;
+    padding-top: 1.8rem;
+    padding-bottom: 1.8rem;
   }
 
   .sales-collection::before {
-    top: 0.8rem;
+    top: 0.6rem;
     right: 0;
-    bottom: 0.8rem;
+    bottom: 0.6rem;
     left: 0;
     border-radius: 1.8rem;
   }
@@ -377,11 +395,11 @@ body {
   }
 
   .sales-collection .product-card-wrapper .card-information {
-    padding: 1.2rem;
+    padding: 1rem;
   }
 
   .sales-collection .card-information__wrapper {
-    min-height: 11rem;
+    min-height: 8rem;
   }
 
   .sales-collection .badge.addToClassList {

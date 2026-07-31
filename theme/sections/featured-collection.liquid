@@ -18,7 +18,7 @@
 
 <div
   id="section-{{ section.__key }}"
-  class="sales-collection spaced-section page-width{% if section.settings.swipe_on_mobile == true and products_to_display > 2 and section.settings.products_to_show > 2 %} page-width-desktop{% endif %}{% if section.settings.title == '' %} mt-0{% endif %}"
+  class="sales-collection page-width{% if section.settings.swipe_on_mobile == true and products_to_display > 2 and section.settings.products_to_show > 2 %} page-width-desktop{% endif %}{% if section.settings.title == '' %} mt-0{% endif %}"
   style="--section-accent: {{ section.settings.accent_color }};"
 >
   <div class="sales-collection__header{% if products_to_display > 2 and section.settings.swipe_on_mobile and section.settings.products_to_show > 2 %} title-wrapper--self-padded-tablet-down{% endif %}{% if section.settings.center_title == true %} sales-collection__header--center{% endif %}">
