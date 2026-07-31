@@ -191,11 +191,51 @@
             "product_bg_color": "rgba(245, 245, 245, 1)"
           },
           "type": "featured-collection"
+        },
+        "1684412368816": {
+          "settings": {
+            "eyebrow": "MARVEL SUPER HEROES",
+            "title": "Marvel Collection",
+            "subtitle": "Explore the latest products from Marvel Super Heroes.",
+            "accent_color": "#C62828",
+            "collection__id": "marvel-super-heroes",
+            "products_per_row": 3,
+            "products_to_show": 6,
+            "show_view_all": true,
+            "image_ratio": "square",
+            "show_secondary_image": true,
+            "swipe_on_mobile": true,
+            "center_title": true,
+            "show_product_info": true,
+            "product_bg_color": "rgba(245, 245, 245, 1)"
+          },
+          "type": "featured-collection"
+        },
+        "1684412368817": {
+          "settings": {
+            "eyebrow": "ENROLL AT STRIXHAVEN",
+            "title": "Secrets of Strixhaven",
+            "subtitle": "Discover the latest products from Secrets of Strixhaven.",
+            "accent_color": "#7B2CBF",
+            "collection__id": "secrets-of-strixhaven",
+            "products_per_row": 3,
+            "products_to_show": 6,
+            "show_view_all": true,
+            "image_ratio": "square",
+            "show_secondary_image": true,
+            "swipe_on_mobile": true,
+            "center_title": true,
+            "show_product_info": true,
+            "product_bg_color": "rgba(245, 245, 245, 1)"
+          },
+          "type": "featured-collection"
         }
       },
       "content_for_index": [
         "1667498127486",
-        "1684403242688"
+        "1684403242688",
+        "1684412368816",
+        "1684412368817"
       ],
       "placeholder": {
         "featured_single_product": "https://s3-ap-southeast-1.amazonaws.com/eesb.themes/onboarding/candy/en_placeholder_featured-single-product.jpg",

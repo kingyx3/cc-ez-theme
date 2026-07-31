@@ -274,41 +274,6 @@
   </symbol>
 </svg>
 
-{% assign category_links = '' %}
-{% for navigation_link in contents.main-menu.links %}
-  {% assign navigation_title = navigation_link.title | downcase %}
-  {% assign navigation_url = navigation_link.url | downcase %}
-  {% assign navigation_children = contents[navigation_link.handle].links %}
-  {% unless navigation_url contains 'wishlist' or navigation_title contains 'wishlist' %}
-    {% if category_links == '' and navigation_title == 'category' and navigation_children != '' %}
-      {% assign category_links = navigation_children %}
-    {% elsif category_links == '' and navigation_title == 'categories' and navigation_children != '' %}
-      {% assign category_links = navigation_children %}
-    {% endif %}
-  {% endunless %}
-{% endfor %}
-
-{% if category_links == blank %}
-  {% for navigation_link in contents.main-menu.links %}
-    {% assign navigation_title = navigation_link.title | downcase %}
-    {% assign navigation_url = navigation_link.url | downcase %}
-    {% assign navigation_children = contents[navigation_link.handle].links %}
-    {% unless navigation_url contains 'wishlist' or navigation_title contains 'wishlist' %}
-      {% if category_links == blank and navigation_children != '' %}
-        {% assign category_links = navigation_children %}
-      {% endif %}
-    {% endunless %}
-  {% endfor %}
-{% endif %}
-
-{% if category_links == blank %}
-  {% assign category_links = contents.catalog.links %}
-{% endif %}
-
-{% if category_links == blank %}
-  {% assign category_links = contents.main-menu.links %}
-{% endif %}
-
 <div id="easystore-section-header">
   {% if section.settings.message %}
     <div
@@ -343,112 +308,9 @@
                 <div class="menu-drawer__navigation-container">
                   <nav class="menu-drawer__navigation">
                     <ul class="menu-drawer__menu list-menu" role="list">
-                      <li class="menu-drawer__nav-item--categories">
-                            <details>
-                              <summary class="menu-drawer__menu-item list-menu__item link link--text focus-inset" role="button" aria-expanded="false">
-                                <span>Category</span>
-                                {% include 'svg-definitions' with 'icon-arrow' %}
-                                {% include 'svg-definitions' with 'icon-caret' %}
-                              </summary>
-                              <div class="menu-drawer__submenu motion-reduce" tabindex="-1">
-                                <div class="menu-drawer__inner-submenu">
-                                  <button class="menu-drawer__close-button link link--text focus-inset" aria-expanded="true">
-                                    {% include 'svg-definitions' with 'icon-arrow' %}
-                                    Category
-                                  </button>
-                                  <ul class="menu-drawer__menu list-menu" role="list" tabindex="-1">
-                                    {% for parentlink in category_links %}
-                                      {% assign navigation_title = parentlink.title | downcase %}
-                                      {% assign navigation_url = parentlink.url | downcase %}
-                                      {% unless navigation_url contains 'wishlist' or navigation_title contains 'wishlist' %}
-                                        {% assign child_handle = parentlink.handle %}
-                                        {% if contents[child_handle].links != '' %}
-                                          {% assign child = contents[child_handle].links %}
-                                          <li>
-                                            <details>
-                                              <summary class="menu-drawer__menu-item list-menu__item link link--text focus-inset" role="button" aria-expanded="false">
-                                                <a href="{{ parentlink.url }}" {% if parentlink.new_page %}target="_blank" rel="noopener noreferrer"{% endif %} class="link--text list-menu__item menu-drawer__menu-item">
-                                                  {{ parentlink.title | escape }}
-                                                </a>
-                                                {% include 'svg-definitions' with 'icon-arrow' %}
-                                                {% include 'svg-definitions' with 'icon-caret' %}
-                                              </summary>
-                                              <div class="menu-drawer__submenu motion-reduce" tabindex="-1">
-                                                <div class="menu-drawer__inner-submenu">
-                                                  <button class="menu-drawer__close-button link link--text focus-inset" aria-expanded="true">
-                                                    {% include 'svg-definitions' with 'icon-arrow' %}
-                                                    {{ parentlink.title | escape }}
-                                                  </button>
-                                                  <ul class="menu-drawer__menu list-menu" role="list" tabindex="-1">
-                                                    {% for childlink in child %}
-                                                      {% assign navigation_title = childlink.title | downcase %}
-                                                      {% assign navigation_url = childlink.url | downcase %}
-                                                      {% unless navigation_url contains 'wishlist' or navigation_title contains 'wishlist' %}
-                                                        {% assign grand_handle = childlink.handle %}
-                                                        {% if contents[grand_handle].links != '' %}
-                                                          {% assign grand = contents[grand_handle].links %}
-                                                          <li>
-                                                            <details>
-                                                              <summary class="menu-drawer__menu-item list-menu__item link link--text focus-inset" role="button" aria-expanded="false">
-                                                                <a href="{{ childlink.url }}" {% if childlink.new_page %}target="_blank" rel="noopener noreferrer"{% endif %} class="link--text list-menu__item menu-drawer__menu-item">
-                                                                  {{ childlink.title | escape }}
-                                                                </a>
-                                                                {% include 'svg-definitions' with 'icon-arrow' %}
-                                                                {% include 'svg-definitions' with 'icon-caret' %}
-                                                              </summary>
-                                                              <div class="menu-drawer__submenu motion-reduce" tabindex="-1">
-                                                                <div class="menu-drawer__inner-submenu">
-                                                                  <button class="menu-drawer__close-button link link--text focus-inset" aria-expanded="true">
-                                                                    {% include 'svg-definitions' with 'icon-arrow' %}
-                                                                    {{ childlink.title | escape }}
-                                                                  </button>
-                                                                  <ul class="menu-drawer__menu list-menu" role="list" tabindex="-1">
-                                                                    {% for grandlink in grand %}
-                                                                      {% assign navigation_title = grandlink.title | downcase %}
-                                                                      {% assign navigation_url = grandlink.url | downcase %}
-                                                                      {% unless navigation_url contains 'wishlist' or navigation_title contains 'wishlist' %}
-                                                                        <li>
-                                                                          <a href="{{ grandlink.url }}" {% if grandlink.new_page %}target="_blank" rel="noopener noreferrer"{% endif %} class="link--text list-menu__item menu-drawer__menu-item focus-inset">
-                                                                            {{ grandlink.title | escape }}
-                                                                          </a>
-                                                                        </li>
-                                                                      {% endunless %}
-                                                                    {% endfor %}
-                                                                  </ul>
-                                                                </div>
-                                                              </div>
-                                                            </details>
-                                                          </li>
-                                                        {% else %}
-                                                          <li>
-                                                            <a href="{{ childlink.url }}" {% if childlink.new_page %}target="_blank" rel="noopener noreferrer"{% endif %} class="menu-drawer__menu-item link link--text list-menu__item focus-inset">
-                                                              {{ childlink.title | escape }}
-                                                            </a>
-                                                          </li>
-                                                        {% endif %}
-                                                      {% endunless %}
-                                                    {% endfor %}
-                                                  </ul>
-                                                </div>
-                                              </div>
-                                            </details>
-                                          </li>
-                                        {% else %}
-                                          <li>
-                                            <a href="{{ parentlink.url }}" {% if parentlink.new_page %}target="_blank" rel="noopener noreferrer"{% endif %} class="menu-drawer__menu-item link link--text list-menu__item focus-inset">
-                                              {{ parentlink.title | escape }}
-                                            </a>
-                                          </li>
-                                        {% endif %}
-                                      {% endunless %}
-                                    {% endfor %}
-                                  </ul>
-                                </div>
-                              </div>
-                            </details>
-                      </li>
                       <li><a href="/collections/the-hobbit" class="menu-drawer__menu-item list-menu__item link link--text focus-inset">Hobbit</a></li>
                       <li><a href="/collections/marvel-super-heroes" class="menu-drawer__menu-item list-menu__item link link--text focus-inset">Marvel</a></li>
+                      <li><a href="/collections/secrets-of-strixhaven" class="menu-drawer__menu-item list-menu__item link link--text focus-inset">Strixhaven</a></li>
                       <li><a href="/pages/about-us" class="menu-drawer__menu-item list-menu__item link link--text focus-inset">About Us</a></li>
                     </ul>
                   </nav>
@@ -507,85 +369,9 @@
       {% endif %}
       <nav class="header__inline-menu">
         <ul class="list-menu list-menu--inline" role="list">
-          <li class="header__nav-item--categories">
-                <details-disclosure>
-                  <details>
-                    <summary class="header__menu-item list-menu__item link focus-inset">
-                      <span>Category</span>
-                      {% include 'svg-definitions' with 'icon-caret' %}
-                    </summary>
-                    <ul class="header__submenu list-menu list-menu--disclosure caption-large motion-reduce" role="list" tabindex="-1">
-                      {% for parentlink in category_links %}
-                        {% assign navigation_title = parentlink.title | downcase %}
-                        {% assign navigation_url = parentlink.url | downcase %}
-                        {% unless navigation_url contains 'wishlist' or navigation_title contains 'wishlist' %}
-                          {% assign child_handle = parentlink.handle %}
-                          {% if contents[child_handle].links != '' %}
-                            {% assign child = contents[child_handle].links %}
-                            <li>
-                              <details-disclosure>
-                                <details>
-                                  <summary class="header__menu-item link link--text list-menu__item focus-inset caption-large">
-                                    <a href="{{ parentlink.url }}" {% if parentlink.new_page %}target="_blank" rel="noopener noreferrer"{% endif %}>{{ parentlink.title | escape }}</a>
-                                    {% include 'svg-definitions' with 'icon-caret' , class : 'rotate-90' %}
-                                  </summary>
-                                  <ul class="header__submenu list-menu list-menu--disclosure motion-reduce" role="list">
-                                    {% for childlink in child %}
-                                      {% assign navigation_title = childlink.title | downcase %}
-                                      {% assign navigation_url = childlink.url | downcase %}
-                                      {% unless navigation_url contains 'wishlist' or navigation_title contains 'wishlist' %}
-                                        {% assign grand_handle = childlink.handle %}
-                                        {% if contents[grand_handle].links != '' %}
-                                          {% assign grand = contents[grand_handle].links %}
-                                          <li>
-                                            <details-disclosure>
-                                              <details>
-                                                <summary class="header__menu-item link link--text list-menu__item focus-inset caption-large">
-                                                  <a href="{{ childlink.url }}" {% if childlink.new_page %}target="_blank" rel="noopener noreferrer"{% endif %}>
-                                                    {{ childlink.title | escape }}
-                                                  </a>
-                                                  {% include 'svg-definitions' with 'icon-caret' , class : 'rotate-90' %}
-                                                </summary>
-                                                <ul class="header__submenu list-menu list-menu--disclosure motion-reduce" role="list">
-                                                  {% for grandlink in grand %}
-                                                    {% assign navigation_title = grandlink.title | downcase %}
-                                                    {% assign navigation_url = grandlink.url | downcase %}
-                                                    {% unless navigation_url contains 'wishlist' or navigation_title contains 'wishlist' %}
-                                                      <li>
-                                                        <a href="{{ grandlink.url }}" {% if grandlink.new_page %}target="_blank" rel="noopener noreferrer"{% endif %} class="header__menu-item list-menu__item link link--text focus-inset caption-large">{{ grandlink.title | escape }}</a>
-                                                      </li>
-                                                    {% endunless %}
-                                                  {% endfor %}
-                                                </ul>
-                                              </details>
-                                            </details-disclosure>
-                                          </li>
-                                        {% else %}
-                                          <li>
-                                            <a href="{{ childlink.url }}" {% if childlink.new_page %}target="_blank" rel="noopener noreferrer"{% endif %} class="header__menu-item list-menu__item link link--text focus-inset caption-large">{{ childlink.title | escape }}</a>
-                                          </li>
-                                        {% endif %}
-                                      {% endunless %}
-                                    {% endfor %}
-                                  </ul>
-                                </details>
-                              </details-disclosure>
-                            </li>
-                          {% else %}
-                            <li>
-                              <a href="{{ parentlink.url }}" {% if parentlink.new_page %}target="_blank" rel="noopener noreferrer"{% endif %} class="header__menu-item list-menu__item link link--text focus-inset caption-large">
-                                {{ parentlink.title | escape }}
-                              </a>
-                            </li>
-                          {% endif %}
-                        {% endunless %}
-                      {% endfor %}
-                    </ul>
-                  </details>
-                </details-disclosure>
-          </li>
           <li><a href="/collections/the-hobbit" class="header__menu-item list-menu__item link link--text focus-inset">Hobbit</a></li>
           <li><a href="/collections/marvel-super-heroes" class="header__menu-item list-menu__item link link--text focus-inset">Marvel</a></li>
+          <li><a href="/collections/secrets-of-strixhaven" class="header__menu-item list-menu__item link link--text focus-inset">Strixhaven</a></li>
           <li class="header__nav-item--about"><a href="/pages/about-us" class="header__menu-item list-menu__item link link--text focus-inset">About Us</a></li>
         </ul>
       </nav>
