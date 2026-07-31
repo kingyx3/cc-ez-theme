@@ -62,6 +62,10 @@
         {% app_snippet 'collection/product_middle' %}
         <span class="caption-large light"></span>
         {% include 'price' %}
+        <span class="product-card__cta" aria-hidden="true">
+          <span>View details</span>
+          <span>→</span>
+        </span>
       </div>
       {% if settings.collection_show_variant_img %}
         <div class="card-information__wrapper d-flex flex-align-center">
@@ -96,10 +100,6 @@
         </div>
       {% endif %}
       {% app_snippet 'collection/product_bottom' %}
-      <span class="product-card__cta" aria-hidden="true">
-        <span>View details</span>
-        <span>→</span>
-      </span>
     </div>
     {% endif %}
   </a>
