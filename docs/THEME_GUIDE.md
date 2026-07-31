@@ -253,10 +253,12 @@ fixed order:
 4. About Us (`/pages/about-us`)
 
 About Us is pushed to the right edge of the desktop navigation area. The
-Categories dropdown uses the children of an EasyStore Main Menu item named
-Categories when available; otherwise it falls back to the other published
-Main Menu links. Wishlist links are filtered by both title and URL at every
-rendered header navigation level.
+Categories dropdown reads EasyStore's system collection hierarchy directly
+from `contents.catalog.links`; it does not depend on the navigator's display
+title. For compatibility with stores that do not expose `contents.catalog`,
+the theme falls back to the first hierarchical Main Menu navigator and then
+to the published Main Menu links. Wishlist links are filtered by both title
+and URL at every rendered header navigation level.
 
 The theme controls:
 
