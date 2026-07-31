@@ -174,11 +174,14 @@ After merging to `main`:
 - [ ] There is no nested ZIP.
 - [ ] EasyStore Edit source shows populated runtime directories.
 - [ ] The unpublished preview renders.
-- [ ] Best Sellers and New Releases appear at the intended homepage position.
+- [ ] Best Sellers and The Hobbit Collection each show two rows of three products on desktop.
+- [ ] Homepage product cards do not show the orange quick-add button.
 - [ ] Product titles use available card width on desktop and mobile.
 - [ ] Announcement hover/focus contrast is readable.
 - [ ] Navigation dropdowns and mobile drawer work.
-- [ ] Wishlist integration still renders.
+- [ ] Wishlist is absent from the desktop header navigation.
+- [ ] The footer shows Follow us and Contact Us, with no payment or quick-link blocks.
+- [ ] The Terms of Service footer link opens `/pages/terms-of-service`.
 - [ ] Sold-out and sale states render correctly.
 - [ ] Add to cart, cart update, and checkout handoff work.
 

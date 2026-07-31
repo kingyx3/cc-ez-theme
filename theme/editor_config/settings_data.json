@@ -49,11 +49,11 @@
           "settings": {
             "logo": "https://cdn.store-assets.com/s/1441746/f/17363518.png",
             "align_logo": "middle-left",
-            "logo_max_width": 110,
+            "logo_max_width": 90,
             "main_linklist": "main-menu",
             "message": true,
             "home_page_only": false,
-            "message_text": "New releases just landed — explore the latest drop.",
+            "message_text": "The Hobbit collection has arrived — explore Middle-earth.",
             "message_link": "/collections/the-hobbit",
             "color_bg": "#131722",
             "announcement_text_color": "#FFFFFF",
@@ -99,13 +99,6 @@
             "show_selected_variant_image": true
           },
           "blocks": {
-            "text-1": {
-              "type": "text",
-              "settings": {
-                "image": "https://cdn.store-assets.com/s/943101/f/8656454.png",
-                "text": "Worldwide shipping"
-              }
-            },
             "main-product-bok5afngub5-ooz1xoo": {
               "type": "text",
               "settings": {
@@ -122,7 +115,6 @@
             }
           },
           "blocks_order": [
-            "text-1",
             "main-product-bok5afngub5-ooz1xoo",
             "main-product-0wkbnnri6s7r-budfnl"
           ]
@@ -133,8 +125,8 @@
             "footer-1": {
               "type": "about_us",
               "settings": {
-                "title": "Our mission",
-                "text": "📦  MTG Sealed Specialist (Boxes, Bundles & Secret Lairs) 📦  ✅  Shipped in sturdy collector-grade packaging  ✅  🤝  Meeting Points: Outram Park / Tanjong Pagar MRT ⭐  Welcome bulk deals⭐  Authentic. Factory Sealed ⭐  From Sealed to Sleeved. Since 1994 ⭐ "
+                "title": "Contact Us",
+                "email": "contact@cardboard.sg"
               }
             },
             "footer-2": {
@@ -143,38 +135,17 @@
                 "title": "Follow us",
                 "twitter": "",
                 "facebook": "https://facebook.com/",
-                "instagram": "https://instagram.com/",
+                "carousell": "https://www.carousell.sg/u/cardboard_collective/",
                 "tiktok": "",
                 "whatsapp": "https://wa.me/",
                 "line": "",
                 "wechat": "",
                 "youtube": ""
               }
-            },
-            "footer-payment": {
-              "type": "payment_accept",
-              "settings": {
-                "title": "We accept",
-                "show_payment_method": true,
-                "show_visa_icon": 0,
-                "show_master_icon": 0,
-                "show_amex_icon": 0,
-                "show_paypal_icon": 0,
-                "show_diners_icon": 0,
-                "show_discover_icon": 0
-              }
-            },
-            "footer-sj4k55g9j8-fojkr4l": {
-              "type": "quick_link",
-              "settings": {
-                "title": "Quick links"
-              }
             }
           },
           "blocks_order": [
             "footer-2",
-            "footer-payment",
-            "footer-sj4k55g9j8-fojkr4l",
             "footer-1"
           ],
           "settings": {
@@ -190,12 +161,11 @@
             "subtitle": "The most-loved collectibles, all in one place.",
             "accent_color": "#E4572E",
             "collection__id": "feature-on-homepage",
-            "products_per_row": 4,
-            "products_to_show": 8,
+            "products_per_row": 3,
+            "products_to_show": 6,
             "show_view_all": true,
             "image_ratio": "square",
             "show_secondary_image": true,
-            "show_add_to_cart_button": true,
             "swipe_on_mobile": true,
             "center_title": true,
             "show_product_info": true,
@@ -205,17 +175,16 @@
         },
         "1684403242688": {
           "settings": {
-            "eyebrow": "JUST LANDED",
-            "title": "New Releases",
-            "subtitle": "Fresh finds and recent drops worth discovering.",
+            "eyebrow": "MIDDLE-EARTH AWAITS",
+            "title": "The Hobbit Collection",
+            "subtitle": "Journey through the latest products from The Hobbit.",
             "accent_color": "#3559D9",
             "collection__id": "the-hobbit",
-            "products_per_row": 4,
-            "products_to_show": 8,
+            "products_per_row": 3,
+            "products_to_show": 6,
             "show_view_all": true,
             "image_ratio": "square",
             "show_secondary_image": true,
-            "show_add_to_cart_button": true,
             "swipe_on_mobile": true,
             "center_title": true,
             "show_product_info": true,
