@@ -175,13 +175,14 @@ After merging to `main`:
 - [ ] EasyStore Edit source shows populated runtime directories.
 - [ ] The unpublished preview renders.
 - [ ] Best Sellers and The Hobbit Collection each show two rows of three products on desktop.
+- [ ] The Marvel Super Heroes campaign banner is absent from the homepage.
 - [ ] Homepage product cards do not show the orange quick-add button.
 - [ ] Product titles use available card width on desktop and mobile.
 - [ ] Announcement hover/focus contrast is readable.
 - [ ] Navigation dropdowns and mobile drawer work.
-- [ ] Wishlist is absent from the desktop header navigation.
+- [ ] Desktop and mobile navigation show Categories, Hobbit, Marvel, and About Us, with no Wishlist link.
 - [ ] The footer shows Follow us and Contact Us, with no payment or quick-link blocks.
-- [ ] The Terms of Service footer link opens `/pages/terms-of-service`.
+- [ ] The Terms of Service footer link opens `https://cardboard.sg/pages/terms-of-service`.
 - [ ] Sold-out and sale states render correctly.
 - [ ] Add to cart, cart update, and checkout handoff work.
 

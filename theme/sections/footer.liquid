@@ -184,7 +184,7 @@
               {% assign policy_title = link.title | downcase %}
               {% assign policy_url = link.url %}
               {% if link.handle == 'terms-of-service' or policy_title contains 'terms of service' %}
-                {% assign policy_url = '/pages/terms-of-service' %}
+                {% assign policy_url = 'https://cardboard.sg/pages/terms-of-service' %}
               {% endif %}
               {% if count == 0 %}
                 <a href="{{ policy_url }}">{{ link.title | escape }}</a>

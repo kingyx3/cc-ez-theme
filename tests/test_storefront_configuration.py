@@ -63,6 +63,14 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertNotIn("section.settings.products_to_display", featured_collection)
         self.assertNotIn("section.settings.collection == ''", featured_collection)
 
+        homepage = self.settings["presets"]["editor"]
+        self.assertEqual(
+            homepage["content_for_index"],
+            ["1667498127486", "1684403242688"],
+        )
+        self.assertNotIn("1684412368816", self.sections)
+        self.assertNotIn("Marvel Super Heroes", self.settings_text)
+
     def test_footer_contains_only_social_and_contact_default_blocks(self) -> None:
         footer = self.sections["footer"]
         self.assertEqual(footer["blocks_order"], ["footer-2", "footer-1"])
@@ -84,23 +92,51 @@ class StorefrontConfigurationTests(unittest.TestCase):
         )
         self.assertIn("icon-carousell", footer_liquid)
         self.assertIn('href="mailto:', footer_liquid)
-        self.assertIn("'/pages/terms-of-service'", footer_liquid)
+        self.assertIn(
+            "'https://cardboard.sg/pages/terms-of-service'", footer_liquid
+        )
         self.assertNotIn("{% when 'quick_link' %}", footer_liquid)
         self.assertNotIn("{% when 'payment_accept' %}", footer_liquid)
         self.assertNotIn('"type": "quick_link"', footer_liquid)
         self.assertNotIn('"type": "payment_accept"', footer_liquid)
 
+        svg_definitions = (
+            THEME_ROOT / "snippets" / "svg-definitions.liquid"
+        ).read_text(encoding="utf-8")
+        carousell_icon = svg_definitions.split(
+            "{% when 'icon-carousell' %}", maxsplit=1
+        )[1].split("{% when 'icon-tiktok' %}", maxsplit=1)[0]
+        self.assertIn('fill="currentColor"', carousell_icon)
+        self.assertNotIn("#ff2636", carousell_icon)
+        self.assertNotIn('fill="#fff"', carousell_icon)
+
     def test_header_is_compact_and_filters_wishlist_links(self) -> None:
         header = (THEME_ROOT / "sections" / "header.liquid").read_text(
             encoding="utf-8"
         )
+        categories = (
+            THEME_ROOT / "snippets" / "navigation-categories.liquid"
+        ).read_text(encoding="utf-8")
+        navigation_source = header + categories
         self.assertGreaterEqual(
-            header.count("navigation_url contains 'wishlist'"), 5
+            navigation_source.count("navigation_url contains 'wishlist'"), 5
         )
         self.assertGreaterEqual(
-            header.count("navigation_title contains 'wishlist'"), 5
+            navigation_source.count("navigation_title contains 'wishlist'"),
+            5,
         )
+        self.assertEqual(categories.count("child_url contains 'wishlist'"), 2)
+        self.assertEqual(categories.count("child_title contains 'wishlist'"), 2)
         self.assertNotIn("{% continue %}", header)
+        self.assertNotIn("{% continue %}", categories)
+        self.assertEqual(header.count('href="/collections/the-hobbit"'), 2)
+        self.assertEqual(
+            header.count('href="/collections/marvel-super-heroes"'), 2
+        )
+        self.assertEqual(header.count('href="/pages/about-us"'), 2)
+        self.assertIn("navigation_mode: 'mobile'", header)
+        self.assertIn("navigation_mode: 'desktop'", header)
+        self.assertIn('class="header__nav-item--about"', header)
         self.assertEqual(self.sections["header"]["settings"]["logo_max_width"], 90)
 
         stylesheet = (THEME_ROOT / "assets" / "conversion-theme.css").read_text(
@@ -115,6 +151,9 @@ class StorefrontConfigurationTests(unittest.TestCase):
             "grid-template-columns: auto minmax(0, 1fr) auto;", stylesheet
         )
         self.assertIn("flex-wrap: nowrap;", stylesheet)
+        self.assertIn("width: 100%;", stylesheet)
+        self.assertIn(".header--middle-left .header__nav-item--about", stylesheet)
+        self.assertIn("margin-left: auto;", stylesheet)
         self.assertIn("padding-top: 0;", stylesheet)
         self.assertIn("padding-bottom: 0;", stylesheet)
 

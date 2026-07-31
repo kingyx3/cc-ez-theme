@@ -164,7 +164,6 @@ The default order is:
 
 1. Best Sellers
 2. The Hobbit Collection
-3. Campaign image banner
 
 ### Best Sellers
 
@@ -182,12 +181,6 @@ The default order is:
 - Default display: 6 products, 3 per desktop row
 - Homepage quick add: disabled
 
-### Campaign banner
-
-The default banner promotes Marvel Super Heroes and links to its collection.
-Images, heading, call-to-action label, URL, overlay, and positioning are
-section settings.
-
 ### Editing the homepage in EasyStore
 
 Use the theme customizer to:
@@ -198,7 +191,7 @@ Use the theme customizer to:
 - change accent colors;
 - adjust product count and desktop columns;
 - enable or disable mobile swiping;
-- change campaign artwork and calls to action.
+- add or remove optional campaign sections.
 
 The section chooses which collection to render. Product membership and product
 ordering remain collection responsibilities in EasyStore.
@@ -251,15 +244,19 @@ background.
 
 ### Navigation data
 
-The current header renders `contents.main-menu.links` on desktop and mobile.
-EasyStore controls:
+The desktop header and mobile drawer expose four top-level destinations in a
+fixed order:
 
-- top-level navigation labels;
-- destination URLs;
-- ordering;
-- publish status;
-- opening links in a new tab;
-- parent/child nesting.
+1. Categories
+2. Hobbit (`/collections/the-hobbit`)
+3. Marvel (`/collections/marvel-super-heroes`)
+4. About Us (`/pages/about-us`)
+
+About Us is pushed to the right edge of the desktop navigation area. The
+Categories dropdown uses the children of an EasyStore Main Menu item named
+Categories when available; otherwise it falls back to the other published
+Main Menu links. Wishlist links are filtered by both title and URL at every
+rendered header navigation level.
 
 The theme controls:
 
@@ -268,10 +265,11 @@ The theme controls:
 - carets and disclosure behavior;
 - desktop dropdown positioning;
 - mobile drawer behavior;
-- supported rendering depth.
+- the fixed shortcut destinations;
+- supported rendering depth inside Categories.
 
-The theme currently renders the top level plus up to three nested dropdown
-levels.
+The Categories menu currently renders its selected top level plus one child
+level.
 
 ### Catalog behavior
 
