@@ -118,6 +118,9 @@ class StorefrontConfigurationTests(unittest.TestCase):
             "{% when 'icon-carousell' %}", maxsplit=1
         )[1].split("{% when 'icon-tiktok' %}", maxsplit=1)[0]
         self.assertIn('fill="currentColor"', carousell_icon)
+        self.assertIn('viewBox="0 0 74 80"', carousell_icon)
+        self.assertIn('fill-rule="evenodd"', carousell_icon)
+        self.assertIn("M66.6 6.9V4", carousell_icon)
         self.assertNotIn("#ff2636", carousell_icon)
         self.assertNotIn('fill="#fff"', carousell_icon)
 
