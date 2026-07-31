@@ -118,6 +118,12 @@ class StorefrontConfigurationTests(unittest.TestCase):
             THEME_ROOT / "snippets" / "navigation-categories.liquid"
         ).read_text(encoding="utf-8")
         navigation_source = header + categories
+        self.assertIn("category_links = contents.catalog.links", categories)
+        self.assertIn(
+            "candidate_links = contents[main_menu_link.handle].links",
+            categories,
+        )
+        self.assertNotIn("navigation_title == 'categories' and", categories)
         self.assertGreaterEqual(
             navigation_source.count("navigation_url contains 'wishlist'"), 5
         )

@@ -1,15 +1,19 @@
-{% assign categories_handle = '' %}
-{% for navigation_link in contents.main-menu.links %}
-  {% assign navigation_title = navigation_link.title | downcase %}
-  {% if navigation_title == 'categories' and contents[navigation_link.handle].links != '' %}
-    {% assign categories_handle = navigation_link.handle %}
-  {% endif %}
-{% endfor %}
+{% assign category_links = contents.catalog.links %}
 
-{% if categories_handle != '' %}
-  {% assign category_links = contents[categories_handle].links %}
-{% else %}
-  {% assign category_links = contents.main-menu.links %}
+{% if category_links == blank %}
+  {% assign categories_handle = '' %}
+  {% for main_menu_link in contents.main-menu.links %}
+    {% assign candidate_links = contents[main_menu_link.handle].links %}
+    {% if categories_handle == '' and candidate_links != blank %}
+      {% assign categories_handle = main_menu_link.handle %}
+    {% endif %}
+  {% endfor %}
+
+  {% if categories_handle != '' %}
+    {% assign category_links = contents[categories_handle].links %}
+  {% else %}
+    {% assign category_links = contents.main-menu.links %}
+  {% endif %}
 {% endif %}
 
 {% for navigation_link in category_links %}
