@@ -1,0 +1,187 @@
+<section
+  id="PopularCollections-{{ section.__key }}"
+  class="popular-collections page-width"
+  aria-labelledby="PopularCollectionsHeading-{{ section.__key }}"
+>
+  <div class="popular-collections__header">
+    <div>
+      {% if section.settings.eyebrow != blank %}
+        <p class="popular-collections__eyebrow">{{ section.settings.eyebrow | escape }}</p>
+      {% endif %}
+      <h2 id="PopularCollectionsHeading-{{ section.__key }}" class="popular-collections__title">
+        {{ section.settings.title | escape }}
+      </h2>
+      {% if section.settings.subtitle != blank %}
+        <p class="popular-collections__subtitle">{{ section.settings.subtitle | escape }}</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <ul class="popular-collections__grid" role="list">
+    {% for block_handle in section.blocks_order %}
+      {% assign blocks = section.blocks %}
+      {% assign tile = blocks[block_handle].settings %}
+      {% assign collection = collections[tile.collection__id] %}
+      {% assign tile_title = tile.title %}
+      {% assign tile_image = tile.image %}
+      {% assign tile_url = tile.link_url %}
+
+      {% if tile_title == blank and collection.title != blank %}
+        {% assign tile_title = collection.title %}
+      {% endif %}
+      {% if tile_title == blank %}
+        {% assign tile_title = 'Browse collection' %}
+      {% endif %}
+      {% if tile_image == blank and collection.image != blank %}
+        {% assign tile_image = collection.image %}
+      {% endif %}
+      {% if collection.url != blank %}
+        {% assign tile_url = collection.url %}
+      {% endif %}
+      {% if tile_url == blank %}
+        {% assign tile_url = '/collections' %}
+      {% endif %}
+
+      <li class="popular-collections__item" style="--tile-accent: {{ tile.accent_color }};">
+        <a class="popular-collections__card" href="{{ tile_url }}" aria-label="Shop {{ tile_title | escape }}">
+          <span class="popular-collections__media">
+            {% if tile_image != blank %}
+              <img
+                src="{{ tile_image | img_url: '900x' }}"
+                alt=""
+                loading="lazy"
+                width="900"
+              >
+            {% else %}
+              <span class="popular-collections__placeholder" aria-hidden="true">
+                {{ tile_title | slice: 0, 1 | upcase }}
+              </span>
+            {% endif %}
+          </span>
+          <span class="popular-collections__overlay" aria-hidden="true"></span>
+          <span class="popular-collections__content">
+            {% if tile.kicker != blank %}
+              <span class="popular-collections__kicker">{{ tile.kicker | escape }}</span>
+            {% elsif collection.product_count > 0 %}
+              <span class="popular-collections__kicker">{{ collection.product_count }} products</span>
+            {% endif %}
+            <span class="popular-collections__name">{{ tile_title | escape }}</span>
+            <span class="popular-collections__action">
+              <span>Shop collection</span>
+              <span aria-hidden="true">→</span>
+            </span>
+          </span>
+        </a>
+      </li>
+    {% endfor %}
+  </ul>
+</section>
+
+{% schema %}
+{
+  "name": {
+    "en_US": "Popular Collections"
+  },
+  "tag": "section",
+  "class": "spaced-section",
+  "max_blocks": 6,
+  "settings": [
+    {
+      "type": "text",
+      "id": "eyebrow",
+      "default": "SHOP YOUR WAY",
+      "label": {
+        "en_US": "Eyebrow"
+      }
+    },
+    {
+      "type": "text",
+      "id": "title",
+      "default": "Popular collections",
+      "label": {
+        "en_US": "Heading"
+      }
+    },
+    {
+      "type": "text",
+      "id": "subtitle",
+      "default": "Start with the releases and formats collectors are browsing most.",
+      "label": {
+        "en_US": "Supporting text"
+      }
+    }
+  ],
+  "blocks": [
+    {
+      "type": "collection",
+      "name": {
+        "en_US": "Collection tile"
+      },
+      "settings": [
+        {
+          "type": "collection",
+          "id": "collection__id",
+          "label": {
+            "en_US": "Collection"
+          }
+        },
+        {
+          "type": "text",
+          "id": "title",
+          "label": {
+            "en_US": "Custom title"
+          }
+        },
+        {
+          "type": "text",
+          "id": "kicker",
+          "label": {
+            "en_US": "Short label"
+          }
+        },
+        {
+          "type": "image",
+          "id": "image",
+          "label": {
+            "en_US": "Custom image"
+          }
+        },
+        {
+          "type": "text",
+          "id": "link_url",
+          "default": "/collections",
+          "label": {
+            "en_US": "Fallback link"
+          }
+        },
+        {
+          "type": "color",
+          "id": "accent_color",
+          "default": "#E4572E",
+          "label": {
+            "en_US": "Accent color"
+          }
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": {
+        "en_US": "Popular Collections"
+      },
+      "blocks": [
+        {
+          "type": "collection"
+        },
+        {
+          "type": "collection"
+        },
+        {
+          "type": "collection"
+        }
+      ]
+    }
+  ]
+}
+{% endschema %}
