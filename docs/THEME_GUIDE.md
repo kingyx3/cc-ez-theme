@@ -104,6 +104,7 @@ Sections are configurable page components. Important sections include:
 | Section | Purpose |
 |---|---|
 | `header.liquid` | Announcement, logo, desktop navigation, mobile menu, account/search/cart controls |
+| `popular-collections.liquid` | Visual shortcuts to commercially important collections |
 | `featured-collection.liquid` | Sales-focused product collection |
 | `collection-list.liquid` | Tabbed collection display |
 | `image-banner.liquid` | Campaign artwork and call to action |
@@ -162,9 +163,25 @@ Homepage order is controlled by `content_for_index` in:
 
 The default order is:
 
-1. Best Sellers
-2. New Releases
-3. Campaign image banner
+1. Campaign image banner
+2. Popular Collections
+3. Best Sellers
+4. New Releases
+
+The campaign appears first so the current release has one clear primary call to
+action. Popular Collections follows with three visual shortcuts, reducing the
+need to scan a deep navigation tree before reaching relevant products.
+The default campaign images are eagerly loaded because this section is the
+homepage's primary visual and largest likely contentful paint.
+
+### Popular Collections
+
+- Section type: `popular-collections`
+- Default collections: The Hobbit, Marvel Super Heroes, and Collector Favourites
+- Default display: three image-led cards on desktop and a swipeable row on mobile
+- Card images fall back to the selected collection image
+- Titles, short labels, fallback links, custom images, and accent colors remain
+  editable in the theme customizer
 
 ### Best Sellers
 
@@ -191,6 +208,7 @@ section settings.
 Use the theme customizer to:
 
 - reorder sections;
+- choose the collections and artwork used by Popular Collections;
 - change collection assignments;
 - edit eyebrow, title, and supporting text;
 - change accent colors;
@@ -267,8 +285,11 @@ The theme controls:
 - mobile drawer behavior;
 - supported rendering depth.
 
-The theme currently renders the top level plus up to three nested dropdown
-levels.
+The mobile drawer renders the top level plus up to three nested levels. On
+desktop, the same data is flattened into a scan-friendly mega menu: immediate
+children become column headings, with deeper links grouped beneath them. This
+keeps broad catalog navigation visible without forcing customers through
+several hover-activated side panels.
 
 ### Catalog behavior
 
