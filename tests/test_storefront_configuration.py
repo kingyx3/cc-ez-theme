@@ -127,6 +127,13 @@ class StorefrontConfigurationTests(unittest.TestCase):
         )
         self.assertEqual(categories.count("child_url contains 'wishlist'"), 2)
         self.assertEqual(categories.count("child_title contains 'wishlist'"), 2)
+        self.assertEqual(categories.count("grand_url contains 'wishlist'"), 2)
+        self.assertEqual(categories.count("grand_title contains 'wishlist'"), 2)
+        self.assertEqual(
+            categories.count("grand_links = contents[grand_handle].links"),
+            2,
+        )
+        self.assertEqual(categories.count("for grand_link in grand_links"), 2)
         self.assertNotIn("{% continue %}", header)
         self.assertNotIn("{% continue %}", categories)
         self.assertEqual(header.count('href="/collections/the-hobbit"'), 2)

@@ -268,8 +268,9 @@ The theme controls:
 - the fixed shortcut destinations;
 - supported rendering depth inside Categories.
 
-The Categories menu currently renders its selected top level plus one child
-level.
+The Categories menu follows EasyStore's configured handles through three
+nested collection levels on desktop and mobile, matching the original header
+hierarchy behavior.
 
 ### Catalog behavior
 
