@@ -34,7 +34,8 @@
         src="{{ section.settings.image | img_url: '1500x' }}"
         alt="{{ section.settings.image.alt | escape }}"
         {% if section.settings.image_2 != "" %}class="banner__media-image-half"{% endif %}
-        loading="lazy"
+        loading="eager"
+        fetchpriority="high"
       >
     </div>
   {% elsif section.settings.image_2 == ""  %}
@@ -50,7 +51,7 @@
         src="{{ section.settings.image_2 | img_url: '1500x' }}"
         alt="{{ section.settings.image_2.alt | escape }}"
         {% if section.settings.image != "" %}class="banner__media-image-half"{% endif %}
-        loading="lazy"
+        loading="eager"
       >
     </div>
   {% endif %}
