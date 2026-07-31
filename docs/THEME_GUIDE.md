@@ -164,6 +164,8 @@ The default order is:
 
 1. Best Sellers
 2. The Hobbit Collection
+3. Marvel Collection
+4. Secrets of Strixhaven
 
 ### Best Sellers
 
@@ -178,6 +180,22 @@ The default order is:
 - Section type: `featured-collection`
 - Default title: `The Hobbit Collection`
 - Default collection: `the-hobbit`
+- Default display: 6 products, 3 per desktop row
+- Homepage quick add: disabled
+
+### Marvel Collection
+
+- Section type: `featured-collection`
+- Default title: `Marvel Collection`
+- Default collection: `marvel-super-heroes`
+- Default display: 6 products, 3 per desktop row
+- Homepage quick add: disabled
+
+### Secrets of Strixhaven
+
+- Section type: `featured-collection`
+- Default title: `Secrets of Strixhaven`
+- Default collection: `secrets-of-strixhaven`
 - Default display: 6 products, 3 per desktop row
 - Homepage quick add: disabled
 
@@ -252,51 +270,21 @@ background.
 The desktop header and mobile drawer expose four top-level destinations in a
 fixed order:
 
-1. Category
-2. Hobbit (`/collections/the-hobbit`)
-3. Marvel (`/collections/marvel-super-heroes`)
+1. Hobbit (`/collections/the-hobbit`)
+2. Marvel (`/collections/marvel-super-heroes`)
+3. Strixhaven (`/collections/secrets-of-strixhaven`)
 4. About Us (`/pages/about-us`)
 
-About Us is pushed to the right edge of the desktop navigation area. Category
-is always rendered immediately before Hobbit, even when EasyStore does not
-expose a matching hierarchical Main Menu root. The lookup accepts both
-`Category` and `Categories` as the EasyStore navigator title. Its dropdown prefers the
-pre-PR #9 hierarchy contract from `contents.main-menu.links`, resolves every
-child level through `contents[link.handle].links` directly in `header.liquid`,
-and falls back to `contents.catalog.links` when Main Menu has no hierarchy.
-Wishlist links are filtered by both title and URL at every rendered header
-navigation level.
+About Us is pushed to the right edge of the desktop navigation area. The
+header intentionally has no Category or Categories dropdown; the three
+collection shortcuts are direct EasyStore collection links.
 
 The theme controls:
 
 - visual treatment;
 - a single-row desktop layout with the logo directly before navigation;
-- carets and disclosure behavior;
-- desktop dropdown positioning;
 - mobile drawer behavior;
-- the fixed shortcut destinations;
-- supported rendering depth inside Categories.
-
-The Categories menu follows EasyStore's configured handles through three
-nested collection levels on desktop and mobile, matching the original header
-hierarchy behavior.
-
-### Main Menu behavior
-
-The Category disclosure first follows the hierarchy configured in
-EasyStore's Main Menu navigator. If EasyStore exposes no hierarchical Main
-Menu link, the disclosure uses the system Catalog hierarchy; if neither source
-is available, it shows the published Main Menu links. The Category control
-itself is unconditional, so a missing data source cannot remove it from the
-desktop header or mobile drawer.
-
-For a curated storefront:
-
-1. Keep a Categories entry in Main Menu and attach its child navigators.
-2. Add only the sales-relevant collection links beneath Categories.
-3. Group them by set or product type as needed.
-4. Publish the Main Menu after hierarchy changes so EasyStore exposes the
-   updated handles to the theme.
+- the fixed collection shortcut destinations.
 
 ## 8. Product taxonomy
 
@@ -403,8 +391,8 @@ communicates interaction.
 
 1. Update `content_for_index` in both settings-data files.
 2. Confirm every referenced section key exists.
-3. Keep Best Sellers and The Hobbit Collection first unless the merchandising
-   strategy explicitly changes.
+3. Preserve the documented Best Sellers, Hobbit, Marvel, and Strixhaven order
+   unless the merchandising strategy explicitly changes.
 
 ### Change a collection assignment
 

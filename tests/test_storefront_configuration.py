@@ -38,6 +38,11 @@ class StorefrontConfigurationTests(unittest.TestCase):
         expected = {
             "1667498127486": ("Best Sellers", "feature-on-homepage"),
             "1684403242688": ("The Hobbit Collection", "the-hobbit"),
+            "1684412368816": ("Marvel Collection", "marvel-super-heroes"),
+            "1684412368817": (
+                "Secrets of Strixhaven",
+                "secrets-of-strixhaven",
+            ),
         }
         for section_id, (title, collection_id) in expected.items():
             section = self.sections[section_id]
@@ -69,10 +74,13 @@ class StorefrontConfigurationTests(unittest.TestCase):
         homepage = self.settings["presets"]["editor"]
         self.assertEqual(
             homepage["content_for_index"],
-            ["1667498127486", "1684403242688"],
+            [
+                "1667498127486",
+                "1684403242688",
+                "1684412368816",
+                "1684412368817",
+            ],
         )
-        self.assertNotIn("1684412368816", self.sections)
-        self.assertNotIn("Marvel Super Heroes", self.settings_text)
 
         stylesheet = (THEME_ROOT / "assets" / "conversion-theme.css").read_text(
             encoding="utf-8"
@@ -145,7 +153,7 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertNotIn("#ff2636", carousell_icon)
         self.assertNotIn('fill="#fff"', carousell_icon)
 
-    def test_header_always_renders_categories_with_hierarchy_fallbacks(self) -> None:
+    def test_header_uses_fixed_collection_shortcuts_without_category(self) -> None:
         header = (THEME_ROOT / "sections" / "header.liquid").read_text(
             encoding="utf-8"
         )
@@ -154,55 +162,47 @@ class StorefrontConfigurationTests(unittest.TestCase):
         )
         self.assertFalse(categories_snippet.exists())
         self.assertNotIn("navigation-categories", header)
-        self.assertNotIn("if link.handle == categories_handle", header)
-        self.assertEqual(
-            header.count("for navigation_link in contents.main-menu.links"), 2
-        )
-        self.assertIn(
-            "navigation_children = contents[navigation_link.handle].links",
-            header,
-        )
-        self.assertIn("navigation_title == 'category'", header)
-        self.assertIn("navigation_title == 'categories'", header)
-        self.assertIn("category_links = navigation_children", header)
-        self.assertIn("category_links = contents.catalog.links", header)
-        self.assertIn("category_links = contents.main-menu.links", header)
-        self.assertEqual(header.count("for parentlink in category_links"), 2)
-        self.assertEqual(
-            header.count("if contents[child_handle].links != ''"), 2
-        )
-        self.assertEqual(header.count("for childlink in child"), 2)
-        self.assertEqual(
-            header.count("if contents[grand_handle].links != ''"), 2
-        )
-        self.assertEqual(header.count("for grandlink in grand"), 2)
-        self.assertGreaterEqual(
-            header.count("navigation_url contains 'wishlist'"), 10
-        )
-        self.assertGreaterEqual(
-            header.count("navigation_title contains 'wishlist'"), 10
-        )
+        self.assertNotIn("category_links", header)
+        self.assertNotIn("contents.catalog.links", header)
+        self.assertNotIn('class="header__nav-item--categories"', header)
+        self.assertNotIn('class="menu-drawer__nav-item--categories"', header)
+        self.assertNotIn("<span>Category</span>", header)
+        self.assertNotIn("<span>Categories</span>", header)
         self.assertNotIn("{% continue %}", header)
         self.assertEqual(header.count('href="/collections/the-hobbit"'), 2)
         self.assertEqual(
             header.count('href="/collections/marvel-super-heroes"'), 2
         )
-        self.assertEqual(header.count('href="/pages/about-us"'), 2)
-        self.assertEqual(header.count('class="header__nav-item--categories"'), 1)
         self.assertEqual(
-            header.count('class="menu-drawer__nav-item--categories"'), 1
+            header.count('href="/collections/secrets-of-strixhaven"'), 2
         )
-        desktop_categories_position = header.index(
-            'class="header__nav-item--categories"'
+        self.assertEqual(header.count('href="/pages/about-us"'), 2)
+
+        first_hobbit = header.index('href="/collections/the-hobbit"')
+        first_marvel = header.index(
+            'href="/collections/marvel-super-heroes"', first_hobbit
         )
-        self.assertLess(
-            desktop_categories_position,
-            header.index(
-                'href="/collections/the-hobbit"', desktop_categories_position
-            ),
+        first_strixhaven = header.index(
+            'href="/collections/secrets-of-strixhaven"', first_marvel
         )
-        self.assertEqual(header.count("<span>Category</span>"), 2)
-        self.assertNotIn("<span>Categories</span>", header)
+        first_about = header.index('href="/pages/about-us"', first_strixhaven)
+        self.assertLess(first_hobbit, first_marvel)
+        self.assertLess(first_marvel, first_strixhaven)
+        self.assertLess(first_strixhaven, first_about)
+
+        second_hobbit = header.index(
+            'href="/collections/the-hobbit"', first_about
+        )
+        second_marvel = header.index(
+            'href="/collections/marvel-super-heroes"', second_hobbit
+        )
+        second_strixhaven = header.index(
+            'href="/collections/secrets-of-strixhaven"', second_marvel
+        )
+        second_about = header.index('href="/pages/about-us"', second_strixhaven)
+        self.assertLess(second_hobbit, second_marvel)
+        self.assertLess(second_marvel, second_strixhaven)
+        self.assertLess(second_strixhaven, second_about)
         self.assertIn('class="header__nav-item--about"', header)
         self.assertEqual(self.sections["header"]["settings"]["logo_max_width"], 90)
 
