@@ -93,8 +93,17 @@ class StorefrontConfigurationTests(unittest.TestCase):
             footer["blocks"]["footer-1"]["settings"],
             {"title": "Contact Us", "email": "contact@cardboard.sg"},
         )
+        social_settings = footer["blocks"]["footer-2"]["settings"]
         self.assertEqual(
-            footer["blocks"]["footer-2"]["settings"]["carousell"],
+            social_settings["whatsapp"],
+            "https://chat.whatsapp.com/L4f286YJNlxI7jPxfuzEV0",
+        )
+        self.assertEqual(
+            social_settings["facebook"],
+            "https://www.facebook.com/cardboardsg",
+        )
+        self.assertEqual(
+            social_settings["carousell"],
             "https://www.carousell.sg/u/cardboard_collective/",
         )
 
@@ -102,6 +111,18 @@ class StorefrontConfigurationTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("icon-carousell", footer_liquid)
+        self.assertIn(
+            '"default": "https://www.facebook.com/cardboardsg"',
+            footer_liquid,
+        )
+        self.assertIn(
+            '"default": "https://chat.whatsapp.com/L4f286YJNlxI7jPxfuzEV0"',
+            footer_liquid,
+        )
+        self.assertIn(
+            '"default": "https://www.carousell.sg/u/cardboard_collective/"',
+            footer_liquid,
+        )
         self.assertIn('href="mailto:', footer_liquid)
         self.assertIn(
             "'https://cardboard.sg/pages/terms-of-service'", footer_liquid
