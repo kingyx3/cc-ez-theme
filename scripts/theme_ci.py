@@ -41,6 +41,31 @@ LIQUID_COMMENT = re.compile(
     r"{%\s*comment\s*%}.*?{%\s*endcomment\s*%}",
     re.DOTALL,
 )
+LIQUID_TAG = re.compile(r"{%-?\s*(?P<name>[A-Za-z_][\w-]*)\b")
+EASYSTORE_LIQUID_TAGS = {
+    "app_snippet",
+    "assign",
+    "capture",
+    "case",
+    "comment",
+    "csrf",
+    "else",
+    "elsif",
+    "endcapture",
+    "endcase",
+    "endcomment",
+    "endfor",
+    "endif",
+    "endschema",
+    "endunless",
+    "for",
+    "if",
+    "include",
+    "schema",
+    "section",
+    "unless",
+    "when",
+}
 ASSET_REFERENCE = re.compile(
     r"(?P<quote>['\"])(?P<name>.+?)(?P=quote)\s*\|\s*asset_url\b"
 )
@@ -73,6 +98,13 @@ def _validate_liquid(
 ) -> None:
     relative = path.relative_to(theme_dir).as_posix()
     references = LIQUID_COMMENT.sub("", text)
+
+    for match in LIQUID_TAG.finditer(references):
+        tag_name = match.group("name")
+        if tag_name not in EASYSTORE_LIQUID_TAGS:
+            issues.append(
+                f"{relative}: unsupported EasyStore Liquid tag {tag_name!r}"
+            )
 
     for match in ASSET_REFERENCE.finditer(references):
         asset_name = match.group("name").partition("?")[0]

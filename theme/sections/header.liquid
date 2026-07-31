@@ -310,6 +310,9 @@
                   <nav class="menu-drawer__navigation">
                     <ul class="menu-drawer__menu list-menu" role="list">
                       {% for link in contents.main-menu.links %}
+                      {% assign navigation_url = link.url | downcase %}
+                      {% assign navigation_title = link.title | downcase %}
+                      {% unless navigation_url contains 'wishlist' or navigation_title contains 'wishlist' %}
                       {% assign parent_handle = link.handle %}
                         {% if contents[parent_handle].links != '' %}
                           {% assign parent = contents[parent_handle].links %}
@@ -416,6 +419,7 @@
                             </a>
                           </li>
                         {% endif %}
+                      {% endunless %}
                       {% endfor %}
                     </ul>
                   </nav>
@@ -427,19 +431,27 @@
                     {% if shop.customer_accounts_enabled %}
                     {% if customer %}
                     {% for link in contents.after-login.links %}
+                      {% assign navigation_url = link.url | downcase %}
+                      {% assign navigation_title = link.title | downcase %}
+                      {% unless navigation_url contains 'wishlist' or navigation_title contains 'wishlist' %}
                       <a href="{{link.url}}" class="menu-drawer__account link link--text focus-inset h5">
                         {% if link.url == '/account' %} {% include 'svg-definitions' with 'icon-account' %} {% endif %}
                         {% if link.url == '/account/logout' %} {% include 'svg-definitions' with 'icon-arrow' %} {% endif %}
                         {{link.title}}
                       </a>
+                      {% endunless %}
                     {% endfor %}
                     {% else %}
                     {% for link in contents.before-login.links %}
+                      {% assign navigation_url = link.url | downcase %}
+                      {% assign navigation_title = link.title | downcase %}
+                      {% unless navigation_url contains 'wishlist' or navigation_title contains 'wishlist' %}
                       <a href="{{link.url}}" class="menu-drawer__account link link--text focus-inset h5">
                         {% if link.url == '/account/login' %} {% include 'svg-definitions' with 'icon-account' %} {% endif %}
                         {% if link.url == '/account/register' %} {% include 'svg-definitions' with 'icon-plus' %} {% endif %}
                         {{link.title}}
                       </a>
+                      {% endunless %}
                     {% endfor %}
                     {% endif %}
                     {% endif %}
@@ -467,7 +479,9 @@
       <nav class="header__inline-menu">
         <ul class="list-menu list-menu--inline" role="list">
           {% for link in contents.main-menu.links %}
-            {% if link.url contains 'wishlist' %}{% continue %}{% endif %}
+            {% assign navigation_url = link.url | downcase %}
+            {% assign navigation_title = link.title | downcase %}
+            {% unless navigation_url contains 'wishlist' or navigation_title contains 'wishlist' %}
             {% assign parent_handle = link.handle %}
               {% if contents[parent_handle].links != '' %}
                 {% assign parent = contents[parent_handle].links %}
@@ -546,12 +560,15 @@
                   </a>
                 </li>
               {% endif %}
+            {% endunless %}
             {% endfor %}
             
             {% if shop.customer_accounts_enabled %}
               {% if customer %}
                 {% for link in contents.after-login.links %}
-                  {% unless link.url contains 'wishlist' %}
+                  {% assign navigation_url = link.url | downcase %}
+                  {% assign navigation_title = link.title | downcase %}
+                  {% unless navigation_url contains 'wishlist' or navigation_title contains 'wishlist' %}
                     {% if link.url != '/account' and link.url != '/account/logout' %}
                         <li><a href="{{link.url}}" {% if link.new_page %} target="_blank" {% endif %} class="header__menu-item header__menu-item list-menu__item link link--text focus-inset">{{link.title}}</a></li>
                     {% endif %}
@@ -559,7 +576,9 @@
                 {% endfor %}
               {% else %}
                 {% for link in contents.before-login.links %}
-                  {% unless link.url contains 'wishlist' %}
+                  {% assign navigation_url = link.url | downcase %}
+                  {% assign navigation_title = link.title | downcase %}
+                  {% unless navigation_url contains 'wishlist' or navigation_title contains 'wishlist' %}
                     {% if link.url != '/account/login' and link.url != '/account/register' %}
                     <li><a href="{{link.url}}" {% if link.new_page %} target="_blank" {% endif %} class="header__menu-item header__menu-item list-menu__item link link--text focus-inset">{{link.title}}</a></li>
                     {% endif %}

@@ -9,7 +9,7 @@
 {% assign collection = collections[collection_id] %}
 
 
-{% assign products_to_display = collection.product_count %}
+{% assign products_to_display = collection.product_count | default: 0 %}
 
 {% if products_to_display > section.settings.products_to_show %}
   {% assign products_to_display = section.settings.products_to_show %}
@@ -40,10 +40,10 @@
     {% endif %}
   </div>
 
-  {% if collection_id and products_to_display > 0 %}
+  {% if collection_id != blank and products_to_display > 0 %}
 
     <slider-component class="slider-mobile-gutter">
-      <ul class="sales-collection__grid grid grid--2-col product-grid{% if products_to_display == 4 or section.settings.collection == '' %} grid--3-col-tablet grid--{{section.settings.products_per_row}}-col-desktop{% else %} grid--3-col-tablet{% endif %}{% if products_to_display > 5 %} grid--one-third-max grid--{{section.settings.products_per_row}}-col-desktop grid--quarter-max{% endif %}{% if products_to_display > 2 and section.settings.swipe_on_mobile and section.settings.products_to_show > 2 %} slider slider--tablet grid--peek{% endif %}{% if section.settings.show_view_all == false or section.settings.products_to_display < section.settings.products_to_show %} negative-margin{% endif %}{% if section.settings.show_view_all and section.settings.products_to_display > section.settings.products_to_show %} negative-margin--small{% endif %}" role="list">
+      <ul class="sales-collection__grid grid grid--2-col grid--3-col-tablet grid--{{ section.settings.products_per_row }}-col-desktop product-grid{% if products_to_display > 2 and section.settings.swipe_on_mobile and section.settings.products_to_show > 2 %} slider slider--tablet grid--peek{% endif %}{% if section.settings.show_view_all == false or products_to_display < section.settings.products_to_show %} negative-margin{% endif %}{% if section.settings.show_view_all and products_to_display > section.settings.products_to_show %} negative-margin--small{% endif %}" role="list">
         {% for product in collection.products limit: section.settings.products_to_show %}
           <li class="grid__item{% if products_to_display > 2 and section.settings.swipe_on_mobile and section.settings.products_to_show > 2 %} slider__slide{% endif %}">
             {% include 'product-card', show_secondary_image: section.settings.show_secondary_image, show_add_to_cart_button: false, image_ratio: section.settings.image_ratio, show_product_info: section.settings.show_product_info %}
