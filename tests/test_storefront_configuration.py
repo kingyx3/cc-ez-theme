@@ -58,6 +58,9 @@ class StorefrontConfigurationTests(unittest.TestCase):
             "grid--{{ section.settings.products_per_row }}-col-desktop",
             featured_collection,
         )
+        self.assertNotIn(
+            'class="sales-collection spaced-section', featured_collection
+        )
         self.assertIn("collection.product_count | default: 0", featured_collection)
         self.assertIn("collection_id != blank", featured_collection)
         self.assertNotIn("section.settings.products_to_display", featured_collection)
@@ -70,6 +73,14 @@ class StorefrontConfigurationTests(unittest.TestCase):
         )
         self.assertNotIn("1684412368816", self.sections)
         self.assertNotIn("Marvel Super Heroes", self.settings_text)
+
+        stylesheet = (THEME_ROOT / "assets" / "conversion-theme.css").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(".template-index .spaced-section", stylesheet)
+        self.assertIn("padding-top: clamp(1.8rem, 2.5vw, 3.2rem);", stylesheet)
+        self.assertIn("min-height: 9rem;", stylesheet)
+        self.assertIn("min-height: 8rem;", stylesheet)
 
     def test_footer_contains_only_social_and_contact_default_blocks(self) -> None:
         footer = self.sections["footer"]
