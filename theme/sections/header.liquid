@@ -274,29 +274,37 @@
   </symbol>
 </svg>
 
-{% assign categories_handle = '' %}
+{% assign category_links = '' %}
 {% for navigation_link in contents.main-menu.links %}
   {% assign navigation_title = navigation_link.title | downcase %}
   {% assign navigation_url = navigation_link.url | downcase %}
   {% assign navigation_children = contents[navigation_link.handle].links %}
   {% unless navigation_url contains 'wishlist' or navigation_title contains 'wishlist' %}
-    {% if categories_handle == '' and navigation_title == 'categories' and navigation_children != '' %}
-      {% assign categories_handle = navigation_link.handle %}
+    {% if category_links == '' and navigation_title == 'categories' and navigation_children != '' %}
+      {% assign category_links = navigation_children %}
     {% endif %}
   {% endunless %}
 {% endfor %}
 
-{% if categories_handle == '' %}
+{% if category_links == blank %}
   {% for navigation_link in contents.main-menu.links %}
     {% assign navigation_title = navigation_link.title | downcase %}
     {% assign navigation_url = navigation_link.url | downcase %}
     {% assign navigation_children = contents[navigation_link.handle].links %}
     {% unless navigation_url contains 'wishlist' or navigation_title contains 'wishlist' %}
-      {% if categories_handle == '' and navigation_children != '' %}
-        {% assign categories_handle = navigation_link.handle %}
+      {% if category_links == blank and navigation_children != '' %}
+        {% assign category_links = navigation_children %}
       {% endif %}
     {% endunless %}
   {% endfor %}
+{% endif %}
+
+{% if category_links == blank %}
+  {% assign category_links = contents.catalog.links %}
+{% endif %}
+
+{% if category_links == blank %}
+  {% assign category_links = contents.main-menu.links %}
 {% endif %}
 
 <div id="easystore-section-header">
@@ -333,16 +341,10 @@
                 <div class="menu-drawer__navigation-container">
                   <nav class="menu-drawer__navigation">
                     <ul class="menu-drawer__menu list-menu" role="list">
-                      {% for link in contents.main-menu.links %}
-                        {% if link.handle == categories_handle %}
-                          {% assign parent_handle = link.handle %}
-                          {% assign parent = contents[parent_handle].links %}
-                          <li>
+                      <li class="menu-drawer__nav-item--categories">
                             <details>
                               <summary class="menu-drawer__menu-item list-menu__item link link--text focus-inset" role="button" aria-expanded="false">
-                                <a href="{{ link.url }}" {% if link.new_page %}target="_blank" rel="noopener noreferrer"{% endif %} class="link--text list-menu__item menu-drawer__menu-item">
-                                  Categories
-                                </a>
+                                <span>Categories</span>
                                 {% include 'svg-definitions' with 'icon-arrow' %}
                                 {% include 'svg-definitions' with 'icon-caret' %}
                               </summary>
@@ -353,7 +355,7 @@
                                     Categories
                                   </button>
                                   <ul class="menu-drawer__menu list-menu" role="list" tabindex="-1">
-                                    {% for parentlink in parent %}
+                                    {% for parentlink in category_links %}
                                       {% assign navigation_title = parentlink.title | downcase %}
                                       {% assign navigation_url = parentlink.url | downcase %}
                                       {% unless navigation_url contains 'wishlist' or navigation_title contains 'wishlist' %}
@@ -442,9 +444,7 @@
                                 </div>
                               </div>
                             </details>
-                          </li>
-                        {% endif %}
-                      {% endfor %}
+                      </li>
                       <li><a href="/collections/the-hobbit" class="menu-drawer__menu-item list-menu__item link link--text focus-inset">Hobbit</a></li>
                       <li><a href="/collections/marvel-super-heroes" class="menu-drawer__menu-item list-menu__item link link--text focus-inset">Marvel</a></li>
                       <li><a href="/pages/about-us" class="menu-drawer__menu-item list-menu__item link link--text focus-inset">About Us</a></li>
@@ -505,19 +505,15 @@
       {% endif %}
       <nav class="header__inline-menu">
         <ul class="list-menu list-menu--inline" role="list">
-          {% for link in contents.main-menu.links %}
-            {% if link.handle == categories_handle %}
-              {% assign parent_handle = link.handle %}
-              {% assign parent = contents[parent_handle].links %}
-              <li class="header__nav-item--categories">
+          <li class="header__nav-item--categories">
                 <details-disclosure>
                   <details>
                     <summary class="header__menu-item list-menu__item link focus-inset">
-                      <a href="{{ link.url }}" {% if link.new_page %}target="_blank" rel="noopener noreferrer"{% endif %}>Categories</a>
+                      <span>Categories</span>
                       {% include 'svg-definitions' with 'icon-caret' %}
                     </summary>
                     <ul class="header__submenu list-menu list-menu--disclosure caption-large motion-reduce" role="list" tabindex="-1">
-                      {% for parentlink in parent %}
+                      {% for parentlink in category_links %}
                         {% assign navigation_title = parentlink.title | downcase %}
                         {% assign navigation_url = parentlink.url | downcase %}
                         {% unless navigation_url contains 'wishlist' or navigation_title contains 'wishlist' %}
@@ -585,9 +581,7 @@
                     </ul>
                   </details>
                 </details-disclosure>
-              </li>
-            {% endif %}
-          {% endfor %}
+          </li>
           <li><a href="/collections/the-hobbit" class="header__menu-item list-menu__item link link--text focus-inset">Hobbit</a></li>
           <li><a href="/collections/marvel-super-heroes" class="header__menu-item list-menu__item link link--text focus-inset">Marvel</a></li>
           <li class="header__nav-item--about"><a href="/pages/about-us" class="header__menu-item list-menu__item link link--text focus-inset">About Us</a></li>

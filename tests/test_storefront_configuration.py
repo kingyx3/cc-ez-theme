@@ -124,7 +124,7 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertNotIn("#ff2636", carousell_icon)
         self.assertNotIn('fill="#fff"', carousell_icon)
 
-    def test_header_restores_main_menu_hierarchy_and_filters_wishlist(self) -> None:
+    def test_header_always_renders_categories_with_hierarchy_fallbacks(self) -> None:
         header = (THEME_ROOT / "sections" / "header.liquid").read_text(
             encoding="utf-8"
         )
@@ -132,17 +132,19 @@ class StorefrontConfigurationTests(unittest.TestCase):
             THEME_ROOT / "snippets" / "navigation-categories.liquid"
         )
         self.assertFalse(categories_snippet.exists())
-        self.assertNotIn("contents.catalog.links", header)
         self.assertNotIn("navigation-categories", header)
-        self.assertGreaterEqual(
-            header.count("for link in contents.main-menu.links"), 2
+        self.assertNotIn("if link.handle == categories_handle", header)
+        self.assertEqual(
+            header.count("for navigation_link in contents.main-menu.links"), 2
         )
         self.assertIn(
             "navigation_children = contents[navigation_link.handle].links",
             header,
         )
-        self.assertEqual(header.count("parent = contents[parent_handle].links"), 2)
-        self.assertEqual(header.count("for parentlink in parent"), 2)
+        self.assertIn("category_links = navigation_children", header)
+        self.assertIn("category_links = contents.catalog.links", header)
+        self.assertIn("category_links = contents.main-menu.links", header)
+        self.assertEqual(header.count("for parentlink in category_links"), 2)
         self.assertEqual(
             header.count("if contents[child_handle].links != ''"), 2
         )
@@ -164,6 +166,19 @@ class StorefrontConfigurationTests(unittest.TestCase):
         )
         self.assertEqual(header.count('href="/pages/about-us"'), 2)
         self.assertEqual(header.count('class="header__nav-item--categories"'), 1)
+        self.assertEqual(
+            header.count('class="menu-drawer__nav-item--categories"'), 1
+        )
+        desktop_categories_position = header.index(
+            'class="header__nav-item--categories"'
+        )
+        self.assertLess(
+            desktop_categories_position,
+            header.index(
+                'href="/collections/the-hobbit"', desktop_categories_position
+            ),
+        )
+        self.assertEqual(header.count("<span>Categories</span>"), 2)
         self.assertIn('class="header__nav-item--about"', header)
         self.assertEqual(self.sections["header"]["settings"]["logo_max_width"], 90)
 
