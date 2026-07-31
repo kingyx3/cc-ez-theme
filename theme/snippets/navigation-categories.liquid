@@ -38,11 +38,46 @@
                     {% assign child_url = child_link.url | downcase %}
                     {% assign child_title = child_link.title | downcase %}
                     {% unless child_url contains 'wishlist' or child_title contains 'wishlist' %}
-                      <li>
-                        <a href="{{ child_link.url }}" {% if child_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="menu-drawer__menu-item link link--text list-menu__item focus-inset">
-                          {{ child_link.title | escape }}
-                        </a>
-                      </li>
+                      {% assign grand_handle = child_link.handle %}
+                      {% assign grand_links = contents[grand_handle].links %}
+                      {% if grand_links != '' %}
+                        <li>
+                          <details>
+                            <summary class="menu-drawer__menu-item list-menu__item link link--text focus-inset" role="button" aria-expanded="false">
+                              <span>{{ child_link.title | escape }}</span>
+                              {% include 'svg-definitions' with 'icon-arrow' %}
+                              {% include 'svg-definitions' with 'icon-caret' %}
+                            </summary>
+                            <div class="menu-drawer__submenu motion-reduce" tabindex="-1">
+                              <div class="menu-drawer__inner-submenu">
+                                <button class="menu-drawer__close-button link link--text focus-inset" aria-expanded="true">
+                                  {% include 'svg-definitions' with 'icon-arrow' %}
+                                  {{ child_link.title | escape }}
+                                </button>
+                                <ul class="menu-drawer__menu list-menu" role="list" tabindex="-1">
+                                  {% for grand_link in grand_links %}
+                                    {% assign grand_url = grand_link.url | downcase %}
+                                    {% assign grand_title = grand_link.title | downcase %}
+                                    {% unless grand_url contains 'wishlist' or grand_title contains 'wishlist' %}
+                                      <li>
+                                        <a href="{{ grand_link.url }}" {% if grand_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="menu-drawer__menu-item link link--text list-menu__item focus-inset">
+                                          {{ grand_link.title | escape }}
+                                        </a>
+                                      </li>
+                                    {% endunless %}
+                                  {% endfor %}
+                                </ul>
+                              </div>
+                            </div>
+                          </details>
+                        </li>
+                      {% else %}
+                        <li>
+                          <a href="{{ child_link.url }}" {% if child_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="menu-drawer__menu-item link link--text list-menu__item focus-inset">
+                            {{ child_link.title | escape }}
+                          </a>
+                        </li>
+                      {% endif %}
                     {% endunless %}
                   {% endfor %}
                 </ul>
@@ -71,11 +106,39 @@
                   {% assign child_url = child_link.url | downcase %}
                   {% assign child_title = child_link.title | downcase %}
                   {% unless child_url contains 'wishlist' or child_title contains 'wishlist' %}
-                    <li>
-                      <a href="{{ child_link.url }}" {% if child_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="header__menu-item list-menu__item link link--text focus-inset caption-large">
-                        {{ child_link.title | escape }}
-                      </a>
-                    </li>
+                    {% assign grand_handle = child_link.handle %}
+                    {% assign grand_links = contents[grand_handle].links %}
+                    {% if grand_links != '' %}
+                      <li>
+                        <details-disclosure>
+                          <details>
+                            <summary class="header__menu-item link link--text list-menu__item focus-inset caption-large">
+                              <a href="{{ child_link.url }}" {% if child_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %}>{{ child_link.title | escape }}</a>
+                              {% include 'svg-definitions' with 'icon-caret' , class : 'rotate-90' %}
+                            </summary>
+                            <ul class="header__submenu list-menu list-menu--disclosure motion-reduce" role="list">
+                              {% for grand_link in grand_links %}
+                                {% assign grand_url = grand_link.url | downcase %}
+                                {% assign grand_title = grand_link.title | downcase %}
+                                {% unless grand_url contains 'wishlist' or grand_title contains 'wishlist' %}
+                                  <li>
+                                    <a href="{{ grand_link.url }}" {% if grand_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="header__menu-item list-menu__item link link--text focus-inset caption-large">
+                                      {{ grand_link.title | escape }}
+                                    </a>
+                                  </li>
+                                {% endunless %}
+                              {% endfor %}
+                            </ul>
+                          </details>
+                        </details-disclosure>
+                      </li>
+                    {% else %}
+                      <li>
+                        <a href="{{ child_link.url }}" {% if child_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="header__menu-item list-menu__item link link--text focus-inset caption-large">
+                          {{ child_link.title | escape }}
+                        </a>
+                      </li>
+                    {% endif %}
                   {% endunless %}
                 {% endfor %}
               </ul>
