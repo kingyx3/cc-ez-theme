@@ -252,14 +252,15 @@ background.
 The desktop header and mobile drawer expose four top-level destinations in a
 fixed order:
 
-1. Categories
+1. Category
 2. Hobbit (`/collections/the-hobbit`)
 3. Marvel (`/collections/marvel-super-heroes`)
 4. About Us (`/pages/about-us`)
 
-About Us is pushed to the right edge of the desktop navigation area. Categories
+About Us is pushed to the right edge of the desktop navigation area. Category
 is always rendered immediately before Hobbit, even when EasyStore does not
-expose a matching hierarchical Main Menu root. Its dropdown prefers the
+expose a matching hierarchical Main Menu root. The lookup accepts both
+`Category` and `Categories` as the EasyStore navigator title. Its dropdown prefers the
 pre-PR #9 hierarchy contract from `contents.main-menu.links`, resolves every
 child level through `contents[link.handle].links` directly in `header.liquid`,
 and falls back to `contents.catalog.links` when Main Menu has no hierarchy.
@@ -282,10 +283,10 @@ hierarchy behavior.
 
 ### Main Menu behavior
 
-The Categories disclosure first follows the hierarchy configured in
+The Category disclosure first follows the hierarchy configured in
 EasyStore's Main Menu navigator. If EasyStore exposes no hierarchical Main
 Menu link, the disclosure uses the system Catalog hierarchy; if neither source
-is available, it shows the published Main Menu links. The Categories control
+is available, it shows the published Main Menu links. The Category control
 itself is unconditional, so a missing data source cannot remove it from the
 desktop header or mobile drawer.
 
