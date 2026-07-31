@@ -141,6 +141,8 @@ class StorefrontConfigurationTests(unittest.TestCase):
             "navigation_children = contents[navigation_link.handle].links",
             header,
         )
+        self.assertIn("navigation_title == 'category'", header)
+        self.assertIn("navigation_title == 'categories'", header)
         self.assertIn("category_links = navigation_children", header)
         self.assertIn("category_links = contents.catalog.links", header)
         self.assertIn("category_links = contents.main-menu.links", header)
@@ -178,7 +180,8 @@ class StorefrontConfigurationTests(unittest.TestCase):
                 'href="/collections/the-hobbit"', desktop_categories_position
             ),
         )
-        self.assertEqual(header.count("<span>Categories</span>"), 2)
+        self.assertEqual(header.count("<span>Category</span>"), 2)
+        self.assertNotIn("<span>Categories</span>", header)
         self.assertIn('class="header__nav-item--about"', header)
         self.assertEqual(self.sections["header"]["settings"]["logo_max_width"], 90)
 

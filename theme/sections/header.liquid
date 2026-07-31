@@ -280,7 +280,9 @@
   {% assign navigation_url = navigation_link.url | downcase %}
   {% assign navigation_children = contents[navigation_link.handle].links %}
   {% unless navigation_url contains 'wishlist' or navigation_title contains 'wishlist' %}
-    {% if category_links == '' and navigation_title == 'categories' and navigation_children != '' %}
+    {% if category_links == '' and navigation_title == 'category' and navigation_children != '' %}
+      {% assign category_links = navigation_children %}
+    {% elsif category_links == '' and navigation_title == 'categories' and navigation_children != '' %}
       {% assign category_links = navigation_children %}
     {% endif %}
   {% endunless %}
@@ -344,7 +346,7 @@
                       <li class="menu-drawer__nav-item--categories">
                             <details>
                               <summary class="menu-drawer__menu-item list-menu__item link link--text focus-inset" role="button" aria-expanded="false">
-                                <span>Categories</span>
+                                <span>Category</span>
                                 {% include 'svg-definitions' with 'icon-arrow' %}
                                 {% include 'svg-definitions' with 'icon-caret' %}
                               </summary>
@@ -352,7 +354,7 @@
                                 <div class="menu-drawer__inner-submenu">
                                   <button class="menu-drawer__close-button link link--text focus-inset" aria-expanded="true">
                                     {% include 'svg-definitions' with 'icon-arrow' %}
-                                    Categories
+                                    Category
                                   </button>
                                   <ul class="menu-drawer__menu list-menu" role="list" tabindex="-1">
                                     {% for parentlink in category_links %}
@@ -509,7 +511,7 @@
                 <details-disclosure>
                   <details>
                     <summary class="header__menu-item list-menu__item link focus-inset">
-                      <span>Categories</span>
+                      <span>Category</span>
                       {% include 'svg-definitions' with 'icon-caret' %}
                     </summary>
                     <ul class="header__submenu list-menu list-menu--disclosure caption-large motion-reduce" role="list" tabindex="-1">
