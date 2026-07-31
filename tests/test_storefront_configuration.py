@@ -54,6 +54,14 @@ class StorefrontConfigurationTests(unittest.TestCase):
             THEME_ROOT / "sections" / "featured-collection.liquid"
         ).read_text(encoding="utf-8")
         self.assertIn("show_add_to_cart_button: false", featured_collection)
+        self.assertIn(
+            "grid--{{ section.settings.products_per_row }}-col-desktop",
+            featured_collection,
+        )
+        self.assertIn("collection.product_count | default: 0", featured_collection)
+        self.assertIn("collection_id != blank", featured_collection)
+        self.assertNotIn("section.settings.products_to_display", featured_collection)
+        self.assertNotIn("section.settings.collection == ''", featured_collection)
 
     def test_footer_contains_only_social_and_contact_default_blocks(self) -> None:
         footer = self.sections["footer"]
@@ -86,7 +94,13 @@ class StorefrontConfigurationTests(unittest.TestCase):
         header = (THEME_ROOT / "sections" / "header.liquid").read_text(
             encoding="utf-8"
         )
-        self.assertIn("link.url contains 'wishlist'", header)
+        self.assertGreaterEqual(
+            header.count("navigation_url contains 'wishlist'"), 5
+        )
+        self.assertGreaterEqual(
+            header.count("navigation_title contains 'wishlist'"), 5
+        )
+        self.assertNotIn("{% continue %}", header)
         self.assertEqual(self.sections["header"]["settings"]["logo_max_width"], 90)
 
         stylesheet = (THEME_ROOT / "assets" / "conversion-theme.css").read_text(
@@ -97,7 +111,9 @@ class StorefrontConfigurationTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertEqual(stylesheet, editor_stylesheet)
         self.assertIn("grid-template-areas: 'heading navigation icons';", stylesheet)
-        self.assertIn("grid-template-columns: auto minmax(0, 1fr) auto;", stylesheet)
+        self.assertIn(
+            "grid-template-columns: auto minmax(0, 1fr) auto;", stylesheet
+        )
         self.assertIn("flex-wrap: nowrap;", stylesheet)
         self.assertIn("padding-top: 0;", stylesheet)
         self.assertIn("padding-bottom: 0;", stylesheet)

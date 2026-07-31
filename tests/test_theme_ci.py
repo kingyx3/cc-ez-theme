@@ -169,6 +169,19 @@ class ThemeCITests(unittest.TestCase):
         self.assertTrue(any("missing section 'missing'" in issue for issue in issues))
         self.assertTrue(any("missing snippet 'missing'" in issue for issue in issues))
 
+    def test_unsupported_easystore_liquid_tag(self) -> None:
+        theme = self.make_theme()
+        (theme / "snippets" / "unsupported.liquid").write_text(
+            "{% continue %}\n", encoding="utf-8"
+        )
+
+        issues = theme_ci.validate_theme(theme)
+        self.assertIn(
+            "snippets/unsupported.liquid: unsupported EasyStore Liquid tag "
+            "'continue'",
+            issues,
+        )
+
     def test_section_schema_errors(self) -> None:
         theme = self.make_theme()
         cases = {
