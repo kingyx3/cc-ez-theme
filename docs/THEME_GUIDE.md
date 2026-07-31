@@ -257,13 +257,14 @@ fixed order:
 3. Marvel (`/collections/marvel-super-heroes`)
 4. About Us (`/pages/about-us`)
 
-About Us is pushed to the right edge of the desktop navigation area. The
-Categories dropdown restores the original EasyStore hierarchy contract used
-before PR #9: it selects the Categories entry (or the first hierarchical
-entry) from `contents.main-menu.links`, keeps that real link as the disclosure
-root, and resolves every child level through `contents[link.handle].links`
-directly in `header.liquid`. Wishlist links are filtered by both title and URL
-at every rendered header navigation level.
+About Us is pushed to the right edge of the desktop navigation area. Categories
+is always rendered immediately before Hobbit, even when EasyStore does not
+expose a matching hierarchical Main Menu root. Its dropdown prefers the
+pre-PR #9 hierarchy contract from `contents.main-menu.links`, resolves every
+child level through `contents[link.handle].links` directly in `header.liquid`,
+and falls back to `contents.catalog.links` when Main Menu has no hierarchy.
+Wishlist links are filtered by both title and URL at every rendered header
+navigation level.
 
 The theme controls:
 
@@ -281,9 +282,12 @@ hierarchy behavior.
 
 ### Main Menu behavior
 
-The Categories disclosure follows the hierarchy configured in EasyStore's
-Main Menu navigator. This keeps the root link, its URL, and all descendant
-handles in the same rendering scope as the original working header.
+The Categories disclosure first follows the hierarchy configured in
+EasyStore's Main Menu navigator. If EasyStore exposes no hierarchical Main
+Menu link, the disclosure uses the system Catalog hierarchy; if neither source
+is available, it shows the published Main Menu links. The Categories control
+itself is unconditional, so a missing data source cannot remove it from the
+desktop header or mobile drawer.
 
 For a curated storefront:
 
