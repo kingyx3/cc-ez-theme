@@ -88,8 +88,13 @@ body {
   }
 
   .header--middle-left .list-menu--inline {
+    width: 100%;
     align-items: center;
     flex-wrap: nowrap;
+  }
+
+  .header--middle-left .header__nav-item--about {
+    margin-left: auto;
   }
 
   .header__inline-menu > .list-menu--inline > li > .header__menu-item,

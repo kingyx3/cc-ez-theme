@@ -191,44 +191,11 @@
             "product_bg_color": "rgba(245, 245, 245, 1)"
           },
           "type": "featured-collection"
-        },
-        "1684412368816": {
-          "settings": {
-            "image": "https://cdn.store-assets.com/s/1441746/f/17367541.png",
-            "image_2": "https://cdn.store-assets.com/s/1441746/f/17370493.png",
-            "desktop_text_box_position": "center",
-            "show_text_box": 0,
-            "image_overlay_opacity": 20,
-            "show_text_below": 0
-          },
-          "type": "image-banner",
-          "blocks_order": [
-            "1684412368816-0",
-            "1684412368816-2"
-          ],
-          "blocks": {
-            "1684412368816-0": {
-              "type": "heading",
-              "settings": {
-                "heading": "Marvel Super Heroes",
-                "heading_size": "large"
-              }
-            },
-            "1684412368816-2": {
-              "type": "buttons",
-              "settings": {
-                "button_label_1": "Shop Now",
-                "button_link_1": "/collections/marvel-super-heroes",
-                "button_style_secondary_1": true
-              }
-            }
-          }
         }
       },
       "content_for_index": [
         "1667498127486",
-        "1684403242688",
-        "1684412368816"
+        "1684403242688"
       ],
       "placeholder": {
         "featured_single_product": "https://s3-ap-southeast-1.amazonaws.com/eesb.themes/onboarding/candy/en_placeholder_featured-single-product.jpg",
