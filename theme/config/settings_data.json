@@ -183,6 +183,54 @@
             "color_footer_body_text": "#000000"
           }
         },
+        "popular-collections-home": {
+          "type": "popular-collections",
+          "settings": {
+            "eyebrow": "SHOP YOUR WAY",
+            "title": "Popular collections",
+            "subtitle": "Jump straight into the releases and sealed products collectors are browsing most."
+          },
+          "blocks": {
+            "popular-collections-hobbit": {
+              "type": "collection",
+              "settings": {
+                "collection__id": "the-hobbit",
+                "title": "The Hobbit",
+                "kicker": "Latest release",
+                "image": "",
+                "link_url": "/collections/the-hobbit",
+                "accent_color": "#F2C14E"
+              }
+            },
+            "popular-collections-marvel": {
+              "type": "collection",
+              "settings": {
+                "collection__id": "marvel-super-heroes",
+                "title": "Marvel Super Heroes",
+                "kicker": "Featured set",
+                "image": "",
+                "link_url": "/collections/marvel-super-heroes",
+                "accent_color": "#E4572E"
+              }
+            },
+            "popular-collections-favourites": {
+              "type": "collection",
+              "settings": {
+                "collection__id": "feature-on-homepage",
+                "title": "Collector favourites",
+                "kicker": "Proven picks",
+                "image": "",
+                "link_url": "/collections/feature-on-homepage",
+                "accent_color": "#45B69C"
+              }
+            }
+          },
+          "blocks_order": [
+            "popular-collections-hobbit",
+            "popular-collections-marvel",
+            "popular-collections-favourites"
+          ]
+        },
         "1667498127486": {
           "settings": {
             "eyebrow": "CUSTOMER FAVORITES",
@@ -257,9 +305,10 @@
         }
       },
       "content_for_index": [
+        "1684412368816",
+        "popular-collections-home",
         "1667498127486",
-        "1684403242688",
-        "1684412368816"
+        "1684403242688"
       ],
       "placeholder": {
         "featured_single_product": "https://s3-ap-southeast-1.amazonaws.com/eesb.themes/onboarding/candy/en_placeholder_featured-single-product.jpg",
