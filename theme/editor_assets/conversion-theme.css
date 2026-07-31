@@ -475,6 +475,7 @@ body {
 
 .sales-collection .product-card-wrapper {
   width: 100%;
+  height: 100%;
   overflow: hidden;
   border: 0.1rem solid var(--storefront-border);
   border-radius: 1.6rem;
@@ -508,12 +509,12 @@ body {
   flex: 1;
   flex-direction: column;
   align-items: stretch;
-  padding: 1.6rem;
+  padding: 1.3rem 1.4rem 1.4rem;
 }
 
 .sales-collection .card-information__wrapper {
   display: flex;
-  min-height: 12rem;
+  min-height: 0;
   flex-direction: column;
 }
 
@@ -530,7 +531,7 @@ body {
 }
 
 .sales-collection .card-information__wrapper > .price {
-  margin-top: 0.9rem;
+  margin-top: 0.7rem;
   color: var(--storefront-ink);
   font-weight: 700;
 }
@@ -541,7 +542,8 @@ body {
   justify-content: space-between;
   gap: 1rem;
   margin-top: auto !important;
-  padding-top: 1.4rem;
+  padding-top: 0.8rem;
+  border-top: 0.1rem solid var(--storefront-border);
   color: var(--section-accent);
   font-size: 1.3rem;
   font-weight: 700;
@@ -664,11 +666,11 @@ body {
   }
 
   .sales-collection .product-card-wrapper .card-information {
-    padding: 1.2rem;
+    padding: 1rem 1.1rem 1.1rem;
   }
 
   .sales-collection .card-information__wrapper {
-    min-height: 11rem;
+    min-height: 0;
   }
 
   .sales-collection .badge.addToClassList {
