@@ -174,13 +174,13 @@ After merging to `main`:
 - [ ] There is no nested ZIP.
 - [ ] EasyStore Edit source shows populated runtime directories.
 - [ ] The unpublished preview renders.
-- [ ] Best Sellers and The Hobbit Collection each show two rows of three products on desktop.
+- [ ] Best Sellers, The Hobbit, Marvel, and Strixhaven each show two rows of three products on desktop.
 - [ ] The Marvel Super Heroes campaign banner is absent from the homepage.
 - [ ] Homepage product cards do not show the orange quick-add button.
 - [ ] Product titles use available card width on desktop and mobile.
 - [ ] Announcement hover/focus contrast is readable.
-- [ ] Navigation dropdowns and mobile drawer work.
-- [ ] Desktop and mobile navigation show Categories, Hobbit, Marvel, and About Us, with no Wishlist link.
+- [ ] Search history and the mobile drawer work with keyboard and pointer input.
+- [ ] Desktop and mobile navigation show Hobbit, Marvel, Strixhaven, and About Us, with no category or wishlist link.
 - [ ] The footer shows Follow us and Contact Us, with no payment or quick-link blocks.
 - [ ] The Terms of Service footer link opens `https://cardboard.sg/pages/terms-of-service`.
 - [ ] Sold-out and sale states render correctly.

@@ -9,7 +9,7 @@
     <ul class="note errors" id="errorMessage"></ul>
     <div class="repurchase-modal__body"></div>
     <div class="repurchase-modal__footer">
-    	<button class="btn button" id="repurchaseButton">{{ 'products.product.add_to_cart' | t }}</button>
+      <button type="button" class="btn button" id="repurchaseButton">{{ 'products.product.add_to_cart' | t }}</button>
     </div>
   </div>
 </div>
@@ -272,7 +272,6 @@
   }
   
   function disableRepurchaseButton() {
-    console.log("repurchase button", selectedVariantIds);
     if (selectedVariantIds.length === 0) {
       repurchaseButton.classList.add('disabled');
     } else {
@@ -359,23 +358,34 @@
   function generateItemContent(items, currency) {
     let content = '';
 
+    const escapeRepurchaseHtml = (value) => String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
     items.forEach(lineItem => {
       const isAvailable = lineItem.is_available;
-      const formattedPrice = formatPrice(lineItem.price, currency);
+      const formattedPrice = escapeRepurchaseHtml(formatPrice(lineItem.price, currency));
+      const imageUrl = escapeRepurchaseHtml(lineItem.image || '/assets/images/products/no_image.png');
+      const title = escapeRepurchaseHtml(lineItem.title);
+      const variantTitle = escapeRepurchaseHtml(lineItem.variant_title);
+      const variantId = Number(lineItem.variant_id);
 
       content += `
         <div class="repurchase-item-list ${!isAvailable ? 'unavailable' : ''}">
             <label class="repurchase-item-checkbox">
-            	${isAvailable ? `<input type="checkbox" checked data-variant-id="${lineItem.variant_id}">`:
+				${isAvailable && Number.isFinite(variantId) ? `<input type="checkbox" checked data-variant-id="${variantId}">`:
     			`` }
                 
                 <div class="repurchase-product">
                     <div class="product-img-wrapper">
-                        <img src="${lineItem.image ? lineItem.image : '/assets/images/products/no_image.png'}">
+                        <img src="${imageUrl}" alt="${title}">
                     </div>
                     <div class="text-left">
-                        <div class="h5">${lineItem.title}</div>
-                        <div>${lineItem.variant_title ? `<small>${lineItem.variant_title}</small>` : ''}</div>
+                        <div class="h5">${title}</div>
+                        <div>${variantTitle ? `<small>${variantTitle}</small>` : ''}</div>
                         <small>${formattedPrice}</small>
                     </div>
                 </div>

@@ -224,6 +224,9 @@
       <div class="card-box mb-30">
 		<div class="account-navigation__list">
           {% for link in contents.account_navigation.links %}
+            {% assign navigation_url = link.url | downcase %}
+            {% assign navigation_title = link.title | downcase %}
+            {% unless navigation_url contains 'wishlist' or navigation_title contains 'wishlist' or link.handle contains 'wishlist' %}
             <a class="navigation-item heading-nav_link" href="{% if link.handle == 'orders' %}{{ link.url }}?filter=to_pay{% else %}{{ link.url }}{% endif %}">
               <span class="navigation-icon d-flex">
                 {% if link.handle == 'details' %}{% include 'svg-definitions' with 'icon-profile' %}
@@ -238,6 +241,7 @@
               <div class="navigation-title">{{ navigation | t }}</div>
               <span class="chevron d-flex">{% include 'svg-definitions' with 'icon-chevron-right' %}</span>
             </a>
+            {% endunless %}
           {% endfor %}
         </div>
       </div>
@@ -254,7 +258,7 @@
       	<ul class="order-grid grid grid--1-col grid--2-col-tablet slider slider--tablet py-1">
           {% for order in customer.recent_incomplete_order %}
           <li class="grid__item slider__slide mt-0">
-            <div class="card-box order-card__wrapper" onclick="window.location.href = '{{ order.customer_url }}'">
+            <a class="card-box order-card__wrapper full-unstyled-link" href="{{ order.customer_url }}">
               <div>
                 {% if order.name != order.order_number %}
                   <div class="small-text color-light-text">
@@ -325,9 +329,9 @@
                 <div class="order-image">
                   <div class="media media--square" style="width: 100%; height: 100%;">
                     {% if item.image == null %}
-                      <img src="/assets/images/products/no_image.png">
+                      <img src="/assets/images/products/no_image.png" alt="Order item">
                     {% else %}
-                      <img src="{{ item.image }}">
+                      <img src="{{ item.image }}" alt="Order item">
                     {% endif %}
                   </div>
                 </div>
@@ -336,7 +340,7 @@
               </div>
 
               <div class="h5 text-right">{{ 'customer.orders.total' | t }}: {{ order.total_price | money: order.currency_format }}</div>
-            </div>
+            </a>
           </li>
           {% endfor %}
         </ul>
@@ -376,7 +380,7 @@
           </svg>
         </div>
         <p class="color-light-text mb-0">{{ 'customer.orders.none' | t }}</p>
-        <button class="btn" onclick="window.location.href = '/collections/all'">{{ 'products.product.continue_shopping' | t }}</button>
+        <a class="btn" href="/collections/all">{{ 'products.product.continue_shopping' | t }}</a>
       </div>
       {% endif %}
     </div>
@@ -574,10 +578,10 @@
             </div>
             <div class="modal-box__body">
               <div class="center">
-                <img src="{{ customer.barcode_url }}">
+                <img src="{{ customer.barcode_url }}" alt="Membership barcode">
                 <p class="text-center" style="margin-top: -12px; letter-spacing: 8px;">{{ customer.code }}</p>
                 <br>
-                <img class="modal-qrcode" src="{{ customer.qrcode_url }}">
+                <img class="modal-qrcode" src="{{ customer.qrcode_url }}" alt="Membership QR code">
                 <br>
                 <p class="mt-4" style="font-size: 85%;">{{ 'customer.account.identify_membership' | t }}</p>
               </div>
@@ -595,12 +599,12 @@
               <div class="member-card_detail">
                 <div>
                   {% if customer.membership.membership_tier.card_logo_image_url and customer.membership.membership_tier.card_type == 'simple' %}
-                    <img src="{{ customer.membership.membership_tier.card_logo_image_url }}" style="width: 60px;height: 60px;border-radius: 8px;object-fit: contain;">
+                    <img src="{{ customer.membership.membership_tier.card_logo_image_url }}" alt="{{ customer.membership.membership_tier.name | escape }}" style="width: 60px;height: 60px;border-radius: 8px;object-fit: contain;">
                   {% endif %}
                 </div>
                 <div>
                   {% if customer.avatar_url %}
-                    <img src="{{ customer.avatar_url }}" style="width: 60px;height: 60px;border-radius: 8px;object-fit: cover;">
+                    <img src="{{ customer.avatar_url }}" alt="{{ customer.name | escape }}" style="width: 60px;height: 60px;border-radius: 8px;object-fit: cover;">
                   {% endif %}
                 </div>
               </div>
@@ -678,7 +682,7 @@
                 </div>
                 
                 <div>
-                  <a onclick="document.querySelector('qr-modal').open()" class="qr-modal-toggle flex-center">{% include 'svg-definitions' with 'icon-qr' %}</a>
+                  <button type="button" onclick="document.querySelector('qr-modal').open()" class="qr-modal-toggle flex-center" aria-label="Open membership QR code">{% include 'svg-definitions' with 'icon-qr' %}</button>
                 </div>
               </div>
             </div>
@@ -788,7 +792,7 @@
       	<div class="card-box mb-30">
           <div class="d-flex flex-align-center flex-space-between">
             <div class="d-flex flex-align-center">
-              <img src="{{ customer.avatar_url }}" class="avatar-img">
+              <img src="{{ customer.avatar_url }}" class="avatar-img" alt="{{ customer.name | escape }}">
               <div class="ml-2">
                 <div class="h3">{{ customer.name }}</div>
                 {% if customer.default_address.phone %}
@@ -796,7 +800,7 @@
                 {% endif %}
               </div>
             </div>
-            <a id="barcodeBtn" onclick="document.querySelector('qr-modal').open()">{% include 'svg-definitions' with 'icon-qr' %}</a>
+            <button type="button" id="barcodeBtn" onclick="document.querySelector('qr-modal').open()" aria-label="Open membership QR code">{% include 'svg-definitions' with 'icon-qr' %}</button>
           </div>
       	</div>
       {% endif %}
@@ -1011,11 +1015,11 @@
                   style="padding-right: 40px;"
             >
             <label for="ReferralLinkInput">{{ 'customer.account.referral.referral_link' | t }}</label>
-            <div onclick="shareReferralLink('copy')" style="position: absolute; right: 14px; bottom: 0; cursor: pointer;" >
+            <button type="button" onclick="shareReferralLink('copy')" aria-label="Copy referral link" style="position: absolute; right: 14px; bottom: 0; cursor: pointer; border: 0; background: transparent;" >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20">
                 <path d="M16.58,7.35H4.44A1.69,1.69,0,0,0,2.75,9v8.9a1.69,1.69,0,0,0,1.69,1.68H16.58a1.69,1.69,0,0,0,1.69-1.68V9A1.69,1.69,0,0,0,16.58,7.35Zm.19,10.59a.18.18,0,0,1-.19.18H4.44a.18.18,0,0,1-.19-.18V9a.19.19,0,0,1,.19-.19H16.58a.19.19,0,0,1,.19.19ZM21.25,6.22V15.9a.75.75,0,1,1-1.5,0V6.22a.35.35,0,0,0-.35-.34H6.48a.75.75,0,0,1-.75-.76.74.74,0,0,1,.75-.74H19.4A1.84,1.84,0,0,1,21.25,6.22Z"/>
               </svg>
-            </div>
+            </button>
           </div>
         </div>
         <div id="copy-message" class="hidden" style="color: #28a745; font-size: 12px; margin-top: 8px; display: flex; align-items: center; gap: 4px;">
@@ -1091,7 +1095,6 @@
         text: shareMessage.replace('__SHOP_NAME__', shareTitle),
         url: referralUrl
       }).catch(function(error) {
-        console.log('Error sharing:', error);
       });
     } else {
       shareReferralLink('copy');

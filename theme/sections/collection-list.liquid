@@ -199,7 +199,7 @@
             <li class="grid__item text-center">
               {% capture placeholder_image_url %}https://themes.easystore.co/onboarding/placeholder/products/frame/product-frame-{{ i }}.png{% endcapture %}
               <a href="https://{{GLOBALS.ADMIN_DOMAIN}}/products/" class="full-unstyled-link">
-                <img src="{{ placeholder_image_url }}" width="100%">
+                <img src="{{ placeholder_image_url }}" alt="" width="550" height="550" loading="lazy">
                 <div>
                   {{ 'home_page.onboarding.product_title' | t: i }}
                 </div>

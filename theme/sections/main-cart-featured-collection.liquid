@@ -10,7 +10,7 @@
 {% assign collection = collections[collection_id] %}
 
  
-{% assign products_to_display = collection.product_count %}
+{% assign products_to_display = collection.product_count | default: 0 %}
 
 {% if products_to_display > section.settings.products_to_show %}
   {% assign products_to_display = section.settings.products_to_show %}
@@ -18,7 +18,7 @@
 {% endif %}
 
 
-<div id="section-{{ section.__key }}" class="collection page-width page-margin{% if section.settings.swipe_on_mobile == true and products_to_display > 2 and section.settings.products_to_show > 2 %} page-width-desktop{% endif %}">
+<div id="section-{{ section.__key }}" class="collection page-width page-margin{% if section.settings.swipe_on_mobile == true and products_to_display > 2 and section.settings.products_to_show > 2 %} page-width-desktop{% endif %}" style="--product-surface: {{ section.settings.product_bg_color }};">
   <div class="title-wrapper-with-link {% if products_to_display > 2 and section.settings.swipe_on_mobile and section.settings.products_to_show > 2 %} title-wrapper--self-padded-tablet-down{% endif %}">
     <h2 class="title">
       {% if section.settings.title %} 
@@ -34,7 +34,7 @@
   </div>
 
   <slider-component class="slider-mobile-gutter">
-    <ul class="grid grid--2-col product-grid{% if products_to_display == 4 or section.settings.collection == blank %} grid--3-col-tablet grid--{{section.settings.products_per_row}}-col-desktop{% else %} grid--3-col-tablet{% endif %}{% if products_to_display > 5 %} grid--one-third-max grid--{{section.settings.products_per_row}}-col-desktop grid--quarter-max{% endif %}{% if products_to_display > 2 and section.settings.swipe_on_mobile and section.settings.products_to_show > 2 %} slider slider--tablet grid--peek{% endif %}{% if section.settings.show_view_all == false or section.settings.products_to_display < section.settings.products_to_show %} negative-margin{% endif %}{% if section.settings.show_view_all and section.settings.products_to_display > section.settings.products_to_show %} negative-margin--small{% endif %}" role="list">
+    <ul class="grid grid--2-col product-grid grid--3-col-tablet grid--{{section.settings.products_per_row}}-col-desktop{% if products_to_display > 5 %} grid--one-third-max grid--quarter-max{% endif %}{% if products_to_display > 2 and section.settings.swipe_on_mobile and section.settings.products_to_show > 2 %} slider slider--tablet grid--peek{% endif %}{% if section.settings.show_view_all == false or products_to_display < section.settings.products_to_show %} negative-margin{% endif %}{% if section.settings.show_view_all and products_to_display > section.settings.products_to_show %} negative-margin--small{% endif %}" role="list">
       {% for product in collection.products limit: section.settings.products_to_show %}
         <li class="grid__item{% if products_to_display > 2 and section.settings.swipe_on_mobile and section.settings.products_to_show > 2 %} slider__slide{% endif %}">
           {% include 'product-card', show_secondary_image: section.settings.show_secondary_image, show_add_to_cart_button: section.settings.show_add_to_cart_button, image_ratio: section.settings.image_ratio, show_product_info: section.settings.show_product_info  %}
@@ -43,13 +43,13 @@
     </ul>
     {% if products_to_display > 2 and section.settings.swipe_on_mobile and section.settings.products_to_show > 2 %}
       <div class="slider-buttons no-js-hidden{% if products_to_display < 4 %} medium-hide{% endif %}{% if products_to_display < 3 %} small-hide{% endif %}">
-        <button type="button" class="slider-button slider-button--prev" name="previous">{% include 'svg-definitions' with 'icon-caret' %}</button>
+        <button type="button" class="slider-button slider-button--prev" name="previous" aria-label="{{ 'accessibility.previous_slide' | t }}">{% include 'svg-definitions' with 'icon-caret' %}</button>
         <div class="slider-counter caption">
           <span class="slider-counter--current">1</span>
           <span aria-hidden="true"> / </span>
           <span class="slider-counter--total">{{ products_to_display }}</span>
         </div>
-        <button type="button" class="slider-button slider-button--next" name="next">{% include 'svg-definitions' with 'icon-caret' %}</button>
+        <button type="button" class="slider-button slider-button--next" name="next" aria-label="{{ 'accessibility.next_slide' | t }}">{% include 'svg-definitions' with 'icon-caret' %}</button>
       </div>
     {% endif %}
   </slider-component>
@@ -213,6 +213,12 @@
       "id": "swipe_on_mobile",
       "default": true,
       "label": { "en_US": "Swipe on Mobile", "zh_TW": "手機版顯示滑動圖片", "zh_CN": "手机版显示滑动图片", "ms_MY": "Leret pada mudah alih" }
+    },
+    {
+      "type": "color",
+      "id": "product_bg_color",
+      "default": "rgba(245, 245, 245, 1)",
+      "label": { "en_US": "Product background color" }
     }
   ]
 }

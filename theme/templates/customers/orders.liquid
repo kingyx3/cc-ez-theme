@@ -58,9 +58,9 @@
         <ul class="order-tab__slider grid slider slider--tablet pl-0 mt-0 mb-0">
           {% for tab in customer.paginate.filter.tabs %}
           {% assign selectedTab = customer.paginate.filter.current_tab %}
-          <li id="{{ tab.status }}" class="grid__item slider__slide {% if tab.status == selectedTab %}active{% endif %}" data-target="{{ tab.status }}" onclick="switchTab('{{ tab.status }}')">
+          <li id="{{ tab.status }}" class="grid__item slider__slide {% if tab.status == selectedTab %}active{% endif %}" data-target="{{ tab.status }}">
             {% assign tab_name = 'customer.orders.tab.' | append: tab.status %}
-            <div>{{ tab_name | t }} {% if tab.count > 0 %}<span class="order-count">{{ tab.count }}</span>{% endif %}</div>
+            <button type="button" class="full-unstyled-link" onclick="switchTab('{{ tab.status }}')"{% if tab.status == selectedTab %} aria-current="page"{% endif %}>{{ tab_name | t }} {% if tab.count > 0 %}<span class="order-count">{{ tab.count }}</span>{% endif %}</button>
             
             <span>|</span>
           </li>
@@ -145,7 +145,7 @@
                       <div>
                           {% assign remaining_items = order.line_items | size | minus: index %}
                           {% if item.image == null %}
-                            <img src="/assets/images/products/no_image.png">
+                            <img src="/assets/images/products/no_image.png" alt="{{ item.title | escape }}">
                           {% else %}
                             <img src="{{ item.image }}" alt="{{ item.title | escape }}">
                           {% endif %}
@@ -161,11 +161,11 @@
                   <div class="order-right">
                     <div class="h4">{{order.currency_format.format_prefix}} {{ order.total_price }} {{order.currency_format.format_suffix}}</div>
                       {% if order.is_paid == false and order.is_cancelled == 0 and order.cod_type != 1 and selectedTab != 'to_receive' %}
-                        <button class="order-button button mt-2 mb-0" onclick="handleClickPay(event, '{{order.cart_token}}')">{{ 'customer.order.pay' | t }}</button>
+                        <button type="button" class="order-button button mt-2 mb-0" onclick="handleClickPay(event, '{{order.cart_token}}')">{{ 'customer.order.pay' | t }}</button>
                       {% endif %}
                     
                       {% if order.is_repurchasable == true and selectedTab != 'to_receive' %}
-                        <button class="order-button button mt-2 mb-0" data-repurchase-items="{{ order.line_items | json | escape }}" data-currency="{{ order.currency_format | json | escape }}" onclick="openRepurchaseModal(event, this)">{{ 'customer.order.buy_again' | t }}</button>
+                        <button type="button" class="order-button button mt-2 mb-0" data-repurchase-items="{{ order.line_items | json | escape }}" data-currency="{{ order.currency_format | json | escape }}" onclick="openRepurchaseModal(event, this)">{{ 'customer.order.buy_again' | t }}</button>
                       {% endif %}
                     
                       {% if selectedTab == 'to_receive' %}
@@ -213,7 +213,6 @@
                                         selfBtn.removeClass('btn--loading');
                                       },
                                       error: function(xhr){
-                                        console.log(xhr);
                                         selfBtn.removeClass('btn--loading');
                                       },
                                     });
@@ -248,7 +247,7 @@
             </svg>
           </div>
           <p class="color-light-text mb-0">{{ 'customer.orders.empty' | t }}</p>
-          <button class="btn" onclick="window.location.href = '/collections/all'">{{ 'products.product.continue_shopping' | t }}</button>
+          <a class="btn" href="/collections/all">{{ 'products.product.continue_shopping' | t }}</a>
         </div>
       {% endif %}
       

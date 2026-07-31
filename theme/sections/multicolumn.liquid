@@ -24,6 +24,7 @@
         {% for block_handle in section.blocks_order %}
         {% assign blocks = section.blocks %}
         {% assign block = blocks[block_handle] %}
+        {% assign column_image_alt = block.settings.title | _default: section.settings.title %}
           <li class="multicolumn-list__item grid__item{% if section.settings.swipe_on_mobile %} slider__slide{% endif %}{% if section.settings.column_alignment == 'center' %} center{% endif %}" {{ block.shopify_attributes }}>
             <div class="multicolumn-card">
               {% if block.settings.image and block.settings.image != '' %}
@@ -43,7 +44,7 @@
                       sizes="(min-width: 990px) 710px,
                         (min-width: 750px) 550px,
                         550px"
-                      alt="{{ block.settings.image_alt }}"
+                      alt="{{ column_image_alt | escape }}"
                       loading="lazy"
                     >
                     

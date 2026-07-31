@@ -79,7 +79,6 @@
               </div>
 
               <div class="grid grid--2-col-desktop grid--1-col">
-                <script>console.log({{shop.attribute_settings | json}});</script>
 
                 {% for attribute_setting in shop.attribute_settings %}
                   {% if attribute_setting.input_type == "dropdown" %}
@@ -132,7 +131,7 @@
               </div>
     
               <p class="text-right">
-                <a href="javascript:void(0)" onclick="window.history.back();" class="button button--secondary">{{ 'customer.addresses.cancel' | t }}</a>&nbsp;&nbsp;
+                <button type="button" onclick="window.history.back();" class="button button--secondary">{{ 'customer.addresses.cancel' | t }}</button>&nbsp;&nbsp;
                 <input type="submit" class="button" value="{{ 'customer.recover_password.submit' | t }}">
               </p>
           </div>
@@ -218,7 +217,7 @@
               </svg>
               {{ 'customer.login.password' | t }}
             </strong><br>
-            <a href="javascript:void(0)" onclick="viewChangePW();" class="change_password">{{ 'customer.details.change_password' | t }}</a>
+            <button type="button" onclick="viewChangePW();" class="change_password link">{{ 'customer.details.change_password' | t }}</button>
             <div class="confirm_password" style="display: none;">
               <div class="field">
                 <input type="password" placeholder="{{'customer.login.password' | t }}" id="DetailPassword" class="address_form" name="details[password1]">
@@ -231,7 +230,7 @@
               </div>
               <br>
               <div class="text-right">
-                <a href="javascript:void(0)" onclick="viewChangePW();" class="button button--secondary button--small">{{ 'customer.addresses.cancel' | t }}</a>&nbsp;&nbsp;
+                <button type="button" onclick="viewChangePW();" class="button button--secondary button--small">{{ 'customer.addresses.cancel' | t }}</button>&nbsp;&nbsp;
                 <input type="submit" class="button button--small" value="{{ 'customer.recover_password.submit' | t }}">
               </div>
             </div>
@@ -287,7 +286,7 @@
                   <span style="color: green;">{{ 'customer.details.verified' | t }}</span>
                 {% else %}
                   {% comment %} <a style="cursor: pointer;" href="/account/request-verify?customer_id={{ customer.id }}&method={{ key }}">Verify now</a> {% endcomment %}
-                  <a id="request-verify-{{ customer.id }}" role="button" tabindex="0" style="cursor: pointer;" onclick="requestVerify('{{ customer.id }}', '{{ key }}')">{{ 'customer.details.verify_now' | t }}</a>
+                  <button type="button" id="request-verify-{{ customer.id }}" class="link" onclick="requestVerify('{{ customer.id }}', '{{ key }}')">{{ 'customer.details.verify_now' | t }}</button>
                 {% endif %}
               </p>
             </div>

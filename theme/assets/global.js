@@ -16,6 +16,11 @@ function trapFocus(container, elementToFocus = container) {
 
   removeTrapFocus();
 
+  if (!elements.length) {
+    elementToFocus.focus();
+    return;
+  }
+
   trapFocusHandlers.focusin = (event) => {
     if (
       event.target !== container &&
@@ -74,7 +79,6 @@ const serializeForm = form => {
       obj[key] = formData.get(key);
     }
   }
-console.log('obj',obj);
   return JSON.stringify(obj);
 };
 
@@ -95,7 +99,7 @@ function pauseAllMedia() {
   });
   document.querySelectorAll('video').forEach((video) => video.pause());
   document.querySelectorAll('product-model').forEach((model) => {
-    if (model.modelViewerUI) modelViewerUI.pause();
+    if (model.modelViewerUI) model.modelViewerUI.pause();
   });
 }
 
@@ -177,7 +181,7 @@ class QuantityInput extends HTMLElement {
     event.preventDefault();
     const previousValue = this.input.value;
 
-    event.target.name === 'plus' ? this.input.stepUp() : this.input.stepDown();
+    event.currentTarget.name === 'plus' ? this.input.stepUp() : this.input.stepDown();
     if (previousValue !== this.input.value) this.input.dispatchEvent(this.changeEvent);
   }
 }
@@ -192,18 +196,18 @@ class VariantSelects {
     this.productInfo = document.getElementById('ProductInfo-'+id);
 
     this.toggleAddButton(true, '', false);
-    this.updateProductPrice(id);
-    this.updateLabelValue();
 
     if (!this.currentVariant || (!this.currentVariant.available && this.currentVariant.inventory_quantity != 0)) {
       this.toggleAddButton(true, '', true);
-      this.setUnavailable();
-    } else {
-
-      const price = document.getElementById('price-'+id);
-      if (price) price.classList.remove('visibility-hidden');
-      this.toggleAddButton(!this.currentVariant.available, window.variantStrings.soldOut);
+      this.setUnavailable(id);
+      return;
     }
+
+    this.updateProductPrice(id);
+    this.updateLabelValue();
+    const price = document.getElementById('price-'+id);
+    if (price) price.classList.remove('visibility-hidden');
+    this.toggleAddButton(!this.currentVariant.available, window.variantStrings.soldOut);
   }
   
   updateLabelValue(){
@@ -325,8 +329,9 @@ class VariantSelects {
     }
   }
 
-  setUnavailable() {
+  setUnavailable(id) {
     const button = document.getElementById('AddToCartForm-'+id);
+    if (!button) return;
     const addButton = button.querySelector('[name="add"]');
     const price = document.getElementById('price-'+id);
     if (!addButton) return;
@@ -464,7 +469,7 @@ class HeaderDrawer extends MenuDrawer {
   }
 
   openMenuDrawer(summaryElement) {
-    this.header = this.header || document.querySelector('#easystore-section-header header');
+    this.header = this.header || document.getElementById('easystore-section-header');
     this.borderOffset = this.borderOffset || this.closest('.header-wrapper').classList.contains('header-wrapper--border-bottom') ? 1 : 0;
     document.documentElement.style.setProperty('--header-bottom-position', `${parseInt(this.header.getBoundingClientRect().bottom - this.borderOffset)}px`);
 
@@ -520,7 +525,7 @@ class SliderComponent extends HTMLElement {
     this.prevButton = this.querySelector('button[name="previous"]');
     this.nextButton = this.querySelector('button[name="next"]');
 
-    if (!this.slider || !this.nextButton) return;
+    if (!this.slider || !this.prevButton || !this.nextButton) return;
 
     const resizeObserver = new ResizeObserver(entries => this.initPages());
     resizeObserver.observe(this.slider);
@@ -560,7 +565,6 @@ class SliderComponent extends HTMLElement {
   }
 
   onButtonClick(event) {
-    console.log('onButtonClick');
     event.preventDefault();
     const slideScrollPosition = event.currentTarget.name === 'next' ? this.slider.scrollLeft + this.sliderLastItem.clientWidth : this.slider.scrollLeft - this.sliderLastItem.clientWidth;
     this.slider.scrollTo({
@@ -578,7 +582,7 @@ class AddToCartButton extends HTMLElement {
     this.loading = this.querySelector('.loading-overlay');
     this.button = this.querySelector('.addToClassList');
     this.quickviewModal = document.querySelector('product-quickview-modal');
-    this.button.addEventListener('click', this.onSubmitHandler.bind(this), { passive: false });
+    if (this.button) this.button.addEventListener('click', this.onSubmitHandler.bind(this), { passive: false });
     this.cartNotification = document.querySelector('cart-notification');
   }
 
@@ -604,7 +608,7 @@ class AddToCartButton extends HTMLElement {
     const { variantId, productHandle, productPriceMax, productAvailable } = this.button.dataset;
 
     // If product is unavailable or price is zero, redirect to product page
-    if (productPriceMax <= 0 || !productAvailable) {
+    if (Number(productPriceMax) <= 0 || productAvailable === 'false' || productAvailable === false) {
       window.location.href = `/products/${productHandle}`;
       return;
     }
@@ -625,6 +629,11 @@ class AddToCartButton extends HTMLElement {
   }
 
   addToCart(){
+    if (!this.cartNotification) {
+      window.location.href = `/products/${this.button.dataset.productHandle}`;
+      return;
+    }
+
     this.cartNotification.setActiveElement(document.activeElement);
 
     this.button.classList.add('transparent');
@@ -643,7 +652,6 @@ class AddToCartButton extends HTMLElement {
         this.cartNotification.renderContents(cart)
       } 
       
-      console.log('addToCart',cart);
       this.setLoading(false);
     })
   }
@@ -661,3 +669,24 @@ class AddToCartButton extends HTMLElement {
 }
 
 customElements.define('add-to-cart-button', AddToCartButton);
+
+const wishlistSelectors = [
+  'a[href*="wishlist" i]',
+  'form[action*="wishlist" i]',
+  'button[name*="wishlist" i]',
+  '[data-wishlist]',
+  '[data-app*="wishlist" i]',
+  '[class~="wishlist"]',
+  '[class^="wishlist-"]',
+  '[class*=" wishlist-"]',
+].join(',');
+
+function removeWishlistUI(root = document) {
+  if (root.nodeType === Node.ELEMENT_NODE && root.matches(wishlistSelectors)) root.remove();
+  if (root.querySelectorAll) root.querySelectorAll(wishlistSelectors).forEach((element) => element.remove());
+}
+
+removeWishlistUI();
+new MutationObserver((mutations) => {
+  mutations.forEach((mutation) => mutation.addedNodes.forEach(removeWishlistUI));
+}).observe(document.documentElement, { childList: true, subtree: true });

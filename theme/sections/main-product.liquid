@@ -11,6 +11,17 @@
   .product__info-wrapper .product-card-wrapper{
     background-color: {{section.settings.wrapper_bg_color}};
   }
+  .product-media-open {
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: zoom-in;
+  }
+  .product-media-open img {
+    display: block;
+    width: 100%;
+  }
 </style>
 
 <link rel="preload" href="{{ 'component-slider.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
@@ -30,24 +41,26 @@
               {% for image in product.images %}
                 <li id="image-item-{{image.id}}" class="main-image product__media-item grid__item slider__slide d-flex flex-align-center" data-image-id="{{ image.id }}">
                   {% if image.type == "Youtube" %}
-                    <iframe width="90%" height="320px" src="https://www.youtube.com/embed/{{ image.id }}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                    <iframe title="{{ product.title | escape }} video" width="90%" height="320" src="https://www.youtube.com/embed/{{ image.id }}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
                   {% else %}
-                    <img src="{{ image.src | img_url: 'social-share' }}" alt="{{ image.alt | escape }}" width="100%" loading="lazy" class="js-image-modal-toggle">
+                    {% assign product_image_alt = image.alt | _default: product.title %}
+                    <button type="button" class="product-media-open js-image-modal-toggle" aria-label="Enlarge {{ product_image_alt | escape }}">
+                      <img src="{{ image.src | img_url: 'social-share' }}" alt="{{ product_image_alt | escape }}" width="1200" height="1200" {% if forloop.first %}loading="eager" fetchpriority="high"{% else %}loading="lazy"{% endif %}>
+                    </button>
                   {% endif %}
                 </li>
               {% endfor %}
             </ul>
             <div class="slider-buttons no-js-hidden {% if product.images.size < 1 %} medium-hide small-hide {% endif %}">
-              <button type="button" class="slider-button slider-button--prev" name="previous">{% include 'svg-definitions' with 'icon-caret' %}</button>
+              <button type="button" class="slider-button slider-button--prev" name="previous" aria-label="{{ 'accessibility.previous_slide' | t }}">{% include 'svg-definitions' with 'icon-caret' %}</button>
               <div class="slider-counter caption">
                 <span class="slider-counter--current">1</span>
                 <span aria-hidden="true"> / </span>
-                <span class="slider-counter--total">{{ products_to_display }}</span>
+                <span class="slider-counter--total">{{ product.images.size }}</span>
               </div>
-              <button type="button" class="slider-button slider-button--next" name="next">{% include 'svg-definitions' with 'icon-caret' %}</button>
+              <button type="button" class="slider-button slider-button--next" name="next" aria-label="{{ 'accessibility.next_slide' | t }}">{% include 'svg-definitions' with 'icon-caret' %}</button>
             </div>
           </slider-component>
-          <span class="js-image-modal-close product-media-modal__toggle hidden">{% include 'svg-definitions' with 'icon-close' %}</span>
           {% app_snippet 'product/content_left' %}
         </div>
       </div>
@@ -55,7 +68,7 @@
 
       <div class="grid__item product__media-wrapper text-center">
         {% assign featured_image = product.selected_or_first_available_variant.featured_image | default: product.featured_image %}
-        <img src="{{ featured_image | img_url: '1024x' }}" alt="{{ featured_image.alt | escape }}">
+        <img src="{{ featured_image | img_url: '1024x' }}" alt="{{ featured_image.alt | _default: product.title | escape }}" width="1024" height="1024" loading="eager" fetchpriority="high">
       </div>
       
     {% endif %}
@@ -123,7 +136,7 @@
 
               <!-- quantity_selector -->
               <div class="product-form__input product-form__quantity">
-                <label class="form__label" for="Quantity">
+                <label class="form__label" for="Quantity-{{ section.__key }}">
                   {{ 'products.product.quantity' | t }}
                 </label>
 
@@ -134,7 +147,7 @@
                   <input class="quantity__input"
                       type="number"
                       name="quantity"
-                      id="Quantity"
+                      id="Quantity-{{ section.__key }}"
                       min="1"
                       value="1"
                     >
@@ -167,7 +180,7 @@
 
               </div>
               
-              <div class="form__message hidden" tabindex="-1" autofocus>
+              <div class="form__message hidden" tabindex="-1" role="alert">
                 <span class="visually-hidden">{{ 'accessibility.error' | t }} </span>
                 {% include 'svg-definitions' with 'icon-error' %}
                 <div class="js-error-content"></div>
@@ -203,9 +216,9 @@
   {% app_snippet 'product/content_bottom' %}
   
     <!-- The Modal -->
-  <div id="product-modal" class="modal hide">
-    <span class="js-image-modal-close product-media-modal__toggle product-modal-close">{% include 'svg-definitions' with 'icon-close' %}</span>
-    <img class="modal-content" id="modal-img">
+  <div id="product-modal" class="modal hide" role="dialog" aria-modal="true" aria-label="Product image preview" aria-hidden="true">
+    <button type="button" class="js-image-modal-close product-media-modal__toggle product-modal-close" aria-label="{{ 'accessibility.close' | t }}">{% include 'svg-definitions' with 'icon-close' %}</button>
+    <img class="modal-content" id="modal-img" alt="">
   </div>
 
 </section>
@@ -228,14 +241,14 @@
       variants = {{ product.variants | json }},
       variants_unavailable = variants.filter(value => value.available == false);
       
-  window.onload = (event) => {
-    document.getElementById("main-image-wrapper-{{ section.__key }}").scrollTo({left: 0, behavior: "smooth"});
-  };
+  window.addEventListener('load', () => {
+    const imageWrapper = document.getElementById("main-image-wrapper-{{ section.__key }}");
+    if (imageWrapper) imageWrapper.scrollTo({left: 0, behavior: "smooth"});
+  });
 
   document.addEventListener( 'DOMContentLoaded', function() {
 
     var selectCallback = function(variant, selector) {
-      console.log('variant, selector',variant, selector);
       VariantSelector.onVariantChange(variant,"{{ section.__key }}");
       if(variants_unavailable && variants_unavailable.length > 0 && VariantSelector.updateVariantsUnavailable) VariantSelector.updateVariantsUnavailable(variants,variants_unavailable);
       
@@ -243,8 +256,10 @@
         var img_wrapper = document.getElementById("main-image-wrapper-{{ section.__key }}");
         if(variant.featured_image != null && variant.featured_image.id && is_variants_initial){
           const img_item = document.getElementById("image-item-" + variant.featured_image.id);
-          img_wrapper.insertAdjacentElement("afterbegin", img_item);
-          img_wrapper.scrollTo({left: 0, behavior: "smooth"});
+          if (img_wrapper && img_item) {
+            img_wrapper.insertAdjacentElement("afterbegin", img_item);
+            img_wrapper.scrollTo({left: 0, behavior: "smooth"});
+          }
         }
         is_variants_initial = true
       {% endif %}
@@ -259,33 +274,37 @@
 
     //modal
     var product_modal = document.getElementById("product-modal");
-    const body = document.querySelector("body");
-    all_this_el('.js-image-modal-toggle').forEach(imgModal => imgModal.addEventListener("click", (event)=>{
+    const body = document.body;
+    let modalTrigger = null;
+    const closeProductModal = () => {
+      product_modal.classList.add('hide');
+      product_modal.classList.remove('show');
+      product_modal.setAttribute('aria-hidden', 'true');
+      body.style.overflow = '';
+      if (modalTrigger) modalTrigger.focus();
+    };
+
+    all_this_el('.js-image-modal-toggle').forEach(imageButton => imageButton.addEventListener("click", ()=>{
       var modalImg = document.getElementById("modal-img");
+      const image = imageButton.querySelector('img');
+      modalTrigger = imageButton;
       product_modal.classList.remove("hide");
       product_modal.classList.add("show");
-      modalImg.src = imgModal.src;
-      if (product_modal.classList.contains("show")) {
-          // Disable scroll
-          body.style.overflow = "hidden";
-      } 
+      product_modal.setAttribute('aria-hidden', 'false');
+      modalImg.src = image.src;
+      modalImg.alt = image.alt;
+      body.style.overflow = "hidden";
+      product_modal.querySelector('.product-modal-close').focus();
     }))
 
-    // close modal
     var modal_close = document.getElementsByClassName("product-modal-close")[0];
-    modal_close.onclick = function() { 
-      product_modal.classList.add("hide");
-      if (product_modal.classList.contains("hide")) {
-          // Disable scroll
-          body.style.overflow = "";
-      } 
-    }
-    window.onclick = function(event) {
-   	  if (event.target == product_modal) {
-        product_modal.classList.add("hide");
-        body.style.overflow = "";
-      }
-    }
+    if (modal_close) modal_close.addEventListener('click', closeProductModal);
+    product_modal.addEventListener('click', (event) => {
+      if (event.target === product_modal) closeProductModal();
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && product_modal.classList.contains('show')) closeProductModal();
+    });
   
   });
 
@@ -294,7 +313,13 @@
   var storedProductViewHistory = localStorage.getItem('productViewHistory');
 
   if(storedProductViewHistory !== null) {
+    try {
       productViewHistoryData = JSON.parse(storedProductViewHistory);
+      if (!Array.isArray(productViewHistoryData)) productViewHistoryData = [];
+    } catch (error) {
+      productViewHistoryData = [];
+      localStorage.removeItem('productViewHistory');
+    }
   }
 
   if(productViewHistoryData.length > 0) {

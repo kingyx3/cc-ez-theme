@@ -318,7 +318,6 @@
                           selfBtn.removeClass('btn--loading');
                         },
                         error: function(xhr){
-                          console.log(xhr);
                           selfBtn.removeClass('btn--loading');
                         },
                       });
@@ -478,7 +477,7 @@
             
             {% if order.barcode_image_url and order.is_pickup_from_store_location %}
               <div style="text-align: center;margin-top: 15px;padding-top: 15px;border-top: 1px solid #eee;">
-                  <img src="{{order.barcode_image_url}}" width="240px" style="max-width: 100%;max-height: 100px;margin: 0 auto 5px;object-fit: contain;">
+                  <img src="{{order.barcode_image_url}}" alt="Order pickup barcode" width="240" style="max-width: 100%;max-height: 100px;margin: 0 auto 5px;object-fit: contain;">
                   <div>
                   	<small class="text-secondary">{{ 'checkout.detail.show_barcode_counter' | t }}</small>
                   </div>
@@ -551,7 +550,7 @@
             {% if order.attachment != null %}
               {% for attachment in order.attachment %}
               <div id="attachment-row-{{attachment.id}}" class="attachment-list-item" >
-                <a href="{{attachment.url}}" target="_blank" class="attachment-link">
+                <a href="{{attachment.url}}" target="_blank" rel="noopener noreferrer" class="attachment-link">
                   <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-file" width="24" height="24" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
                     <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
                     <path d="M14 3v4a1 1 0 0 0 1 1h4" />
@@ -623,7 +622,7 @@
       if(res.status == "success"){
         this_el(".attachment-wrapper").innerHTML += `
           <div id="attachment-row-`+res.data.id+`" class="attachment-list-item" >
-            <a href="`+res.data.url+`" target="_blank">`+res.data.title+`.`+res.data.extension+`</a>
+            <a href="`+res.data.url+`" target="_blank" rel="noopener noreferrer">`+res.data.title+`.`+res.data.extension+`</a>
             <a class="remove-attachment btn" onclick="removeAttachment(`+res.data.id+`)" value="`+res.data.id+`" style="text-align: right">
               <svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false" role="presentation" class="icon icon-close" fill="none" viewBox="0 0 18 17">
                 <path d="M.865 15.978a.5.5 0 00.707.707l7.433-7.431 7.579 7.282a.501.501 0 00.846-.37.5.5 0 00-.153-.351L9.712 8.546l7.417-7.416a.5.5 0 10-.707-.708L8.991 7.853 1.413.573a.5.5 0 10-.693.72l7.563 7.268-7.418 7.417z" fill="currentColor">
@@ -677,7 +676,7 @@
           selected_row.remove();
         }
       })
-      .catch((error) => {console.log(error)})
+      .catch(() => {})
 
     }
   };
@@ -783,7 +782,7 @@
         location.reload();
       }
     })
-    .catch((error) => {console.log(error)})
+    .catch(() => {})
 
   });
 

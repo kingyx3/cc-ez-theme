@@ -20,64 +20,11 @@
     display: none;
   }
   
-  .search-modal__form{
+  .search-modal__form {
     position: relative;
   }
-  
-  .dropdown {
-    display: none;
-    position: absolute;
-    top: 100%;
-    left: 0;
-    width: 100%;
-    padding: 5px 0;
-    background-color: #fff;
-    color:#000;
-    z-index: 1000;
-    border-bottom-left-radius: 15px;
-    border-bottom-right-radius: 15px;
-    border: 1px solid rgba(var(--color-foreground), 1);
-    border-top: none;
-    overflow-x: hidden;
-    overflow-y: auto;
-    max-height: 350px;
-  }
-  
-  .dropdown-item {
-    padding: 0.4rem 2rem;
-    cursor: pointer;
-    line-height: 1.4;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  
-  .dropdown-item:hover{
-    background-color: #f3f3f3;
-  }
-  
-  .search__input.is-focus{
-    border-radius: 15px;
-    border-bottom-left-radius: 0;
-    border-bottom-right-radius: 0;
-    border: 1px solid rgba(var(--color-foreground), 1);
-    border-bottom: none;
-    box-shadow: none;
-  }
-  
-  .clear-all {
-    text-align: right;
-    padding: 0 2rem 0.2rem;
-    line-height: 1;
-    font-size: 70%;
-    margin-bottom: -2px;
-  }
-  
-  .clear-all:hover{
-    background-color: #fff;
-  }
-  
-  .search-input-focus .easystore-section-header-hidden{
+
+  .search-input-focus .easystore-section-header-hidden {
     transform: none;
   }
   .referral-notification {
@@ -270,7 +217,7 @@
   </symbol>
 
   <symbol id="icon-close" class="icon icon-close" fill="none" viewBox="0 0 18 17">
-    <path d="M.865 15.978a.5.5 0 00.707.707l7.433-7.431 7.579 7.282a.501.501 0 00.846-.37.5.5 0 00-.153-.351L9.712 8.546l7.417-7.416a.5.5 0 10-.707-.708L8.991 7.853 1.413.573a.5.5 0 10-.693.72l7.563 7.268-7.418 7.417z" fill="currentColor">
+    <path d="M.865 15.978a.5.5 0 00.707.707l7.433-7.431 7.579 7.282a.501.501 0 00.846-.37.5.5 0 00-.153-.351L9.712 8.546l7.417-7.416a.5.5 0 10-.707-.708L8.991 7.853 1.413.573a.5.5 0 10-.693.72l7.563 7.268-7.418 7.417z" fill="currentColor"/>
   </symbol>
 </svg>
 
@@ -296,8 +243,8 @@
     <header class="header header--{{section.settings.align_logo}} page-width header--has-menu" itemscope itemtype="http://schema.org/Organization">
       <div class="header__left-icon header__icons large-up-hide">
         <header-drawer data-breakpoint="tablet">
-          <details class="menu-drawer-container menu-opening">
-            <summary class="header__icon header__icon--menu header__icon--summary link link--text focus-inset" aria-label="Menu" role="button" aria-expanded="true" aria-controls="menu-drawer">
+          <details class="menu-drawer-container">
+            <summary class="header__icon header__icon--menu header__icon--summary link link--text focus-inset" aria-label="Menu" role="button" aria-expanded="false" aria-controls="menu-drawer">
               <span>
                 {% include 'svg-definitions' with 'icon-hamburger' %}
                 {% include 'svg-definitions' with 'icon-close' %}
@@ -352,19 +299,19 @@
             </div>
           </details>
         </header-drawer>
-        {% include 'search-modal' %}
+        {% include 'search-modal', search_id: 'HeaderMobileSearch' %}
       </div>
   
       {% if section.settings.logo %}
         <a href="/" class="header__heading-link link link--text focus-inset" itemprop="url">
           {% if section.settings.transparent_header %}
-            <img src="{{ section.settings.logo_secondary }}" class="header__heading-logo header__logo_secondary" alt="{{ shop.name }}" loading="lazy">
+            <img src="{{ section.settings.logo_secondary }}" class="header__heading-logo header__logo_secondary" alt="{{ shop.name | escape }}" loading="eager">
           {% endif %}
-          <img src="{{ section.settings.logo }}" class="header__heading-logo" alt="{{ shop.name }}" loading="lazy" itemprop="logo">
+          <img src="{{ section.settings.logo }}" class="header__heading-logo" alt="{{ shop.name | escape }}" loading="eager" fetchpriority="high" itemprop="logo">
         </a>
       {% else %}
         <h1 class="header__heading">
-          {{ shop.name }}
+          <a href="/" class="header__heading-link link link--text focus-inset">{{ shop.name | escape }}</a>
         </h1>
       {% endif %}
       <nav class="header__inline-menu">
@@ -377,7 +324,7 @@
       </nav>
       <div class="header__icons">
         <div class="medium-hide small-hide">
-          {% include 'search-modal' %}
+          {% include 'search-modal', search_id: 'HeaderDesktopSearch' %}
         </div>
         
         {% if shop.customer_accounts_enabled %}
@@ -385,10 +332,8 @@
             <div class="header__icon header__icon--account link link--text focus-inset small-hide medium-hide">   
               <details-disclosure>
                 <details>
-                  <summary class="full-unstyled-link link focus-inset">
-                    <a href="/account" class="header__icon link link--text focus-inset p-2">
-                      {% include 'svg-definitions' with 'icon-account' %}
-                    </a>
+                  <summary class="header__icon link link--text focus-inset p-2" aria-label="Account menu" aria-expanded="false">
+                    {% include 'svg-definitions' with 'icon-account' %}
                   </summary>
                   <ul class="header__submenu list-menu list-menu--disclosure caption-large motion-reduce" role="list" tabindex="-1" style="margin-left: -60px;">
                     {% for link in contents.drop-down-after-login.links %}
@@ -418,17 +363,17 @@
 
               <!-- Referral Notification Popup for Desktop -->
               <div id="referralNotification" class="referral-notification" style="display: none;">
-                <button class="close-btn" onclick="dismissReferralNotification()">&times;</button>
+                <button type="button" class="close-btn" aria-label="Close referral notification" onclick="dismissReferralNotification()">&times;</button>
                 <div style="text-align: center; margin-bottom: 16px;">
                   <div style="width: 100px; height: 100px; margin: 0 auto;">
-                    <img src="https://resources.easystore.co/storefront/icons/channels/vector_referral_program.svg">
+                    <img src="https://resources.easystore.co/storefront/icons/channels/vector_referral_program.svg" alt="" width="100" height="100">
                   </div>
                 </div>
                 <p id="referralSignupMessage" style="text-align: center; font-size: 14px; color: #666; margin: 0 0 20px 0;">
                   {{ 'customer.account.referral.signup_message' | t }}
                 </p>
                 <div style="text-align: center;">
-                  <button class="btn" onclick="goToSignupPage()" style="width: 100%;">
+                  <button type="button" class="btn" onclick="goToSignupPage()" style="width: 100%;">
                     {{ 'customer.account.referral.signup_button' | t }}
                   </button>
                 </div>
@@ -442,15 +387,9 @@
               {% assign navigation_title = link.title | downcase %}
               {% unless navigation_url contains 'wishlist' or navigation_title contains 'wishlist' %}
               {% assign navigation = 'customer.account.navigation.' | append: link.handle %}
-              <details-disclosure>
-                <details>
-                  <summary class="full-unstyled-link link focus-inset">
-                    <a href="{{link.url}}" class="header__icon link link--text focus-inset">
-                      {% include 'svg-definitions' with 'icon-history' %}
-                    </a>
-                  </summary>
-                </details>
-              </details-disclosure>
+              <a href="{{ link.url }}" class="header__icon link link--text focus-inset" aria-label="{{ navigation | t }}">
+                {% include 'svg-definitions' with 'icon-history' %}
+              </a>
               {% endunless %}
             {% endfor %} 
           </div>
@@ -479,7 +418,7 @@
                   
                   <div style="margin-bottom: 24px;">
                     <div style="width: 120px; height: 120px; margin: 0 auto 20px;">
-                      <img src="https://resources.easystore.co/storefront/icons/channels/vector_referral_program.svg" style="width: 100%; height: 100%;">
+                      <img src="https://resources.easystore.co/storefront/icons/channels/vector_referral_program.svg" alt="" width="120" height="120" style="width: 100%; height: 100%;">
                     </div>
                   </div>
                   
@@ -584,21 +523,22 @@
     }
 
     closeSearchModal() {
-      this.searchModal = this.searchModal || this.header.querySelector('details-modal');
-      this.searchModal.close(false);
+      this.searchModals = this.searchModals || this.header.querySelectorAll('details-modal.header__search');
+      this.searchModals.forEach((searchModal) => searchModal.close(false));
     }
   }
 
-  customElements.define('sticky-header', StickyHeader);
+  if (!customElements.get('sticky-header')) customElements.define('sticky-header', StickyHeader);
 
   
   class DetailsDisclosure extends HTMLElement{
     constructor() {
       super();
       this.mainDetailsToggle = this.querySelector('details');
-      // this.mainDetailsToggle.addEventListener('focusout', this.onFocusOut.bind(this));
+      this.mainDetailsToggle.addEventListener('focusout', this.onFocusOut.bind(this));
       this.mainDetailsToggle.addEventListener('mouseover', this.open.bind(this));
       this.mainDetailsToggle.addEventListener('mouseleave', this.close.bind(this));
+      this.mainDetailsToggle.addEventListener('toggle', this.updateExpandedState.bind(this));
     }
 
     onFocusOut() {
@@ -608,106 +548,33 @@
     }
 
     open() {
-      this.mainDetailsToggle.setAttribute('open',1)
+      this.mainDetailsToggle.setAttribute('open', '')
     }
 
     close() {
       this.mainDetailsToggle.removeAttribute('open')
     }
-  }
 
-  customElements.define('details-disclosure', DetailsDisclosure);
-
-  function clearAll() {
-    localStorage.removeItem('searchHistory'); 
-    
-    var customer = {{ customer | json }};
-    if(customer) {
-      // Your logic to clear all data or call an endpoint
-      fetch('/account/search_histories', {
-          method: 'DELETE',
-          headers: {
-            "Content-Type": "application/json",
-            "X-Requested-With": "XMLHttpRequest"
-          },
-          body: JSON.stringify({
-            _token: "{% csrf %}"
-          }),
-      })
-      .then(response => response.json())
+    updateExpandedState() {
+      const summary = this.mainDetailsToggle.querySelector('summary');
+      if (summary) summary.setAttribute('aria-expanded', String(this.mainDetailsToggle.open));
     }
   }
-  // End - delete search history from local storage
-  
-  // search history dropdown  
-  var searchInputs = document.querySelectorAll('.search__input');
-  
-  if(searchInputs.length > 0) {
-    
-    searchInputs.forEach((searchInput)=> {
-    
-      searchInput.addEventListener('focus', function() {
-        var searchDropdown = searchInput.closest('form').querySelector('#searchDropdown');
-        searchDropdown.innerHTML = ''; // Clear existing items
-  
-        // retrieve data from local storage
-        var searchHistoryData = JSON.parse(localStorage.getItem('searchHistory')) || [];
-  
-        // Convert JSON to string
-        var search_history_json = JSON.stringify(searchHistoryData);
-  
-        // Set the value of the hidden input
-        searchInput.closest('form').querySelector(".hidden_search_history").value = search_history_json;
-  
-        // create dropdown items
-        var clearAllItem = document.createElement('div');
-        clearAllItem.className = 'dropdown-item clear-all';
-        clearAllItem.textContent = 'Clear';
-        clearAllItem.addEventListener('click', function() {
-          clearAll();
-          searchDropdown.style.display = 'none';
-          searchInput.classList.remove('is-focus');
-        });
-        searchDropdown.appendChild(clearAllItem);
-  
-        // create dropdown items
-        searchHistoryData.forEach(function(item) {
-          var dropdownItem = document.createElement('div');
-          dropdownItem.className = 'dropdown-item';
-          dropdownItem.textContent = item.term;
-          dropdownItem.addEventListener('click', function() {
-            searchInput.value = item.term;
-            searchInput.closest('form').submit();
-            searchDropdown.style.display = 'none';
-          });
-          searchDropdown.appendChild(dropdownItem);
-        });
-  
-        if(searchHistoryData.length > 0){
-          // display the dropdown
-          searchInput.classList.add('is-focus');
-          document.body.classList.add('search-input-focus');
-          searchDropdown.style.display = 'block';
-        }
-      });
-  
-      searchInput.addEventListener("focusout", (event) => {
-        var searchDropdown = searchInput.closest('form').querySelector('#searchDropdown');
-        searchInput.classList.remove('is-focus');
-        searchDropdown.classList.add('transparent');
-        setTimeout(()=>{
-          searchDropdown.style.display = 'none';
-          searchDropdown.classList.remove('transparent');
-          document.body.classList.remove('search-input-focus');
-        }, 400);
-      });
-    })
-  }
-  // End - search history dropdown
+
+  if (!customElements.get('details-disclosure')) customElements.define('details-disclosure', DetailsDisclosure);
 
   // referral notification popup
-  const referralMessageTemplate = '{{ "customer.account.referral.signup_message" | t: "__CURRENCY_CODE__", "__CREDIT_AMOUNT__" }}';
-  const shopCurrency = '{{ shop.money_prefix }}';
+  const referralMessageTemplate = {{ "customer.account.referral.signup_message" | t: "__CURRENCY_CODE__", "__CREDIT_AMOUNT__" | json }};
+  const shopCurrency = {{ shop.money_prefix | json }};
+
+  function readReferralData() {
+    try {
+      return JSON.parse(localStorage.getItem('referral_notification_data')) || {};
+    } catch (error) {
+      localStorage.removeItem('referral_notification_data');
+      return {};
+    }
+  }
 
   function getCookie(name) {
     const value = `; ${document.cookie}`;
@@ -724,13 +591,13 @@
     const referralCode = getCookie('customer_referral_code');
     
     {% if customer and customer.customer_referral and customer.customer_referral.referral_code %}
-    const customerReferralCode = '{{ customer.customer_referral.referral_code }}';
+    const customerReferralCode = {{ customer.customer_referral.referral_code | json }};
     {% else %}
     const customerReferralCode = null;
     {% endif %}
     
     const activeReferralCode = referralCode || customerReferralCode;
-    const referralData = JSON.parse(localStorage.getItem('referral_notification_data')) || {};
+    const referralData = readReferralData();
     
     if (referralData.timestamp && referralData.expirationDays) {
       const expirationTime = referralData.timestamp + (referralData.expirationDays * 24 * 60 * 60 * 1000);
@@ -774,7 +641,7 @@
           }
         }
         
-        const referralData = JSON.parse(localStorage.getItem('referral_notification_data')) || {};
+        const referralData = readReferralData();
         referralData.creditAmount = refereeCreditAmount;
         referralData.dismissed = referralData.dismissed || false;
         referralData.timestamp = Date.now();
@@ -829,7 +696,7 @@
   showReferralNotification();
 
   addEventListener('beforeunload', function() {
-    const referralData = JSON.parse(localStorage.getItem('referral_notification_data')) || {};
+    const referralData = readReferralData();
     
     if (referralData.creditAmount !== undefined) {
       referralData.creditAmount = null;
@@ -845,7 +712,7 @@
   }
 
   function dismissReferralNotification() {
-    const referralData = JSON.parse(localStorage.getItem('referral_notification_data')) || {};
+    const referralData = readReferralData();
     
     referralData.dismissed = true;
     referralData.timestamp = referralData.timestamp || Date.now();
@@ -867,7 +734,7 @@
       mobileModal.removeAttribute('open');
     }
     
-    const referralData = JSON.parse(localStorage.getItem('referral_notification_data')) || {};
+    const referralData = readReferralData();
     referralData.dismissed = true;
     referralData.timestamp = referralData.timestamp || Date.now();
     referralData.expirationDays = referralData.expirationDays || 3;
@@ -899,6 +766,14 @@
       "default": true,
       "label": {
         "en_US": "Show announcement"
+      }
+    },
+    {
+      "type": "checkbox",
+      "id": "enable_sticky_header",
+      "default": true,
+      "label": {
+        "en_US": "Enable sticky header"
       }
     },
     {

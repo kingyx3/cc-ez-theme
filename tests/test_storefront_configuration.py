@@ -224,6 +224,56 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertIn("padding-top: 0;", stylesheet)
         self.assertIn("padding-bottom: 0;", stylesheet)
 
+    def test_wishlist_is_removed_from_all_theme_surfaces(self) -> None:
+        header = (THEME_ROOT / "sections" / "header.liquid").read_text(
+            encoding="utf-8"
+        )
+        account = (
+            THEME_ROOT / "templates" / "customers" / "account.liquid"
+        ).read_text(encoding="utf-8")
+        global_script = (THEME_ROOT / "assets" / "global.js").read_text(
+            encoding="utf-8"
+        )
+        editor_script = (
+            THEME_ROOT / "editor_assets" / "global.js"
+        ).read_text(encoding="utf-8")
+        stylesheet = (
+            THEME_ROOT / "assets" / "conversion-theme.css"
+        ).read_text(encoding="utf-8")
+
+        self.assertGreaterEqual(header.count("contains 'wishlist'"), 4)
+        self.assertIn("link.handle contains 'wishlist'", account)
+        self.assertIn("const wishlistSelectors", global_script)
+        self.assertIn("new MutationObserver", global_script)
+        self.assertIn('a[href*="wishlist" i]', stylesheet)
+        self.assertEqual(global_script, editor_script)
+
+        for settings in self.sections.values():
+            self.assertNotIn("wishlist", json.dumps(settings).lower())
+
+    def test_search_history_is_shared_and_accessible(self) -> None:
+        search_script = (
+            THEME_ROOT / "assets" / "search-history.js"
+        ).read_text(encoding="utf-8")
+        editor_search_script = (
+            THEME_ROOT / "editor_assets" / "search-history.js"
+        ).read_text(encoding="utf-8")
+        search_modal = (
+            THEME_ROOT / "snippets" / "search-modal.liquid"
+        ).read_text(encoding="utf-8")
+        header = (THEME_ROOT / "sections" / "header.liquid").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertEqual(search_script, editor_search_script)
+        self.assertIn("data-search-history-form", search_modal)
+        self.assertIn('role="combobox"', search_modal)
+        self.assertIn('role="listbox"', search_modal)
+        self.assertIn("HeaderMobileSearch", header)
+        self.assertIn("HeaderDesktopSearch", header)
+        self.assertNotIn("searchDropdown", header)
+        self.assertNotIn("function clearAll", header)
+
 
 if __name__ == "__main__":
     unittest.main()
