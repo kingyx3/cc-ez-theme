@@ -255,6 +255,53 @@ class StorefrontConfigurationTests(unittest.TestCase):
             1,
         )
 
+        self.assertIn("encodeURIComponent(referralCode)", header)
+        self.assertIn(
+            "const campaign = data && data.data && data.data.campaign;",
+            header,
+        )
+        self.assertIn("Array.isArray(campaign.referral_rules)", header)
+
+        quickview = (
+            THEME_ROOT / "assets" / "product-quickview.js"
+        ).read_text(encoding="utf-8")
+        self.assertIn("this.requestController = new AbortController()", quickview)
+        self.assertIn("const requestSequence = ++this.requestSequence", quickview)
+        self.assertIn("signal: this.requestController.signal", quickview)
+        self.assertIn("requestSequence !== this.requestSequence", quickview)
+        self.assertIn("if (this.requestController) this.requestController.abort()", quickview)
+
+        cart = (THEME_ROOT / "assets" / "cart.js").read_text(encoding="utf-8")
+        remove_item = cart.split("removeCartItem(line", maxsplit=1)[1]
+        self.assertLess(
+            remove_item.index("if (!cartItemDeleteBtn) return"),
+            remove_item.index("this.enableLoading(line)"),
+        )
+
+        social_sharing = (
+            THEME_ROOT / "snippets" / "social-sharing.liquid"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            "{% assign encoded_permalink_url = permalinkURL | url_param_escape %}",
+            social_sharing,
+        )
+        self.assertIn("media={{ encoded_share_media_url }}", social_sharing)
+
+        customer_details = (
+            THEME_ROOT / "templates" / "customers" / "details.liquid"
+        ).read_text(encoding="utf-8")
+        self.assertIn('max="{{ "now" | date: "%Y-%m-%d" }}"', customer_details)
+        self.assertNotIn('date: "%Y%m%d"', customer_details)
+        self.assertNotIn('{{ " now" | date:', customer_details)
+
+        layout = (THEME_ROOT / "layout" / "theme.liquid").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            'lang="{{ shop.locale | default: \'en\' | escape }}"',
+            layout,
+        )
+
     def test_homepage_collections_are_six_products_in_three_columns(self) -> None:
         expected = {
             "1667498127486": ("Best Sellers", "feature-on-homepage"),
