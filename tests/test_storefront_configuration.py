@@ -436,9 +436,13 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertIn('class="menu-drawer__nav-item--browse"', header)
         self.assertIn("contents.catalog.links", browse)
         self.assertIn("browse_link.links", browse)
+        self.assertIn("browse_link.children", browse)
         self.assertIn("child_link.links", browse)
+        self.assertIn("child_link.children", browse)
         self.assertIn("contents[browse_link.handle].links", browse)
         self.assertIn("contents[child_link.handle].links", browse)
+        self.assertIn("contents[browse_url_handle].links", browse)
+        self.assertIn("contents[child_url_handle].links", browse)
         self.assertIn("navigation_mode == 'mobile'", browse)
         self.assertIsNone(
             re.search(
@@ -510,10 +514,9 @@ class StorefrontConfigurationTests(unittest.TestCase):
             ".header__nav-item--browse .header__submenu > li",
             stylesheet,
         )
-        self.assertIn(
-            "details[open] > .header__submenu",
-            stylesheet,
-        )
+        self.assertIn(".browse-menu__item--has-children:hover", stylesheet)
+        self.assertIn(".browse-menu__item--has-children:focus-within", stylesheet)
+        self.assertIn(".browse-menu__flyout", stylesheet)
         self.assertIn("left: 100%;", stylesheet)
         self.assertIn("pointer-events: auto;", stylesheet)
 
