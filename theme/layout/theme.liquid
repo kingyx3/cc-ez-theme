@@ -198,6 +198,12 @@
     window.promotionStrings = {
       title: {{ 'products.product.promotion' | t | json }},
     }
+
+    window.purchaseStrings = {
+      quantityExceeded: {{ 'products.product.quantity_exceeded' | t | default: 'You selected __QUANTITY__. The maximum allowed is __MAXIMUM__ due to __REASON__.' | json }},
+      quantityMaximum: {{ 'products.product.quantity_maximum' | t | default: 'Maximum allowed: __MAXIMUM__ due to __REASON__.' | json }},
+      addLimitError: {{ 'products.product.add_limit_error' | t | default: 'This item could not be added because it may exceed a customer, store, or stock limit.' | json }},
+    }
     
     window.productSettings = {
       variantOptionsDisplay: {{ settings.sections.main-product.settings.variant_options_display | _default: 'radio' | json }},

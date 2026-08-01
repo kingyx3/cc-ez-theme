@@ -210,7 +210,10 @@ if (!customElements.get('product-form')) {
 
       if (quantity > limit.maximum) {
         const message = limit.message
-          || `You selected ${quantity}. The maximum allowed is ${limit.maximum} due to ${limit.reason}.`;
+          || window.purchaseStrings.quantityExceeded
+            .replace('__QUANTITY__', quantity)
+            .replace('__MAXIMUM__', limit.maximum)
+            .replace('__REASON__', limit.reason);
         this.showQuantityLimit(message, 'error');
         this.setPurchaseButtonsLimited(true);
         if (focusInvalid) this.quantityInput.focus();
@@ -220,7 +223,9 @@ if (!customElements.get('product-form')) {
       this.setPurchaseButtonsLimited(false);
       if (quantity === limit.maximum) {
         this.showQuantityLimit(
-          `Maximum allowed: ${limit.maximum} due to ${limit.reason}.`,
+          window.purchaseStrings.quantityMaximum
+            .replace('__MAXIMUM__', limit.maximum)
+            .replace('__REASON__', limit.reason),
           'warning'
         );
       } else {
@@ -282,11 +287,21 @@ if (!customElements.get('product-form')) {
       const setSubmitting = (submitting) => {
         purchaseButtons.forEach((button) => {
           if (submitting) {
+            if (button.dataset.submissionWasDisabled == null) {
+              button.dataset.submissionWasDisabled = button.matches('[disabled], [aria-disabled="true"]')
+                ? 'true'
+                : 'false';
+            }
             button.setAttribute('disabled', true);
             button.setAttribute('aria-disabled', 'true');
           } else {
-            button.removeAttribute('disabled');
-            button.removeAttribute('aria-disabled');
+            const wasDisabled = button.dataset.submissionWasDisabled === 'true';
+            const variantUnavailable = this.currentVariant && this.currentVariant.available === false;
+            if (!wasDisabled && !variantUnavailable) {
+              button.removeAttribute('disabled');
+              button.removeAttribute('aria-disabled');
+            }
+            delete button.dataset.submissionWasDisabled;
           }
         });
 
@@ -294,6 +309,7 @@ if (!customElements.get('product-form')) {
           submitButton.classList.add('loading');
         } else {
           submitButton.classList.remove('loading');
+          this.validateQuantity();
         }
       };
 
@@ -331,7 +347,7 @@ if (!customElements.get('product-form')) {
 
         if (buyNow && !cartConfirmed) {
           this.openBuyNowLimitModal(
-            'This item could not be added because it may exceed a customer, store, or stock limit.'
+            window.purchaseStrings.addLimitError
           );
           setSubmitting(false);
           return;
