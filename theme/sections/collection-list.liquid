@@ -72,11 +72,15 @@
 
           {% if collection.id %}
             <li
-              onclick="toggleCollectionListTab('{{ section.__key }}','{{collection.id}}', '{{ block_handle }}')"
+              data-theme-action="toggle-collection-list"
+              data-section-id="{{ section.__key | escape }}"
+              data-collection-id="{{ collection.id }}"
+              data-block-id="{{ block_handle | escape }}"
               id="collection_title-{{collection.id}}"
               class="featured-collections-tab__item  {% if forloop.index == 1 %}featured-collections-tab__item--active{% endif %}"
               role="tab"
-              aria-selected="true">
+              tabindex="0"
+              aria-selected="{% if forloop.index == 1 %}true{% else %}false{% endif %}">
               <span class="featured-collections__item-title">{{ collection.title | escape }}</span>
             </li>
           {% endif %}
@@ -92,7 +96,7 @@
           <div class="grid__item {% if i != 1 and i != 2 %}small-hide medium-hide{% endif %}">
             <div class="collection_skeleton-card">
               <div class="collection_skeleton-loading collection_skeleton-card-img"></div>
-              <div class="collection_skeleton-loading" style="width: 40%;"></div>
+              <div class="collection_skeleton-loading collection-skeleton-card__short-line"></div>
               <div class="collection_skeleton-loading"></div>
             </div>
           </div>
@@ -240,11 +244,17 @@
     const loading = document.querySelector(`#collection-list-wrapper_${sectionId} .collection_skeleton-card-wrapper`);
 
     // Remove active class from all titles
-    allTitles.forEach(el => el.classList.remove("featured-collections-tab__item--active"));
+    allTitles.forEach((el) => {
+      el.classList.remove("featured-collections-tab__item--active");
+      el.setAttribute('aria-selected', 'false');
+    });
 
     // Add active class to the selected title
     const activeTitle = document.querySelector(`${sectionSelector} #collection_title-${CollectionId}`);
-    if (activeTitle) activeTitle.classList.add("featured-collections-tab__item--active");
+    if (activeTitle) {
+      activeTitle.classList.add("featured-collections-tab__item--active");
+      activeTitle.setAttribute('aria-selected', 'true');
+    }
     window._collectionList_selectedBlock.set(sectionId, blockId);
 
     // Hide all collections

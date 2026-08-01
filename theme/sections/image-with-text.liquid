@@ -17,7 +17,7 @@
     <div class="text-section {% if section.settings.image_width == 'one-third'%}one-third-{% elsif section.settings.image_width == 'half' %}half-{% else %}two-third-{% endif %}text-section" {% if section.settings.image == "" %}style="width:100%;padding:40px;"{% endif %}>
       <div class="img-with-text-subtitle">{{section.settings.subtitle}}</div>
       <div class="img-with-text-title">{{section.settings.content_title}}</div>
-      <p class="img-with-text-rich-text" style="">{{section.settings.rich_text}}</p>
+      <p class="img-with-text-rich-text">{{section.settings.rich_text}}</p>
       <a href="{{section.settings.button_link}}" class="btn">{{section.settings.button_label}}</a>
     </div>
     {% if section.settings.image != "" %}
@@ -29,6 +29,8 @@
                   (min-width: 750px) 710px,
                   550px"
             alt="{{ section.settings.content_title | escape }} | {{ shop.name | escape }}"
+            width="950"
+            height="950"
             loading="lazy" />
       </a>
     {% endif %}

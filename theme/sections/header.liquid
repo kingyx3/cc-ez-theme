@@ -42,6 +42,46 @@
     font-size: 14px;
     line-height: 1.4;
   }
+
+  #referralNotification,
+  .referral-modal__toggle {
+    display: none;
+  }
+
+  .header__submenu--account {
+    margin-left: -60px;
+  }
+
+  .header__account-entry {
+    position: relative;
+  }
+
+  .referral-notification__media,
+  .referral-notification__actions {
+    text-align: center;
+  }
+
+  .referral-notification__media {
+    margin-bottom: 16px;
+  }
+
+  .referral-notification__image {
+    width: 100px;
+    height: 100px;
+    margin: 0 auto;
+  }
+
+  .referral-notification__message {
+    margin: 0 0 20px;
+    color: #666;
+    font-size: 14px;
+    text-align: center;
+  }
+
+  .referral-notification__button,
+  .referral-modal__button {
+    width: 100%;
+  }
   
   .referral-notification::before {
     content: '';
@@ -167,6 +207,38 @@
     display: block;
     opacity: 1;
     transition: opacity var(--duration-default) ease, visibility 0s;
+  }
+
+  .referral-modal__close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    border: 0;
+    background: none;
+    cursor: pointer;
+    font-size: 24px;
+  }
+
+  .referral-modal__media {
+    margin-bottom: 24px;
+  }
+
+  .referral-modal__image-wrapper {
+    width: 120px;
+    height: 120px;
+    margin: 0 auto 20px;
+  }
+
+  .referral-modal__image {
+    width: 100%;
+    height: 100%;
+  }
+
+  .referral-modal__message {
+    margin: 0 0 30px;
+    color: #333;
+    font-size: 16px;
+    line-height: 1.5;
   }
 </style>
 
@@ -305,9 +377,9 @@
       {% if section.settings.logo %}
         <a href="/" class="header__heading-link link link--text focus-inset" itemprop="url">
           {% if section.settings.transparent_header %}
-            <img src="{{ section.settings.logo_secondary }}" class="header__heading-logo header__logo_secondary" alt="{{ shop.name | escape }}" loading="eager">
+            <img src="{{ section.settings.logo_secondary }}" class="header__heading-logo header__logo_secondary" alt="{{ shop.name | escape }}" width="{{ section.settings.logo_max_width }}" height="{{ section.settings.logo_max_width }}" loading="eager">
           {% endif %}
-          <img src="{{ section.settings.logo }}" class="header__heading-logo" alt="{{ shop.name | escape }}" loading="eager" fetchpriority="high" itemprop="logo">
+          <img src="{{ section.settings.logo }}" class="header__heading-logo" alt="{{ shop.name | escape }}" width="{{ section.settings.logo_max_width }}" height="{{ section.settings.logo_max_width }}" loading="eager" fetchpriority="high" itemprop="logo">
         </a>
       {% else %}
         <h1 class="header__heading">
@@ -335,7 +407,7 @@
                   <summary class="header__icon link link--text focus-inset p-2" aria-label="Account menu" aria-expanded="false">
                     {% include 'svg-definitions' with 'icon-account' %}
                   </summary>
-                  <ul class="header__submenu list-menu list-menu--disclosure caption-large motion-reduce" role="list" tabindex="-1" style="margin-left: -60px;">
+                  <ul class="header__submenu header__submenu--account list-menu list-menu--disclosure caption-large motion-reduce" role="list" tabindex="-1">
                     {% for link in contents.drop-down-after-login.links %}
                       {% assign navigation = 'customer.account.navigation.' | append: link.handle %}
                       {% assign navigation_url = link.url | downcase %}
@@ -356,24 +428,24 @@
               </details-disclosure>
             </div>
           {% else %}
-            <div class="header__icon header__icon--account link link--text focus-inset small-hide medium-hide" style="position: relative;">
+            <div class="header__icon header__icon--account header__account-entry link link--text focus-inset small-hide medium-hide">
               <a href="/account/login" class="header__icon link link--text focus-inset p-2">
                 {% include 'svg-definitions' with 'icon-account' %}
               </a>
 
               <!-- Referral Notification Popup for Desktop -->
-              <div id="referralNotification" class="referral-notification" style="display: none;">
-                <button type="button" class="close-btn" aria-label="Close referral notification" onclick="dismissReferralNotification()">&times;</button>
-                <div style="text-align: center; margin-bottom: 16px;">
-                  <div style="width: 100px; height: 100px; margin: 0 auto;">
+              <div id="referralNotification" class="referral-notification">
+                <button type="button" class="close-btn" aria-label="Close referral notification" data-theme-action="dismiss-referral-notification">&times;</button>
+                <div class="referral-notification__media">
+                  <div class="referral-notification__image">
                     <img src="https://resources.easystore.co/storefront/icons/channels/vector_referral_program.svg" alt="" width="100" height="100">
                   </div>
                 </div>
-                <p id="referralSignupMessage" style="text-align: center; font-size: 14px; color: #666; margin: 0 0 20px 0;">
+                <p id="referralSignupMessage" class="referral-notification__message">
                   {{ 'customer.account.referral.signup_message' | t }}
                 </p>
-                <div style="text-align: center;">
-                  <button type="button" class="btn" onclick="goToSignupPage()" style="width: 100%;">
+                <div class="referral-notification__actions">
+                  <button type="button" class="btn referral-notification__button" data-theme-action="open-referral-signup">
                     {{ 'customer.account.referral.signup_button' | t }}
                   </button>
                 </div>
@@ -407,26 +479,26 @@
           <!-- Referral Notification Modal for Mobile -->
           <details-modal class="referral-modal" id="referralMobileModal">
             <details>
-              <summary class="referral-modal__toggle" aria-haspopup="dialog" aria-label="Open referral modal" style="display: none;">
+              <summary class="referral-modal__toggle" aria-haspopup="dialog" aria-label="Open referral modal">
               </summary>
               <div class="modal-overlay referral-modal-overlay"></div>
               <div class="referral-modal__dialog" role="dialog" aria-modal="true" aria-label="Referral notification">
                 <div class="referral-modal__content">
-                  <button type="button" class="modal__close-button" aria-label="Close" onclick="closeMobileReferralModal()" style="position: absolute; top: 16px; right: 16px; background: none; border: none; font-size: 24px; cursor: pointer;">
+                  <button type="button" class="modal__close-button referral-modal__close" aria-label="Close" data-theme-action="close-mobile-referral">
                     &times;
                   </button>
                   
-                  <div style="margin-bottom: 24px;">
-                    <div style="width: 120px; height: 120px; margin: 0 auto 20px;">
-                      <img src="https://resources.easystore.co/storefront/icons/channels/vector_referral_program.svg" alt="" width="120" height="120" style="width: 100%; height: 100%;">
+                  <div class="referral-modal__media">
+                    <div class="referral-modal__image-wrapper">
+                      <img src="https://resources.easystore.co/storefront/icons/channels/vector_referral_program.svg" class="referral-modal__image" alt="" width="120" height="120">
                     </div>
                   </div>
                   
-                  <p id="referralSignupMessageMobile" style="font-size: 16px; color: #333; margin: 0 0 30px 0; line-height: 1.5;">
+                  <p id="referralSignupMessageMobile" class="referral-modal__message">
                     {{ 'customer.account.referral.signup_message' | t }}
                   </p>
                   
-                  <button type="button" class="btn" onclick="goToSignupPageFromMobile()" style="width: 100%;">
+                  <button type="button" class="btn referral-modal__button" data-theme-action="open-mobile-referral-signup">
                     {{ 'customer.account.referral.signup_button' | t }}
                   </button>
                 </div>

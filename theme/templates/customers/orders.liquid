@@ -52,7 +52,7 @@
           {% assign selectedTab = customer.paginate.filter.current_tab %}
           <li id="{{ tab.status }}" class="grid__item slider__slide {% if tab.status == selectedTab %}active{% endif %}" data-target="{{ tab.status }}">
             {% assign tab_name = 'customer.orders.tab.' | append: tab.status %}
-            <button type="button" class="full-unstyled-link" onclick="switchTab('{{ tab.status }}')"{% if tab.status == selectedTab %} aria-current="page"{% endif %}>{{ tab_name | t }} {% if tab.count > 0 %}<span class="order-count">{{ tab.count }}</span>{% endif %}</button>
+            <button type="button" class="full-unstyled-link" data-theme-action="switch-order-tab" data-order-status="{{ tab.status | escape }}"{% if tab.status == selectedTab %} aria-current="page"{% endif %}>{{ tab_name | t }} {% if tab.count > 0 %}<span class="order-count">{{ tab.count }}</span>{% endif %}</button>
             
             <span>|</span>
           </li>
@@ -157,7 +157,7 @@
                       {% endif %}
                     
                       {% if order.is_repurchasable == true and selectedTab != 'to_receive' %}
-                        <button type="button" class="order-button button mt-2 mb-0" data-repurchase-items="{{ order.line_items | json | escape }}" data-currency="{{ order.currency_format | json | escape }}" onclick="openRepurchaseModal(event, this)">{{ 'customer.order.buy_again' | t }}</button>
+                        <button type="button" class="order-button button mt-2 mb-0" data-repurchase-items="{{ order.line_items | json | escape }}" data-currency="{{ order.currency_format | json | escape }}" data-theme-action="open-repurchase-modal">{{ 'customer.order.buy_again' | t }}</button>
                       {% endif %}
                     
                       {% if selectedTab == 'to_receive' %}
@@ -188,26 +188,27 @@
 
                                 <script>
                                   var confirmOrderBtn = document.getElementById('confirmOrder{{order.token}}');
-                                  confirmOrderBtn.addEventListener('click', function (e) {
-                                    var selfBtn = $(this);
-      								              selfBtn.addClass('btn--loading');
-                                    
-                                    $.ajax({
-                                      type: "PUT",
-                                      dataType: 'json',
-                                      url: "/sf/order/{{ order.token }}/fulfillment_update",
-                                      data:{
-                                          _token: "{% csrf %}",
-                                      },
-                                      success: function(response){
-                                        window.location.replace('/account/orders?filter=completed');
-                                        document.querySelector('#closeModal{{order.token}}').click();
-                                        selfBtn.removeClass('btn--loading');
-                                      },
-                                      error: function(xhr){
-                                        selfBtn.removeClass('btn--loading');
-                                      },
-                                    });
+                                  confirmOrderBtn.addEventListener('click', async function () {
+                                    this.classList.add('btn--loading');
+
+                                    try {
+                                      const response = await fetch('/sf/order/{{ order.token }}/fulfillment_update', {
+                                        method: 'PUT',
+                                        headers: {
+                                          Accept: 'application/json',
+                                          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                                        },
+                                        body: new URLSearchParams({ _token: "{% csrf %}" }).toString(),
+                                      });
+                                      if (!response.ok) throw new Error('Unable to update fulfillment');
+
+                                      document.querySelector('#closeModal{{order.token}}').click();
+                                      window.location.replace('/account/orders?filter=completed');
+                                    } catch (error) {
+                                      console.error('Unable to confirm order receipt', error);
+                                    } finally {
+                                      this.classList.remove('btn--loading');
+                                    }
                                   });
                                 </script>
                               </div>

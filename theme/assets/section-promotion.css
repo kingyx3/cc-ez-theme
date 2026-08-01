@@ -103,6 +103,10 @@ sub, sup {
 	letter-spacing: .2em;
 }
 
+.promotion-banner-description p {
+	margin: 7.5px 10px;
+}
+
 .promotion-section-container .promotion-wrapper .promotion-block .promotion-block-img{
 	width:60%;
 	display:flex;

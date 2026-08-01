@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import unittest
 from pathlib import Path
 
@@ -244,12 +245,26 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertGreaterEqual(header.count("contains 'wishlist'"), 4)
         self.assertIn("link.handle contains 'wishlist'", account)
         self.assertIn("const wishlistSelectors", global_script)
+        self.assertIn("removeMobileWishlistUI", global_script)
+        self.assertIn("mobileWishlistDrawerSelector", global_script)
+        self.assertIn("characterData: true", global_script)
         self.assertIn("new MutationObserver", global_script)
         self.assertIn('a[href*="wishlist" i]', stylesheet)
+        self.assertIn('[aria-label*="wishlist" i]', stylesheet)
         self.assertEqual(global_script, editor_script)
 
         for settings in self.sections.values():
             self.assertNotIn("wishlist", json.dumps(settings).lower())
+
+    def test_homepage_collection_eyebrows_use_each_section_accent(self) -> None:
+        stylesheet = (
+            THEME_ROOT / "assets" / "conversion-theme.css"
+        ).read_text(encoding="utf-8")
+        eyebrow_rule = stylesheet.split(".sales-collection__eyebrow {", 1)[1].split(
+            "}", 1
+        )[0]
+
+        self.assertIn("color: var(--section-accent);", eyebrow_rule)
 
     def test_search_history_is_shared_and_accessible(self) -> None:
         search_script = (
@@ -284,6 +299,61 @@ class StorefrontConfigurationTests(unittest.TestCase):
                     "this.onload=null;this.rel='stylesheet'",
                     text,
                 )
+
+    def test_runtime_markup_uses_delegated_actions_and_intrinsic_images(self) -> None:
+        event_attribute = re.compile(
+            r"\son(?:click|change|submit|keydown|keyup)\s*=",
+            re.IGNORECASE,
+        )
+        image_tag = re.compile(r"<img\b[^>]*>", re.IGNORECASE | re.DOTALL)
+
+        for path in THEME_ROOT.rglob("*.liquid"):
+            text = path.read_text(encoding="utf-8")
+            with self.subTest(path=path.relative_to(THEME_ROOT)):
+                self.assertIsNone(event_attribute.search(text))
+                for tag in image_tag.findall(text):
+                    self.assertRegex(tag, r"\bwidth\s*=")
+                    self.assertRegex(tag, r"\bheight\s*=")
+
+        global_script = (THEME_ROOT / "assets" / "global.js").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("const themeActionHandlers", global_script)
+        self.assertIn("[data-theme-action]", global_script)
+
+    def test_legacy_jquery_is_replaced_with_compatible_modern_runtime(self) -> None:
+        layout = (THEME_ROOT / "layout" / "theme.liquid").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("jquery/1.11", layout)
+        self.assertIn("jquery-3.7.1.min.js", layout)
+        self.assertIn("jquery-migrate-3.6.0.min.js", layout)
+        self.assertEqual(layout.count('integrity="sha256-'), 2)
+
+        for relative in (
+            "snippets/repurchase-modal.liquid",
+            "templates/customers/order.liquid",
+            "templates/customers/orders.liquid",
+        ):
+            source = (THEME_ROOT / relative).read_text(encoding="utf-8")
+            with self.subTest(path=relative):
+                self.assertNotIn("$.ajax", source)
+                self.assertNotIn("eval(", source)
+                self.assertIn("fetch(", source)
+
+    def test_repeated_storefront_labels_use_translation_fallbacks(self) -> None:
+        expected = {
+            "layout/theme.liquid": "general.search.clear_history",
+            "snippets/search-modal.liquid": "general.search.recent_searches",
+            "snippets/product-card.liquid": "general.show_details",
+            "templates/customers/order.liquid": "customer.addresses.edit",
+            "templates/store-locator.liquid": "general.store_locator.hours_unavailable",
+        }
+        for relative, translation_key in expected.items():
+            source = (THEME_ROOT / relative).read_text(encoding="utf-8")
+            with self.subTest(path=relative):
+                self.assertIn(translation_key, source)
+                self.assertIn("| t", source)
 
     def test_share_widget_instances_have_unique_controls(self) -> None:
         share_snippet = (
@@ -336,7 +406,12 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertIn("const dayIndex = new Date().getDay() || 7", store_locator)
         self.assertIn("businessHour.everyday === 'closed'", store_locator)
         self.assertIn("end <= start", store_locator)
-        self.assertIn('dropdownToggle.textContent = "Hours unavailable"', store_locator)
+        self.assertIn(
+            "dropdownToggle.textContent = storeLocatorStrings.hoursUnavailable",
+            store_locator,
+        )
+        self.assertIn("const setHoursStatus", store_locator)
+        self.assertNotIn("dropdownToggle.innerHTML", store_locator)
 
         quickview = (
             THEME_ROOT / "assets" / "product-quickview.js"

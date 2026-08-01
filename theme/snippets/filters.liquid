@@ -288,7 +288,7 @@
   
   <div class="flex flex-space-between flex-align-center">
     <div>{{ 'collections.filter.filters' | t | default: 'Filters' }}</div>
-    <small><a href="#MainContent" onclick="resetFilter()">{{ 'collections.sorting.reset' | t }}</a></small>
+    <small><a href="#MainContent" data-theme-action="reset-filter">{{ 'collections.sorting.reset' | t }}</a></small>
   </div>
 
   <details class="filter-collapsible" data-filter-group="SortBy">
@@ -298,25 +298,25 @@
     </summary>
     <div class="filter-collapsible-content">
       <input id="sorting-featured" type="radio" class="styled-checkbox" value="featured" name="SortBy" />
-      <label for="sorting-featured" style="display:inline">{{ 'collections.sorting.featured' | t }}</label>
+      <label for="sorting-featured" class="filter-option-label">{{ 'collections.sorting.featured' | t }}</label>
       <br>
       <input id="sorting-title+asc" type="radio" class="styled-checkbox" value="title+asc" name="SortBy" />
-      <label for="sorting-title+asc" style="display:inline">{{ 'collections.sorting.az' | t }}</label>
+      <label for="sorting-title+asc" class="filter-option-label">{{ 'collections.sorting.az' | t }}</label>
       <br>
       <input id="sorting-title+desc" type="radio" class="styled-checkbox" value="title+desc" name="SortBy" />
-      <label for="sorting-title+desc" style="display:inline">{{ 'collections.sorting.za' | t }}</label>
+      <label for="sorting-title+desc" class="filter-option-label">{{ 'collections.sorting.za' | t }}</label>
       <br>
       <input id="sorting-price+asc" type="radio" class="styled-checkbox" value="price+asc" name="SortBy" />
-      <label for="sorting-price+asc" style="display:inline">{{ 'collections.sorting.price_ascending' | t }}</label>
+      <label for="sorting-price+asc" class="filter-option-label">{{ 'collections.sorting.price_ascending' | t }}</label>
       <br>
       <input id="sorting-price+desc" type="radio" class="styled-checkbox" value="price+desc" name="SortBy" />
-      <label for="sorting-price+desc" style="display:inline">{{ 'collections.sorting.price_descending' | t }}</label>
+      <label for="sorting-price+desc" class="filter-option-label">{{ 'collections.sorting.price_descending' | t }}</label>
       <br>
       <input id="sorting-date+desc" type="radio" class="styled-checkbox" value="date+desc" name="SortBy" />
-      <label for="sorting-date+desc" style="display:inline">{{ 'collections.sorting.date_descending' | t }}</label>
+      <label for="sorting-date+desc" class="filter-option-label">{{ 'collections.sorting.date_descending' | t }}</label>
       <br>
       <input id="sorting-date+asc" type="radio" class="styled-checkbox" value="date+asc" name="SortBy" />
-      <label for="sorting-date+asc" style="display:inline">{{ 'collections.sorting.date_ascending' | t }}</label>
+      <label for="sorting-date+asc" class="filter-option-label">{{ 'collections.sorting.date_ascending' | t }}</label>
       <br>
     </div>
   </details>
@@ -372,7 +372,7 @@
             {% for option in filter.values %}
               {% assign option_input_id = filter.param_name | handle | append: '-' | append: forloop.index %}
               <input id="{{ option_input_id }}" type="checkbox" {% if option.active %}checked{% endif %} class="styled-checkbox" data-type="{{filter.param_name}}" data-label="{{filter.label}}" value="{{ option.value }}" />
-              <label for="{{ option_input_id }}" style="display:inline">{{ option.label }}</label>
+              <label for="{{ option_input_id }}" class="filter-option-label">{{ option.label }}</label>
               <br>
             {% endfor %}
           </div>
@@ -380,7 +380,7 @@
     {% when 'boolean' %}
         <div class="filter-boolean-row">
           {% assign boolean_filter_id = filter.param_name | handle | append: '-available' %}
-          <label for="{{ boolean_filter_id }}" class="flex" style="justify-content: space-between;align-items: center;width: 100%;cursor: pointer;">
+          <label for="{{ boolean_filter_id }}" class="filter-boolean-toggle">
             <h4>{{ filter.label }}</h4>
             <input id="{{ boolean_filter_id }}" {% if filter.active_values.size > 0 %}checked{% endif %} type="checkbox" class="styled-checkbox" data-type="purchasable" data-value="true" />
           </label>

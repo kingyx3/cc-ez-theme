@@ -29,7 +29,7 @@
               {% if error.code == 'cart_item_stock' or error.code == 'cart_item_not_available' or error.code == 'cart_item_not_free_gift' or error.code == 'cart_item_deleted' %}
                 <div>{{ 'error.checkout.' | append: error.code | t: error.value.value_1, error.value.value_2 }}</div>
               {% else %}
-                <div style="font-weight:bold">{{ 'error.checkout.' | append: error.code | t: error.value.value_1, error.value.value_2 }}</div>
+                <div class="cart-error__message">{{ 'error.checkout.' | append: error.code | t: error.value.value_1, error.value.value_2 }}</div>
               {% endif %}
             {% endfor %}
           </div>
@@ -73,7 +73,7 @@
         {% unless discount_code_application contains 'discount_code' %}
           {% if shop.customer_rewards_enabled %}
             <div class="voucher-toggle-wrapper">
-              <button type="button" class="voucher-toggle" onclick="document.querySelector('vouchers-modal').open()">
+              <button type="button" class="voucher-toggle" data-theme-action="open-vouchers-modal">
                 <div class="voucher-toggle-content">
                   <small class="voucher-toggle-title font-weight-bold">{{ 'checkout.general.vouchers' | t }}</small>
                   <small class="text-muted text-xs">{{ 'checkout.general.apply_before_checkout' | t }}</small>

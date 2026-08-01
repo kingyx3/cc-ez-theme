@@ -53,7 +53,7 @@ class ProductQuickviewModal extends HTMLElement {
         .then(res => {
           this.renderHTML(res.html, this.cartItem);
           this.modalLoading.classList.add('hidden');
-          this.modalBody.style.display = '';
+          this.modalBody.classList.remove('hidden');
 
           this.initProductOptionsSelector(res.product);
           this.preselectProductOptionsSelector(el);
@@ -61,8 +61,8 @@ class ProductQuickviewModal extends HTMLElement {
         })
         .catch(() => {
           this.modalLoading.classList.add('hidden');
-          this.modalBody.style.display = '';
-          this.modalBody.textContent = 'Product details could not be loaded. Please try again.';
+          this.modalBody.classList.remove('hidden');
+          this.modalBody.textContent = window.productStrings?.quickviewError || 'Product details could not be loaded. Please try again.';
         });
     }
   }
@@ -71,7 +71,7 @@ class ProductQuickviewModal extends HTMLElement {
     document.body.classList.remove(`overflow-hidden`);
     removeTrapFocus(elementToFocus || this.activeElement);
     this.modal.removeAttribute('open');
-    this.modalBody.style.display = 'none';
+    this.modalBody.classList.add('hidden');
     this.modalBody.innerHTML = '';
     this.modalLoading.style.display = '';
     this.modalLoading.classList.remove('hidden');

@@ -1,12 +1,12 @@
 {{ 'component-card.css' | asset_url | stylesheet_tag }}
 {{ 'component-price.css' | asset_url | stylesheet_tag }}
 {{ 'component-product-grid.css' | asset_url | stylesheet_tag }}
-<div style="text-align: center; display: flex; flex-direction: column; align-items: center; margin: 0rem 2rem;">
+<div class="template-404">
   <h1>{{ 'general.404.oops' | t }}</h1>
   <p>{{ 'general.404.oops_description' | t }}</p>
   
   <p>{{ 'general.404.search_description' | t }}</p>
-  <div class="template-search__search" style="width: 100%; max-width: 500px;">
+  <div class="template-search__search template-404__search">
     <form action="/search" method="get" role="search" class="search" data-search-history-form>
       <div class="field">
         <input
@@ -25,8 +25,8 @@
         >
         <label class="field__label" for="Search-In-Template">{{ 'general.search.placeholder' | t }}</label>
         <div class="search-history" data-search-history-panel hidden>
-          <div id="Search-In-404-History" role="listbox" aria-label="Recent searches" data-search-history-list></div>
-          <button type="button" class="search-history__clear" data-search-history-clear>Clear history</button>
+          <div id="Search-In-404-History" role="listbox" aria-label="{{ 'general.search.recent_searches' | t | default: 'Recent searches' }}" data-search-history-list></div>
+          <button type="button" class="search-history__clear" data-search-history-clear>{{ 'general.search.clear_history' | t | default: 'Clear history' }}</button>
         </div>
         <input type="hidden" name="search_history" class="hidden_search_history">
 
@@ -41,7 +41,7 @@
 {% if product_count > 0 %}
   <section class="product-section page-width spaced-section">
     <product-recommendations>
-      <h2 class="product-recommendations__heading" style="text-align: center;">
+      <h2 class="product-recommendations__heading text-center">
         {{ 'general.404.top_products_title' | t }}
       </h2>
       <ul class="grid grid--2-col product-grid grid--3-col-desktop grid--one-third-max" role="list">
