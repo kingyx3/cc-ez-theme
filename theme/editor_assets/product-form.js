@@ -4,40 +4,45 @@ if (!customElements.get('product-form')) {
       super();
 
       this.form = this.querySelector('form');
+      this.buyNowButton = this.querySelector('[data-buy-now]');
+      this.buyNowLimitModal = this.querySelector('[data-checkout-limit-modal]');
+      this.buyNowLimitMessage = this.querySelector('[data-checkout-limit-message]');
       this.cartNotification = document.querySelector('cart-notification');
 
       if (!this.form) return;
 
       this.form.addEventListener('submit', this.onSubmitHandler.bind(this));
-      this.addEventListener('click', this.onBuyNowClick.bind(this), true);
-    }
+      if (this.buyNowButton) {
+        this.buyNowButton.addEventListener('click', this.onBuyNowClick.bind(this));
+      }
 
-    isBuyNowAction(action) {
-      if (!action) return false;
+      if (this.buyNowLimitModal) {
+        this.buyNowLimitModal
+          .querySelectorAll('[data-checkout-limit-cancel]')
+          .forEach((button) => {
+            button.addEventListener('click', this.closeBuyNowLimitModal.bind(this));
+          });
 
-      const actionName = (action.getAttribute('name') || '').toLowerCase();
-      const href = action.getAttribute('href') || '';
-      const formAction = action.getAttribute('formaction') || '';
+        const continueButton = this.buyNowLimitModal.querySelector(
+          '[data-checkout-limit-continue]'
+        );
+        if (continueButton) {
+          continueButton.addEventListener('click', () => {
+            this.closeBuyNowLimitModal();
+            window.location.assign('/checkout');
+          });
+        }
 
-      return actionName === 'buy_now'
-        || actionName === 'checkout'
-        || action.matches('[data-buy-now], .product-form__buy-now')
-        || href.includes('/checkout')
-        || formAction.includes('/checkout');
+        this.buyNowLimitModal.addEventListener(
+          'click',
+          this.onBuyNowLimitModalClick.bind(this)
+        );
+      }
     }
 
     onBuyNowClick(evt) {
-      if (!evt.target || typeof evt.target.closest !== 'function') return;
-
-      const buyNowButton = evt.target.closest(
-        '[name="buy_now"], [name="checkout"], [data-buy-now], .product-form__buy-now, a[href*="/checkout"], [formaction*="/checkout"]'
-      );
-
-      if (!buyNowButton || !this.contains(buyNowButton)) return;
-
       evt.preventDefault();
-      evt.stopPropagation();
-      this.submitProduct(buyNowButton, true);
+      this.submitProduct(this.buyNowButton, true);
     }
 
     onSubmitHandler(evt) {
@@ -47,7 +52,7 @@ if (!customElements.get('product-form')) {
         || this.querySelector('[name="add"]')
         || this.querySelector('[type="submit"]');
 
-      this.submitProduct(submitButton, this.isBuyNowAction(submitButton));
+      this.submitProduct(submitButton, false);
     }
 
     submitProduct(submitButton, buyNow) {
@@ -60,9 +65,10 @@ if (!customElements.get('product-form')) {
         this.cartNotification.setActiveElement(document.activeElement);
       }
 
-      const purchaseButtons = this.querySelectorAll(
-        '.product-form__buttons [name="add"], .product-form__buttons [name="buy_now"], .product-form__buttons [name="checkout"], .product-form__buttons [data-buy-now], .product-form__buttons .product-form__buy-now, .product-form__buttons a[href*="/checkout"], .product-form__buttons [formaction*="/checkout"]'
-      );
+      const purchaseButtons = this.querySelectorAll('[name="add"], [data-buy-now]');
+      const cartCount = document.querySelector('.js-content-cart-count');
+      const parsedItemCount = Number.parseInt(cartCount ? cartCount.textContent : '0', 10);
+      const previousItemCount = Number.isFinite(parsedItemCount) ? parsedItemCount : 0;
 
       const setSubmitting = (submitting) => {
         purchaseButtons.forEach((button) => {
@@ -76,12 +82,8 @@ if (!customElements.get('product-form')) {
         });
 
         if (submitting) {
-          submitButton.setAttribute('disabled', true);
-          submitButton.setAttribute('aria-disabled', 'true');
           submitButton.classList.add('loading');
         } else {
-          submitButton.removeAttribute('disabled');
-          submitButton.removeAttribute('aria-disabled');
           submitButton.classList.remove('loading');
         }
       };
@@ -94,13 +96,33 @@ if (!customElements.get('product-form')) {
       }
 
       const body = JSON.parse(serializeForm(this.form));
+      const requestedQuantity = Math.max(1, Number.parseInt(body.quantity, 10) || 1);
 
       EasyStore.Action.addToCart(body, (cart) => {
         cart = cart || {};
         this.hideErrorMsg();
 
         if (cart.description != undefined) {
-          this.renderErrorMsg(cart.description);
+          if (buyNow) {
+            this.openBuyNowLimitModal(String(cart.description));
+          } else {
+            this.renderErrorMsg(cart.description);
+          }
+          setSubmitting(false);
+          return;
+        }
+
+        const itemCount = Number(cart.item_count);
+        const latestItems = Array.isArray(cart.latest_items) ? cart.latest_items : [];
+        const minimumItemCount = previousItemCount + requestedQuantity;
+        const cartConfirmed = Number.isFinite(itemCount)
+          && itemCount >= minimumItemCount
+          && latestItems.length > 0;
+
+        if (buyNow && !cartConfirmed) {
+          this.openBuyNowLimitModal(
+            'This item could not be added because it may exceed a customer, store, or stock limit.'
+          );
           setSubmitting(false);
           return;
         }
@@ -121,6 +143,41 @@ if (!customElements.get('product-form')) {
           setSubmitting(false);
         }
       });
+    }
+
+    openBuyNowLimitModal(message) {
+      if (!this.buyNowLimitModal || !this.buyNowLimitMessage) {
+        this.renderErrorMsg(message);
+        return;
+      }
+
+      this.buyNowLimitMessage.textContent = message;
+
+      if (typeof this.buyNowLimitModal.showModal === 'function') {
+        if (!this.buyNowLimitModal.open) {
+          this.buyNowLimitModal.showModal();
+        }
+      } else {
+        this.buyNowLimitModal.setAttribute('open', '');
+      }
+    }
+
+    closeBuyNowLimitModal() {
+      if (!this.buyNowLimitModal) return;
+
+      if (typeof this.buyNowLimitModal.close === 'function') {
+        if (this.buyNowLimitModal.open) {
+          this.buyNowLimitModal.close();
+        }
+      } else {
+        this.buyNowLimitModal.removeAttribute('open');
+      }
+    }
+
+    onBuyNowLimitModalClick(evt) {
+      if (evt.target === this.buyNowLimitModal) {
+        this.closeBuyNowLimitModal();
+      }
     }
 
     renderErrorMsg(html) {

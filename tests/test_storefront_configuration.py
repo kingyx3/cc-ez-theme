@@ -35,7 +35,7 @@ class StorefrontConfigurationTests(unittest.TestCase):
         ]
         self.assertNotIn("Worldwide shipping", rendered_text)
 
-    def test_product_page_media_and_injected_buy_now_checkout_action(self) -> None:
+    def test_product_page_media_and_custom_buy_now_checkout_action(self) -> None:
         main_product = (
             THEME_ROOT / "sections" / "main-product.liquid"
         ).read_text(encoding="utf-8")
@@ -44,8 +44,22 @@ class StorefrontConfigurationTests(unittest.TestCase):
             r'name="add"[\s\S]+?class="[^"]*'
             r'product-form__submit--accent-outline[^"]*button--secondary',
         )
-        self.assertNotIn('name="buy_now"', main_product)
-        self.assertNotIn("Buy now", main_product)
+        self.assertRegex(
+            main_product,
+            r'type="button"[\s\S]+?name="buy_now"[\s\S]+?'
+            r'data-buy-now[\s\S]+?product-form__buy-now[^"]*button--primary',
+        )
+        self.assertIn("Buy now", main_product)
+        self.assertEqual(
+            len(re.findall(r"\sdata-buy-now(?:\s|>)", main_product)),
+            1,
+        )
+        self.assertIn("data-checkout-limit-modal", main_product)
+        self.assertIn("data-checkout-limit-message", main_product)
+        self.assertIn("data-checkout-limit-cancel", main_product)
+        self.assertIn("data-checkout-limit-continue", main_product)
+        self.assertIn("Continue without this item?", main_product)
+        self.assertIn("Continue to checkout", main_product)
         self.assertIn("{% app_snippet 'product/button' %}", main_product)
         self.assertIn('class="product-media-video"', main_product)
         self.assertIn('class="product__media-fallback"', main_product)
@@ -63,15 +77,22 @@ class StorefrontConfigurationTests(unittest.TestCase):
             THEME_ROOT / "editor_assets" / "product-form.js"
         ).read_text(encoding="utf-8")
         self.assertEqual(product_form, editor_product_form)
-        self.assertIn("this.onBuyNowClick.bind(this)", product_form)
-        self.assertIn("evt.submitter", product_form)
+        self.assertIn("this.buyNowButton = this.querySelector('[data-buy-now]')", product_form)
+        self.assertIn("this.submitProduct(this.buyNowButton, true)", product_form)
         self.assertIn("serializeForm(this.form)", product_form)
         self.assertIn("EasyStore.Action.addToCart", product_form)
-        self.assertIn("this.submitProduct(buyNowButton, true)", product_form)
-        self.assertIn("window.location.assign('/checkout')", product_form)
+        self.assertIn("const minimumItemCount = previousItemCount + requestedQuantity", product_form)
+        self.assertIn("itemCount >= minimumItemCount", product_form)
+        self.assertIn("latestItems.length > 0", product_form)
+        self.assertIn("if (buyNow && !cartConfirmed)", product_form)
+        self.assertIn("this.openBuyNowLimitModal(String(cart.description))", product_form)
+        self.assertIn("this.openBuyNowLimitModal(", product_form)
+        self.assertIn("this.buyNowLimitModal.showModal()", product_form)
+        self.assertIn("this.closeBuyNowLimitModal()", product_form)
+        self.assertEqual(product_form.count("window.location.assign('/checkout')"), 2)
         self.assertLess(
-            product_form.index("cart.description != undefined"),
-            product_form.index("if (buyNow)"),
+            product_form.index("if (buyNow && !cartConfirmed)"),
+            product_form.rindex("window.location.assign('/checkout')"),
         )
 
         for asset_directory in ("assets", "editor_assets"):
@@ -101,6 +122,10 @@ class StorefrontConfigurationTests(unittest.TestCase):
             self.assertIn("border-radius: 4rem !important;", stylesheet)
             self.assertIn(".product-form__buttons .button::after", stylesheet)
             self.assertIn(".product-form__buttons .btn::after", stylesheet)
+            self.assertIn(".buy-now-limit-modal::backdrop", stylesheet)
+            self.assertIn(".buy-now-limit-modal__actions", stylesheet)
+            self.assertIn("grid-template-columns: 1fr 1fr;", stylesheet)
+            self.assertIn("width: min(calc(100% - 3rem), 48rem);", stylesheet)
             self.assertNotIn(".product-form__buy-now", stylesheet)
             self.assertNotIn(".product-form__submit--secondary", stylesheet)
 
@@ -111,7 +136,8 @@ class StorefrontConfigurationTests(unittest.TestCase):
             THEME_ROOT / "editor_assets" / "global.js"
         ).read_text(encoding="utf-8")
         self.assertEqual(global_script, editor_global_script)
-        self.assertNotIn("'[name=\"buy_now\"]'", global_script)
+        self.assertIn("this.productForm.querySelector('[data-buy-now]')", global_script)
+        self.assertIn("querySelectorAll('.product-form__submit')", global_script)
 
     def test_homepage_collections_are_six_products_in_three_columns(self) -> None:
         expected = {
