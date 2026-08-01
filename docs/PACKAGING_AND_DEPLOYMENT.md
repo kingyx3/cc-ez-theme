@@ -181,6 +181,7 @@ After merging to `main`:
 - [ ] Announcement hover/focus contrast is readable.
 - [ ] Search history and the mobile drawer work with keyboard and pointer input.
 - [ ] Desktop and mobile navigation show a Browse collection dropdown before Hobbit, Marvel, Strixhaven, and About Us.
+- [ ] Hovering or focusing a parent collection in the desktop Browse menu reveals its child collection flyout.
 - [ ] The footer shows Follow us and Contact Us, with no payment or quick-link blocks.
 - [ ] The Terms of Service footer link opens `https://cardboard.sg/pages/terms-of-service`.
 - [ ] Sold-out and sale states render correctly.

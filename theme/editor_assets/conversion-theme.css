@@ -236,6 +236,27 @@ body {
     padding-top: 0.8rem;
     padding-bottom: 0.8rem;
   }
+
+  .header__nav-item--browse .header__submenu > li {
+    position: relative;
+  }
+
+  .header__nav-item--browse .header__submenu > li > details-disclosure > details > .header__submenu {
+    top: 0;
+    left: 100%;
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(-0.8rem);
+  }
+
+  .header__nav-item--browse .header__submenu > li > details-disclosure > details[open] > .header__submenu,
+  .header__nav-item--browse .header__submenu > li > details-disclosure > details:focus-within > .header__submenu {
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateX(0);
+  }
 }
 
 .button,
