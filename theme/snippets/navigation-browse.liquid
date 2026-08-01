@@ -8,7 +8,35 @@
   the parent link's handle. The catalog supports three descendant levels.
 {% endcomment %}
 
-{% assign browse_links = contents.catalog.links %}
+{% assign browse_links = blank %}
+
+{% comment %}
+  The hierarchy lives in the navigation record linked from EasyStore's main
+  menu. contents.catalog.links is a flat storefront catalog on this store, so
+  it is only a last-resort fallback.
+{% endcomment %}
+{% for main_menu_link in contents.main-menu.links %}
+  {% assign main_menu_title = main_menu_link.title | downcase %}
+  {% assign main_menu_children = contents[main_menu_link.handle].links %}
+  {% if browse_links == blank and main_menu_children != blank %}
+    {% if main_menu_title == 'browse' or main_menu_title == 'category' or main_menu_title == 'categories' %}
+      {% assign browse_links = main_menu_children %}
+    {% endif %}
+  {% endif %}
+{% endfor %}
+
+{% if browse_links == blank %}
+  {% for main_menu_link in contents.main-menu.links %}
+    {% assign main_menu_children = contents[main_menu_link.handle].links %}
+    {% if browse_links == blank and main_menu_children != blank %}
+      {% assign browse_links = main_menu_children %}
+    {% endif %}
+  {% endfor %}
+{% endif %}
+
+{% if browse_links == blank %}
+  {% assign browse_links = contents.catalog.links %}
+{% endif %}
 
 {% for browse_link in browse_links %}
   {% assign child_links = contents[browse_link.handle].links %}
@@ -160,4 +188,3 @@
     </li>
   {% endif %}
 {% endfor %}
-

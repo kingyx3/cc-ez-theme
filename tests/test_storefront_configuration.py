@@ -434,7 +434,15 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertEqual(header.count("<span>Browse</span>"), 2)
         self.assertIn('class="header__nav-item--browse"', header)
         self.assertIn('class="menu-drawer__nav-item--browse"', header)
+        self.assertIn("contents.main-menu.links", browse)
+        self.assertIn("main_menu_title == 'browse'", browse)
+        self.assertIn("main_menu_title == 'category'", browse)
+        self.assertIn("main_menu_title == 'categories'", browse)
         self.assertIn("contents.catalog.links", browse)
+        self.assertLess(
+            browse.index("{% for main_menu_link in contents.main-menu.links %}"),
+            browse.index("{% assign browse_links = contents.catalog.links %}"),
+        )
         self.assertIn("contents[browse_link.handle].links", browse)
         self.assertIn("contents[child_link.handle].links", browse)
         self.assertIn("contents[grandchild_link.handle].links", browse)
