@@ -1,5 +1,5 @@
-<link rel="preload" href="{{ 'component-slider.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
-<link rel="preload" href="{{ 'section-blog-post.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+{{ 'component-slider.css' | asset_url | stylesheet_tag }}
+{{ 'section-blog-post.css' | asset_url | stylesheet_tag }}
 
 <style>
   .blog-btn-margin-top{

@@ -1,6 +1,6 @@
 <!-- {{ 'component-rte.css' | asset_url | stylesheet_tag }} -->
-<link rel="preload" href="{{ 'section-main-product.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
-<link rel="preload" href="{{ 'component-price.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+{{ 'section-main-product.css' | asset_url | stylesheet_tag }}
+{{ 'component-price.css' | asset_url | stylesheet_tag }}
 
 <style>
   .product-wrapper_color{
@@ -24,7 +24,7 @@
   }
 </style>
 
-<link rel="preload" href="{{ 'component-slider.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+{{ 'component-slider.css' | asset_url | stylesheet_tag }}
 <script src="{{ 'product-form.js' | asset_url }}" defer="defer"></script>
 
 <section class="product-section page-width spaced-section">
@@ -99,7 +99,7 @@
               <div class="product_upsell-box">
                 {% if block.settings.image and block.settings.image != '' %}
                   <div class="product_upsell-icon">
-                    <img src="{{ block.settings.image }}" alt="{{ block.settings.text }} | {{ shop.name }}">
+                    <img src="{{ block.settings.image }}" alt="{{ block.settings.text }} | {{ shop.name }}" width="24" height="24" loading="lazy">
                   </div>
                 {% endif %}
                 {% if block.settings.text != '' %}
@@ -191,7 +191,7 @@
 
 
           <div>
-            {% include 'social-sharing' %}
+            {% include 'social-sharing', share_id: section.__key %}
           </div>
 
         
@@ -308,55 +308,36 @@
   
   });
 
-  // retrieve & store view history in local storage
-  var productViewHistoryData = [];
-  var storedProductViewHistory = localStorage.getItem('productViewHistory');
+  // Keep a small, valid product history without breaking the product page when
+  // storage is unavailable or EasyStore omits view_history.
+  (() => {
+    const storageKey = 'productViewHistory';
+    const currentViewedProduct = {{ product.view_history | json }};
+    if (!currentViewedProduct || typeof currentViewedProduct !== 'object' || currentViewedProduct.product_id == null) return;
 
-  if(storedProductViewHistory !== null) {
     try {
-      productViewHistoryData = JSON.parse(storedProductViewHistory);
-      if (!Array.isArray(productViewHistoryData)) productViewHistoryData = [];
-    } catch (error) {
-      productViewHistoryData = [];
-      localStorage.removeItem('productViewHistory');
-    }
-  }
+      const storedHistory = JSON.parse(localStorage.getItem(storageKey) || '[]');
+      const productViewHistoryData = (Array.isArray(storedHistory) ? storedHistory : [])
+        .filter((item) => item && typeof item === 'object' && item.product_id != null);
+      const existingProduct = productViewHistoryData.find((item) => String(item.product_id) === String(currentViewedProduct.product_id));
 
-  if(productViewHistoryData.length > 0) {
-    var currentViewedProduct = {{ product.view_history | json }}
-    var currentViewedAt = new Date(currentViewedProduct.viewed_at);
-    var matchProductID = false;
-
-    productViewHistoryData.forEach(data => {
-      // Check if product_id is similar
-      if (data.product_id == currentViewedProduct.product_id) {
-        var previousViewedAt = new Date(data.viewed_at);
-        if (currentViewedAt > previousViewedAt) {
-          data.viewed_at = currentViewedProduct.viewed_at;
-        }
-        matchProductID = true;
+      if (existingProduct) {
+        Object.assign(existingProduct, currentViewedProduct);
+      } else {
+        productViewHistoryData.unshift(currentViewedProduct);
       }
-    });
 
-    // sort "viewed_at" desc
-    productViewHistoryData.sort((a, b) => {
-      var viewedAt1 = new Date(a.viewed_at);
-      var viewedAt2 = new Date(b.viewed_at);
-      return viewedAt2 - viewedAt1;
-    });
+      productViewHistoryData.sort((firstProduct, secondProduct) => {
+        const firstViewedAt = Date.parse(firstProduct.viewed_at) || 0;
+        const secondViewedAt = Date.parse(secondProduct.viewed_at) || 0;
+        return secondViewedAt - firstViewedAt;
+      });
 
-    if (!matchProductID) {
-      productViewHistoryData.unshift(currentViewedProduct);
+      localStorage.setItem(storageKey, JSON.stringify(productViewHistoryData.slice(0, 20)));
+    } catch (error) {
+      // Private browsing and strict storage policies should not block shopping.
     }
-  }
-  else {
-      productViewHistoryData.push({{ product.view_history | json }});
-  }
-
-  productViewHistoryData = JSON.stringify(productViewHistoryData);
-  localStorage.setItem('productViewHistory', productViewHistoryData);
-
-  // End - retrieve & store view history in local storage
+  })();
 
 </script>
 

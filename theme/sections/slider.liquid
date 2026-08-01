@@ -1,5 +1,5 @@
-<link rel="preload" href="{{ 'splide.min.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
-<link rel="preload" href="{{ 'component-slider.css?v2' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+{{ 'splide.min.css' | asset_url | stylesheet_tag }}
+{{ 'component-slider.css?v2' | asset_url | stylesheet_tag }}
 
 <style>
   {% for block_handle in section.blocks_order %}

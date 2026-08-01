@@ -57,11 +57,12 @@
 
   var locations = {{locations | json}};
 
-  const ordering = { mon: 1, tue: 2, wed: 3, thur: 4, fri: 5, sat: 6, sun: 7 }
+  const ordering = { mon: 1, tue: 2, wed: 3, thur: 4, fri: 5, sat: 6, sun: 7 };
 
-  const formatDay = day => day.replace(day[0], day[0].toUpperCase())
+  const formatDay = day => day ? day.replace(day[0], day[0].toUpperCase()) : '';
 
   const convertTime = time => {
+    if (typeof time !== 'string') return '';
 
     if(!time.includes(":")) time += ":00"
 
@@ -77,6 +78,7 @@
   }
 
   const checkTimeFormat = value => {
+    if (typeof value !== 'string') return '';
 
     if(value.split(':').length == 3) {
       return value.slice(0, value.length - 3)
@@ -85,6 +87,7 @@
   }
 
   const formatTime = time => {
+    if (!time || typeof time !== 'object' || !time.start || !time.end) return 'Closed';
 
     var start = convertTime(checkTimeFormat(time.start))
     var end = convertTime(checkTimeFormat(time.end))
@@ -93,16 +96,15 @@
   }
 
   const getToday = businessHour => {
+    if (!businessHour || typeof businessHour !== 'object') return undefined;
 
-    var today = new Date().getDay()
-
-    var today = Object.keys(businessHour).filter(key => ordering[key] === today)[0];
-
-    return today
+    const dayIndex = new Date().getDay() || 7
+    return Object.keys(businessHour).find(key => ordering[key] === dayIndex)
 
   }
 
   const checkOpen = businessHour => {
+    if (!businessHour || typeof businessHour !== 'object') return false;
 
     var today = getToday(businessHour)
 
@@ -110,7 +112,7 @@
 
     if(today !== undefined) result = businessHour[today]
 
-    if (result === 'closed') return false
+    if (result === 'closed' || !result || typeof result !== 'object' || !result.start || !result.end) return false
 
     var { start, end } = result
 
@@ -125,13 +127,22 @@
     var now = new Date()
     now = parseInt(`${now.getHours()}${String(now.getMinutes()).padStart(2, "0")}`)
 
-    if(now < start || now >= end) {
-      return false
-    }
-
-    return true
+    if (end <= start) return now >= start || now < end
+    return now >= start && now < end
 
   }
+
+  const parseBusinessHours = value => {
+    if (value === null || value === undefined || value === '') return {};
+    if (typeof value === 'object') return Array.isArray(value) ? null : value;
+
+    try {
+      const parsedValue = JSON.parse(value);
+      return parsedValue && typeof parsedValue === 'object' && !Array.isArray(parsedValue) ? parsedValue : null;
+    } catch (error) {
+      return null;
+    }
+  };
 
 
 
@@ -153,7 +164,7 @@
 
     // Update provinceSelect Option
     var provinceOptionExist = false
-    for (x = 0; x < provinceSelect.length; ++x){
+    for (let x = 0; x < provinceSelect.length; ++x){
       if (provinceSelect.options[x].value == locations[i].province){
         provinceOptionExist = true
       }
@@ -166,7 +177,7 @@
     }
 
     var node = document.getElementById(`business-hour-${i}`)
-    var businessHour = JSON.parse(locations[i].business_hour)
+    var businessHour = parseBusinessHours(locations[i].business_hour)
 
     var dropdown = document.createElement("div")
     dropdown.className = "store-hours dropdown"
@@ -185,7 +196,19 @@
     dropdownMenu.className = "dropdown-menu list-unstyled"
     dropdownMenu.id = `business-hour-menu-${i}`
 
-    if(Object.keys(businessHour).length <= 0) {
+    if(businessHour === null) {
+
+      dropdownToggle.textContent = "Hours unavailable"
+
+      var li = document.createElement("li")
+      var label = document.createElement("span")
+      label.textContent = "Please contact the store for opening hours"
+      li.appendChild(label)
+      dropdownMenu.appendChild(li)
+
+    }
+
+    else if(Object.keys(businessHour).length <= 0) {
 
       dropdownToggle.innerHTML = `<span style="color: green; font-weight: bold;">Open</span>`
 
@@ -207,7 +230,7 @@
 
       var li = document.createElement("li")
       var label = document.createElement("span")
-      label.textContent = `Everyday: ${formatTime(businessHour.everyday)}`
+      label.textContent = `Everyday: ${businessHour.everyday === 'closed' ? 'Closed' : formatTime(businessHour.everyday)}`
       li.appendChild(label)
       dropdownMenu.appendChild(li)
     }

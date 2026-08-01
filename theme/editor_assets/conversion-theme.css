@@ -213,7 +213,7 @@ button[name*="wishlist" i],
 }
 
 .sales-collection {
-  --section-accent: #e4572e;
+  --section-accent: #c44120;
   position: relative;
   isolation: isolate;
   padding-top: clamp(1.8rem, 2.5vw, 3.2rem);

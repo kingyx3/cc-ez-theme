@@ -1,4 +1,4 @@
-<link rel="preload" href="{{ 'section-image-with-text.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+{{ 'section-image-with-text.css' | asset_url | stylesheet_tag }}
 
 <style>
   #section-{{ section.__key }} .text-section{

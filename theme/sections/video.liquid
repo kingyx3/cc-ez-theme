@@ -1,5 +1,5 @@
-<link rel="preload" href="{{ 'component-deferred-media.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
-<link rel="preload" href="{{ 'section-video.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+{{ 'component-deferred-media.css' | asset_url | stylesheet_tag }}
+{{ 'section-video.css' | asset_url | stylesheet_tag }}
 
 <div class="video-section{% if section.settings.full_width == false %} page-width{% endif %}">
   <div class="text-center {% if section.settings.full_width %} page-width {% endif %}">

@@ -787,7 +787,14 @@ li[data-address] > h2 {
 }
 
 .order .attachment-list-item .remove-attachment{
-  margin-left: 6px;
+  min-width: 3.2rem;
+  min-height: 3.2rem;
+  margin-left: auto;
+  padding: 0.6rem;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: none;
+  color: rgb(var(--color-base-text));
 }
 
 .order .attachment-list-item .attachment-link{

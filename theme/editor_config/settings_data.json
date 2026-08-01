@@ -3,7 +3,7 @@
   "presets": {
     "editor": {
       "colors_solid_button_labels": "#FFFFFF",
-      "colors_accent_1": "#E4572E",
+      "colors_accent_1": "#C44120",
       "colors_text": "#000000",
       "colors_outline_button_labels": "#131722",
       "colors_background_1": "#F7F5F0",
@@ -159,7 +159,7 @@
             "eyebrow": "CUSTOMER FAVORITES",
             "title": "Best Sellers",
             "subtitle": "The most-loved collectibles, all in one place.",
-            "accent_color": "#E4572E",
+            "accent_color": "#C44120",
             "collection__id": "feature-on-homepage",
             "products_per_row": 3,
             "products_to_show": 6,

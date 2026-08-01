@@ -1,5 +1,5 @@
-<link rel="preload" href="{{ 'blog.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
-<link rel="preload" href="{{ 'article.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+{{ 'blog.css' | asset_url | stylesheet_tag }}
+{{ 'article.css' | asset_url | stylesheet_tag }}
 
 {% assign number_of_comments = article.comments_count %}
 
@@ -26,7 +26,7 @@
       {% if article.image.src %}
       <div class="article-template__hero-container">
         <div class="article-template__hero-adapt media" itemprop="image" style="padding-bottom: 40%;">
-          <img src="{{ article.image.src }}" alt="{{ article.title | escape}}">
+          <img src="{{ article.image.src }}" alt="{{ article.title | escape}}" width="1500" height="600" fetchpriority="high">
         </div>
       </div>
       {% endif %}

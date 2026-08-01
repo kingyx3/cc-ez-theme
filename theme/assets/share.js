@@ -18,7 +18,9 @@ if (!customElements.get('share-button')) {
       if (navigator.share) {
         this.mainDetailsToggle.setAttribute('hidden', '');
         this.elements.shareButton.classList.remove('hidden');
-        this.elements.shareButton.addEventListener('click', () => { navigator.share({ url: this.urlToShare, title: document.title }) });
+        this.elements.shareButton.addEventListener('click', () => {
+          navigator.share({ url: this.urlToShare, title: document.title }).catch(() => {});
+        });
       } else {
         this.addAccessibilityAttributes();
         this.mainDetailsToggle.addEventListener('toggle', this.toggleDetails.bind(this));
@@ -43,13 +45,24 @@ if (!customElements.get('share-button')) {
       this.elements.shareSummary.setAttribute('aria-expanded', this.mainDetailsToggle.open);
     }
 
-    copyToClipboard() {
-      navigator.clipboard.writeText(this.elements.urlInput.value).then(() => {
+    async copyToClipboard() {
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(this.elements.urlInput.value);
+        } else {
+          this.elements.urlInput.focus();
+          this.elements.urlInput.select();
+          document.execCommand('copy');
+        }
+
         this.elements.successMessage.classList.remove('hidden');
         this.elements.successMessage.textContent = window.accessibilityStrings.shareSuccess;
         this.elements.closeButton.classList.remove('hidden');
         this.elements.closeButton.focus();
-      });
+      } catch (error) {
+        this.elements.urlInput.focus();
+        this.elements.urlInput.select();
+      }
     }
     
     onFocusOut() {

@@ -28,7 +28,7 @@
   }
 </style>
 
-<link rel="preload" href="{{ 'section-footer.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+{{ 'section-footer.css' | asset_url | stylesheet_tag }}
 
 <footer class="footer color-background-1">
   <div class="footer__content-top page-width">
@@ -124,8 +124,8 @@
                   {% if shop.shopping_app.icon_url %}
                     <img
                       src="{{ shop.shopping_app.icon_url }}"
-                      width="50px"
-                      height="50px"
+                      width="50"
+                      height="50"
                       class="rounded shopping-app-border object-contain mr-2"
                       alt="{{ shop.name }}"
                       loading="lazy"
@@ -134,8 +134,8 @@
                   <img
                     src="https://resources.easystore.co/admin/channels/shopping_app.png"
                     class="rounded"
-                    width="50px"
-                    height="50px"
+                    width="50"
+                    height="50"
                     alt="{{ shop.name | escape }} app"
                     loading="lazy"
                   >
@@ -145,20 +145,26 @@
                   <img
                     src="https://resources.easystore.co/email-templates/badges/app-store-badge.png"
                     class="app-download-badge"
-                    width="100px"
+                    width="100"
+                    height="30"
                     alt="App Store"
+                    loading="lazy"
                   >
                   <img
                     src="https://resources.easystore.co/email-templates/badges/play-store-badge.png"
                     class="app-download-badge"
-                    width="100px"
+                    width="100"
+                    height="30"
                     alt="Play Store"
+                    loading="lazy"
                   >
                   <img
                     src="https://resources.easystore.co/email-templates/badges/app-gallery-badge.png"
                     class="app-download-badge"
-                    width="100px"
+                    width="100"
+                    height="30"
                     alt="App Gallery"
+                    loading="lazy"
                   >
                 </a>
                 <br>

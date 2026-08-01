@@ -1,12 +1,12 @@
-<link rel="preload" href="{{ 'component-cart.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
-<link rel="preload" href="{{ 'component-cart-items.css?v1.01' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
-<link rel="preload" href="{{ 'component-totals.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
-<link rel="preload" href="{{ 'component-price.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
-<link rel="preload" href="{{ 'component-discounts.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
-<link rel="preload" href="{{ 'component-loading-overlay.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
-<link rel="preload" href="{{ 'css/vouchers.css?v1.3' | global_asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
-<link rel="preload" href="{{ 'account/vouchers/vouchers.css' | global_asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
-<link rel="preload" href="{{ 'account/vouchers/voucher-widget.css' | global_asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+{{ 'component-cart.css' | asset_url | stylesheet_tag }}
+{{ 'component-cart-items.css?v1.01' | asset_url | stylesheet_tag }}
+{{ 'component-totals.css' | asset_url | stylesheet_tag }}
+{{ 'component-price.css' | asset_url | stylesheet_tag }}
+{{ 'component-discounts.css' | asset_url | stylesheet_tag }}
+{{ 'component-loading-overlay.css' | asset_url | stylesheet_tag }}
+{{ 'css/vouchers.css?v1.3' | global_asset_url | stylesheet_tag }}
+{{ 'account/vouchers/vouchers.css' | global_asset_url | stylesheet_tag }}
+{{ 'account/vouchers/voucher-widget.css' | global_asset_url | stylesheet_tag }}
 
 {{ 'js/promotion/vouchers.js?v1.4' | global_asset_url | script_tag }}
 {{ 'account/vouchers/voucher-widget.js' | global_asset_url | script_tag }}

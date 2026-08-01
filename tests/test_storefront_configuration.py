@@ -273,6 +273,85 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertIn("HeaderDesktopSearch", header)
         self.assertNotIn("searchDropdown", header)
         self.assertNotIn("function clearAll", header)
+        self.assertIn("seededHistory.length || localStorage.getItem", search_script)
+
+    def test_component_styles_do_not_depend_on_javascript(self) -> None:
+        liquid_files = list(THEME_ROOT.rglob("*.liquid"))
+        for path in liquid_files:
+            text = path.read_text(encoding="utf-8")
+            with self.subTest(path=path.relative_to(THEME_ROOT)):
+                self.assertNotIn(
+                    "this.onload=null;this.rel='stylesheet'",
+                    text,
+                )
+
+    def test_share_widget_instances_have_unique_controls(self) -> None:
+        share_snippet = (
+            THEME_ROOT / "snippets" / "social-sharing.liquid"
+        ).read_text(encoding="utf-8")
+        share_script = (THEME_ROOT / "assets" / "share.js").read_text(
+            encoding="utf-8"
+        )
+        editor_share_script = (
+            THEME_ROOT / "editor_assets" / "share.js"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("share_instance_id", share_snippet)
+        self.assertIn('id="SharePanel-{{ share_instance_id }}"', share_snippet)
+        self.assertIn('id="ShareUrl-{{ share_instance_id }}"', share_snippet)
+        self.assertNotIn('id="url"', share_snippet)
+        self.assertNotIn('id="Product-share-id"', share_snippet)
+        self.assertIn("document.execCommand('copy')", share_script)
+        self.assertEqual(share_script, editor_share_script)
+
+    def test_customer_order_actions_use_safe_semantics(self) -> None:
+        order = (
+            THEME_ROOT / "templates" / "customers" / "order.liquid"
+        ).read_text(encoding="utf-8")
+        orders = (
+            THEME_ROOT / "templates" / "customers" / "orders.liquid"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn("<div onclick=\"window.location.href", orders)
+        self.assertIn('<article class="flex-table-tr">', orders)
+        self.assertIn('href="/orders/{{ order.cart_token }}/repayment"', orders)
+        self.assertIn('data-edit-remark aria-controls="edit-remark"', order)
+        self.assertIn('data-edit-payment aria-controls="edit-reference"', order)
+        self.assertIn('data-remove-attachment="{{ attachment.id }}"', order)
+        self.assertNotIn(".innerHTML +=", order)
+        self.assertNotIn(".empty().hide()", order)
+        self.assertIn("response.status === 413", order)
+
+    def test_optional_storefront_data_is_defensively_parsed(self) -> None:
+        product = (
+            THEME_ROOT / "sections" / "main-product.liquid"
+        ).read_text(encoding="utf-8")
+        store_locator = (
+            THEME_ROOT / "templates" / "store-locator.liquid"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("currentViewedProduct.product_id == null", product)
+        self.assertIn("productViewHistoryData.slice(0, 20)", product)
+        self.assertIn("const parseBusinessHours", store_locator)
+        self.assertIn("const dayIndex = new Date().getDay() || 7", store_locator)
+        self.assertIn("businessHour.everyday === 'closed'", store_locator)
+        self.assertIn("end <= start", store_locator)
+        self.assertIn('dropdownToggle.textContent = "Hours unavailable"', store_locator)
+
+        quickview = (
+            THEME_ROOT / "assets" / "product-quickview.js"
+        ).read_text(encoding="utf-8")
+        editor_quickview = (
+            THEME_ROOT / "editor_assets" / "product-quickview.js"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("innerHTML +=", quickview)
+        self.assertIn("promotionTitle.textContent", quickview)
+        self.assertEqual(quickview, editor_quickview)
+
+    def test_default_brand_accent_meets_button_contrast_target(self) -> None:
+        preset = self.settings["presets"]["editor"]
+        self.assertEqual(preset["colors_accent_1"], "#C44120")
+        self.assertEqual(preset["colors_solid_button_labels"], "#FFFFFF")
 
 
 if __name__ == "__main__":
