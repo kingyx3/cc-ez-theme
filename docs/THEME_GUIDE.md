@@ -277,11 +277,12 @@ top-level destinations in a fixed order:
 5. About Us (`/pages/about-us`)
 
 About Us is pushed to the right edge of the desktop navigation area. The
-Browse reads `contents.catalog.links` and renders up to three collection levels
-from EasyStore's product catalog hierarchy. On desktop, hovering or focusing a
-parent collection opens its child collection flyout; mobile retains nested
-drill-down navigation. The three fixed collection shortcuts remain direct
-EasyStore links.
+Browse reads `contents.catalog.links` and resolves every descendant level from
+EasyStore's canonical `contents[link.handle].links` navigation records. It
+renders the parent plus three descendant collection levels. On desktop,
+hovering or focusing a parent collection opens its child collection flyout;
+mobile retains nested drill-down navigation. The three fixed collection
+shortcuts remain direct EasyStore links.
 
 The theme controls:
 

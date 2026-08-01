@@ -133,13 +133,13 @@ The archive must not contain:
 
 The `Package EasyStore theme` workflow runs:
 
-- on pull requests targeting `main`;
-- on pushes to `main`;
+- on pull requests targeting any branch;
+- on pushes to any branch;
 - through manual workflow dispatch.
 
 The test job always validates the real theme and enforces coverage.
 
-The package job runs after successful tests for pushes to `main` and manual
+The package job runs after successful tests for pushes to any branch and manual
 runs. It:
 
 1. builds `cc-ez-theme.zip`;
@@ -152,7 +152,7 @@ wrapper prevents an incorrect ZIP-inside-ZIP structure.
 
 ## 9. Download and upload
 
-After merging to `main`:
+After pushing the branch you want to package:
 
 1. Open the successful `Package EasyStore theme` workflow run.
 2. Download the `cc-ez-theme` artifact.
@@ -169,7 +169,7 @@ After merging to `main`:
 ## 10. Release acceptance checklist
 
 - [ ] Pull-request CI succeeded.
-- [ ] The merge-to-main workflow succeeded.
+- [ ] The workflow for the intended branch succeeded.
 - [ ] The artifact has one `cc-ez-theme/` root.
 - [ ] There is no nested ZIP.
 - [ ] EasyStore Edit source shows populated runtime directories.
