@@ -42,7 +42,7 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertRegex(
             main_product,
             r'name="add"[\s\S]+?class="[^"]*'
-            r'product-form__submit[^"]*button--primary',
+            r'product-form__submit--accent-outline[^"]*button--secondary',
         )
         self.assertNotIn('name="buy_now"', main_product)
         self.assertNotIn("Buy now", main_product)
@@ -78,6 +78,15 @@ class StorefrontConfigurationTests(unittest.TestCase):
             self.assertIn("max-height: calc(100svh - 10rem);", stylesheet)
             self.assertIn(".product-media-open:focus-visible", stylesheet)
             self.assertIn("prefers-reduced-motion: reduce", stylesheet)
+            self.assertIn(".product-form__submit--accent-outline", stylesheet)
+            self.assertIn(
+                "--color-button: var(--color-base-accent-1);",
+                stylesheet,
+            )
+            self.assertIn(
+                "--color-button-text: var(--color-base-accent-1);",
+                stylesheet,
+            )
             self.assertNotIn(".product-form__buy-now", stylesheet)
             self.assertNotIn(".product-form__submit--secondary", stylesheet)
 

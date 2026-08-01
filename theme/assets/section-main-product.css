@@ -276,10 +276,22 @@ fieldset.product-form__input .form__label {
   margin-top: 1rem;
 }
 
+.product-form__submit--accent-outline {
+  --color-button: var(--color-base-accent-1);
+  --color-button-text: var(--color-base-accent-1);
+  --alpha-button-background: 0;
+  --alpha-button-border: 1;
+}
+
 .no-js .product-form__submit.button--secondary {
   --color-button: var(--color-base-accent-1);
   --color-button-text: var(--color-base-solid-button-labels);
   --alpha-button-background: 1;
+}
+
+.no-js .product-form__submit--accent-outline.button--secondary {
+  --color-button-text: var(--color-base-accent-1);
+  --alpha-button-background: 0;
 }
 
 /* Product info */
