@@ -708,7 +708,7 @@
   }
     
   function fetchReferralCampaignData(referralCode) {
-    fetch(`/customer/referral_program/campaigns/${referralCode}`)
+    fetch(`/customer/referral_program/campaigns/${encodeURIComponent(referralCode)}`)
       .then(response => {
         if (!response.ok) {
           throw new Error('Network response was not ok');
@@ -717,8 +717,9 @@
       })
       .then(data => {
         let refereeCreditAmount = null;
-        if (data.data.campaign && data.data.campaign.referral_rules) {
-          const refereeRule = data.data.campaign.referral_rules.find(rule => 
+        const campaign = data && data.data && data.data.campaign;
+        if (campaign && Array.isArray(campaign.referral_rules)) {
+          const refereeRule = campaign.referral_rules.find(rule =>
             rule.target_type === 'referee' && 
             rule.event_name === 'customer/create' && 
             rule.entitlement && 
