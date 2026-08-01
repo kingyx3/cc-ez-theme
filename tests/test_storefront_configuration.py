@@ -35,7 +35,7 @@ class StorefrontConfigurationTests(unittest.TestCase):
         ]
         self.assertNotIn("Worldwide shipping", rendered_text)
 
-    def test_product_page_media_is_bounded_and_buy_now_is_removed(self) -> None:
+    def test_product_page_media_and_injected_buy_now_checkout_action(self) -> None:
         main_product = (
             THEME_ROOT / "sections" / "main-product.liquid"
         ).read_text(encoding="utf-8")
@@ -46,6 +46,7 @@ class StorefrontConfigurationTests(unittest.TestCase):
         )
         self.assertNotIn('name="buy_now"', main_product)
         self.assertNotIn("Buy now", main_product)
+        self.assertIn("{% app_snippet 'product/button' %}", main_product)
         self.assertIn('class="product-media-video"', main_product)
         self.assertIn('class="product__media-fallback"', main_product)
         self.assertIn("padding: clamp(1.8rem, 4vw, 3rem);", main_product)
@@ -62,10 +63,16 @@ class StorefrontConfigurationTests(unittest.TestCase):
             THEME_ROOT / "editor_assets" / "product-form.js"
         ).read_text(encoding="utf-8")
         self.assertEqual(product_form, editor_product_form)
+        self.assertIn("this.onBuyNowClick.bind(this)", product_form)
+        self.assertIn("evt.submitter", product_form)
         self.assertIn("serializeForm(this.form)", product_form)
         self.assertIn("EasyStore.Action.addToCart", product_form)
-        self.assertNotIn("buyNow", product_form)
-        self.assertNotIn("'/checkout'", product_form)
+        self.assertIn("this.submitProduct(buyNowButton, true)", product_form)
+        self.assertIn("window.location.assign('/checkout')", product_form)
+        self.assertLess(
+            product_form.index("cart.description != undefined"),
+            product_form.index("if (buyNow)"),
+        )
 
         for asset_directory in ("assets", "editor_assets"):
             stylesheet = (
