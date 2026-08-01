@@ -279,7 +279,8 @@ top-level destinations in a fixed order:
 About Us is pushed to the right edge of the desktop navigation area. The
 Browse always renders its ordered first level from EasyStore's
 `contents.catalog.links`. Each catalog link is then joined to the matching item
-in EasyStore's global `collections` object by handle. Descendants are resolved
+in EasyStore's global `collections` object by direct handle lookup, with an
+iterative handle/URL-slug match as a compatibility fallback. Descendants are resolved
 by comparing `collection.parent_id` with the matched `collection.id`, and their
 storefront URLs are generated from `collection.handle`. If a catalog link does
 not match a collection record, the first-level link still renders without a

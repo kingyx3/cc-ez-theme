@@ -18,9 +18,14 @@
     {% assign catalog_handle = catalog_url_handle %}
   {% endif %}
 
-  {% assign parent_id = '' %}
+  {% assign catalog_collection = collections[catalog_handle] %}
+  {% if catalog_collection == blank %}
+    {% assign catalog_collection = collections[catalog_url_handle] %}
+  {% endif %}
+
+  {% assign parent_id = catalog_collection.id | append: '' %}
   {% for catalog_collection in collections %}
-    {% if catalog_collection.handle == catalog_handle or catalog_collection.handle == catalog_url_handle %}
+    {% if parent_id == '' and catalog_collection.handle == catalog_handle or parent_id == '' and catalog_collection.handle == catalog_url_handle %}
       {% assign parent_id = catalog_collection.id | append: '' %}
     {% endif %}
   {% endfor %}
@@ -54,7 +59,7 @@
                     {% for child_collection in collections %}
                       {% assign child_parent_id = child_collection.parent_id | append: '' %}
                       {% if child_parent_id == parent_id %}
-                        {% unless child_collection.is_locked %}
+                        {% if child_collection.is_locked != true and child_collection.is_locked != 'true' %}
                           {% assign child_id = child_collection.id | append: '' %}
                           {% assign child_has_children = false %}
                           {% for grandchild_candidate in collections %}
@@ -81,7 +86,7 @@
                                       {% for grandchild_collection in collections %}
                                         {% assign grandchild_parent_id = grandchild_collection.parent_id | append: '' %}
                                         {% if grandchild_parent_id == child_id %}
-                                          {% unless grandchild_collection.is_locked %}
+                                          {% if grandchild_collection.is_locked != true and grandchild_collection.is_locked != 'true' %}
                                             {% assign grandchild_id = grandchild_collection.id | append: '' %}
                                             {% assign grandchild_has_children = false %}
                                             {% for great_grandchild_candidate in collections %}
@@ -108,13 +113,13 @@
                                                         {% for great_grandchild_collection in collections %}
                                                           {% assign great_grandchild_parent_id = great_grandchild_collection.parent_id | append: '' %}
                                                           {% if great_grandchild_parent_id == grandchild_id %}
-                                                            {% unless great_grandchild_collection.is_locked %}
+                                                            {% if great_grandchild_collection.is_locked != true and great_grandchild_collection.is_locked != 'true' %}
                                                               <li>
                                                                 <a href="/collections/{{ great_grandchild_collection.handle | escape }}" class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
                                                                   {{ great_grandchild_collection.title | default: great_grandchild_collection.name | escape }}
                                                                 </a>
                                                               </li>
-                                                            {% endunless %}
+                                                            {% endif %}
                                                           {% endif %}
                                                         {% endfor %}
                                                       </ul>
@@ -127,7 +132,7 @@
                                                 </a>
                                               {% endif %}
                                             </li>
-                                          {% endunless %}
+                                          {% endif %}
                                         {% endif %}
                                       {% endfor %}
                                     </ul>
@@ -140,7 +145,7 @@
                               </a>
                             {% endif %}
                           </li>
-                        {% endunless %}
+                        {% endif %}
                       {% endif %}
                     {% endfor %}
                   </ul>
@@ -166,7 +171,7 @@
               {% for child_collection in collections %}
                 {% assign child_parent_id = child_collection.parent_id | append: '' %}
                 {% if child_parent_id == parent_id %}
-                  {% unless child_collection.is_locked %}
+                  {% if child_collection.is_locked != true and child_collection.is_locked != 'true' %}
                     {% assign child_id = child_collection.id | append: '' %}
                     {% assign child_has_children = false %}
                     {% for grandchild_candidate in collections %}
@@ -187,7 +192,7 @@
                           {% for grandchild_collection in collections %}
                             {% assign grandchild_parent_id = grandchild_collection.parent_id | append: '' %}
                             {% if grandchild_parent_id == child_id %}
-                              {% unless grandchild_collection.is_locked %}
+                              {% if grandchild_collection.is_locked != true and grandchild_collection.is_locked != 'true' %}
                                 {% assign grandchild_id = grandchild_collection.id | append: '' %}
                                 {% assign grandchild_has_children = false %}
                                 {% for great_grandchild_candidate in collections %}
@@ -208,25 +213,25 @@
                                       {% for great_grandchild_collection in collections %}
                                         {% assign great_grandchild_parent_id = great_grandchild_collection.parent_id | append: '' %}
                                         {% if great_grandchild_parent_id == grandchild_id %}
-                                          {% unless great_grandchild_collection.is_locked %}
+                                          {% if great_grandchild_collection.is_locked != true and great_grandchild_collection.is_locked != 'true' %}
                                             <li>
                                               <a href="/collections/{{ great_grandchild_collection.handle | escape }}" class="header__menu-item list-menu__item link link--text focus-inset caption-large">
                                                 {{ great_grandchild_collection.title | default: great_grandchild_collection.name | escape }}
                                               </a>
                                             </li>
-                                          {% endunless %}
+                                          {% endif %}
                                         {% endif %}
                                       {% endfor %}
                                     </ul>
                                   {% endif %}
                                 </li>
-                              {% endunless %}
+                              {% endif %}
                             {% endif %}
                           {% endfor %}
                         </ul>
                       {% endif %}
                     </li>
-                  {% endunless %}
+                  {% endif %}
                 {% endif %}
               {% endfor %}
             </ul>

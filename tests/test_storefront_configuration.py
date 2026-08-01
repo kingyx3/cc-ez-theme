@@ -438,9 +438,11 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertIn("catalog_link.handle", browse)
         self.assertIn("catalog_link.url | split: '/'", browse)
         self.assertIn("catalog_url_handle = catalog_url_parts | last", browse)
+        self.assertIn("collections[catalog_handle]", browse)
+        self.assertIn("collections[catalog_url_handle]", browse)
         self.assertIn(
-            "catalog_collection.handle == catalog_handle or "
-            "catalog_collection.handle == catalog_url_handle",
+            "parent_id == '' and catalog_collection.handle == catalog_handle or "
+            "parent_id == '' and catalog_collection.handle == catalog_url_handle",
             browse,
         )
         self.assertIn("catalog_collection.id | append: ''", browse)
@@ -452,6 +454,7 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertIn("child_candidate.parent_id", browse)
         self.assertIn("grandchild_candidate.parent_id", browse)
         self.assertIn("great_grandchild_candidate.parent_id", browse)
+        self.assertIn("child_collection.is_locked != 'true'", browse)
         self.assertIn('href="/collections/{{ child_collection.handle | escape }}"', browse)
         self.assertIn('href="/collections/{{ grandchild_collection.handle | escape }}"', browse)
         self.assertNotIn("contents[", browse)
