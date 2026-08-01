@@ -284,7 +284,9 @@ iterative handle/URL-slug match as a compatibility fallback. Descendants are res
 by comparing `collection.parent_id` with the matched `collection.id`, and their
 storefront URLs are generated from `collection.handle`. If a catalog link does
 not match a collection record, the first-level link still renders without a
-flyout. It renders three descendant levels. On desktop, hovering or focusing a
+flyout. Relationship checks use captured loop output so they do not depend on
+assignments escaping EasyStore Liquid's loop scope. It renders three descendant
+levels. On desktop, hovering or focusing a
 parent collection opens its child collection flyout; mobile retains nested
 drill-down navigation. The three fixed collection shortcuts remain direct
 EasyStore links.

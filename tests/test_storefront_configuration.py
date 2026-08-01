@@ -440,11 +440,13 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertIn("catalog_url_handle = catalog_url_parts | last", browse)
         self.assertIn("collections[catalog_handle]", browse)
         self.assertIn("collections[catalog_url_handle]", browse)
-        self.assertIn(
-            "parent_id == '' and catalog_collection.handle == catalog_handle or "
-            "parent_id == '' and catalog_collection.handle == catalog_url_handle",
-            browse,
-        )
+        self.assertIn("{% capture matched_parent_id %}", browse)
+        self.assertIn("{% capture parent_child_matches %}", browse)
+        self.assertIn("parent_child_matches contains '1'", browse)
+        self.assertIn("{% capture child_grandchild_matches %}", browse)
+        self.assertIn("child_grandchild_matches contains '1'", browse)
+        self.assertIn("{% capture grandchild_descendant_matches %}", browse)
+        self.assertIn("grandchild_descendant_matches contains '1'", browse)
         self.assertIn("catalog_collection.id | append: ''", browse)
         self.assertIn('href="{{ catalog_link.url | escape }}"', browse)
         self.assertIn("{{ catalog_link.title | escape }}", browse)
