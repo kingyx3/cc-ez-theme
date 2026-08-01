@@ -1,4 +1,4 @@
-<link rel="preload" href="{{ 'customer.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+{{ 'customer.css' | asset_url | stylesheet_tag }}
 <style>
   input::-webkit-calendar-picker-indicator{
     display: none;
@@ -110,7 +110,7 @@
               <div class="d-flex gap-x-2">
                 <div class="media media--square flex-shrink-0" style="width: 100px; height: 100px; padding-bottom: 0; overflow: visible;">
                   <a href="{{ line_item.product.url }}">
-                    <img src="{{ line_item.image_url }}" alt="{{ line_item.product_name | escape }}">
+                    <img src="{{ line_item.image_url }}" alt="{{ line_item.product_name | escape }}" width="100" height="100" loading="lazy">
                     <div class="product-qty-badge">{{ line_item.quantity }}</div>
                   </a>
                 </div>
@@ -263,13 +263,13 @@
       <div class="d-flex flex-wrap" style="justify-content: flex-end; gap: 15px; padding: 2.2rem 0;">
         {% if order.is_paid == false and order.cancelled == 0 and order.cod_type != 1 %}
         <div class="text-right" >
-          <button class="btn" style="margin: 0;" onclick="window.location.href = '/orders/{{order.cart_token}}/repayment'">{{ 'customer.order.pay' | t }}</button>
+          <a class="btn button" style="margin: 0;" href="/orders/{{ order.cart_token }}/repayment">{{ 'customer.order.pay' | t }}</a>
         </div>
         {% endif %}
 
         {% if order.is_repurchasable == true %}
         <div class="text-right" >
-          <button class="btn button {% if order.is_paid == false and order.cancelled == 0 or order.status == "to_receive" %}button--secondary{% endif %}" style="margin: 0;" data-repurchase-items="{{ remappedLineItems | escape }}" data-currency="{{ order.currency_format | json | escape }}" onclick="openRepurchaseModal(event, this)">{{ 'customer.order.buy_again' | t }}</button>
+          <button type="button" class="btn button {% if order.is_paid == false and order.cancelled == 0 or order.status == "to_receive" %}button--secondary{% endif %}" style="margin: 0;" data-repurchase-items="{{ remappedLineItems | escape }}" data-currency="{{ order.currency_format | json | escape }}" onclick="openRepurchaseModal(event, this)">{{ 'customer.order.buy_again' | t }}</button>
           {% include 'repurchase-modal' %}
         </div>
         {% endif %}
@@ -277,9 +277,7 @@
         {% if order.status == "to_receive" and order.fulfillment_status != "unfulfilled" %}
         <details-modal>
           <details>
-            <summary class="text-right" aria-haspopup="dialog">
-              <button class="btn" style="margin: 0;">{{ 'customer.order.receive' | t }}</button>
-            </summary>
+            <summary class="btn button text-right" aria-haspopup="dialog" style="margin: 0;">{{ 'customer.order.receive' | t }}</summary>
 
             <div class="confirmation-modal modal__content" role="dialog" aria-modal="true">
               <div class="modal-overlay"></div>
@@ -295,7 +293,7 @@
                     {{ 'customer.orders.receive.cancel' | t }}
                   </button>
 
-                  <button id="confirmOrder{{order.token}}" class="btn button">
+                  <button id="confirmOrder{{order.token}}" type="button" class="btn button">
                     {{ 'customer.orders.receive.confirm' | t }}
                   </button>
 
@@ -347,10 +345,17 @@
           .parcel-tracking-wrapper .parcel-details-toggle{
             font-size: 0.85em;
             padding: 5px 1px;
+            min-width: 0;
+            min-height: 0;
+            border: 0;
+            background: transparent;
+            box-shadow: none;
+            color: inherit;
             text-decoration: none;
             display: flex;
             align-items: center;
             gap: 3px;
+            cursor: pointer;
           }
           .parcel-tracking-wrapper .parcel-details-toggle svg{
             width: 1.4em;
@@ -370,23 +375,24 @@
             let parcelWrappers = document.querySelectorAll(".parcel-tracking-wrapper");
 
             if (parcelWrappers.length > 0) {
-              parcelWrappers.forEach(wrapper => {
+              parcelWrappers.forEach((wrapper) => {
                 if (wrapper.querySelectorAll(".parcel-status-wrapper").length <= 1) return;
 
                 wrapper.classList.add("hide-details");
-                let link = document.createElement("a");
-                link.className = "parcel-details-toggle";
-                link.href = "#";
-                link.innerHTML = `{{ 'general.show_details' | t }} <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6l6 -6"></path></svg>`;
+                let toggleButton = document.createElement("button");
+                toggleButton.type = "button";
+                toggleButton.className = "parcel-details-toggle";
+                toggleButton.setAttribute('aria-expanded', 'false');
+                toggleButton.innerHTML = `{{ 'general.show_details' | t }} <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6l6 -6"></path></svg>`;
 
-                link.onclick = (e) => {
-                    e.preventDefault();
+                toggleButton.addEventListener('click', () => {
                     wrapper.classList.toggle("hide-details");
-                    link.classList.toggle("is-active");
-                    link.innerHTML = `${wrapper.classList.contains("hide-details") ? "{{ 'general.show_details' | t }}" : "{{ 'general.hide_details' | t }}"} <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6l6 -6"></path></svg>`;
-                };
+                    toggleButton.classList.toggle("is-active");
+                    toggleButton.setAttribute('aria-expanded', String(!wrapper.classList.contains("hide-details")));
+                    toggleButton.innerHTML = `${wrapper.classList.contains("hide-details") ? "{{ 'general.show_details' | t }}" : "{{ 'general.hide_details' | t }}"} <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6l6 -6"></path></svg>`;
+                });
 
-                wrapper.appendChild(link);
+                wrapper.appendChild(toggleButton);
               });
             }
           });
@@ -477,7 +483,7 @@
             
             {% if order.barcode_image_url and order.is_pickup_from_store_location %}
               <div style="text-align: center;margin-top: 15px;padding-top: 15px;border-top: 1px solid #eee;">
-                  <img src="{{order.barcode_image_url}}" alt="Order pickup barcode" width="240" style="max-width: 100%;max-height: 100px;margin: 0 auto 5px;object-fit: contain;">
+                  <img src="{{order.barcode_image_url}}" alt="Order pickup barcode" width="240" height="100" loading="lazy" style="max-width: 100%;max-height: 100px;margin: 0 auto 5px;object-fit: contain;">
                   <div>
                   	<small class="text-secondary">{{ 'checkout.detail.show_barcode_counter' | t }}</small>
                   </div>
@@ -511,14 +517,14 @@
       <div class="mb-4">
         <div class="title-edit-container">
           <h2>{{ 'customer.order.remarks' | t }}</h2>
-          <p><a onclick="editRemark(); return false;">Edit</a></p>
+          <button type="button" class="link" data-edit-remark aria-controls="edit-remark" aria-expanded="false">Edit</button>
         </div>
         <div id="edit-details" class="details">
           <p name="remark">{{order.remark | escape }}</p>
         </div>
         <div id="edit-remark" class="text-right" style="display:none;">
           <textarea name="remark" placeholder="{{ 'customer.order.add_a_remark' | t }}">{{order.remark | escape }}</textarea>
-          <button class="button btn" save-remark>{{ 'customer.order.save' | t }}</button>
+          <button type="button" class="button btn" save-remark>{{ 'customer.order.save' | t }}</button>
         </div>
       </div>
       
@@ -527,7 +533,7 @@
       <div class="mb-4">
         <div class="title-edit-container">
           <h2>{{ 'checkout.payment_reference._' | t }}</h2>
-          <p><a onclick="editPayment(); return false;">Edit</a></p>
+          <button type="button" class="link" data-edit-payment aria-controls="edit-reference" aria-expanded="false">Edit</button>
         </div>
         <div id="edit-payment" class="details">
           <p name="payment">{{ order.ref_number | escape }}</p>
@@ -558,12 +564,12 @@
                   </svg>
                   {{ attachment.title }}.{{ attachment.extension }}
                 </a>
-                <a class="remove-attachment btn" onclick="removeAttachment({{attachment.id}})" attachment-id="{{attachment.id}}">
+                <button type="button" class="remove-attachment btn" data-remove-attachment="{{ attachment.id }}" aria-label="Remove {{ attachment.title | escape }} attachment">
                   <svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false" role="presentation" class="icon icon-close" fill="none" viewBox="0 0 18 17">
                     <path d="M.865 15.978a.5.5 0 00.707.707l7.433-7.431 7.579 7.282a.501.501 0 00.846-.37.5.5 0 00-.153-.351L9.712 8.546l7.417-7.416a.5.5 0 10-.707-.708L8.991 7.853 1.413.573a.5.5 0 10-.693.72l7.563 7.268-7.418 7.417z" fill="currentColor">
                     </path>
                   </svg>
-                </a>
+                </button>
               </div>
               {% endfor %}
             {% endif %}
@@ -593,18 +599,57 @@
 
 
 <script>
-  let this_el = document.querySelector.bind(document),
-      all_this_el = document.querySelectorAll.bind(document);
-        
-  var ref_number = "{{ order.ref_number | escape }}";
-  this_el('.attachment-error').style.display = "none";
+  let this_el = document.querySelector.bind(document);
 
-  
+  const attachmentWrapper = this_el('.attachment-wrapper');
+  const attachmentError = this_el('.attachment-error');
+  const uploadFailedMessage = {{ 'customer.attachment.upload_fail' | t | json }};
+  const fileTooLargeMessage = {{ 'customer.attachment.file_too_large' | t | json }};
+
+  const showAttachmentError = (message = '') => {
+    attachmentError.textContent = message;
+    attachmentError.style.display = message ? 'block' : 'none';
+  };
+
+  const createAttachmentRow = (attachment) => {
+    if (!attachment || attachment.id == null || !attachment.url) return null;
+
+    const row = document.createElement('div');
+    row.id = `attachment-row-${attachment.id}`;
+    row.className = 'attachment-list-item';
+
+    const attachmentLink = document.createElement('a');
+    attachmentLink.href = String(attachment.url);
+    attachmentLink.target = '_blank';
+    attachmentLink.rel = 'noopener noreferrer';
+    attachmentLink.className = 'attachment-link';
+    attachmentLink.textContent = `${attachment.title || 'Attachment'}${attachment.extension ? `.${attachment.extension}` : ''}`;
+
+    const removeButton = document.createElement('button');
+    removeButton.type = 'button';
+    removeButton.className = 'remove-attachment btn';
+    removeButton.dataset.removeAttachment = attachment.id;
+    removeButton.setAttribute('aria-label', `Remove ${attachment.title || 'attachment'}`);
+    removeButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false" class="icon icon-close" fill="none" viewBox="0 0 18 17"><path d="M.865 15.978a.5.5 0 00.707.707l7.433-7.431 7.579 7.282a.501.501 0 00.846-.37.5.5 0 00-.153-.351L9.712 8.546l7.417-7.416a.5.5 0 10-.707-.708L8.991 7.853 1.413.573a.5.5 0 10-.693.72l7.563 7.268-7.418 7.417z" fill="currentColor"></path></svg>';
+
+    row.append(attachmentLink, removeButton);
+    return row;
+  };
+
+  showAttachmentError();
+
+  attachmentWrapper.addEventListener('click', (event) => {
+    const removeButton = event.target.closest('[data-remove-attachment]');
+    if (!removeButton || !attachmentWrapper.contains(removeButton)) return;
+    removeAttachment(removeButton.dataset.removeAttachment);
+  });
+
   this_el("#file_input").addEventListener("change", ()=>{
-    var button = this_el("[name='upload']");
-    
     var form_data = new FormData();
     var file_data = this_el("#file_input").files[0];
+    if (!file_data) return;
+
+    showAttachmentError();
     form_data.append("file", file_data);
     form_data.append("order_token", "{{ order.token }}");
     form_data.append("_token", "{% csrf %}");
@@ -617,38 +662,23 @@
       },
       body: form_data,
     })
-    .then(response => response.json())
+    .then((response) => {
+      if (response.status === 413) throw new Error('file_too_large');
+      if (!response.ok) throw new Error('upload_failed');
+      return response.json();
+    })
     .then((res) => {
       if(res.status == "success"){
-        this_el(".attachment-wrapper").innerHTML += `
-          <div id="attachment-row-`+res.data.id+`" class="attachment-list-item" >
-            <a href="`+res.data.url+`" target="_blank" rel="noopener noreferrer">`+res.data.title+`.`+res.data.extension+`</a>
-            <a class="remove-attachment btn" onclick="removeAttachment(`+res.data.id+`)" value="`+res.data.id+`" style="text-align: right">
-              <svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false" role="presentation" class="icon icon-close" fill="none" viewBox="0 0 18 17">
-                <path d="M.865 15.978a.5.5 0 00.707.707l7.433-7.431 7.579 7.282a.501.501 0 00.846-.37.5.5 0 00-.153-.351L9.712 8.546l7.417-7.416a.5.5 0 10-.707-.708L8.991 7.853 1.413.573a.5.5 0 10-.693.72l7.563 7.268-7.418 7.417z" fill="currentColor">
-                </path>
-              </svg>
-            </a>
-          </div>`;
-        
-        this_el(".attachment-error").empty().hide();
-        this_el(".attachment-error").innerHTML = "";
-        this_el(".attachment-error").style.display = "none";
+        const attachmentRow = createAttachmentRow(res.data);
+        if (attachmentRow) attachmentWrapper.appendChild(attachmentRow);
+        showAttachmentError();
       }
       else{
-        this_el(".attachment-error").innerHTML = res.data;
-        this_el(".attachment-error").style.display = "block";
+        showAttachmentError(typeof res.data === 'string' ? res.data : uploadFailedMessage);
       }
     })
-    .catch((x, t, m) => {
-      if(m == "Request Entity Too Large"){
-        this_el(".attachment-error").innerHTML = "{{'customer.attachment.file_too_large' | t}}";
-        this_el(".attachment-error").style.display = "block";
-      }
-      if(t == "timeout"){
-        this_el(".attachment-error").innerHTML = "{{'customer.attachment.upload_fail' | t}}";
-        this_el(".attachment-error").style.display = "block";
-      }
+    .catch((error) => {
+      showAttachmentError(error.message === 'file_too_large' ? fileTooLargeMessage : uploadFailedMessage);
     })
   });
   
@@ -673,10 +703,13 @@
       .then(response => response.json())
       .then((res) => {
         if(res.status == "success"){
-          selected_row.remove();
+          if (selected_row) selected_row.remove();
+          showAttachmentError();
+        } else {
+          showAttachmentError(uploadFailedMessage);
         }
       })
-      .catch(() => {})
+      .catch(() => showAttachmentError(uploadFailedMessage))
 
     }
   };
@@ -684,10 +717,16 @@
   function editPayment() {
     var editBtn = document.getElementById('edit-payment');
     var editEl = document.getElementById('edit-reference');
-    editBtn.style.display = editBtn.style.display == 'none' ? '' : 'none';
-    editEl.style.display = editEl.style.display == 'none' ? '' : 'none';
-    return false;
+    var toggleButton = this_el('[data-edit-payment]');
+    var isOpening = editEl.style.display == 'none';
+    editBtn.style.display = isOpening ? 'none' : '';
+    editEl.style.display = isOpening ? '' : 'none';
+    toggleButton.setAttribute('aria-expanded', String(isOpening));
   };
+
+  if (this_el('[data-edit-payment]')) {
+    this_el('[data-edit-payment]').addEventListener('click', editPayment);
+  }
 
   if(this_el("#submit_reference")){
     this_el("#submit_reference").addEventListener("click", ()=>{
@@ -722,7 +761,6 @@
           editBtn.style.display = editBtn.style.display == 'none' ? '' : 'none';
           editEl.style.display = editEl.style.display == 'none' ? '' : 'none';
           location.reload();
-          ref_number = reference_id;
           this_el("#submit_reference").classList.add('hidden')
           this_el("#submit_reference").disabled = false
   
@@ -741,7 +779,8 @@
       .catch((error) => {
           this_el("#error_message").innerHTML = "<p>{{ 'checkout.payment_reference.update_reference_fail' | t }}</p>"
           this_el("#error_message").style.display = "block"
-          this_el('#submit_reference').disabled = false 
+          this_el('#submit_reference').disabled = false
+          this_el('#submit_reference').classList.remove('btn--loading');
       })
   
   
@@ -751,10 +790,14 @@
   function editRemark() {
     var editBtn = document.getElementById('edit-details');
     var editEl = document.getElementById('edit-remark');
-    editBtn.style.display = editBtn.style.display == 'none' ? '' : 'none';
-    editEl.style.display = editEl.style.display == 'none' ? '' : 'none';
-    return false;
+    var toggleButton = this_el('[data-edit-remark]');
+    var isOpening = editEl.style.display == 'none';
+    editBtn.style.display = isOpening ? 'none' : '';
+    editEl.style.display = isOpening ? '' : 'none';
+    toggleButton.setAttribute('aria-expanded', String(isOpening));
   };
+
+  this_el('[data-edit-remark]').addEventListener('click', editRemark);
 
   this_el("[save-remark]").addEventListener("click", ()=>{
     this_el("[save-remark]").classList.add('btn--loading');
@@ -782,7 +825,9 @@
         location.reload();
       }
     })
-    .catch(() => {})
+    .catch(() => {
+      this_el("[save-remark]").classList.remove('btn--loading');
+    })
 
   });
 

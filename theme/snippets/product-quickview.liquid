@@ -7,7 +7,7 @@
 <div class="product-quickview">
   <div class="product-quickview__img-wrapper">
     {% assign featured_image = product.selected_or_first_available_variant.featured_image | default: product.featured_image %}
-    <img src="{{ featured_image | img_url: '1024x' }}" alt="{{ featured_image.alt | escape }}" id="productModal-MainImg" class="product-quickview__img">
+    <img src="{{ featured_image | img_url: '1024x' }}" alt="{{ featured_image.alt | _default: product.title | escape }}" id="productModal-MainImg" class="product-quickview__img" width="1024" height="1024">
   </div>
   <div id="ProductInfo-ProductModal" class="product-quickview__content-wrapper">
     <a href="{{ product.url | within: collection | escape }}" class="quickview-title" title="{{ 'collections.general.link_title' | t: collection_title }}">

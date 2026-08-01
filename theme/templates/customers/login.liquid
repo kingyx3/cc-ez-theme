@@ -1,6 +1,6 @@
 {% app_snippet 'login/content_top' %}
 
-<link rel="preload" href="{{ 'customer.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+{{ 'customer.css' | asset_url | stylesheet_tag }}
 <style>input::-webkit-calendar-picker-indicator{display: none;}</style>
 
 {% assign account_placeholder = 'customer.login.email' %}
@@ -39,7 +39,7 @@
         </label>
       </div>
 
-      <button>
+      <button type="submit">
         {{ 'customer.recover_password.submit' | t }}
       </button>
 
@@ -151,7 +151,7 @@
       <h2>{{ 'customer.login.guest_title' | t }}</h2>
       <form action="/account/guest">
         <input type="hidden" name="_token" value="{% csrf %}">
-        <button>
+        <button type="submit">
           {{ 'customer.login.guest_continue' | t }}
         </button>
       </form>

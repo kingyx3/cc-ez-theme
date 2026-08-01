@@ -1,5 +1,5 @@
-<link rel="preload" href="{{ 'section-featured-product.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
-<link rel="preload" href="{{ 'component-price.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+{{ 'section-featured-product.css' | asset_url | stylesheet_tag }}
+{{ 'component-price.css' | asset_url | stylesheet_tag }}
 
 <!-- {{ 'component-rte.css' | asset_url | stylesheet_tag }} -->
 
@@ -31,7 +31,7 @@
   }
 </style>
 
-<link rel="preload" href="{{ 'component-slider.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+{{ 'component-slider.css' | asset_url | stylesheet_tag }}
 <script src="{{ 'product-form.js' | asset_url }}" defer="defer"></script>
 {% if section.settings.product__id %}
   <div id="FeaturedProduct-{{ section.__key }}" class="product-section page-width spaced-section">

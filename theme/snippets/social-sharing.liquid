@@ -12,8 +12,10 @@
   {% assign shareTitle = voucher.title | url_param_escape %}
 {% endif %}
 
+{% assign share_instance_id = share_id | default: product.id | default: article.id | default: 'page' %}
+
 <share-button class="share-button">
-  <button type="button" class="share-button__button hidden">
+  <button type="button" class="share-button__button hidden" aria-label="{{ 'general.share' | t }}">
     {% if social-sharing == 'float-icon' %}
       <span class="button-circle">
         {% include 'svg-definitions' with 'icon-share' %}
@@ -24,7 +26,7 @@
     {% endif %}
   </button>
   <details>
-    <summary class="share-button__button">
+    <summary class="share-button__button" aria-label="{{ 'general.share' | t }}">
       {% if social-sharing == 'float-icon' %}
         <span class="button-circle">
           {% include 'svg-definitions' with 'icon-share' %}
@@ -34,7 +36,7 @@
         {{ 'general.share' | t }}
       {% endif %}
     </summary>
-    <div id="Product-share-id" class="share-button__fallback motion-reduce {% if social-sharing == 'float-icon' %} float-bottom-modal {% endif %}">
+    <div id="SharePanel-{{ share_instance_id }}" class="share-button__fallback motion-reduce {% if social-sharing == 'float-icon' %} float-bottom-modal {% endif %}">
 
       <div class="social-sharing-icons" data-permalink="{{ permalinkURL }}">
         <div class="sharing-icons-label"><small>{{ 'general.social.share' | t }}</small></div>
@@ -64,17 +66,16 @@
 
       <div class="share-button_copy-wrapper">
         <div class="field">
-          <span id="ShareMessage-id" class="share-button__message hidden" role="status">
+          <span id="ShareMessage-{{ share_instance_id }}" class="share-button__message hidden" role="status">
           </span>
           <input type="text"
                 class="field__input"
-                id="url"
+                id="ShareUrl-{{ share_instance_id }}"
                 value="{{ permalinkURL }}"
                 placeholder="{{ 'general.social.share_url' | t }}"
-                onclick="this.select();"
                 readonly
           >
-          <label class="field__label" for="url">{{ 'general.social.share_url' | t }}</label>
+          <label class="field__label" for="ShareUrl-{{ share_instance_id }}">{{ 'general.social.share_url' | t }}</label>
         </div>
         <button type="button" class="share-button__close hidden no-js-hidden">
           {% include 'svg-definitions' with 'icon-close' %}

@@ -168,34 +168,52 @@ class ProductQuickviewModal extends HTMLElement {
       })
       .then(response => {
         const { total_promotions, promotions } = response.data || {};
-        let tagLabelHtml = '', tagHtml = '';
+        const labelContainer = document.getElementById('quickview_promo-tag-label');
+        const promotionContainer = document.getElementById('quickview_promo-tag');
+        if (!labelContainer || !promotionContainer) return;
+
+        labelContainer.replaceChildren();
+        promotionContainer.replaceChildren();
 
         if (total_promotions > 0 && Array.isArray(promotions)) {
-          tagLabelHtml = `<div><label>${window.promotionStrings.title}</label></div>`;
+          const labelWrapper = document.createElement('div');
+          const label = document.createElement('span');
+          label.textContent = window.promotionStrings.title;
+          labelWrapper.appendChild(label);
+          labelContainer.appendChild(labelWrapper);
 
           promotions.forEach(promo => {
             const isClickable = promo.prerequisite_subtotal_range == null && promo.prerequisite_to_entitlement_quantity_ratio != null;
             const labelClass = isClickable ? "quickview_promo-label-clickable" : "quickview_promo-label-unclickable";
-            const svgIcon = isClickable
-              ? `<svg class="quickview_promo-svg-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke-width="2.8" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><polyline points="9 6 15 12 9 18" /></svg>`
-              : '';
-            const safeTitle = promo.title
-              .replace(/&/g, '&amp;')
-              .replace(/>/g, '&gt;')
-              .replace(/</g, '&lt;')
-              .replace(/\//g, '&sol;')
-              .replace(/“/g, '&quot;')
-              .replace(/'/g, '&#39;');
-            tagHtml += `<a href="${url}" class="quickview_promo-promo-label ${labelClass}"><b class="quickview_promo-tag-label-title">${safeTitle}</b>${svgIcon}</a>`;
+            const promotionLink = document.createElement('a');
+            const promotionTitle = document.createElement('b');
+            promotionLink.href = url;
+            promotionLink.className = `quickview_promo-promo-label ${labelClass}`;
+            promotionTitle.className = 'quickview_promo-tag-label-title';
+            promotionTitle.textContent = String(promo.title || '');
+            promotionLink.appendChild(promotionTitle);
+
+            if (isClickable) {
+              const svgIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+              const arrow = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+              svgIcon.setAttribute('class', 'quickview_promo-svg-icon');
+              svgIcon.setAttribute('viewBox', '0 0 24 24');
+              svgIcon.setAttribute('stroke-width', '2.8');
+              svgIcon.setAttribute('stroke', 'currentColor');
+              svgIcon.setAttribute('fill', 'none');
+              svgIcon.setAttribute('stroke-linecap', 'round');
+              svgIcon.setAttribute('stroke-linejoin', 'round');
+              svgIcon.setAttribute('aria-hidden', 'true');
+              arrow.setAttribute('points', '9 6 15 12 9 18');
+              svgIcon.appendChild(arrow);
+              promotionLink.appendChild(svgIcon);
+            }
+
+            promotionContainer.appendChild(promotionLink);
           });
         }
-
-        document.getElementById("quickview_promo-tag-label").innerHTML = tagLabelHtml;
-        document.getElementById("quickview_promo-tag").innerHTML += tagHtml;
       })
-      .catch(error => {
-        // Handle error if needed
-      });
+      .catch(() => {});
   }
 
 }

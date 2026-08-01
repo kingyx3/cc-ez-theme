@@ -1,4 +1,4 @@
-<link rel="preload" href="{{ 'section-promotion.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+{{ 'section-promotion.css' | asset_url | stylesheet_tag }}
 
 <style>
   {% for block_handle in section.blocks_order %}
@@ -21,7 +21,7 @@
   {% endfor %}
 </style>
 
-<link rel="preload" href="{{ 'component-slider.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+{{ 'component-slider.css' | asset_url | stylesheet_tag }}
 <div class="section-collection-list spaced-section page-width page-width-desktop">
   <div class="promotion-section-container">
     {% for block_handle in section.blocks_order %}

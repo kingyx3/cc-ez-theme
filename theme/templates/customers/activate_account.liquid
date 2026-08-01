@@ -1,4 +1,4 @@
-<link rel="preload" href="{{ 'customer.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+{{ 'customer.css' | asset_url | stylesheet_tag }}
 <style>input::-webkit-calendar-picker-indicator{display: none;}</style>
 
 <style>
@@ -198,7 +198,7 @@
             <div class="d-flex flex-align-center mb-2" style="line-height: 1.3;">
               <div class="img-wrapper">
                 <span class="item-count">{{ line_item.quantity }}</span>
-                <img src="{{ line_item.image_url | _default: '/assets/images/products/no_image.png' }}" alt="{{ line_item.product_name | escape }}">
+                  <img src="{{ line_item.image_url | _default: '/assets/images/products/no_image.png' }}" alt="{{ line_item.product_name | escape }}" width="100" height="100" loading="lazy">
               </div>
               {{ line_item.product_name }}
               {% if line_item.variant_name %} - {{ line_item.variant_name }} {% endif %}

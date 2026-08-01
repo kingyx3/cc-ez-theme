@@ -1,5 +1,5 @@
-<link rel="preload" href="{{ 'blog.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
-<link rel="preload" href="{{ 'component-card.css' | asset_url }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+{{ 'blog.css' | asset_url | stylesheet_tag }}
+{{ 'component-card.css' | asset_url | stylesheet_tag }}
 
 <div class="main-blog page-width">
     <h1 class="title--primary">
@@ -17,7 +17,7 @@
                     {% if article.image and article.image.src %}
                         <div class="article-card__image-wrapper">
                             <div class="article-card__image media media--landscape">
-                                <img src="{{ article.image.src }}" alt="{{ article.title | escape }}" class="motion-reduce" loading="lazy">
+                                <img src="{{ article.image.src }}" alt="{{ article.title | escape }}" class="motion-reduce" width="1200" height="800" loading="lazy">
                             </div>
                         </div>
                     {% endif %}

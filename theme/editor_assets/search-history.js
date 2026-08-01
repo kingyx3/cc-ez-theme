@@ -6,7 +6,11 @@
       const storedHistory = JSON.parse(localStorage.getItem(storageKey) || '[]');
       return Array.isArray(storedHistory) ? storedHistory : [];
     } catch (error) {
-      localStorage.removeItem(storageKey);
+      try {
+        localStorage.removeItem(storageKey);
+      } catch (storageError) {
+        // Storage can be disabled by the browser; search must still work.
+      }
       return [];
     }
   };
@@ -17,11 +21,22 @@
 
   const seedHistory = () => {
     if (!Array.isArray(window.CardboardSearchHistorySeed)) return;
-    localStorage.setItem(storageKey, JSON.stringify(normaliseHistory(window.CardboardSearchHistorySeed)));
+    try {
+      const seededHistory = normaliseHistory(window.CardboardSearchHistorySeed);
+      if (seededHistory.length || localStorage.getItem(storageKey) === null) {
+        localStorage.setItem(storageKey, JSON.stringify(seededHistory));
+      }
+    } catch (error) {
+      // Search history is an enhancement, not a requirement for submitting.
+    }
   };
 
   const clearHistory = async () => {
-    localStorage.removeItem(storageKey);
+    try {
+      localStorage.removeItem(storageKey);
+    } catch (error) {
+      // Continue with the optional account sync when storage is unavailable.
+    }
     const config = window.searchHistoryConfig || {};
     if (!config.customer) return;
 
