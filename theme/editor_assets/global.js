@@ -280,13 +280,16 @@ class VariantSelects {
     if (!this.productForm) return;
 
     const addButton = this.productForm.querySelector('[name="add"]');
+    const buyNowButton = this.productForm.querySelector('[data-buy-now]');
     if (!addButton) return;
 
     if (disable) {
       addButton.setAttribute('disabled', true);
+      if (buyNowButton) buyNowButton.setAttribute('disabled', true);
       if (text) addButton.innerHTML = text;
     } else {
       addButton.removeAttribute('disabled');
+      if (buyNowButton) buyNowButton.removeAttribute('disabled');
       addButton.innerHTML = window.variantStrings.addToCart;
       if(addButton.dataset.updateCart)  addButton.innerHTML = window.variantStrings.updateCart;
     }
@@ -315,7 +318,7 @@ class VariantSelects {
 
     this.productInfo.querySelector('.price').classList.remove('price--sold-out','price--on-sale')
     this.productInfo.querySelector('.product-form__quantity').style.display = ''
-    this.productInfo.querySelector('.product-form__submit').style.display = ''
+    this.productInfo.querySelectorAll('.product-form__submit').forEach((button) => { button.style.display = ''; })
 
     if(this.currentVariant.compare_at_price > this.currentVariant.price) this.productInfo.querySelector('.price').classList.add('price--on-sale')
     if(!this.currentVariant.available && this.currentVariant.inventory_quantity <= 0) {
@@ -325,7 +328,7 @@ class VariantSelects {
 
     if(this.currentVariant.price <= 0){
       this.productInfo.querySelector('.product-form__quantity').style.display = 'none'
-      this.productInfo.querySelector('.product-form__submit').style.display = 'none'
+      this.productInfo.querySelectorAll('.product-form__submit').forEach((button) => { button.style.display = 'none'; })
     }
   }
 

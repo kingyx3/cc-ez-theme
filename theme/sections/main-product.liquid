@@ -165,6 +165,16 @@
                     {% endif %}
                 </button>
 
+                <button
+                  type="button"
+                  name="buy_now"
+                  data-buy-now
+                  class="product-form__submit product-form__buy-now button button--full-width button--primary btn--radius"
+                {% if product.selected_or_first_available_variant.available == false %}disabled{% endif %}
+                >
+                  Buy now
+                </button>
+
                 {% app_snippet 'product/button' %}
 
               </div>
