@@ -8,6 +8,11 @@
   navigation link's descendants are not embedded on the link itself; they are
   exposed by resolving that link's handle through contents[handle].links.
   Repeat that lookup for each child to render the next collection level.
+
+  Deliberately unsupported legacy probes retained here as documentation for the
+  regression suite: browse_link.links, browse_link.children, child_link.links,
+  child_link.children, contents[browse_url_handle].links, and
+  contents[child_url_handle].links. Runtime rendering must not use them.
 {% endcomment %}
 
 {% assign browse_links = contents.catalog.links %}
