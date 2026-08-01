@@ -12,6 +12,8 @@ class ProductQuickviewModal extends HTMLElement {
 
     this.isUpdateCart = false; 
     this.cartItem = null;
+    this.requestController = null;
+    this.requestSequence = 0;
   }
   
   bindEvents() {
@@ -21,6 +23,9 @@ class ProductQuickviewModal extends HTMLElement {
   }
 
   open(el, isUpdateCart = false) {
+    if (this.requestController) this.requestController.abort();
+    this.requestController = new AbortController();
+    const requestSequence = ++this.requestSequence;
     this.activeElement = el;
     this.isUpdateCart = isUpdateCart;
     this.modal.setAttribute('open', true);
@@ -40,6 +45,7 @@ class ProductQuickviewModal extends HTMLElement {
     if (productHandle) {
       fetch(`/products/${productHandle}/product_quickview_html`, {
         method: 'GET',
+        signal: this.requestController.signal,
         headers: {
           'Accept': 'application/json'
         }
@@ -51,15 +57,18 @@ class ProductQuickviewModal extends HTMLElement {
           return response.json();
         })
         .then(res => {
-          this.renderHTML(res.html, this.cartItem);
+          if (requestSequence !== this.requestSequence || !this.modal.hasAttribute('open')) return;
+          const cartItem = this.cartItem;
+          this.renderHTML(res.html, cartItem);
           this.modalLoading.classList.add('hidden');
           this.modalBody.classList.remove('hidden');
 
           this.initProductOptionsSelector(res.product);
           this.preselectProductOptionsSelector(el);
-          this.getProductModalPromotionList(res.product.url);
+          this.getProductModalPromotionList(res.product.url, requestSequence);
         })
-        .catch(() => {
+        .catch((error) => {
+          if (error.name === 'AbortError' || requestSequence !== this.requestSequence) return;
           this.modalLoading.classList.add('hidden');
           this.modalBody.classList.remove('hidden');
           this.modalBody.textContent = window.variantStrings?.quickviewError || 'Product details could not be loaded. Please try again.';
@@ -68,6 +77,9 @@ class ProductQuickviewModal extends HTMLElement {
   }
 
   close(event, elementToFocus = false) {
+    if (this.requestController) this.requestController.abort();
+    this.requestController = null;
+    this.requestSequence += 1;
     document.body.classList.remove(`overflow-hidden`);
     removeTrapFocus(elementToFocus || this.activeElement);
     this.modal.removeAttribute('open');
@@ -154,7 +166,7 @@ class ProductQuickviewModal extends HTMLElement {
     }
   }
   
-  getProductModalPromotionList(url) {
+  getProductModalPromotionList(url, requestSequence) {
     fetch(`${url}/promotions`, {
       method: 'GET',
       headers: {
@@ -168,6 +180,7 @@ class ProductQuickviewModal extends HTMLElement {
         return response.json();
       })
       .then(response => {
+        if (requestSequence !== this.requestSequence || !this.modal.hasAttribute('open')) return;
         const { total_promotions, promotions } = response.data || {};
         const labelContainer = document.getElementById('quickview_promo-tag-label');
         const promotionContainer = document.getElementById('quickview_promo-tag');

@@ -12,6 +12,14 @@
   {% assign shareTitle = voucher.title | url_param_escape %}
 {% endif %}
 
+{% assign encoded_permalink_url = permalinkURL | url_param_escape %}
+{% if template contains 'product' %}
+  {% assign share_media_url = product | img_url: 'social-share' %}
+{% else %}
+  {% assign share_media_url = article | img_url: 'social-share' %}
+{% endif %}
+{% assign encoded_share_media_url = share_media_url | url_param_escape %}
+
 {% assign share_instance_id = share_id | default: product.id | default: article.id | default: 'page' %}
 
 <share-button class="share-button">
@@ -41,23 +49,23 @@
       <div class="social-sharing-icons" data-permalink="{{ permalinkURL }}">
         <div class="sharing-icons-label"><small>{{ 'general.social.share' | t }}</small></div>
 
-        <a target="_blank" rel="noopener noreferrer" aria-label="Share on Facebook" href="//www.facebook.com/sharer.php?u={{ permalinkURL }}" class="share-icon-button">
+        <a target="_blank" rel="noopener noreferrer" aria-label="Share on Facebook" href="//www.facebook.com/sharer.php?u={{ encoded_permalink_url }}" class="share-icon-button">
           {% include 'svg-definitions' with 'icon-facebook' %}
         </a>
 
-        <a target="_blank" rel="noopener noreferrer" aria-label="Share on Twitter" href="//twitter.com/share?text={{ shareTitle }}&amp;url={{ permalinkURL }}" class="share-icon-button">
+        <a target="_blank" rel="noopener noreferrer" aria-label="Share on Twitter" href="//twitter.com/share?text={{ shareTitle }}&amp;url={{ encoded_permalink_url }}" class="share-icon-button">
           {% include 'svg-definitions' with 'icon-twitter' %}
         </a>
 
         {% if product.featured_image or article.image %}
 
-          <a target="_blank" rel="noopener noreferrer" aria-label="Share on Pinterest" href="//pinterest.com/pin/create/button/?url={{ permalinkURL }}&amp;media={% if template contains 'product' %}{{ product | img_url: 'social-share' }}{% else %}{{ article | img_url: 'social-share' }}{% endif %}&amp;description={{ shareTitle }}" class="share-icon-button">
+          <a target="_blank" rel="noopener noreferrer" aria-label="Share on Pinterest" href="//pinterest.com/pin/create/button/?url={{ encoded_permalink_url }}&amp;media={{ encoded_share_media_url }}&amp;description={{ shareTitle }}" class="share-icon-button">
             {% include 'svg-definitions' with 'icon-pinterest' %}
           </a>
 
         {% endif %}
         
-        <a target="_blank" rel="noopener noreferrer" aria-label="Share on Line" href="//social-plugins.line.me/lineit/share?url={{ permalinkURL }}" class="share-icon-button">
+        <a target="_blank" rel="noopener noreferrer" aria-label="Share on Line" href="//social-plugins.line.me/lineit/share?url={{ encoded_permalink_url }}" class="share-icon-button">
           {% include 'svg-definitions' with 'icon-line' %}
         </a>
 

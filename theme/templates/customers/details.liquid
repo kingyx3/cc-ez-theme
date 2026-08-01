@@ -72,7 +72,7 @@
                 </div>
                 <div class="grid__item">
                   <div class="field">
-                    <input type="date" name="details[birthdate]" id="DetailBirthdate" value="{{customer.birthdate}}" placeholder="{{ 'customer.register.birthdate' | t }}" max="{{ "now" | date: "%Y%m%d" }}" {% if customer.birthdate_editable == false %}disabled{% endif %}>
+                    <input type="date" name="details[birthdate]" id="DetailBirthdate" value="{{customer.birthdate}}" placeholder="{{ 'customer.register.birthdate' | t }}" max="{{ "now" | date: "%Y-%m-%d" }}" {% if customer.birthdate_editable == false %}disabled{% endif %}>
                     <label for="DetailBirthdate">{{ 'customer.register.birthdate' | t }}</label>
                   </div>
                 </div>
@@ -97,7 +97,7 @@
                   {% elsif attribute_setting.input_type == "date" %}
                     <div class="grid__item sm-mt-1" id="attribute-date-toggle-{{ attribute_setting.id }}">
                       <div class="field">
-                        <input type="text" name="details[attributes][{{ attribute_setting.id }}]" id="DetailAttribute{{ attribute_setting.id }}" value="{{ attribute_setting.value }}" placeholder="Select {{ attribute_setting.title | downcase }}" max="{{ " now" | date: "%Y-%m-%d" }}" class="input-datepicker" {% if attribute_setting.is_required %}required{% endif %}>
+                        <input type="text" name="details[attributes][{{ attribute_setting.id }}]" id="DetailAttribute{{ attribute_setting.id }}" value="{{ attribute_setting.value }}" placeholder="Select {{ attribute_setting.title | downcase }}" max="{{ "now" | date: "%Y-%m-%d" }}" class="input-datepicker" {% if attribute_setting.is_required %}required{% endif %}>
                         <label for="DetailAttribute{{ attribute_setting.id }}">{{ attribute_setting.title }}</label>
                       </div>
                     </div>
