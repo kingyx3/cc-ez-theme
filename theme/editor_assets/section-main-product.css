@@ -932,7 +932,7 @@ a.product__text {
 .modal {
   position: fixed; /* Stay in place */
   box-sizing: border-box;
-  z-index: 3; /* Sit on top */
+  z-index: 11; /* Sit on top */
   padding-top: 70px; /* Location of the box */
   padding-bottom: 30px; 
   left: 0;

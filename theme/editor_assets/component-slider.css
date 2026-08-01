@@ -271,6 +271,10 @@ slider-component.slider--desktop .slider--mobile + .slider-buttons {
     padding: 6rem 8rem;
     text-align: left;
   }
+  .split-slideshow__slider.split-slideshow__slider--right .slider__content{
+    justify-content: flex-end;
+    text-align: right;
+  }
   
   .slider-section .splide__arrow--prev{
     left: initial;

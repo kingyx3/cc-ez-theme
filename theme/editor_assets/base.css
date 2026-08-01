@@ -1963,8 +1963,8 @@ input[type='checkbox'] {
   justify-content: center;
   align-items: center;
   font-size: 0.9rem;
-  top: -0.3rem;
-  left: 1rem;
+  top: 0.5rem;
+  right: 0.5rem;
   line-height: 1.1;
 }
 
@@ -2051,7 +2051,7 @@ input[type='checkbox'] {
   grid-template-areas: 
     'left-icon heading icons'
     'search search search';
-  grid-template-columns: 1fr 2fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   align-items: center;
   padding-top: 1rem;
   padding-bottom: 1rem;
@@ -2398,7 +2398,7 @@ details[open] > .header__icon--menu .icon-hamburger {
   }
 
   .header--top-center .header__inline-menu {
-    justify-self: center;
+    justify-self: left;
   }
 
   .header--top-center .header__inline-menu > .list-menu--inline {
