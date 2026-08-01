@@ -14,7 +14,15 @@
 {% for browse_link in browse_links %}
   {% assign child_links = browse_link.links %}
   {% if child_links == blank %}
+    {% assign child_links = browse_link.children %}
+  {% endif %}
+  {% if child_links == blank %}
     {% assign child_links = contents[browse_link.handle].links %}
+  {% endif %}
+  {% if child_links == blank %}
+    {% assign browse_url_parts = browse_link.url | split: '/' %}
+    {% assign browse_url_handle = browse_url_parts | last %}
+    {% assign child_links = contents[browse_url_handle].links %}
   {% endif %}
 
   {% if navigation_mode == 'mobile' %}
@@ -36,7 +44,15 @@
                   {% for child_link in child_links %}
                     {% assign grandchild_links = child_link.links %}
                     {% if grandchild_links == blank %}
+                      {% assign grandchild_links = child_link.children %}
+                    {% endif %}
+                    {% if grandchild_links == blank %}
                       {% assign grandchild_links = contents[child_link.handle].links %}
+                    {% endif %}
+                    {% if grandchild_links == blank %}
+                      {% assign child_url_parts = child_link.url | split: '/' %}
+                      {% assign child_url_handle = child_url_parts | last %}
+                      {% assign grandchild_links = contents[child_url_handle].links %}
                     {% endif %}
 
                     <li>
@@ -95,28 +111,32 @@
                 {% for child_link in child_links %}
                   {% assign grandchild_links = child_link.links %}
                   {% if grandchild_links == blank %}
+                    {% assign grandchild_links = child_link.children %}
+                  {% endif %}
+                  {% if grandchild_links == blank %}
                     {% assign grandchild_links = contents[child_link.handle].links %}
                   {% endif %}
+                  {% if grandchild_links == blank %}
+                    {% assign child_url_parts = child_link.url | split: '/' %}
+                    {% assign child_url_handle = child_url_parts | last %}
+                    {% assign grandchild_links = contents[child_url_handle].links %}
+                  {% endif %}
 
-                  <li>
+                  <li{% if grandchild_links != blank %} class="browse-menu__item--has-children"{% endif %}>
                     {% if grandchild_links != blank %}
-                        <details-disclosure>
-                          <details>
-                            <summary class="header__menu-item list-menu__item link link--text focus-inset caption-large">
-                              <span>{{ child_link.title | escape }}</span>
-                              {% include 'svg-definitions' with 'icon-caret' , class : 'rotate-90' %}
-                            </summary>
-                            <ul class="header__submenu list-menu list-menu--disclosure motion-reduce" role="list">
-                              {% for grandchild_link in grandchild_links %}
-                                <li>
-                                  <a href="{{ grandchild_link.url }}"{% if grandchild_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="header__menu-item list-menu__item link link--text focus-inset caption-large">
-                                    {{ grandchild_link.title | escape }}
-                                  </a>
-                                </li>
-                              {% endfor %}
-                            </ul>
-                          </details>
-                        </details-disclosure>
+                      <a href="{{ child_link.url }}"{% if child_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="header__menu-item list-menu__item link link--text focus-inset caption-large">
+                        <span>{{ child_link.title | escape }}</span>
+                        {% include 'svg-definitions' with 'icon-caret' , class : 'rotate-90' %}
+                      </a>
+                      <ul class="header__submenu browse-menu__flyout list-menu list-menu--disclosure motion-reduce" role="list">
+                        {% for grandchild_link in grandchild_links %}
+                          <li>
+                            <a href="{{ grandchild_link.url }}"{% if grandchild_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="header__menu-item list-menu__item link link--text focus-inset caption-large">
+                              {{ grandchild_link.title | escape }}
+                            </a>
+                          </li>
+                        {% endfor %}
+                      </ul>
                     {% else %}
                         <a href="{{ child_link.url }}"{% if child_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="header__menu-item list-menu__item link link--text focus-inset caption-large">
                           {{ child_link.title | escape }}

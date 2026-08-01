@@ -241,7 +241,7 @@ body {
     position: relative;
   }
 
-  .header__nav-item--browse .header__submenu > li > details-disclosure > details > .header__submenu {
+  .header__nav-item--browse .browse-menu__flyout {
     top: 0;
     left: 100%;
     visibility: hidden;
@@ -250,8 +250,8 @@ body {
     transform: translateX(-0.8rem);
   }
 
-  .header__nav-item--browse .header__submenu > li > details-disclosure > details[open] > .header__submenu,
-  .header__nav-item--browse .header__submenu > li > details-disclosure > details:focus-within > .header__submenu {
+  .header__nav-item--browse .browse-menu__item--has-children:hover > .browse-menu__flyout,
+  .header__nav-item--browse .browse-menu__item--has-children:focus-within > .browse-menu__flyout {
     visibility: visible;
     opacity: 1;
     pointer-events: auto;
