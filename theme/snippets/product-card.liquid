@@ -64,7 +64,7 @@
         <span class="caption-large light"></span>
         {% include 'price' %}
         <span class="product-card__cta" aria-hidden="true">
-          <span>{{ 'general.show_details' | t | default: 'View details' }}</span>
+          <span>{% include 'translation-fallback', translation_key: 'general.show_details', fallback: 'View details' %}</span>
           <span>→</span>
         </span>
       </div>

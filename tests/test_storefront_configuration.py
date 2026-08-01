@@ -566,8 +566,17 @@ class StorefrontConfigurationTests(unittest.TestCase):
                 self.assertIn("fetch(", source)
 
     def test_repeated_storefront_labels_use_translation_fallbacks(self) -> None:
+        fallback_snippet = (
+            THEME_ROOT / "snippets" / "translation-fallback.liquid"
+        ).read_text(encoding="utf-8")
+        self.assertIn("translated_value == translation_key", fallback_snippet)
+        self.assertIn("translated_value == blank", fallback_snippet)
+        self.assertIn("escape_output", fallback_snippet)
+        self.assertIn("translated_value | escape", fallback_snippet)
+
         expected = {
             "layout/theme.liquid": "general.search.clear_history",
+            "sections/main-product.liquid": "products.product.buy_now",
             "snippets/search-modal.liquid": "general.search.recent_searches",
             "snippets/product-card.liquid": "general.show_details",
             "templates/customers/order.liquid": "customer.addresses.edit",
@@ -577,7 +586,70 @@ class StorefrontConfigurationTests(unittest.TestCase):
             source = (THEME_ROOT / relative).read_text(encoding="utf-8")
             with self.subTest(path=relative):
                 self.assertIn(translation_key, source)
-                self.assertIn("| t", source)
+                self.assertIn("translation-fallback", source)
+
+        broken_fallback = re.compile(r"\|\s*t(?:\s*:[^|}]*)?\s*\|\s*default")
+        for path in THEME_ROOT.rglob("*.liquid"):
+            source = path.read_text(encoding="utf-8")
+            with self.subTest(path=path.relative_to(THEME_ROOT)):
+                self.assertIsNone(broken_fallback.search(source))
+
+    def test_liquid_javascript_strings_are_safely_encoded(self) -> None:
+        script_pattern = re.compile(
+            r"<script(?:\s[^>]*)?>(.*?)</script>", re.IGNORECASE | re.DOTALL
+        )
+        unsafe_translation = re.compile(r"{{[^{}]*\|\s*t(?:\s*:[^{}]*)?}}")
+
+        for path in THEME_ROOT.rglob("*.liquid"):
+            source = path.read_text(encoding="utf-8")
+            for script in script_pattern.findall(source):
+                for expression in unsafe_translation.findall(script):
+                    with self.subTest(path=path.relative_to(THEME_ROOT)):
+                        self.assertIn("| json", expression)
+
+        locale = (
+            THEME_ROOT / "snippets" / "flatpickr-locale.liquid"
+        ).read_text(encoding="utf-8")
+        self.assertIn("date_formats.days.sun", locale)
+        self.assertIn("date_formats.months.dec", locale)
+        self.assertNotRegex(locale, r'"{{[^{}]*\|\s*t')
+
+    def test_async_sections_ignore_stale_requests_and_recover(self) -> None:
+        filters = (THEME_ROOT / "snippets" / "filters.liquid").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("new AbortController()", filters)
+        self.assertIn("filterRequestSequence", filters)
+        self.assertIn("signal: filterRequestController.signal", filters)
+        self.assertIn("error.name === 'AbortError'", filters)
+
+        collection_list = (
+            THEME_ROOT / "sections" / "collection-list.liquid"
+        ).read_text(encoding="utf-8")
+        self.assertIn("if (!response.ok)", collection_list)
+        self.assertIn("window.EasyStore?.Currencies", collection_list)
+        self.assertNotIn("EasyStore !== undefined", collection_list)
+        self.assertIn("previouslyVisibleCollections", collection_list)
+        self.assertIn("previousTitle", collection_list)
+
+    def test_repeatable_product_sections_use_scoped_ids(self) -> None:
+        featured = (
+            THEME_ROOT / "sections" / "featured-product.liquid"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn('id="AddToCart"', featured)
+        self.assertNotIn('id="main-image"', featured)
+        self.assertIn('id="AddToCart-{{ section.__key }}"', featured)
+        self.assertIn('id="main-image-{{ section.__key }}"', featured)
+        self.assertIn('id="image-item-{{ section.__key }}-', featured)
+        self.assertIn("if (!variant) return;", featured)
+
+        for asset_directory in ("assets", "editor_assets"):
+            quickview = (
+                THEME_ROOT / asset_directory / "product-quickview.js"
+            ).read_text(encoding="utf-8")
+            self.assertIn("window.variantStrings?.quickviewError", quickview)
+            self.assertNotIn("window.productStrings?.quickviewError", quickview)
+            self.assertIn("if (!variant) return;", quickview)
 
     def test_share_widget_instances_have_unique_controls(self) -> None:
         share_snippet = (

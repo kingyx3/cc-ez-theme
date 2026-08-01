@@ -62,7 +62,7 @@ class ProductQuickviewModal extends HTMLElement {
         .catch(() => {
           this.modalLoading.classList.add('hidden');
           this.modalBody.classList.remove('hidden');
-          this.modalBody.textContent = window.productStrings?.quickviewError || 'Product details could not be loaded. Please try again.';
+          this.modalBody.textContent = window.variantStrings?.quickviewError || 'Product details could not be loaded. Please try again.';
         });
     }
   }
@@ -117,6 +117,7 @@ class ProductQuickviewModal extends HTMLElement {
         variants_unavailable = variants.filter(value => value.available == false);
 
     var selectCallback = function(variant, selector) {
+      if (!variant) return;
       VariantSelector.onVariantChange(variant, 'ProductModal')
       if(variants_unavailable && variants_unavailable.length > 0 && VariantSelector.updateVariantsUnavailable) VariantSelector.updateVariantsUnavailable(variants,variants_unavailable);
       if(variant.featured_image != undefined && variant.featured_image.src) document.querySelector('#productModal-MainImg').src = variant.featured_image.src;

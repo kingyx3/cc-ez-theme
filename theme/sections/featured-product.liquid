@@ -45,19 +45,19 @@
             <slider-component class="slider-mobile-gutter slider--desktop slider-component">
               <ul id="main-image-wrapper-{{ section.__key }}" class="featured-product-section product__media-list grid grid--peek list-unstyled slider slider--mobile" role="list">
                 {% if section.settings.show_selected_variant_image and featured_product.selected_or_first_available_variant.featured_image != null %}
-                    <li id="image-item-{{ featured_product.selected_or_first_available_variant.featured_image.id }}" class="main-image product__media-item grid__item slider__slide d-flex flex-align-center" data-image-id="{{ featured_product.selected_or_first_available_variant.featured_image.id }}">
+                    <li id="image-item-{{ section.__key }}-{{ featured_product.selected_or_first_available_variant.featured_image.id }}" class="main-image product__media-item grid__item slider__slide d-flex flex-align-center" data-image-id="{{ featured_product.selected_or_first_available_variant.featured_image.id }}">
                       {% if featured_product.selected_or_first_available_variant.featured_image.type == "Youtube" %}
                         <iframe title="{{ featured_product.title | escape }} video" width="90%" height="320" src="https://www.youtube.com/embed/{{ featured_product.featured_image.id }}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
                       {% else %}
                         <button type="button" class="product-media-open js-image-modal-toggle" aria-label="Enlarge {{ featured_product.title | escape }}">
-                          <img id="main-image" src="{{ featured_product.selected_or_first_available_variant.featured_image.src | img_url: 'social-share' }}" alt="{{ featured_product.selected_or_first_available_variant.featured_image.alt | _default: featured_product.title | escape }}" width="1200" height="1200" loading="eager">
+                          <img id="main-image-{{ section.__key }}" src="{{ featured_product.selected_or_first_available_variant.featured_image.src | img_url: 'social-share' }}" alt="{{ featured_product.selected_or_first_available_variant.featured_image.alt | _default: featured_product.title | escape }}" width="1200" height="1200" loading="eager">
                         </button>
                       {% endif %}
                     </li>
                 {% endif %}
                 {% for image in featured_product.images %}
                   {% if section.settings.show_selected_variant_image and image.id != featured_product.selected_or_first_available_variant.featured_image.id or section.settings.show_selected_variant_image == false %}
-                    <li id="image-item-{{image.id}}" class="main-image product__media-item grid__item slider__slide d-flex flex-align-center" data-image-id="{{ image.id }}">
+                    <li id="image-item-{{ section.__key }}-{{image.id}}" class="main-image product__media-item grid__item slider__slide d-flex flex-align-center" data-image-id="{{ image.id }}">
                       {% if image.type == "Youtube" %}
                         <iframe title="{{ featured_product.title | escape }} video" width="90%" height="320" src="https://www.youtube.com/embed/{{ image.id }}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
                       {% else %}
@@ -143,7 +143,7 @@
                   <button
                     type="submit"
                     name="add"
-                    id="AddToCart"
+                    id="AddToCart-{{ section.__key }}"
                     class="product-form__submit button button--full-width button--primary btn--radius"
                   {% if featured_product.selected_or_first_available_variant.available == false %}disabled{% endif %}
                   >
@@ -190,13 +190,14 @@
       var keyId = "{{ section.__key }}";
 
       var selectCallback = function(variant, selector) {
+        if (!variant) return;
         VariantSelector.onVariantChange(variant,keyId);
         if(variants_unavailable && variants_unavailable.length > 0 && VariantSelector.updateVariantsUnavailable) VariantSelector.updateVariantsUnavailable(variants,variants_unavailable);
         
         {% if section.settings.show_selected_variant_image %}
           var img_wrapper = document.getElementById("main-image-wrapper-{{ section.__key }}");
           if(variant.featured_image != null && variant.featured_image.id && is_variants_initial){
-            const img_item = document.getElementById("image-item-" + variant.featured_image.id);
+            const img_item = document.getElementById("image-item-{{ section.__key }}-" + variant.featured_image.id);
             if (img_wrapper && img_item) {
               img_wrapper.insertAdjacentElement("afterbegin", img_item);
               setTimeout(function(){img_item.scrollIntoView({block: 'center'})}, 100);

@@ -85,24 +85,24 @@ if (!customElements.get('product-form')) {
       const candidates = [];
 
       if (inventory && variant.available !== false) {
-        candidates.push({ maximum: inventory, reason: 'available inventory' });
+        candidates.push({ maximum: inventory, reason: window.purchaseStrings.inventoryLimit });
       }
 
       const metadataLimits = [
-        ['purchase limit', variant.max_purchase_quantity],
-        ['purchase limit', variant.maximum_purchase_quantity],
-        ['purchase limit', variant.purchase_limit],
-        ['store limit', variant.store_purchase_limit],
-        ['customer limit', variant.customer_purchase_limit],
-        ['promotion limit', variant.promotion_purchase_limit],
-        ['promotion limit', variant.promo_purchase_limit],
-        ['order limit', variant.max_order_quantity],
-        ['order limit', variant.order_limit],
-        ['quantity rule', variant.quantity_rule && variant.quantity_rule.max],
-        ['quantity rule', variant.quantity_limits && variant.quantity_limits.max],
-        ['quantity rule', variant.limits && variant.limits.max_quantity],
-        ['configured limit', this.quantityInput.dataset.maxQuantity],
-        ['configured limit', this.form.dataset.maxQuantity],
+        [window.purchaseStrings.purchaseLimit, variant.max_purchase_quantity],
+        [window.purchaseStrings.purchaseLimit, variant.maximum_purchase_quantity],
+        [window.purchaseStrings.purchaseLimit, variant.purchase_limit],
+        [window.purchaseStrings.storeLimit, variant.store_purchase_limit],
+        [window.purchaseStrings.customerLimit, variant.customer_purchase_limit],
+        [window.purchaseStrings.promotionLimit, variant.promotion_purchase_limit],
+        [window.purchaseStrings.promotionLimit, variant.promo_purchase_limit],
+        [window.purchaseStrings.orderLimit, variant.max_order_quantity],
+        [window.purchaseStrings.orderLimit, variant.order_limit],
+        [window.purchaseStrings.quantityRule, variant.quantity_rule && variant.quantity_rule.max],
+        [window.purchaseStrings.quantityRule, variant.quantity_limits && variant.quantity_limits.max],
+        [window.purchaseStrings.quantityRule, variant.limits && variant.limits.max_quantity],
+        [window.purchaseStrings.configuredLimit, this.quantityInput.dataset.maxQuantity],
+        [window.purchaseStrings.configuredLimit, this.form.dataset.maxQuantity],
       ];
 
       metadataLimits.forEach(([reason, value]) => {
@@ -111,7 +111,7 @@ if (!customElements.get('product-form')) {
       });
 
       const nativeMaximum = this.toPositiveLimit(this.nativeQuantityMaximum);
-      if (nativeMaximum) candidates.push({ maximum: nativeMaximum, reason: 'configured limit' });
+      if (nativeMaximum) candidates.push({ maximum: nativeMaximum, reason: window.purchaseStrings.configuredLimit });
 
       if (this.rejectedQuantityLimit) {
         candidates.push(this.rejectedQuantityLimit);

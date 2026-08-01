@@ -79,29 +79,29 @@
     format_decimals: {{ cart.currency.format_decimals | json }}
   };
   var _getEntitlementTranslation = {
-    "free_shipping": "{{ 'customer.rewards.free_shipping' | t }}",
-    "free_of_charge": "{{ 'customer.rewards.free_of_charge' | t }}",
+    "free_shipping": {{ 'customer.rewards.free_shipping' | t | json }},
+    "free_of_charge": {{ 'customer.rewards.free_of_charge' | t | json }},
   }
   var _getTargetTypeTranslation = {
-    "amount_credit": "{{ 'customer.rewards.amount_credit' | t }}",
-    "amount_off": "{{'customer.rewards.amount_off' | t }}",
+    "amount_credit": {{ 'customer.rewards.amount_credit' | t | json }},
+    "amount_off": {{'customer.rewards.amount_off' | t | json }},
   }
   var _getPrerequisiteTranslation = {
-    "min_quantity": "{{ 'customer.rewards.min_quantity' | t: 'formatValue' }}",
-    "every_quantity": "{{ 'customer.rewards.every_quantity' | t: 'formatValue' }}",
-    "min_amount": "{{ 'customer.rewards.min_amount' | t: 'formatCurrency' }}",
-    "every_amount": "{{ 'customer.rewards.every_amount' | t: 'formatCurrency' }}"
+    "min_quantity": {{ 'customer.rewards.min_quantity' | t: 'formatValue' | json }},
+    "every_quantity": {{ 'customer.rewards.every_quantity' | t: 'formatValue' | json }},
+    "min_amount": {{ 'customer.rewards.min_amount' | t: 'formatCurrency' | json }},
+    "every_amount": {{ 'customer.rewards.every_amount' | t: 'formatCurrency' | json }}
   }
   var _getPrerequisiteConditionTranslation = {
-    "selected_items": "{{ 'customer.rewards.selected_items' | t }}",
-    "selected_collections": "{{ 'customer.rewards.selected_collections' | t }}",
-    "storewide": "{{ 'customer.rewards.storewide' | t }}",
-    "order_subtotal": "{{ 'customer.rewards.order_subtotal' | t }}"
+    "selected_items": {{ 'customer.rewards.selected_items' | t | json }},
+    "selected_collections": {{ 'customer.rewards.selected_collections' | t | json }},
+    "storewide": {{ 'customer.rewards.storewide' | t | json }},
+    "order_subtotal": {{ 'customer.rewards.order_subtotal' | t | json }}
   }
   var _getVoucherButtonTextTranslation = {
-    "apply": "{{ 'customer.rewards.apply' | t }}",
+    "apply": {{ 'customer.rewards.apply' | t | json }},
   }
   var _getVoucherErrorTranslation = {
-    "condition_not_matched": "{{ 'error.checkout.voucher_condition_not_matched' | t }}"
+    "condition_not_matched": {{ 'error.checkout.voucher_condition_not_matched' | t | json }}
   }
 </script>
