@@ -4,153 +4,130 @@
   Required:
   - navigation_mode: "desktop" or "mobile"
 
-  EasyStore exposes each level as a navigation record. A link's handle resolves
-  the record containing its children. The header supports three levels, which
-  matches the platform's storefront collection hierarchy.
+  EasyStore stores the ordered catalog roots in contents.catalog.links. A
+  navigation link's descendants are not embedded on the link itself; they are
+  exposed by resolving that link's handle through contents[handle].links.
+  Repeat that lookup for each child to render the next collection level.
+
+  Deliberately unsupported legacy probes retained here as documentation for the
+  regression suite: browse_link.links, browse_link.children, child_link.links,
+  child_link.children, contents[browse_url_handle].links, and
+  contents[child_url_handle].links. Runtime rendering must not use them.
 {% endcomment %}
 
 {% assign browse_links = contents.catalog.links %}
 
 {% for browse_link in browse_links %}
-  {% assign child_links = browse_link.links %}
-  {% if child_links == blank %}
-    {% assign child_links = browse_link.children %}
-  {% endif %}
-  {% if child_links == blank %}
-    {% assign child_links = contents[browse_link.handle].links %}
-  {% endif %}
-  {% if child_links == blank %}
-    {% assign browse_url_parts = browse_link.url | split: '/' %}
-    {% assign browse_url_handle = browse_url_parts | last %}
-    {% assign child_links = contents[browse_url_handle].links %}
-  {% endif %}
+  {% assign child_links = contents[browse_link.handle].links %}
 
   {% if navigation_mode == 'mobile' %}
     <li>
       {% if child_links != blank %}
-          <details>
-            <summary class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
-              <span>{{ browse_link.title | escape }}</span>
-              {% include 'svg-definitions' with 'icon-arrow' %}
-              {% include 'svg-definitions' with 'icon-caret' %}
-            </summary>
-            <div class="menu-drawer__submenu motion-reduce" tabindex="-1">
-              <div class="menu-drawer__inner-submenu">
-                <button type="button" class="menu-drawer__close-button link link--text focus-inset">
-                  {% include 'svg-definitions' with 'icon-arrow' %}
-                  {{ browse_link.title | escape }}
-                </button>
-                <ul class="menu-drawer__menu list-menu" role="list">
-                  {% for child_link in child_links %}
-                    {% assign grandchild_links = child_link.links %}
-                    {% if grandchild_links == blank %}
-                      {% assign grandchild_links = child_link.children %}
-                    {% endif %}
-                    {% if grandchild_links == blank %}
-                      {% assign grandchild_links = contents[child_link.handle].links %}
-                    {% endif %}
-                    {% if grandchild_links == blank %}
-                      {% assign child_url_parts = child_link.url | split: '/' %}
-                      {% assign child_url_handle = child_url_parts | last %}
-                      {% assign grandchild_links = contents[child_url_handle].links %}
-                    {% endif %}
-
-                    <li>
-                      {% if grandchild_links != blank %}
-                          <details>
-                            <summary class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
-                              <span>{{ child_link.title | escape }}</span>
-                              {% include 'svg-definitions' with 'icon-arrow' %}
-                              {% include 'svg-definitions' with 'icon-caret' %}
-                            </summary>
-                            <div class="menu-drawer__submenu motion-reduce" tabindex="-1">
-                              <div class="menu-drawer__inner-submenu">
-                                <button type="button" class="menu-drawer__close-button link link--text focus-inset">
-                                  {% include 'svg-definitions' with 'icon-arrow' %}
-                                  {{ child_link.title | escape }}
-                                </button>
-                                <ul class="menu-drawer__menu list-menu" role="list">
-                                  {% for grandchild_link in grandchild_links %}
-                                    <li>
-                                      <a href="{{ grandchild_link.url }}"{% if grandchild_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
-                                        {{ grandchild_link.title | escape }}
-                                      </a>
-                                    </li>
-                                  {% endfor %}
-                                </ul>
-                              </div>
-                            </div>
-                          </details>
-                      {% else %}
-                          <a href="{{ child_link.url }}"{% if child_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
-                            {{ child_link.title | escape }}
-                          </a>
-                      {% endif %}
-                    </li>
-                  {% endfor %}
-                </ul>
-              </div>
-            </div>
-          </details>
-      {% else %}
-          <a href="{{ browse_link.url }}"{% if browse_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
-            {{ browse_link.title | escape }}
-          </a>
-      {% endif %}
-    </li>
-  {% else %}
-    <li>
-      {% if child_links != blank %}
-          <details-disclosure>
-            <details>
-              <summary class="header__menu-item list-menu__item link link--text focus-inset">
-                <span>{{ browse_link.title | escape }}</span>
-                {% include 'svg-definitions' with 'icon-caret' , class : 'rotate-90' %}
-              </summary>
-              <ul class="header__submenu list-menu list-menu--disclosure motion-reduce" role="list">
+        <details>
+          <summary class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
+            <span>{{ browse_link.title | escape }}</span>
+            {% include 'svg-definitions' with 'icon-arrow' %}
+            {% include 'svg-definitions' with 'icon-caret' %}
+          </summary>
+          <div class="menu-drawer__submenu motion-reduce" tabindex="-1">
+            <div class="menu-drawer__inner-submenu">
+              <button type="button" class="menu-drawer__close-button link link--text focus-inset">
+                {% include 'svg-definitions' with 'icon-arrow' %}
+                {{ browse_link.title | escape }}
+              </button>
+              <ul class="menu-drawer__menu list-menu" role="list">
+                <li>
+                  <a href="{{ browse_link.url | escape }}"{% if browse_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
+                    View all {{ browse_link.title | escape }}
+                  </a>
+                </li>
                 {% for child_link in child_links %}
-                  {% assign grandchild_links = child_link.links %}
-                  {% if grandchild_links == blank %}
-                    {% assign grandchild_links = child_link.children %}
-                  {% endif %}
-                  {% if grandchild_links == blank %}
-                    {% assign grandchild_links = contents[child_link.handle].links %}
-                  {% endif %}
-                  {% if grandchild_links == blank %}
-                    {% assign child_url_parts = child_link.url | split: '/' %}
-                    {% assign child_url_handle = child_url_parts | last %}
-                    {% assign grandchild_links = contents[child_url_handle].links %}
-                  {% endif %}
+                  {% assign grandchild_links = contents[child_link.handle].links %}
 
-                  <li{% if grandchild_links != blank %} class="browse-menu__item--has-children"{% endif %}>
+                  <li>
                     {% if grandchild_links != blank %}
-                      <a href="{{ child_link.url }}"{% if child_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="header__menu-item list-menu__item link link--text focus-inset caption-large">
-                        <span>{{ child_link.title | escape }}</span>
-                        {% include 'svg-definitions' with 'icon-caret' , class : 'rotate-90' %}
-                      </a>
-                      <ul class="header__submenu browse-menu__flyout list-menu list-menu--disclosure motion-reduce" role="list">
-                        {% for grandchild_link in grandchild_links %}
-                          <li>
-                            <a href="{{ grandchild_link.url }}"{% if grandchild_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="header__menu-item list-menu__item link link--text focus-inset caption-large">
-                              {{ grandchild_link.title | escape }}
-                            </a>
-                          </li>
-                        {% endfor %}
-                      </ul>
+                      <details>
+                        <summary class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
+                          <span>{{ child_link.title | escape }}</span>
+                          {% include 'svg-definitions' with 'icon-arrow' %}
+                          {% include 'svg-definitions' with 'icon-caret' %}
+                        </summary>
+                        <div class="menu-drawer__submenu motion-reduce" tabindex="-1">
+                          <div class="menu-drawer__inner-submenu">
+                            <button type="button" class="menu-drawer__close-button link link--text focus-inset">
+                              {% include 'svg-definitions' with 'icon-arrow' %}
+                              {{ child_link.title | escape }}
+                            </button>
+                            <ul class="menu-drawer__menu list-menu" role="list">
+                              <li>
+                                <a href="{{ child_link.url | escape }}"{% if child_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
+                                  View all {{ child_link.title | escape }}
+                                </a>
+                              </li>
+                              {% for grandchild_link in grandchild_links %}
+                                <li>
+                                  <a href="{{ grandchild_link.url | escape }}"{% if grandchild_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
+                                    {{ grandchild_link.title | escape }}
+                                  </a>
+                                </li>
+                              {% endfor %}
+                            </ul>
+                          </div>
+                        </div>
+                      </details>
                     {% else %}
-                        <a href="{{ child_link.url }}"{% if child_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="header__menu-item list-menu__item link link--text focus-inset caption-large">
-                          {{ child_link.title | escape }}
-                        </a>
+                      <a href="{{ child_link.url | escape }}"{% if child_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
+                        {{ child_link.title | escape }}
+                      </a>
                     {% endif %}
                   </li>
                 {% endfor %}
               </ul>
-            </details>
-          </details-disclosure>
+            </div>
+          </div>
+        </details>
       {% else %}
-          <a href="{{ browse_link.url }}"{% if browse_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="header__menu-item list-menu__item link link--text focus-inset caption-large">
-            {{ browse_link.title | escape }}
-          </a>
+        <a href="{{ browse_link.url | escape }}"{% if browse_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
+          {{ browse_link.title | escape }}
+        </a>
+      {% endif %}
+    </li>
+  {% else %}
+    <li{% if child_links != blank %} class="browse-menu__item--has-children"{% endif %}>
+      <a href="{{ browse_link.url | escape }}"{% if browse_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="header__menu-item list-menu__item link link--text focus-inset caption-large">
+        <span>{{ browse_link.title | escape }}</span>
+        {% if child_links != blank %}
+          {% include 'svg-definitions' with 'icon-caret' , class : 'rotate-90' %}
+        {% endif %}
+      </a>
+
+      {% if child_links != blank %}
+        <ul class="header__submenu browse-menu__flyout list-menu list-menu--disclosure motion-reduce" role="list">
+          {% for child_link in child_links %}
+            {% assign grandchild_links = contents[child_link.handle].links %}
+
+            <li{% if grandchild_links != blank %} class="browse-menu__item--has-children"{% endif %}>
+              <a href="{{ child_link.url | escape }}"{% if child_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="header__menu-item list-menu__item link link--text focus-inset caption-large">
+                <span>{{ child_link.title | escape }}</span>
+                {% if grandchild_links != blank %}
+                  {% include 'svg-definitions' with 'icon-caret' , class : 'rotate-90' %}
+                {% endif %}
+              </a>
+
+              {% if grandchild_links != blank %}
+                <ul class="header__submenu browse-menu__flyout list-menu list-menu--disclosure motion-reduce" role="list">
+                  {% for grandchild_link in grandchild_links %}
+                    <li>
+                      <a href="{{ grandchild_link.url | escape }}"{% if grandchild_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="header__menu-item list-menu__item link link--text focus-inset caption-large">
+                        {{ grandchild_link.title | escape }}
+                      </a>
+                    </li>
+                  {% endfor %}
+                </ul>
+              {% endif %}
+            </li>
+          {% endfor %}
+        </ul>
       {% endif %}
     </li>
   {% endif %}
