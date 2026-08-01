@@ -277,15 +277,16 @@ top-level destinations in a fixed order:
 5. About Us (`/pages/about-us`)
 
 About Us is pushed to the right edge of the desktop navigation area. The
-Browse builds the collection family tree directly from EasyStore's global
-`collections` object. Each visible collection is matched to its parent by
-comparing `collection.parent_id` with `collection.id`; storefront URLs are
-generated from `collection.handle`. This is intentionally independent of
-navigation link handles because EasyStore's documented `link` object does not
-contain descendant links. It renders root collections plus three descendant
-levels. On desktop, hovering or focusing a parent collection opens its child
-collection flyout; mobile retains nested drill-down navigation. The three fixed
-collection shortcuts remain direct EasyStore links.
+Browse always renders its ordered first level from EasyStore's
+`contents.catalog.links`. Each catalog link is then joined to the matching item
+in EasyStore's global `collections` object by handle. Descendants are resolved
+by comparing `collection.parent_id` with the matched `collection.id`, and their
+storefront URLs are generated from `collection.handle`. If a catalog link does
+not match a collection record, the first-level link still renders without a
+flyout. It renders three descendant levels. On desktop, hovering or focusing a
+parent collection opens its child collection flyout; mobile retains nested
+drill-down navigation. The three fixed collection shortcuts remain direct
+EasyStore links.
 
 The theme controls:
 

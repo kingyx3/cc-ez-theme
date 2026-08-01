@@ -434,8 +434,18 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertEqual(header.count("<span>Browse</span>"), 2)
         self.assertIn('class="header__nav-item--browse"', header)
         self.assertIn('class="menu-drawer__nav-item--browse"', header)
-        self.assertIn("{% for parent_collection in collections %}", browse)
-        self.assertIn("parent_collection.parent_id", browse)
+        self.assertIn("{% for catalog_link in contents.catalog.links %}", browse)
+        self.assertIn("catalog_link.handle", browse)
+        self.assertIn("catalog_link.url | split: '/'", browse)
+        self.assertIn("catalog_url_handle = catalog_url_parts | last", browse)
+        self.assertIn(
+            "catalog_collection.handle == catalog_handle or "
+            "catalog_collection.handle == catalog_url_handle",
+            browse,
+        )
+        self.assertIn("catalog_collection.id | append: ''", browse)
+        self.assertIn('href="{{ catalog_link.url | escape }}"', browse)
+        self.assertIn("{{ catalog_link.title | escape }}", browse)
         self.assertIn("child_collection.parent_id", browse)
         self.assertIn("grandchild_collection.parent_id", browse)
         self.assertIn("great_grandchild_collection.parent_id", browse)
@@ -444,7 +454,6 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertIn("great_grandchild_candidate.parent_id", browse)
         self.assertIn('href="/collections/{{ child_collection.handle | escape }}"', browse)
         self.assertIn('href="/collections/{{ grandchild_collection.handle | escape }}"', browse)
-        self.assertNotIn("contents.catalog.links", browse)
         self.assertNotIn("contents[", browse)
         self.assertIn("navigation_mode == 'mobile'", browse)
         self.assertIsNone(

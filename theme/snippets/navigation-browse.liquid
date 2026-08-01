@@ -1,27 +1,39 @@
 {% comment %}
-  Renders EasyStore's product collection family tree.
+  Renders Browse from two documented EasyStore data sources:
 
   Required:
   - navigation_mode: "desktop" or "mobile"
 
-  EasyStore exposes collection ancestry through collections[].id and
-  collections[].parent_id. Navigation link handles do not expose this family
-  tree, so every level below is derived directly from the collections object.
+  contents.catalog.links is the authoritative, ordered first level. Each link
+  is joined to collections by handle so descendants can be resolved through
+  collections[].id and collections[].parent_id. A failed join must never hide
+  the first-level catalog link.
 {% endcomment %}
 
-{% for parent_collection in collections %}
-  {% assign parent_id = parent_collection.id | append: '' %}
-  {% assign parent_parent_id = parent_collection.parent_id | append: '' %}
-  {% assign parent_has_children = false %}
+{% for catalog_link in contents.catalog.links %}
+  {% assign catalog_handle = catalog_link.handle %}
+  {% assign catalog_url_parts = catalog_link.url | split: '/' %}
+  {% assign catalog_url_handle = catalog_url_parts | last %}
+  {% if catalog_handle == blank %}
+    {% assign catalog_handle = catalog_url_handle %}
+  {% endif %}
 
-  {% if parent_parent_id == '' or parent_parent_id == '0' %}
-    {% unless parent_collection.is_locked %}
+  {% assign parent_id = '' %}
+  {% for catalog_collection in collections %}
+    {% if catalog_collection.handle == catalog_handle or catalog_collection.handle == catalog_url_handle %}
+      {% assign parent_id = catalog_collection.id | append: '' %}
+    {% endif %}
+  {% endfor %}
+
+  {% assign parent_has_children = false %}
+  {% if parent_id != '' %}
       {% for child_candidate in collections %}
         {% assign child_candidate_parent_id = child_candidate.parent_id | append: '' %}
         {% if child_candidate_parent_id == parent_id and child_candidate.is_locked != true %}
           {% assign parent_has_children = true %}
         {% endif %}
       {% endfor %}
+  {% endif %}
 
       {% if navigation_mode == 'mobile' %}
         <li>
@@ -36,7 +48,7 @@
                 <div class="menu-drawer__inner-submenu">
                   <button type="button" class="menu-drawer__close-button link link--text focus-inset">
                     {% include 'svg-definitions' with 'icon-arrow' %}
-                    {{ parent_collection.title | default: parent_collection.name | escape }}
+                    {{ catalog_link.title | escape }}
                   </button>
                   <ul class="menu-drawer__menu list-menu" role="list">
                     {% for child_collection in collections %}
@@ -136,15 +148,15 @@
               </div>
             </details>
           {% else %}
-            <a href="/collections/{{ parent_collection.handle | escape }}" class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
-              {{ parent_collection.title | default: parent_collection.name | escape }}
+            <a href="{{ catalog_link.url | escape }}" class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
+              {{ catalog_link.title | escape }}
             </a>
           {% endif %}
         </li>
       {% else %}
         <li{% if parent_has_children %} class="browse-menu__item--has-children"{% endif %}>
-          <a href="/collections/{{ parent_collection.handle | escape }}" class="header__menu-item list-menu__item link link--text focus-inset caption-large">
-            <span>{{ parent_collection.title | default: parent_collection.name | escape }}</span>
+          <a href="{{ catalog_link.url | escape }}" class="header__menu-item list-menu__item link link--text focus-inset caption-large">
+            <span>{{ catalog_link.title | escape }}</span>
             {% if parent_has_children %}
               {% include 'svg-definitions' with 'icon-caret' , class : 'rotate-90' %}
             {% endif %}
@@ -221,7 +233,4 @@
           {% endif %}
         </li>
       {% endif %}
-    {% endunless %}
-  {% endif %}
 {% endfor %}
-
