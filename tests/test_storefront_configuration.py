@@ -35,21 +35,25 @@ class StorefrontConfigurationTests(unittest.TestCase):
         ]
         self.assertNotIn("Worldwide shipping", rendered_text)
 
-    def test_product_page_has_buy_now_checkout_action(self) -> None:
+    def test_product_page_media_is_bounded_and_buy_now_is_removed(self) -> None:
         main_product = (
             THEME_ROOT / "sections" / "main-product.liquid"
         ).read_text(encoding="utf-8")
         self.assertRegex(
             main_product,
             r'name="add"[\s\S]+?class="[^"]*'
-            r'product-form__submit--secondary[^"]*button--secondary',
+            r'product-form__submit[^"]*button--primary',
         )
-        self.assertRegex(
+        self.assertNotIn('name="buy_now"', main_product)
+        self.assertNotIn("Buy now", main_product)
+        self.assertIn('class="product-media-video"', main_product)
+        self.assertIn('class="product__media-fallback"', main_product)
+        self.assertIn("padding: clamp(1.8rem, 4vw, 3rem);", main_product)
+        self.assertIn("product.images.size < 2", main_product)
+        self.assertIn(
+            'class="slider-counter caption" aria-live="polite"',
             main_product,
-            r'name="buy_now"[\s\S]+?class="[^"]*'
-            r'product-form__buy-now[^"]*button--primary',
         )
-        self.assertIn("Buy now", main_product)
 
         product_form = (
             THEME_ROOT / "assets" / "product-form.js"
@@ -58,37 +62,33 @@ class StorefrontConfigurationTests(unittest.TestCase):
             THEME_ROOT / "editor_assets" / "product-form.js"
         ).read_text(encoding="utf-8")
         self.assertEqual(product_form, editor_product_form)
-        self.assertIn("evt.submitter", product_form)
         self.assertIn("serializeForm(this.form)", product_form)
         self.assertIn("EasyStore.Action.addToCart", product_form)
-        self.assertIn("submitButton.name === 'buy_now'", product_form)
-        self.assertIn("window.location.assign('/checkout')", product_form)
-        self.assertLess(
-            product_form.index("cart.description != undefined"),
-            product_form.index("if(buyNow)"),
-        )
+        self.assertNotIn("buyNow", product_form)
+        self.assertNotIn("'/checkout'", product_form)
 
         for asset_directory in ("assets", "editor_assets"):
             stylesheet = (
                 THEME_ROOT / asset_directory / "section-main-product.css"
             ).read_text(encoding="utf-8")
-            self.assertIn(".product-form__submit--secondary", stylesheet)
-            self.assertIn(
-                "--color-button: var(--color-base-accent-1);",
-                stylesheet,
-            )
-            self.assertIn(
-                "--color-button-text: var(--color-base-accent-1);",
-                stylesheet,
-            )
+            self.assertIn(".product-media-open", stylesheet)
+            self.assertIn("aspect-ratio: 1 / 1;", stylesheet)
+            self.assertIn("height: min(82vw, 44rem", stylesheet)
+            self.assertIn("object-fit: contain;", stylesheet)
+            self.assertIn("max-height: calc(100svh - 10rem);", stylesheet)
+            self.assertIn(".product-media-open:focus-visible", stylesheet)
+            self.assertIn("prefers-reduced-motion: reduce", stylesheet)
+            self.assertNotIn(".product-form__buy-now", stylesheet)
+            self.assertNotIn(".product-form__submit--secondary", stylesheet)
 
         global_script = (
             THEME_ROOT / "assets" / "global.js"
         ).read_text(encoding="utf-8")
-        self.assertIn("'[name=\"buy_now\"]'", global_script)
-        self.assertIn(
-            "querySelectorAll('.product-form__submit')", global_script
-        )
+        editor_global_script = (
+            THEME_ROOT / "editor_assets" / "global.js"
+        ).read_text(encoding="utf-8")
+        self.assertEqual(global_script, editor_global_script)
+        self.assertNotIn("'[name=\"buy_now\"]'", global_script)
 
     def test_homepage_collections_are_six_products_in_three_columns(self) -> None:
         expected = {
