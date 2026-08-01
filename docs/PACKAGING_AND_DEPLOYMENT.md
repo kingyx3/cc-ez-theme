@@ -180,7 +180,7 @@ After merging to `main`:
 - [ ] Product titles use available card width on desktop and mobile.
 - [ ] Announcement hover/focus contrast is readable.
 - [ ] Search history and the mobile drawer work with keyboard and pointer input.
-- [ ] Desktop and mobile navigation show Hobbit, Marvel, Strixhaven, and About Us, with no category or wishlist link.
+- [ ] Desktop and mobile navigation show a Browse collection dropdown before Hobbit, Marvel, Strixhaven, and About Us, with no wishlist link.
 - [ ] The footer shows Follow us and Contact Us, with no payment or quick-link blocks.
 - [ ] The Terms of Service footer link opens `https://cardboard.sg/pages/terms-of-service`.
 - [ ] Sold-out and sale states render correctly.

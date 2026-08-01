@@ -327,6 +327,26 @@
                 <div class="menu-drawer__navigation-container">
                   <nav class="menu-drawer__navigation">
                     <ul class="menu-drawer__menu list-menu" role="list">
+                      <li class="menu-drawer__nav-item--browse">
+                        <details>
+                          <summary class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
+                            <span>Browse</span>
+                            {% include 'svg-definitions' with 'icon-arrow' %}
+                            {% include 'svg-definitions' with 'icon-caret' %}
+                          </summary>
+                          <div class="menu-drawer__submenu motion-reduce" tabindex="-1">
+                            <div class="menu-drawer__inner-submenu">
+                              <button type="button" class="menu-drawer__close-button link link--text focus-inset">
+                                {% include 'svg-definitions' with 'icon-arrow' %}
+                                Browse
+                              </button>
+                              <ul class="menu-drawer__menu list-menu" role="list" tabindex="-1">
+                                {% include 'navigation-browse', navigation_mode: 'mobile' %}
+                              </ul>
+                            </div>
+                          </div>
+                        </details>
+                      </li>
                       <li><a href="/collections/the-hobbit" class="menu-drawer__menu-item list-menu__item link link--text focus-inset">Hobbit</a></li>
                       <li><a href="/collections/marvel-super-heroes" class="menu-drawer__menu-item list-menu__item link link--text focus-inset">Marvel</a></li>
                       <li><a href="/collections/secrets-of-strixhaven" class="menu-drawer__menu-item list-menu__item link link--text focus-inset">Strixhaven</a></li>
@@ -388,6 +408,19 @@
       {% endif %}
       <nav class="header__inline-menu">
         <ul class="list-menu list-menu--inline" role="list">
+          <li class="header__nav-item--browse">
+            <details-disclosure>
+              <details>
+                <summary class="header__menu-item list-menu__item link focus-inset">
+                  <span>Browse</span>
+                  {% include 'svg-definitions' with 'icon-caret' %}
+                </summary>
+                <ul class="header__submenu list-menu list-menu--disclosure caption-large motion-reduce" role="list" tabindex="-1">
+                  {% include 'navigation-browse', navigation_mode: 'desktop' %}
+                </ul>
+              </details>
+            </details-disclosure>
+          </li>
           <li><a href="/collections/the-hobbit" class="header__menu-item list-menu__item link link--text focus-inset">Hobbit</a></li>
           <li><a href="/collections/marvel-super-heroes" class="header__menu-item list-menu__item link link--text focus-inset">Marvel</a></li>
           <li><a href="/collections/secrets-of-strixhaven" class="header__menu-item list-menu__item link link--text focus-inset">Strixhaven</a></li>
