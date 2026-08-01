@@ -5,6 +5,7 @@ if (!customElements.get('product-form')) {
 
       this.form = this.querySelector('form');
       this.buyNowButton = this.querySelector('[data-buy-now]');
+      this.checkoutForm = this.querySelector('[data-buy-now-checkout-form]');
       this.buyNowLimitModal = this.querySelector('[data-checkout-limit-modal]');
       this.buyNowLimitMessage = this.querySelector('[data-checkout-limit-message]');
       this.cartNotification = document.querySelector('cart-notification');
@@ -29,7 +30,7 @@ if (!customElements.get('product-form')) {
         if (continueButton) {
           continueButton.addEventListener('click', () => {
             this.closeBuyNowLimitModal();
-            window.location.assign('/checkout');
+            this.goToCheckout();
           });
         }
 
@@ -128,7 +129,7 @@ if (!customElements.get('product-form')) {
         }
 
         if (buyNow) {
-          window.location.assign('/checkout');
+          this.goToCheckout();
           return;
         }
 
@@ -143,6 +144,19 @@ if (!customElements.get('product-form')) {
           setSubmitting(false);
         }
       });
+    }
+
+    goToCheckout() {
+      if (!this.checkoutForm) {
+        window.location.assign('/cart');
+        return;
+      }
+
+      if (typeof this.checkoutForm.requestSubmit === 'function') {
+        this.checkoutForm.requestSubmit();
+      } else {
+        this.checkoutForm.submit();
+      }
     }
 
     openBuyNowLimitModal(message) {

@@ -187,6 +187,12 @@
 
             </form>
 
+            <form action="/cart" method="post" data-buy-now-checkout-form hidden>
+              <input type="hidden" name="_token" value="{% csrf %}">
+              <input type="hidden" name="current_currency" value="{{ shop.selected_currency }}">
+              <input type="hidden" name="checkout" value="true">
+            </form>
+
             <dialog
               class="buy-now-limit-modal"
               data-checkout-limit-modal
