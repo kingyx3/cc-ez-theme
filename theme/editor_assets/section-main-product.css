@@ -203,14 +203,33 @@ fieldset.product-form__input .form__label {
 }
 
 .product-form__submit {
+  margin: 0;
+}
+
+.product-form__submit + .product-form__submit {
   margin-top: 1rem;
-  margin-bottom: 1rem;
+}
+
+.product-form__submit--secondary {
+  --color-button: var(--color-base-accent-1);
+  --color-button-text: var(--color-base-accent-1);
+  --alpha-button-background: 0;
+  --alpha-button-border: 1;
 }
 
 .no-js .product-form__submit.button--secondary {
   --color-button: var(--color-base-accent-1);
   --color-button-text: var(--color-base-solid-button-labels);
   --alpha-button-background: 1;
+}
+
+.no-js .product-form__submit--secondary.button--secondary {
+  --color-button-text: var(--color-base-accent-1);
+  --alpha-button-background: 0;
+}
+
+.no-js .product-form__buy-now {
+  display: none;
 }
 
 

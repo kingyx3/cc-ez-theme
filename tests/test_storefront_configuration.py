@@ -35,6 +35,61 @@ class StorefrontConfigurationTests(unittest.TestCase):
         ]
         self.assertNotIn("Worldwide shipping", rendered_text)
 
+    def test_product_page_has_buy_now_checkout_action(self) -> None:
+        main_product = (
+            THEME_ROOT / "sections" / "main-product.liquid"
+        ).read_text(encoding="utf-8")
+        self.assertRegex(
+            main_product,
+            r'name="add"[\s\S]+?class="[^"]*'
+            r'product-form__submit--secondary[^"]*button--secondary',
+        )
+        self.assertRegex(
+            main_product,
+            r'name="buy_now"[\s\S]+?class="[^"]*'
+            r'product-form__buy-now[^"]*button--primary',
+        )
+        self.assertIn("Buy now", main_product)
+
+        product_form = (
+            THEME_ROOT / "assets" / "product-form.js"
+        ).read_text(encoding="utf-8")
+        editor_product_form = (
+            THEME_ROOT / "editor_assets" / "product-form.js"
+        ).read_text(encoding="utf-8")
+        self.assertEqual(product_form, editor_product_form)
+        self.assertIn("evt.submitter", product_form)
+        self.assertIn("serializeForm(this.form)", product_form)
+        self.assertIn("EasyStore.Action.addToCart", product_form)
+        self.assertIn("submitButton.name === 'buy_now'", product_form)
+        self.assertIn("window.location.assign('/checkout')", product_form)
+        self.assertLess(
+            product_form.index("cart.description != undefined"),
+            product_form.index("if(buyNow)"),
+        )
+
+        for asset_directory in ("assets", "editor_assets"):
+            stylesheet = (
+                THEME_ROOT / asset_directory / "section-main-product.css"
+            ).read_text(encoding="utf-8")
+            self.assertIn(".product-form__submit--secondary", stylesheet)
+            self.assertIn(
+                "--color-button: var(--color-base-accent-1);",
+                stylesheet,
+            )
+            self.assertIn(
+                "--color-button-text: var(--color-base-accent-1);",
+                stylesheet,
+            )
+
+        global_script = (
+            THEME_ROOT / "assets" / "global.js"
+        ).read_text(encoding="utf-8")
+        self.assertIn("'[name=\"buy_now\"]'", global_script)
+        self.assertIn(
+            "querySelectorAll('.product-form__submit')", global_script
+        )
+
     def test_homepage_collections_are_six_products_in_three_columns(self) -> None:
         expected = {
             "1667498127486": ("Best Sellers", "feature-on-homepage"),
