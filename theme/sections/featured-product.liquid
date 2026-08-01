@@ -1,4 +1,5 @@
 {{ 'section-featured-product.css' | asset_url | stylesheet_tag }}
+{{ 'component-quantity-limit.css' | asset_url | stylesheet_tag }}
 {{ 'component-price.css' | asset_url | stylesheet_tag }}
 
 <!-- {{ 'component-rte.css' | asset_url | stylesheet_tag }} -->
@@ -99,7 +100,7 @@
                   <select name="id" id="featured-product-select-{{ section.__key }}" class="hide">
                     {% for variant in featured_product.variants %}
                       {% if variant.available %}
-                        <option {% if variant == featured_product.selected_or_first_available_variant %} selected="selected" {% endif %} data-sku="{{ variant.sku }}" value="{{ variant.id }}">{{ variant.title }} - {{ variant.price | money: shop.money_format }}</option>
+                        <option {% if variant == featured_product.selected_or_first_available_variant %} selected="selected" {% endif %} data-sku="{{ variant.sku }}" data-inventory-quantity="{{ variant.inventory_quantity }}" value="{{ variant.id }}">{{ variant.title }} - {{ variant.price | money: shop.money_format }}</option>
                       {% else %}
                         <option disabled="disabled">
                           {{ variant.title }} - {{ 'products.product.sold_out' | t }}
@@ -121,6 +122,7 @@
                         type="number"
                         name="quantity"
                         id="FeaturedQuantity-{{ section.__key }}"
+                        aria-describedby="FeaturedQuantityLimit-{{ section.__key }}"
                         min="1"
                         value="1"
                       >
@@ -128,6 +130,13 @@
                       {% include 'svg-definitions' with 'icon-plus' %}
                     </button>
                   </quantity-input>
+                  <p
+                    id="FeaturedQuantityLimit-{{ section.__key }}"
+                    class="quantity-limit-message hidden"
+                    data-quantity-limit-message
+                    role="status"
+                    aria-live="polite"
+                  ></p>
                 </div>
 
                 <div class="product-form__buttons">

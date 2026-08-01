@@ -152,6 +152,54 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertEqual(global_script, editor_global_script)
         self.assertIn("this.productForm.querySelector('[data-buy-now]')", global_script)
         self.assertIn("querySelectorAll('.product-form__submit')", global_script)
+        self.assertIn("notifyQuantityRules()", global_script)
+        self.assertIn("new CustomEvent('product:variant-change'", global_script)
+
+        for relative in (
+            "sections/main-product.liquid",
+            "sections/featured-product.liquid",
+            "snippets/product-quickview.liquid",
+        ):
+            markup = (THEME_ROOT / relative).read_text(encoding="utf-8")
+            with self.subTest(path=relative):
+                self.assertIn("data-inventory-quantity", markup)
+                self.assertIn("data-quantity-limit-message", markup)
+                self.assertIn("aria-live=\"polite\"", markup)
+
+        self.assertIn(
+            "{{ 'component-quantity-limit.css' | asset_url | stylesheet_tag }}",
+            main_product,
+        )
+        quickview_modal = (
+            THEME_ROOT / "snippets" / "product-quickview-modal.liquid"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            "{{ 'component-quantity-limit.css' | asset_url | stylesheet_tag }}",
+            quickview_modal,
+        )
+
+        self.assertIn("validateQuantity(focusInvalid = false)", product_form)
+        self.assertIn("variant.inventory_quantity", product_form)
+        self.assertIn("variant.customer_purchase_limit", product_form)
+        self.assertIn("variant.store_purchase_limit", product_form)
+        self.assertIn("variant.promotion_purchase_limit", product_form)
+        self.assertIn("this.nativeQuantityMaximum", product_form)
+        self.assertIn("this.quantityInput.setAttribute('max'", product_form)
+        self.assertIn("this.setPurchaseButtonsLimited(true)", product_form)
+        self.assertIn("this.rememberRejectedQuantity(", product_form)
+        self.assertIn("this.validateQuantity(true)", product_form)
+
+        quantity_css = (
+            THEME_ROOT / "assets" / "component-quantity-limit.css"
+        ).read_text(encoding="utf-8")
+        editor_quantity_css = (
+            THEME_ROOT / "editor_assets" / "component-quantity-limit.css"
+        ).read_text(encoding="utf-8")
+        self.assertEqual(quantity_css, editor_quantity_css)
+        self.assertIn(".quantity-limit-message--warning", quantity_css)
+        self.assertIn(".quantity-limit-message--error", quantity_css)
+        self.assertIn(".quantity-limit-exceeded .quantity", quantity_css)
+        self.assertIn("prefers-contrast: more", quantity_css)
 
     def test_homepage_collections_are_six_products_in_three_columns(self) -> None:
         expected = {

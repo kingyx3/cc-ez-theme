@@ -200,6 +200,7 @@ class VariantSelects {
     if (!this.currentVariant || (!this.currentVariant.available && this.currentVariant.inventory_quantity != 0)) {
       this.toggleAddButton(true, '', true);
       this.setUnavailable(id);
+      this.notifyQuantityRules();
       return;
     }
 
@@ -208,6 +209,17 @@ class VariantSelects {
     const price = document.getElementById('price-'+id);
     if (price) price.classList.remove('visibility-hidden');
     this.toggleAddButton(!this.currentVariant.available, window.variantStrings.soldOut);
+    this.notifyQuantityRules();
+  }
+
+  notifyQuantityRules() {
+    if (!this.productForm) return;
+    const productFormElement = this.productForm.closest('product-form');
+    if (!productFormElement) return;
+
+    productFormElement.dispatchEvent(new CustomEvent('product:variant-change', {
+      detail: { variant: this.currentVariant }
+    }));
   }
   
   updateLabelValue(){
