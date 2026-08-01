@@ -51,7 +51,7 @@ class StorefrontConfigurationTests(unittest.TestCase):
         )
         self.assertIn("Buy now", main_product)
         self.assertEqual(
-            len(re.findall(r"\\sdata-buy-now(?:\\s|>)", main_product)),
+            len(re.findall(r"\sdata-buy-now(?:\s|>)", main_product)),
             1,
         )
         self.assertIn("data-checkout-limit-modal", main_product)
