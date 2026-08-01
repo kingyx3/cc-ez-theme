@@ -434,20 +434,18 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertEqual(header.count("<span>Browse</span>"), 2)
         self.assertIn('class="header__nav-item--browse"', header)
         self.assertIn('class="menu-drawer__nav-item--browse"', header)
-        self.assertIn("contents.main-menu.links", browse)
-        self.assertIn("main_menu_title == 'browse'", browse)
-        self.assertIn("main_menu_title == 'category'", browse)
-        self.assertIn("main_menu_title == 'categories'", browse)
-        self.assertIn("contents.catalog.links", browse)
-        self.assertLess(
-            browse.index("{% for main_menu_link in contents.main-menu.links %}"),
-            browse.index("{% assign browse_links = contents.catalog.links %}"),
-        )
-        self.assertIn("contents[browse_link.handle].links", browse)
-        self.assertIn("contents[child_link.handle].links", browse)
-        self.assertIn("contents[grandchild_link.handle].links", browse)
-        self.assertIn("great_grandchild_links", browse)
-        self.assertIn("great_grandchild_link.url", browse)
+        self.assertIn("{% for parent_collection in collections %}", browse)
+        self.assertIn("parent_collection.parent_id", browse)
+        self.assertIn("child_collection.parent_id", browse)
+        self.assertIn("grandchild_collection.parent_id", browse)
+        self.assertIn("great_grandchild_collection.parent_id", browse)
+        self.assertIn("child_candidate.parent_id", browse)
+        self.assertIn("grandchild_candidate.parent_id", browse)
+        self.assertIn("great_grandchild_candidate.parent_id", browse)
+        self.assertIn('href="/collections/{{ child_collection.handle | escape }}"', browse)
+        self.assertIn('href="/collections/{{ grandchild_collection.handle | escape }}"', browse)
+        self.assertNotIn("contents.catalog.links", browse)
+        self.assertNotIn("contents[", browse)
         self.assertIn("navigation_mode == 'mobile'", browse)
         self.assertIsNone(
             re.search(

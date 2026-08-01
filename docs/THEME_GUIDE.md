@@ -277,12 +277,13 @@ top-level destinations in a fixed order:
 5. About Us (`/pages/about-us`)
 
 About Us is pushed to the right edge of the desktop navigation area. The
-Browse locates the Browse, Category, or Categories entry in
-`contents.main-menu.links`, then resolves its hierarchy from EasyStore's
-canonical `contents[link.handle].links` navigation records. It renders the
-parent plus three descendant collection levels. The flat
-`contents.catalog.links` record is used only when no nested main-menu record is
-available. On desktop, hovering or focusing a parent collection opens its child
+Browse builds the collection family tree directly from EasyStore's global
+`collections` object. Each visible collection is matched to its parent by
+comparing `collection.parent_id` with `collection.id`; storefront URLs are
+generated from `collection.handle`. This is intentionally independent of
+navigation link handles because EasyStore's documented `link` object does not
+contain descendant links. It renders root collections plus three descendant
+levels. On desktop, hovering or focusing a parent collection opens its child
 collection flyout; mobile retains nested drill-down navigation. The three fixed
 collection shortcuts remain direct EasyStore links.
 

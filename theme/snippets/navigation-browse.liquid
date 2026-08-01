@@ -1,190 +1,227 @@
 {% comment %}
-  Renders EasyStore's handle-backed product collection hierarchy.
+  Renders EasyStore's product collection family tree.
 
   Required:
   - navigation_mode: "desktop" or "mobile"
 
-  EasyStore stores each collection level as a navigation record addressed by
-  the parent link's handle. The catalog supports three descendant levels.
+  EasyStore exposes collection ancestry through collections[].id and
+  collections[].parent_id. Navigation link handles do not expose this family
+  tree, so every level below is derived directly from the collections object.
 {% endcomment %}
 
-{% assign browse_links = blank %}
+{% for parent_collection in collections %}
+  {% assign parent_id = parent_collection.id | append: '' %}
+  {% assign parent_parent_id = parent_collection.parent_id | append: '' %}
+  {% assign parent_has_children = false %}
 
-{% comment %}
-  The hierarchy lives in the navigation record linked from EasyStore's main
-  menu. contents.catalog.links is a flat storefront catalog on this store, so
-  it is only a last-resort fallback.
-{% endcomment %}
-{% for main_menu_link in contents.main-menu.links %}
-  {% assign main_menu_title = main_menu_link.title | downcase %}
-  {% assign main_menu_children = contents[main_menu_link.handle].links %}
-  {% if browse_links == blank and main_menu_children != blank %}
-    {% if main_menu_title == 'browse' or main_menu_title == 'category' or main_menu_title == 'categories' %}
-      {% assign browse_links = main_menu_children %}
-    {% endif %}
-  {% endif %}
-{% endfor %}
+  {% if parent_parent_id == '' or parent_parent_id == '0' %}
+    {% unless parent_collection.is_locked %}
+      {% for child_candidate in collections %}
+        {% assign child_candidate_parent_id = child_candidate.parent_id | append: '' %}
+        {% if child_candidate_parent_id == parent_id and child_candidate.is_locked != true %}
+          {% assign parent_has_children = true %}
+        {% endif %}
+      {% endfor %}
 
-{% if browse_links == blank %}
-  {% for main_menu_link in contents.main-menu.links %}
-    {% assign main_menu_children = contents[main_menu_link.handle].links %}
-    {% if browse_links == blank and main_menu_children != blank %}
-      {% assign browse_links = main_menu_children %}
-    {% endif %}
-  {% endfor %}
-{% endif %}
-
-{% if browse_links == blank %}
-  {% assign browse_links = contents.catalog.links %}
-{% endif %}
-
-{% for browse_link in browse_links %}
-  {% assign child_links = contents[browse_link.handle].links %}
-
-  {% if navigation_mode == 'mobile' %}
-    <li>
-      {% if child_links != blank %}
-        <details>
-          <summary class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
-            <span>{{ browse_link.title | escape }}</span>
-            {% include 'svg-definitions' with 'icon-arrow' %}
-            {% include 'svg-definitions' with 'icon-caret' %}
-          </summary>
-          <div class="menu-drawer__submenu motion-reduce" tabindex="-1">
-            <div class="menu-drawer__inner-submenu">
-              <button type="button" class="menu-drawer__close-button link link--text focus-inset">
+      {% if navigation_mode == 'mobile' %}
+        <li>
+          {% if parent_has_children %}
+            <details>
+              <summary class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
+                <span>{{ parent_collection.title | default: parent_collection.name | escape }}</span>
                 {% include 'svg-definitions' with 'icon-arrow' %}
-                {{ browse_link.title | escape }}
-              </button>
-              <ul class="menu-drawer__menu list-menu" role="list">
-                {% for child_link in child_links %}
-                  {% assign grandchild_links = contents[child_link.handle].links %}
-                  <li>
-                    {% if grandchild_links != blank %}
-                      <details>
-                        <summary class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
-                          <span>{{ child_link.title | escape }}</span>
-                          {% include 'svg-definitions' with 'icon-arrow' %}
-                          {% include 'svg-definitions' with 'icon-caret' %}
-                        </summary>
-                        <div class="menu-drawer__submenu motion-reduce" tabindex="-1">
-                          <div class="menu-drawer__inner-submenu">
-                            <button type="button" class="menu-drawer__close-button link link--text focus-inset">
-                              {% include 'svg-definitions' with 'icon-arrow' %}
-                              {{ child_link.title | escape }}
-                            </button>
-                            <ul class="menu-drawer__menu list-menu" role="list">
-                              {% for grandchild_link in grandchild_links %}
-                                {% assign great_grandchild_links = contents[grandchild_link.handle].links %}
-                                <li>
-                                  {% if great_grandchild_links != blank %}
-                                    <details>
-                                      <summary class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
-                                        <span>{{ grandchild_link.title | escape }}</span>
-                                        {% include 'svg-definitions' with 'icon-arrow' %}
-                                        {% include 'svg-definitions' with 'icon-caret' %}
-                                      </summary>
-                                      <div class="menu-drawer__submenu motion-reduce" tabindex="-1">
-                                        <div class="menu-drawer__inner-submenu">
-                                          <button type="button" class="menu-drawer__close-button link link--text focus-inset">
-                                            {% include 'svg-definitions' with 'icon-arrow' %}
-                                            {{ grandchild_link.title | escape }}
-                                          </button>
-                                          <ul class="menu-drawer__menu list-menu" role="list">
-                                            {% for great_grandchild_link in great_grandchild_links %}
-                                              <li>
-                                                <a href="{{ great_grandchild_link.url }}"{% if great_grandchild_link.new_page == true or great_grandchild_link.new_page == 'true' %} target="_blank" rel="noopener noreferrer"{% endif %} class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
-                                                  {{ great_grandchild_link.title | escape }}
-                                                </a>
-                                              </li>
+                {% include 'svg-definitions' with 'icon-caret' %}
+              </summary>
+              <div class="menu-drawer__submenu motion-reduce" tabindex="-1">
+                <div class="menu-drawer__inner-submenu">
+                  <button type="button" class="menu-drawer__close-button link link--text focus-inset">
+                    {% include 'svg-definitions' with 'icon-arrow' %}
+                    {{ parent_collection.title | default: parent_collection.name | escape }}
+                  </button>
+                  <ul class="menu-drawer__menu list-menu" role="list">
+                    {% for child_collection in collections %}
+                      {% assign child_parent_id = child_collection.parent_id | append: '' %}
+                      {% if child_parent_id == parent_id %}
+                        {% unless child_collection.is_locked %}
+                          {% assign child_id = child_collection.id | append: '' %}
+                          {% assign child_has_children = false %}
+                          {% for grandchild_candidate in collections %}
+                            {% assign grandchild_candidate_parent_id = grandchild_candidate.parent_id | append: '' %}
+                            {% if grandchild_candidate_parent_id == child_id and grandchild_candidate.is_locked != true %}
+                              {% assign child_has_children = true %}
+                            {% endif %}
+                          {% endfor %}
+                          <li>
+                            {% if child_has_children %}
+                              <details>
+                                <summary class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
+                                  <span>{{ child_collection.title | default: child_collection.name | escape }}</span>
+                                  {% include 'svg-definitions' with 'icon-arrow' %}
+                                  {% include 'svg-definitions' with 'icon-caret' %}
+                                </summary>
+                                <div class="menu-drawer__submenu motion-reduce" tabindex="-1">
+                                  <div class="menu-drawer__inner-submenu">
+                                    <button type="button" class="menu-drawer__close-button link link--text focus-inset">
+                                      {% include 'svg-definitions' with 'icon-arrow' %}
+                                      {{ child_collection.title | default: child_collection.name | escape }}
+                                    </button>
+                                    <ul class="menu-drawer__menu list-menu" role="list">
+                                      {% for grandchild_collection in collections %}
+                                        {% assign grandchild_parent_id = grandchild_collection.parent_id | append: '' %}
+                                        {% if grandchild_parent_id == child_id %}
+                                          {% unless grandchild_collection.is_locked %}
+                                            {% assign grandchild_id = grandchild_collection.id | append: '' %}
+                                            {% assign grandchild_has_children = false %}
+                                            {% for great_grandchild_candidate in collections %}
+                                              {% assign great_grandchild_candidate_parent_id = great_grandchild_candidate.parent_id | append: '' %}
+                                              {% if great_grandchild_candidate_parent_id == grandchild_id and great_grandchild_candidate.is_locked != true %}
+                                                {% assign grandchild_has_children = true %}
+                                              {% endif %}
                                             {% endfor %}
-                                          </ul>
-                                        </div>
-                                      </div>
-                                    </details>
-                                  {% else %}
-                                    <a href="{{ grandchild_link.url }}"{% if grandchild_link.new_page == true or grandchild_link.new_page == 'true' %} target="_blank" rel="noopener noreferrer"{% endif %} class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
-                                      {{ grandchild_link.title | escape }}
-                                    </a>
+                                            <li>
+                                              {% if grandchild_has_children %}
+                                                <details>
+                                                  <summary class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
+                                                    <span>{{ grandchild_collection.title | default: grandchild_collection.name | escape }}</span>
+                                                    {% include 'svg-definitions' with 'icon-arrow' %}
+                                                    {% include 'svg-definitions' with 'icon-caret' %}
+                                                  </summary>
+                                                  <div class="menu-drawer__submenu motion-reduce" tabindex="-1">
+                                                    <div class="menu-drawer__inner-submenu">
+                                                      <button type="button" class="menu-drawer__close-button link link--text focus-inset">
+                                                        {% include 'svg-definitions' with 'icon-arrow' %}
+                                                        {{ grandchild_collection.title | default: grandchild_collection.name | escape }}
+                                                      </button>
+                                                      <ul class="menu-drawer__menu list-menu" role="list">
+                                                        {% for great_grandchild_collection in collections %}
+                                                          {% assign great_grandchild_parent_id = great_grandchild_collection.parent_id | append: '' %}
+                                                          {% if great_grandchild_parent_id == grandchild_id %}
+                                                            {% unless great_grandchild_collection.is_locked %}
+                                                              <li>
+                                                                <a href="/collections/{{ great_grandchild_collection.handle | escape }}" class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
+                                                                  {{ great_grandchild_collection.title | default: great_grandchild_collection.name | escape }}
+                                                                </a>
+                                                              </li>
+                                                            {% endunless %}
+                                                          {% endif %}
+                                                        {% endfor %}
+                                                      </ul>
+                                                    </div>
+                                                  </div>
+                                                </details>
+                                              {% else %}
+                                                <a href="/collections/{{ grandchild_collection.handle | escape }}" class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
+                                                  {{ grandchild_collection.title | default: grandchild_collection.name | escape }}
+                                                </a>
+                                              {% endif %}
+                                            </li>
+                                          {% endunless %}
+                                        {% endif %}
+                                      {% endfor %}
+                                    </ul>
+                                  </div>
+                                </div>
+                              </details>
+                            {% else %}
+                              <a href="/collections/{{ child_collection.handle | escape }}" class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
+                                {{ child_collection.title | default: child_collection.name | escape }}
+                              </a>
+                            {% endif %}
+                          </li>
+                        {% endunless %}
+                      {% endif %}
+                    {% endfor %}
+                  </ul>
+                </div>
+              </div>
+            </details>
+          {% else %}
+            <a href="/collections/{{ parent_collection.handle | escape }}" class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
+              {{ parent_collection.title | default: parent_collection.name | escape }}
+            </a>
+          {% endif %}
+        </li>
+      {% else %}
+        <li{% if parent_has_children %} class="browse-menu__item--has-children"{% endif %}>
+          <a href="/collections/{{ parent_collection.handle | escape }}" class="header__menu-item list-menu__item link link--text focus-inset caption-large">
+            <span>{{ parent_collection.title | default: parent_collection.name | escape }}</span>
+            {% if parent_has_children %}
+              {% include 'svg-definitions' with 'icon-caret' , class : 'rotate-90' %}
+            {% endif %}
+          </a>
+          {% if parent_has_children %}
+            <ul class="header__submenu browse-menu__flyout list-menu list-menu--disclosure motion-reduce" role="list">
+              {% for child_collection in collections %}
+                {% assign child_parent_id = child_collection.parent_id | append: '' %}
+                {% if child_parent_id == parent_id %}
+                  {% unless child_collection.is_locked %}
+                    {% assign child_id = child_collection.id | append: '' %}
+                    {% assign child_has_children = false %}
+                    {% for grandchild_candidate in collections %}
+                      {% assign grandchild_candidate_parent_id = grandchild_candidate.parent_id | append: '' %}
+                      {% if grandchild_candidate_parent_id == child_id and grandchild_candidate.is_locked != true %}
+                        {% assign child_has_children = true %}
+                      {% endif %}
+                    {% endfor %}
+                    <li{% if child_has_children %} class="browse-menu__item--has-children"{% endif %}>
+                      <a href="/collections/{{ child_collection.handle | escape }}" class="header__menu-item list-menu__item link link--text focus-inset caption-large">
+                        <span>{{ child_collection.title | default: child_collection.name | escape }}</span>
+                        {% if child_has_children %}
+                          {% include 'svg-definitions' with 'icon-caret' , class : 'rotate-90' %}
+                        {% endif %}
+                      </a>
+                      {% if child_has_children %}
+                        <ul class="header__submenu browse-menu__flyout list-menu list-menu--disclosure motion-reduce" role="list">
+                          {% for grandchild_collection in collections %}
+                            {% assign grandchild_parent_id = grandchild_collection.parent_id | append: '' %}
+                            {% if grandchild_parent_id == child_id %}
+                              {% unless grandchild_collection.is_locked %}
+                                {% assign grandchild_id = grandchild_collection.id | append: '' %}
+                                {% assign grandchild_has_children = false %}
+                                {% for great_grandchild_candidate in collections %}
+                                  {% assign great_grandchild_candidate_parent_id = great_grandchild_candidate.parent_id | append: '' %}
+                                  {% if great_grandchild_candidate_parent_id == grandchild_id and great_grandchild_candidate.is_locked != true %}
+                                    {% assign grandchild_has_children = true %}
+                                  {% endif %}
+                                {% endfor %}
+                                <li{% if grandchild_has_children %} class="browse-menu__item--has-children"{% endif %}>
+                                  <a href="/collections/{{ grandchild_collection.handle | escape }}" class="header__menu-item list-menu__item link link--text focus-inset caption-large">
+                                    <span>{{ grandchild_collection.title | default: grandchild_collection.name | escape }}</span>
+                                    {% if grandchild_has_children %}
+                                      {% include 'svg-definitions' with 'icon-caret' , class : 'rotate-90' %}
+                                    {% endif %}
+                                  </a>
+                                  {% if grandchild_has_children %}
+                                    <ul class="header__submenu browse-menu__flyout list-menu list-menu--disclosure motion-reduce" role="list">
+                                      {% for great_grandchild_collection in collections %}
+                                        {% assign great_grandchild_parent_id = great_grandchild_collection.parent_id | append: '' %}
+                                        {% if great_grandchild_parent_id == grandchild_id %}
+                                          {% unless great_grandchild_collection.is_locked %}
+                                            <li>
+                                              <a href="/collections/{{ great_grandchild_collection.handle | escape }}" class="header__menu-item list-menu__item link link--text focus-inset caption-large">
+                                                {{ great_grandchild_collection.title | default: great_grandchild_collection.name | escape }}
+                                              </a>
+                                            </li>
+                                          {% endunless %}
+                                        {% endif %}
+                                      {% endfor %}
+                                    </ul>
                                   {% endif %}
                                 </li>
-                              {% endfor %}
-                            </ul>
-                          </div>
-                        </div>
-                      </details>
-                    {% else %}
-                      <a href="{{ child_link.url }}"{% if child_link.new_page == true or child_link.new_page == 'true' %} target="_blank" rel="noopener noreferrer"{% endif %} class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
-                        {{ child_link.title | escape }}
-                      </a>
-                    {% endif %}
-                  </li>
-                {% endfor %}
-              </ul>
-            </div>
-          </div>
-        </details>
-      {% else %}
-        <a href="{{ browse_link.url }}"{% if browse_link.new_page == true or browse_link.new_page == 'true' %} target="_blank" rel="noopener noreferrer"{% endif %} class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
-          {{ browse_link.title | escape }}
-        </a>
-      {% endif %}
-    </li>
-  {% else %}
-    <li{% if child_links != blank %} class="browse-menu__item--has-children"{% endif %}>
-      {% if child_links != blank %}
-        <a href="{{ browse_link.url }}"{% if browse_link.new_page == true or browse_link.new_page == 'true' %} target="_blank" rel="noopener noreferrer"{% endif %} class="header__menu-item list-menu__item link link--text focus-inset caption-large">
-          <span>{{ browse_link.title | escape }}</span>
-          {% include 'svg-definitions' with 'icon-caret' , class : 'rotate-90' %}
-        </a>
-        <ul class="header__submenu browse-menu__flyout list-menu list-menu--disclosure motion-reduce" role="list">
-          {% for child_link in child_links %}
-            {% assign grandchild_links = contents[child_link.handle].links %}
-            <li{% if grandchild_links != blank %} class="browse-menu__item--has-children"{% endif %}>
-              {% if grandchild_links != blank %}
-                <a href="{{ child_link.url }}"{% if child_link.new_page == true or child_link.new_page == 'true' %} target="_blank" rel="noopener noreferrer"{% endif %} class="header__menu-item list-menu__item link link--text focus-inset caption-large">
-                  <span>{{ child_link.title | escape }}</span>
-                  {% include 'svg-definitions' with 'icon-caret' , class : 'rotate-90' %}
-                </a>
-                <ul class="header__submenu browse-menu__flyout list-menu list-menu--disclosure motion-reduce" role="list">
-                  {% for grandchild_link in grandchild_links %}
-                    {% assign great_grandchild_links = contents[grandchild_link.handle].links %}
-                    <li{% if great_grandchild_links != blank %} class="browse-menu__item--has-children"{% endif %}>
-                      {% if great_grandchild_links != blank %}
-                        <a href="{{ grandchild_link.url }}"{% if grandchild_link.new_page == true or grandchild_link.new_page == 'true' %} target="_blank" rel="noopener noreferrer"{% endif %} class="header__menu-item list-menu__item link link--text focus-inset caption-large">
-                          <span>{{ grandchild_link.title | escape }}</span>
-                          {% include 'svg-definitions' with 'icon-caret' , class : 'rotate-90' %}
-                        </a>
-                        <ul class="header__submenu browse-menu__flyout list-menu list-menu--disclosure motion-reduce" role="list">
-                          {% for great_grandchild_link in great_grandchild_links %}
-                            <li>
-                              <a href="{{ great_grandchild_link.url }}"{% if great_grandchild_link.new_page == true or great_grandchild_link.new_page == 'true' %} target="_blank" rel="noopener noreferrer"{% endif %} class="header__menu-item list-menu__item link link--text focus-inset caption-large">
-                                {{ great_grandchild_link.title | escape }}
-                              </a>
-                            </li>
+                              {% endunless %}
+                            {% endif %}
                           {% endfor %}
                         </ul>
-                      {% else %}
-                        <a href="{{ grandchild_link.url }}"{% if grandchild_link.new_page == true or grandchild_link.new_page == 'true' %} target="_blank" rel="noopener noreferrer"{% endif %} class="header__menu-item list-menu__item link link--text focus-inset caption-large">
-                          {{ grandchild_link.title | escape }}
-                        </a>
                       {% endif %}
                     </li>
-                  {% endfor %}
-                </ul>
-              {% else %}
-                <a href="{{ child_link.url }}"{% if child_link.new_page == true or child_link.new_page == 'true' %} target="_blank" rel="noopener noreferrer"{% endif %} class="header__menu-item list-menu__item link link--text focus-inset caption-large">
-                  {{ child_link.title | escape }}
-                </a>
-              {% endif %}
-            </li>
-          {% endfor %}
-        </ul>
-      {% else %}
-        <a href="{{ browse_link.url }}"{% if browse_link.new_page == true or browse_link.new_page == 'true' %} target="_blank" rel="noopener noreferrer"{% endif %} class="header__menu-item list-menu__item link link--text focus-inset caption-large">
-          {{ browse_link.title | escape }}
-        </a>
+                  {% endunless %}
+                {% endif %}
+              {% endfor %}
+            </ul>
+          {% endif %}
+        </li>
       {% endif %}
-    </li>
+    {% endunless %}
   {% endif %}
 {% endfor %}
+
