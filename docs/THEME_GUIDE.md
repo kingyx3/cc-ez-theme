@@ -267,23 +267,26 @@ background.
 
 ### Navigation data
 
-The desktop header and mobile drawer expose four top-level destinations in a
-fixed order:
+The desktop header and mobile drawer expose a Browse dropdown followed by four
+top-level destinations in a fixed order:
 
-1. Hobbit (`/collections/the-hobbit`)
-2. Marvel (`/collections/marvel-super-heroes`)
-3. Strixhaven (`/collections/secrets-of-strixhaven`)
-4. About Us (`/pages/about-us`)
+1. Browse (EasyStore product collection hierarchy)
+2. Hobbit (`/collections/the-hobbit`)
+3. Marvel (`/collections/marvel-super-heroes`)
+4. Strixhaven (`/collections/secrets-of-strixhaven`)
+5. About Us (`/pages/about-us`)
 
 About Us is pushed to the right edge of the desktop navigation area. The
-header intentionally has no Category or Categories dropdown; the three
-collection shortcuts are direct EasyStore collection links.
+Browse reads `contents.catalog.links` and renders up to three collection levels
+from EasyStore's product catalog hierarchy. The three fixed collection shortcuts
+remain direct EasyStore links.
 
 The theme controls:
 
 - visual treatment;
 - a single-row desktop layout with the logo directly before navigation;
 - mobile drawer behavior;
+- the Browse dropdown backed by EasyStore navigation records;
 - the fixed collection shortcut destinations.
 
 ## 8. Product taxonomy
@@ -309,11 +312,6 @@ such as Collector Booster Boxes, Play Booster Boxes, Bundles, and Booster
 Packs. Use tags for narrower operational detail.
 
 ## 9. Out-of-stock interest
-
-Wishlist is not part of this storefront experience. The theme filters it from
-EasyStore-provided navigation records and suppresses controls injected by app
-snippets so it cannot reappear on desktop, mobile, product, collection, or
-account surfaces.
 
 For out-of-stock products, a free manual alternative is a theme-rendered
 WhatsApp interest link containing the product title, selected variant, and
@@ -345,8 +343,7 @@ Calls such as `{% app_snippet 'collection/product_top' %}` are integration
 points. They allow installed EasyStore apps to inject storefront behavior.
 
 Do not remove app hooks merely because they render nothing in a local source
-review. App hooks are retained, while unsupported wishlist UI is removed by the
-theme's global storefront layer.
+review. Installed apps own any storefront UI they inject through these hooks.
 
 ## 12. Accessibility requirements
 

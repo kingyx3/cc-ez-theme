@@ -33,21 +33,6 @@ body {
   display: none !important;
 }
 
-a[href*="wishlist" i],
-form[action*="wishlist" i],
-button[name*="wishlist" i],
-[aria-label*="wishlist" i],
-[title*="wishlist" i],
-[id*="wishlist" i],
-[name*="wishlist" i],
-[data-wishlist],
-[data-app*="wishlist" i],
-[class~="wishlist"],
-[class^="wishlist-"],
-[class*=" wishlist-"] {
-  display: none !important;
-}
-
 .store-hours__status {
   font-weight: 700;
 }

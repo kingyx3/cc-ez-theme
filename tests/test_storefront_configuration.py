@@ -421,21 +421,30 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertNotIn("#ff2636", carousell_icon)
         self.assertNotIn('fill="#fff"', carousell_icon)
 
-    def test_header_uses_fixed_collection_shortcuts_without_category(self) -> None:
+    def test_header_uses_browse_hierarchy_before_fixed_shortcuts(self) -> None:
         header = (THEME_ROOT / "sections" / "header.liquid").read_text(
             encoding="utf-8"
         )
-        categories_snippet = (
-            THEME_ROOT / "snippets" / "navigation-categories.liquid"
+        browse_snippet = (
+            THEME_ROOT / "snippets" / "navigation-browse.liquid"
         )
-        self.assertFalse(categories_snippet.exists())
-        self.assertNotIn("navigation-categories", header)
-        self.assertNotIn("category_links", header)
-        self.assertNotIn("contents.catalog.links", header)
-        self.assertNotIn('class="header__nav-item--categories"', header)
-        self.assertNotIn('class="menu-drawer__nav-item--categories"', header)
-        self.assertNotIn("<span>Category</span>", header)
-        self.assertNotIn("<span>Categories</span>", header)
+        self.assertTrue(browse_snippet.exists())
+        browse = browse_snippet.read_text(encoding="utf-8")
+        self.assertEqual(header.count("navigation-browse"), 2)
+        self.assertEqual(header.count("<span>Browse</span>"), 2)
+        self.assertIn('class="header__nav-item--browse"', header)
+        self.assertIn('class="menu-drawer__nav-item--browse"', header)
+        self.assertIn("contents.catalog.links", browse)
+        self.assertIn("contents[browse_link.handle].links", browse)
+        self.assertIn("contents[child_link.handle].links", browse)
+        self.assertIn("navigation_mode == 'mobile'", browse)
+        self.assertIsNone(
+            re.search(
+                r"<summary[^>]*>(?:(?!</summary>).)*<a\b",
+                browse,
+                flags=re.DOTALL,
+            )
+        )
         self.assertNotIn("{% continue %}", header)
         self.assertEqual(header.count('href="/collections/the-hobbit"'), 2)
         self.assertEqual(
@@ -446,6 +455,7 @@ class StorefrontConfigurationTests(unittest.TestCase):
         )
         self.assertEqual(header.count('href="/pages/about-us"'), 2)
 
+        first_browse = header.index("navigation-browse")
         first_hobbit = header.index('href="/collections/the-hobbit"')
         first_marvel = header.index(
             'href="/collections/marvel-super-heroes"', first_hobbit
@@ -454,10 +464,12 @@ class StorefrontConfigurationTests(unittest.TestCase):
             'href="/collections/secrets-of-strixhaven"', first_marvel
         )
         first_about = header.index('href="/pages/about-us"', first_strixhaven)
+        self.assertLess(first_browse, first_hobbit)
         self.assertLess(first_hobbit, first_marvel)
         self.assertLess(first_marvel, first_strixhaven)
         self.assertLess(first_strixhaven, first_about)
 
+        second_browse = header.index("navigation-browse", first_browse + 1)
         second_hobbit = header.index(
             'href="/collections/the-hobbit"', first_about
         )
@@ -468,6 +480,7 @@ class StorefrontConfigurationTests(unittest.TestCase):
             'href="/collections/secrets-of-strixhaven"', second_marvel
         )
         second_about = header.index('href="/pages/about-us"', second_strixhaven)
+        self.assertLess(second_browse, second_hobbit)
         self.assertLess(second_hobbit, second_marvel)
         self.assertLess(second_marvel, second_strixhaven)
         self.assertLess(second_strixhaven, second_about)
@@ -492,36 +505,15 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertIn("padding-top: 0;", stylesheet)
         self.assertIn("padding-bottom: 0;", stylesheet)
 
-    def test_wishlist_is_removed_from_all_theme_surfaces(self) -> None:
-        header = (THEME_ROOT / "sections" / "header.liquid").read_text(
-            encoding="utf-8"
-        )
-        account = (
-            THEME_ROOT / "templates" / "customers" / "account.liquid"
-        ).read_text(encoding="utf-8")
-        global_script = (THEME_ROOT / "assets" / "global.js").read_text(
-            encoding="utf-8"
-        )
-        editor_script = (
-            THEME_ROOT / "editor_assets" / "global.js"
-        ).read_text(encoding="utf-8")
-        stylesheet = (
-            THEME_ROOT / "assets" / "conversion-theme.css"
-        ).read_text(encoding="utf-8")
-
-        self.assertGreaterEqual(header.count("contains 'wishlist'"), 4)
-        self.assertIn("link.handle contains 'wishlist'", account)
-        self.assertIn("const wishlistSelectors", global_script)
-        self.assertIn("removeMobileWishlistUI", global_script)
-        self.assertIn("mobileWishlistDrawerSelector", global_script)
-        self.assertIn("characterData: true", global_script)
-        self.assertIn("new MutationObserver", global_script)
-        self.assertIn('a[href*="wishlist" i]', stylesheet)
-        self.assertIn('[aria-label*="wishlist" i]', stylesheet)
-        self.assertEqual(global_script, editor_script)
-
-        for settings in self.sections.values():
-            self.assertNotIn("wishlist", json.dumps(settings).lower())
+    def test_unsupported_saved_items_code_is_absent(self) -> None:
+        unsupported_term = "wish" + "list"
+        for path in THEME_ROOT.rglob("*"):
+            if path.is_file():
+                self.assertNotIn(
+                    unsupported_term,
+                    path.read_text(encoding="utf-8").lower(),
+                    path,
+                )
 
     def test_homepage_collection_eyebrows_use_each_section_accent(self) -> None:
         stylesheet = (
