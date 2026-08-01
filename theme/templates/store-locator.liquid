@@ -57,9 +57,37 @@
 
   var locations = {{locations | json}};
 
+  const storeLocatorStrings = {
+    open: {{ 'general.store_locator.open' | t | default: 'Open' | json }},
+    closed: {{ 'general.store_locator.closed' | t | default: 'Closed' | json }},
+    closes: {{ 'general.store_locator.closes' | t | default: 'Closes' | json }},
+    everyday: {{ 'general.store_locator.everyday' | t | default: 'Everyday' | json }},
+    hoursUnavailable: {{ 'general.store_locator.hours_unavailable' | t | default: 'Hours unavailable' | json }},
+    contactForHours: {{ 'general.store_locator.contact_for_hours' | t | default: 'Please contact the store for opening hours' | json }},
+    openAllDay: {{ 'general.store_locator.open_all_day' | t | default: 'Open for 24 hours' | json }},
+    days: {
+      mon: {{ 'date_formats.days.mon' | t | default: 'Mon' | json }},
+      tue: {{ 'date_formats.days.tue' | t | default: 'Tue' | json }},
+      wed: {{ 'date_formats.days.wed' | t | default: 'Wed' | json }},
+      thur: {{ 'date_formats.days.thu' | t | default: 'Thu' | json }},
+      fri: {{ 'date_formats.days.fri' | t | default: 'Fri' | json }},
+      sat: {{ 'date_formats.days.sat' | t | default: 'Sat' | json }},
+      sun: {{ 'date_formats.days.sun' | t | default: 'Sun' | json }},
+    },
+  };
+
   const ordering = { mon: 1, tue: 2, wed: 3, thur: 4, fri: 5, sat: 6, sun: 7 };
 
-  const formatDay = day => day ? day.replace(day[0], day[0].toUpperCase()) : '';
+  const formatDay = day => storeLocatorStrings.days[day] || (day ? day.replace(day[0], day[0].toUpperCase()) : '');
+
+  const setHoursStatus = (button, isOpen, suffix = '') => {
+    const status = document.createElement('span');
+    status.className = `store-hours__status store-hours__status--${isOpen ? 'open' : 'closed'}`;
+    status.textContent = isOpen ? storeLocatorStrings.open : storeLocatorStrings.closed;
+    button.replaceChildren(status);
+
+    if (suffix) button.append(document.createTextNode(` · ${suffix}`));
+  };
 
   const convertTime = time => {
     if (typeof time !== 'string') return '';
@@ -87,7 +115,7 @@
   }
 
   const formatTime = time => {
-    if (!time || typeof time !== 'object' || !time.start || !time.end) return 'Closed';
+    if (!time || typeof time !== 'object' || !time.start || !time.end) return storeLocatorStrings.closed;
 
     var start = convertTime(checkTimeFormat(time.start))
     var end = convertTime(checkTimeFormat(time.end))
@@ -198,11 +226,11 @@
 
     if(businessHour === null) {
 
-      dropdownToggle.textContent = "Hours unavailable"
+      dropdownToggle.textContent = storeLocatorStrings.hoursUnavailable
 
       var li = document.createElement("li")
       var label = document.createElement("span")
-      label.textContent = "Please contact the store for opening hours"
+      label.textContent = storeLocatorStrings.contactForHours
       li.appendChild(label)
       dropdownMenu.appendChild(li)
 
@@ -210,11 +238,11 @@
 
     else if(Object.keys(businessHour).length <= 0) {
 
-      dropdownToggle.innerHTML = `<span style="color: green; font-weight: bold;">Open</span>`
+      setHoursStatus(dropdownToggle, true)
 
       var li = document.createElement("li")
       var label = document.createElement("span")
-      label.textContent = "Open for 24 hours"
+      label.textContent = storeLocatorStrings.openAllDay
       li.appendChild(label)
       dropdownMenu.appendChild(li)
 
@@ -222,27 +250,27 @@
 
     else if("everyday" in businessHour) {
 
-      dropdownToggle.innerHTML = `<span style="color: red; font-weight: bold;">Closed</span>`
+      setHoursStatus(dropdownToggle, false)
 
       if(checkOpen(businessHour)) {
-        dropdownToggle.innerHTML = `<span style="color: green; font-weight: bold;">Open</span> ⋅ Closes ${convertTime(businessHour.everyday.end)}`
+        setHoursStatus(dropdownToggle, true, `${storeLocatorStrings.closes} ${convertTime(businessHour.everyday.end)}`)
       }
 
       var li = document.createElement("li")
       var label = document.createElement("span")
-      label.textContent = `Everyday: ${businessHour.everyday === 'closed' ? 'Closed' : formatTime(businessHour.everyday)}`
+      label.textContent = `${storeLocatorStrings.everyday}: ${businessHour.everyday === 'closed' ? storeLocatorStrings.closed : formatTime(businessHour.everyday)}`
       li.appendChild(label)
       dropdownMenu.appendChild(li)
     }
 
     else {
 
-      dropdownToggle.innerHTML = `<span style="color: red; font-weight: bold;">Closed</span>`
+      setHoursStatus(dropdownToggle, false)
 
       var today = getToday(businessHour)
 
       if(checkOpen(businessHour)) {
-        dropdownToggle.innerHTML = `<span style="color: green; font-weight: bold;">Open</span> ⋅ Closes ${convertTime(businessHour[today].end)}`
+        setHoursStatus(dropdownToggle, true, `${storeLocatorStrings.closes} ${convertTime(businessHour[today].end)}`)
       }
 
       var listItems = []
@@ -251,7 +279,7 @@
 
         var li = document.createElement("li")
         var label = document.createElement("span")
-        label.textContent = `${formatDay(day)}: ${businessHour[day] === 'closed' ? 'Closed': formatTime(businessHour[day])}`
+        label.textContent = `${formatDay(day)}: ${businessHour[day] === 'closed' ? storeLocatorStrings.closed : formatTime(businessHour[day])}`
         li.appendChild(label)
 
         listItems[ordering[day]] = li

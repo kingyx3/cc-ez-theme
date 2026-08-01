@@ -36,12 +36,69 @@ body {
 a[href*="wishlist" i],
 form[action*="wishlist" i],
 button[name*="wishlist" i],
+[aria-label*="wishlist" i],
+[title*="wishlist" i],
+[id*="wishlist" i],
+[name*="wishlist" i],
 [data-wishlist],
 [data-app*="wishlist" i],
 [class~="wishlist"],
 [class^="wishlist-"],
 [class*=" wishlist-"] {
   display: none !important;
+}
+
+.store-hours__status {
+  font-weight: 700;
+}
+
+.store-hours__status--open {
+  color: #1b6e3c;
+}
+
+.store-hours__status--closed {
+  color: #b42318;
+}
+
+.media--adapt-half {
+  padding-bottom: 50%;
+}
+
+.collection-skeleton-card__short-line {
+  width: 40%;
+}
+
+.filter-option-label {
+  display: inline;
+}
+
+.filter-boolean-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  cursor: pointer;
+}
+
+.cart-error__message {
+  font-weight: 700;
+}
+
+.template-404 {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  margin: 0 2rem;
+  text-align: center;
+}
+
+.template-404__search {
+  width: 100%;
+  max-width: 50rem;
+}
+
+.article-template__hero-media {
+  padding-bottom: 40%;
 }
 
 .search-modal__form,
@@ -254,7 +311,7 @@ button[name*="wishlist" i],
 
 .sales-collection__eyebrow {
   margin: 0 0 0.8rem;
-  color: var(--storefront-ink);
+  color: var(--section-accent);
   font-size: 1.2rem;
   font-weight: 700;
   letter-spacing: 0.16em;

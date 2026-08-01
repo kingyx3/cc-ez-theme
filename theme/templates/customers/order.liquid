@@ -269,7 +269,7 @@
 
         {% if order.is_repurchasable == true %}
         <div class="text-right" >
-          <button type="button" class="btn button {% if order.is_paid == false and order.cancelled == 0 or order.status == "to_receive" %}button--secondary{% endif %}" style="margin: 0;" data-repurchase-items="{{ remappedLineItems | escape }}" data-currency="{{ order.currency_format | json | escape }}" onclick="openRepurchaseModal(event, this)">{{ 'customer.order.buy_again' | t }}</button>
+          <button type="button" class="btn button {% if order.is_paid == false and order.cancelled == 0 or order.status == "to_receive" %}button--secondary{% endif %}" style="margin: 0;" data-repurchase-items="{{ remappedLineItems | escape }}" data-currency="{{ order.currency_format | json | escape }}" data-theme-action="open-repurchase-modal">{{ 'customer.order.buy_again' | t }}</button>
           {% include 'repurchase-modal' %}
         </div>
         {% endif %}
@@ -299,26 +299,27 @@
 
                   <script>
                     var confirmOrderBtn = document.getElementById('confirmOrder{{order.token}}');
-                    confirmOrderBtn.addEventListener('click', function (e) {
-                      var selfBtn = $(this);
-                      selfBtn.addClass('btn--loading');
+                    confirmOrderBtn.addEventListener('click', async function () {
+                      this.classList.add('btn--loading');
 
-                      $.ajax({
-                        type: "PUT",
-                        dataType: 'json',
-                        url: "/sf/order/{{ order.token }}/fulfillment_update",
-                        data:{
-                            _token: "{% csrf %}",
-                        },
-                        success: function(response){
-                          window.location.reload();
-                          document.querySelector('#closeModal{{order.token}}').click();
-                          selfBtn.removeClass('btn--loading');
-                        },
-                        error: function(xhr){
-                          selfBtn.removeClass('btn--loading');
-                        },
-                      });
+                      try {
+                        const response = await fetch('/sf/order/{{ order.token }}/fulfillment_update', {
+                          method: 'PUT',
+                          headers: {
+                            Accept: 'application/json',
+                            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                          },
+                          body: new URLSearchParams({ _token: "{% csrf %}" }).toString(),
+                        });
+                        if (!response.ok) throw new Error('Unable to update fulfillment');
+
+                        document.querySelector('#closeModal{{order.token}}').click();
+                        window.location.reload();
+                      } catch (error) {
+                        console.error('Unable to confirm order receipt', error);
+                      } finally {
+                        this.classList.remove('btn--loading');
+                      }
                     });
                   </script>
                 </div>
@@ -517,7 +518,7 @@
       <div class="mb-4">
         <div class="title-edit-container">
           <h2>{{ 'customer.order.remarks' | t }}</h2>
-          <button type="button" class="link" data-edit-remark aria-controls="edit-remark" aria-expanded="false">Edit</button>
+          <button type="button" class="link" data-edit-remark aria-controls="edit-remark" aria-expanded="false">{{ 'customer.addresses.edit' | t | default: 'Edit' }}</button>
         </div>
         <div id="edit-details" class="details">
           <p name="remark">{{order.remark | escape }}</p>
@@ -533,7 +534,7 @@
       <div class="mb-4">
         <div class="title-edit-container">
           <h2>{{ 'checkout.payment_reference._' | t }}</h2>
-          <button type="button" class="link" data-edit-payment aria-controls="edit-reference" aria-expanded="false">Edit</button>
+          <button type="button" class="link" data-edit-payment aria-controls="edit-reference" aria-expanded="false">{{ 'customer.addresses.edit' | t | default: 'Edit' }}</button>
         </div>
         <div id="edit-payment" class="details">
           <p name="payment">{{ order.ref_number | escape }}</p>

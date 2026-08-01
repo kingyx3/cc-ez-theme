@@ -114,6 +114,8 @@
                   src="{{ block.settings.image }}"
                   style="max-width: min(100%, {{ block.settings.image_width }}px);"
                   alt=""
+                  width="{{ block.settings.image_width }}"
+                  height="{{ block.settings.image_width }}"
                   loading="lazy"
                 >
               {% if block.settings.image_link %}</a>{% endif %}

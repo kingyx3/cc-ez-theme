@@ -33,10 +33,7 @@
                   {% assign spaced_image = true %}
                 {% endif %}
                 <div class="multicolumn-card__image-wrapper multicolumn-card__image-wrapper--{{ section.settings.image_width }}-width{% if section.settings.image_width != 'full' or spaced_image %} multicolumn-card-spacing{% endif %}">
-                  <{% if block.settings.link_url %}a href="{{ block.settings.link_url }}"{% else %}div{% endif %} class="media media--transparent media--{{ section.settings.image_ratio }}"
-                    {% if section.settings.image_ratio == 'adapt' %}
-                      style="padding-bottom: 50%;"
-                    {% endif %}>
+                  <{% if block.settings.link_url %}a href="{{ block.settings.link_url }}"{% else %}div{% endif %} class="media media--transparent media--{{ section.settings.image_ratio }}{% if section.settings.image_ratio == 'adapt' %} media--adapt-half{% endif %}">
                     
                     <img
                       srcset="{{ block.settings.image | img_url: '550x' }} 550w, {{ block.settings.image | img_url: '710x' }} 710w, {{ block.settings.image | img_url: '1420x' }} 1420w"
@@ -45,6 +42,8 @@
                         (min-width: 750px) 550px,
                         550px"
                       alt="{{ column_image_alt | escape }}"
+                      width="1420"
+                      height="710"
                       loading="lazy"
                     >
                     

@@ -30,7 +30,7 @@
       {% if block.type == 'banner' %}
         <div id="promotion-section-{{ section.__key }}-{{ forloop.index }}" class="promotion-banner">
             <div class="promotion-banner-title">{{block.settings.title}}</div>
-            <div class="promotion-banner-description"><p style="margin: 7.5px 10px;">{{block.settings.text}}</p></div>
+            <div class="promotion-banner-description"><p>{{block.settings.text}}</p></div>
             <a href="{{block.settings.button_link}}" class="btn">{{block.settings.button_label}}</a>
         </div>
       {% else %}
@@ -44,12 +44,12 @@
                 <div class="promotion-block-img">
                   {% if block.settings.promotion_image_1 != '' %}
                   <div class="img-wrapper">
-                      <img src="{{block.settings.promotion_image_1 | img_url: '550x' }}" alt="{{ shop.name }}"/>
+                      <img src="{{block.settings.promotion_image_1 | img_url: '550x' }}" alt="{{ shop.name }}" width="550" height="550" loading="lazy"/>
                   </div>
                   {% endif %}
                   {% if block.settings.promotion_image_2 != '' %}
                   <div class="img-wrapper">
-                      <img src="{{block.settings.promotion_image_2 | img_url: '550x' }}" alt="{{ shop.name }}"/>
+                      <img src="{{block.settings.promotion_image_2 | img_url: '550x' }}" alt="{{ shop.name }}" width="550" height="550" loading="lazy"/>
                   </div>
                   {% endif %}
                 </div>

@@ -101,6 +101,7 @@
 }
 
 .cart-item .product-bundle__content {
+  display: none;
   font-size: 1.4rem;
 }
 

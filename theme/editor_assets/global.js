@@ -280,13 +280,16 @@ class VariantSelects {
     if (!this.productForm) return;
 
     const addButton = this.productForm.querySelector('[name="add"]');
+    const buyNowButton = this.productForm.querySelector('[name="buy_now"]');
     if (!addButton) return;
 
     if (disable) {
       addButton.setAttribute('disabled', true);
+      if (buyNowButton) buyNowButton.setAttribute('disabled', true);
       if (text) addButton.innerHTML = text;
     } else {
       addButton.removeAttribute('disabled');
+      if (buyNowButton) buyNowButton.removeAttribute('disabled');
       addButton.innerHTML = window.variantStrings.addToCart;
       if(addButton.dataset.updateCart)  addButton.innerHTML = window.variantStrings.updateCart;
     }
@@ -315,7 +318,9 @@ class VariantSelects {
 
     this.productInfo.querySelector('.price').classList.remove('price--sold-out','price--on-sale')
     this.productInfo.querySelector('.product-form__quantity').style.display = ''
-    this.productInfo.querySelector('.product-form__submit').style.display = ''
+    this.productInfo.querySelectorAll('.product-form__submit').forEach((button) => {
+      button.style.display = ''
+    })
 
     if(this.currentVariant.compare_at_price > this.currentVariant.price) this.productInfo.querySelector('.price').classList.add('price--on-sale')
     if(!this.currentVariant.available && this.currentVariant.inventory_quantity <= 0) {
@@ -325,7 +330,9 @@ class VariantSelects {
 
     if(this.currentVariant.price <= 0){
       this.productInfo.querySelector('.product-form__quantity').style.display = 'none'
-      this.productInfo.querySelector('.product-form__submit').style.display = 'none'
+      this.productInfo.querySelectorAll('.product-form__submit').forEach((button) => {
+        button.style.display = 'none'
+      })
     }
   }
 
@@ -670,10 +677,64 @@ class AddToCartButton extends HTMLElement {
 
 customElements.define('add-to-cart-button', AddToCartButton);
 
+function callThemeFunction(name, ...args) {
+  if (typeof window[name] === 'function') window[name](...args);
+}
+
+const themeActionHandlers = {
+  'close-repurchase-modal': () => callThemeFunction('closeRepurchaseModal'),
+  'reset-filter': () => callThemeFunction('resetFilter'),
+  'open-vouchers-modal': () => document.querySelector('vouchers-modal')?.open(),
+  'switch-order-tab': (event, trigger) => callThemeFunction('switchTab', trigger.dataset.orderStatus),
+  'open-repurchase-modal': (event, trigger) => callThemeFunction('openRepurchaseModal', event, trigger),
+  'toggle-new-address': () => callThemeFunction('toggleNewForm'),
+  'toggle-address-form': (event, trigger) => callThemeFunction('toggleForm', trigger.dataset.addressId),
+  'open-qr-modal': () => document.querySelector('qr-modal')?.open(),
+  'load-referral-rewards': () => callThemeFunction('loadReferralRewards'),
+  'share-referral-link': (event, trigger) => callThemeFunction('shareReferralLink', trigger.dataset.shareMode || 'share'),
+  'toggle-collection-list': (event, trigger) => callThemeFunction(
+    'toggleCollectionListTab',
+    trigger.dataset.sectionId,
+    trigger.dataset.collectionId,
+    trigger.dataset.blockId,
+  ),
+  'history-back': () => window.history.back(),
+  'toggle-password-form': () => callThemeFunction('viewChangePW'),
+  'request-verification': (event, trigger) => callThemeFunction(
+    'requestVerify',
+    trigger.dataset.customerId,
+    trigger.dataset.verificationMethod,
+  ),
+  'dismiss-referral-notification': () => callThemeFunction('dismissReferralNotification'),
+  'open-referral-signup': () => callThemeFunction('goToSignupPage'),
+  'close-mobile-referral': () => callThemeFunction('closeMobileReferralModal'),
+  'open-mobile-referral-signup': () => callThemeFunction('goToSignupPageFromMobile'),
+};
+
+document.addEventListener('click', (event) => {
+  const trigger = event.target.closest('[data-theme-action]');
+  if (!trigger) return;
+
+  const handler = themeActionHandlers[trigger.dataset.themeAction];
+  if (handler) handler(event, trigger);
+});
+
+document.addEventListener('keydown', (event) => {
+  if (!event.target.matches('[role="tab"][data-theme-action]')) return;
+  if (event.key !== 'Enter' && event.key !== ' ') return;
+
+  event.preventDefault();
+  event.target.click();
+});
+
 const wishlistSelectors = [
   'a[href*="wishlist" i]',
   'form[action*="wishlist" i]',
   'button[name*="wishlist" i]',
+  '[aria-label*="wishlist" i]',
+  '[title*="wishlist" i]',
+  '[id*="wishlist" i]',
+  '[name*="wishlist" i]',
   '[data-wishlist]',
   '[data-app*="wishlist" i]',
   '[class~="wishlist"]',
@@ -681,12 +742,62 @@ const wishlistSelectors = [
   '[class*=" wishlist-"]',
 ].join(',');
 
+const mobileWishlistDrawerSelector = '#menu-drawer, .menu-drawer';
+const mobileWishlistActionSelector = 'a, button, [role="menuitem"], .menu-drawer__account';
+
+function removeMobileWishlistUI(root = document) {
+  const drawers = new Set();
+
+  if (root.nodeType === Node.ELEMENT_NODE) {
+    if (root.matches(mobileWishlistDrawerSelector)) drawers.add(root);
+
+    const containingDrawer = root.closest(mobileWishlistDrawerSelector);
+    if (containingDrawer) drawers.add(containingDrawer);
+  }
+
+  if (root.querySelectorAll) {
+    root.querySelectorAll(mobileWishlistDrawerSelector).forEach((drawer) => drawers.add(drawer));
+  }
+
+  drawers.forEach((drawer) => {
+    drawer.querySelectorAll(mobileWishlistActionSelector).forEach((action) => {
+      const accessibleName = [
+        action.textContent,
+        action.getAttribute('aria-label'),
+        action.getAttribute('title'),
+      ].filter(Boolean).join(' ');
+
+      if (!/\bwishlist\b/i.test(accessibleName)) return;
+
+      const listItem = action.closest('li');
+      if (listItem && drawer.contains(listItem)) {
+        listItem.remove();
+      } else {
+        action.remove();
+      }
+    });
+  });
+}
+
 function removeWishlistUI(root = document) {
-  if (root.nodeType === Node.ELEMENT_NODE && root.matches(wishlistSelectors)) root.remove();
+  if (!root) return;
+
+  if (root.nodeType === Node.TEXT_NODE) root = root.parentElement;
+  if (!root) return;
+
+  if (root.nodeType === Node.ELEMENT_NODE && root.matches(wishlistSelectors)) {
+    root.remove();
+    return;
+  }
+
   if (root.querySelectorAll) root.querySelectorAll(wishlistSelectors).forEach((element) => element.remove());
+  removeMobileWishlistUI(root);
 }
 
 removeWishlistUI();
 new MutationObserver((mutations) => {
-  mutations.forEach((mutation) => mutation.addedNodes.forEach(removeWishlistUI));
-}).observe(document.documentElement, { childList: true, subtree: true });
+  mutations.forEach((mutation) => {
+    if (mutation.type === 'characterData') removeWishlistUI(mutation.target);
+    mutation.addedNodes.forEach(removeWishlistUI);
+  });
+}).observe(document.documentElement, { childList: true, characterData: true, subtree: true });

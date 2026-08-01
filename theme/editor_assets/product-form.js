@@ -10,11 +10,15 @@ if (!customElements.get('product-form')) {
 
     onSubmitHandler(evt) {
       evt.preventDefault();
-      this.cartNotification.setActiveElement(document.activeElement);
+      const submitButton = evt.submitter || this.querySelector('[type="submit"]');
+      const submitButtons = this.querySelectorAll('.product-form__submit');
+      const buyNow = submitButton && submitButton.name === 'buy_now';
 
-      const submitButton = this.querySelector('[type="submit"]');
+      if (!buyNow && this.cartNotification) {
+        this.cartNotification.setActiveElement(document.activeElement);
+      }
 
-      submitButton.setAttribute('disabled', true);
+      submitButtons.forEach((button) => button.setAttribute('disabled', true));
       submitButton.classList.add('loading');
 
       let updateCartItem = false;
@@ -27,15 +31,28 @@ if (!customElements.get('product-form')) {
       EasyStore.Action.addToCart(body,(cart)=>{
         this.hideErrorMsg()
 
-        if(!updateCartItem && cart.item_count != undefined && cart.latest_items != undefined) this.cartNotification.renderContents(cart);
-        if(cart.description != undefined) this.renderErrorMsg(cart.description);
+        if(cart.description != undefined) {
+          this.renderErrorMsg(cart.description);
+          submitButton.classList.remove('loading');
+          submitButtons.forEach((button) => button.removeAttribute('disabled'));
+          return;
+        }
+
+        if(buyNow) {
+          window.location.assign('/checkout');
+          return;
+        }
+
+        if(!updateCartItem && cart.item_count != undefined && cart.latest_items != undefined && this.cartNotification) {
+          this.cartNotification.renderContents(cart);
+        }
 
         let cartItem = document.querySelector(`#${submitButton.dataset.cartItemId}`);
         if(updateCartItem && cartItem) {
           cartItem.removeCartItem();
         } else {
           submitButton.classList.remove('loading');
-          submitButton.removeAttribute('disabled');
+          submitButtons.forEach((button) => button.removeAttribute('disabled'));
         }
 
       })

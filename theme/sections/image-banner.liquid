@@ -33,6 +33,8 @@
         sizes="{% if section.settings.image_2 != "" %}(min-width: 750px) 50vw, 100vw{% elsif section.settings.image_2 != "" %}50vw{% else %}100vw{% endif %}"
         src="{{ section.settings.image | img_url: '1500x' }}"
         alt="{{ section.settings.image.alt | escape }}"
+        width="1500"
+        height="600"
         {% if section.settings.image_2 != "" %}class="banner__media-image-half"{% endif %}
         loading="lazy"
       >
@@ -49,6 +51,8 @@
         sizes="{% if section.settings.image != "" %}(min-width: 750px) 50vw, 100vw{% elsif section.settings.image != "" %}50vw{% else %}100vw{% endif %}"
         src="{{ section.settings.image_2 | img_url: '1500x' }}"
         alt="{{ section.settings.image_2.alt | escape }}"
+        width="1500"
+        height="600"
         {% if section.settings.image != "" %}class="banner__media-image-half"{% endif %}
         loading="lazy"
       >

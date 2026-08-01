@@ -490,29 +490,43 @@
               .then(response => response.json())
               .then(data => {
                 if (data.status === "success") {
-                  attr_wrapper.innerHTML = `
-                    <div class="text-center">
-                      <svg fill="#13ce66" width="100px" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M10.29 18.46a.59.59 0 0 0 .45-.21l8.71-9.63a.66.66 0 0 0 0-.92.65.65 0 0 0-.92 0l-8.27 9.14-4.82-4.32a.65.65 0 0 0-.88 1l5.29 4.81a.66.66 0 0 0 .44.13z"/><path d="M12 23.65A11.65 11.65 0 1 0 .35 12 11.67 11.67 0 0 0 12 23.65zm0-22A10.35 10.35 0 1 1 1.65 12 10.36 10.36 0 0 1 12 1.65z"/></svg>
-                      <h3>${data.message}</h3>
-                    </div>
-                  `;
+                  const successWrapper = document.createElement('div');
+                  successWrapper.className = 'text-center';
+
+                  const successIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                  successIcon.setAttribute('fill', '#13ce66');
+                  successIcon.setAttribute('width', '100');
+                  successIcon.setAttribute('height', '100');
+                  successIcon.setAttribute('viewBox', '0 0 24 24');
+                  successIcon.setAttribute('aria-hidden', 'true');
+                  successIcon.innerHTML = '<path d="M10.29 18.46a.59.59 0 0 0 .45-.21l8.71-9.63a.66.66 0 0 0 0-.92.65.65 0 0 0-.92 0l-8.27 9.14-4.82-4.32a.65.65 0 0 0-.88 1l5.29 4.81a.66.66 0 0 0 .44.13z"/><path d="M12 23.65A11.65 11.65 0 1 0 .35 12 11.67 11.67 0 0 0 12 23.65zm0-22A10.35 10.35 0 1 1 1.65 12 10.36 10.36 0 0 1 12 1.65z"/>';
+
+                  const successMessage = document.createElement('h3');
+                  successMessage.textContent = data.message || '';
+                  successWrapper.append(successIcon, successMessage);
+                  attr_wrapper.replaceChildren(successWrapper);
                 } else {
                   submit_button.classList.remove('btn--loading');
                   if (data.errors) {
-                    let errors = data.errors,
-                        error_html = `<div class="errors note">`;
-                      errors.forEach(msg => {error_html += `<div>${msg}</div>`})
-                    error_html += `</div>`;
-                      
-                    error_content.innerHTML = error_html;
-                      
-                      
+                    const errorList = document.createElement('div');
+                    errorList.className = 'errors note';
+                    data.errors.forEach((message) => {
+                      const errorItem = document.createElement('div');
+                      errorItem.textContent = message;
+                      errorList.appendChild(errorItem);
+                    });
+                    error_content.replaceChildren(errorList);
                   }
                 }
               })
               .catch(error => {
                 submit_button.classList.remove('btn--loading');
-                if (error && error.message) error_content.innerHTML = `<div class="errors note">${error.message}</div>`;
+                if (error && error.message) {
+                  const errorItem = document.createElement('div');
+                  errorItem.className = 'errors note';
+                  errorItem.textContent = error.message;
+                  error_content.replaceChildren(errorItem);
+                }
               });
           });
     
@@ -678,7 +692,7 @@
                 </div>
                 
                 <div>
-                  <button type="button" onclick="document.querySelector('qr-modal').open()" class="qr-modal-toggle flex-center" aria-label="Open membership QR code">{% include 'svg-definitions' with 'icon-qr' %}</button>
+                  <button type="button" data-theme-action="open-qr-modal" class="qr-modal-toggle flex-center" aria-label="Open membership QR code">{% include 'svg-definitions' with 'icon-qr' %}</button>
                 </div>
               </div>
             </div>
@@ -796,7 +810,7 @@
                 {% endif %}
               </div>
             </div>
-            <button type="button" id="barcodeBtn" onclick="document.querySelector('qr-modal').open()" aria-label="Open membership QR code">{% include 'svg-definitions' with 'icon-qr' %}</button>
+            <button type="button" id="barcodeBtn" data-theme-action="open-qr-modal" aria-label="Open membership QR code">{% include 'svg-definitions' with 'icon-qr' %}</button>
           </div>
       	</div>
       {% endif %}
@@ -884,7 +898,7 @@
       <div class="card-box mb-30">
         <details-modal>
           <details>
-            <summary aria-haspopup="dialog" toggle-modal-referral="" role="button" aria-expanded="false" onclick="loadReferralRewards()">
+            <summary aria-haspopup="dialog" toggle-modal-referral="" role="button" aria-expanded="false" data-theme-action="load-referral-rewards">
               <div class="h3 mb-2">
                 <svg id="Layer_2" xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 24 24" width="24" height="24" style="vertical-align: middle;">
                   <g id="FSGB47">
@@ -989,7 +1003,7 @@
                 </div>
                 
                 <!-- Share Button -->
-                <button type="button" class="button button--full-width mb-0" id="referral-share-btn" onclick="shareReferralLink()">
+                <button type="button" class="button button--full-width mb-0" id="referral-share-btn" data-theme-action="share-referral-link">
                   {{ 'customer.account.referral.share_button' | t }}
                 </button>
               </div>
@@ -1011,7 +1025,7 @@
                   style="padding-right: 40px;"
             >
             <label for="ReferralLinkInput">{{ 'customer.account.referral.referral_link' | t }}</label>
-            <button type="button" onclick="shareReferralLink('copy')" aria-label="Copy referral link" style="position: absolute; right: 14px; bottom: 0; cursor: pointer; border: 0; background: transparent;" >
+            <button type="button" data-theme-action="share-referral-link" data-share-mode="copy" aria-label="Copy referral link" style="position: absolute; right: 14px; bottom: 0; cursor: pointer; border: 0; background: transparent;" >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20">
                 <path d="M16.58,7.35H4.44A1.69,1.69,0,0,0,2.75,9v8.9a1.69,1.69,0,0,0,1.69,1.68H16.58a1.69,1.69,0,0,0,1.69-1.68V9A1.69,1.69,0,0,0,16.58,7.35Zm.19,10.59a.18.18,0,0,1-.19.18H4.44a.18.18,0,0,1-.19-.18V9a.19.19,0,0,1,.19-.19H16.58a.19.19,0,0,1,.19.19ZM21.25,6.22V15.9a.75.75,0,1,1-1.5,0V6.22a.35.35,0,0,0-.35-.34H6.48a.75.75,0,0,1-.75-.76.74.74,0,0,1,.75-.74H19.4A1.84,1.84,0,0,1,21.25,6.22Z"/>
               </svg>
@@ -1028,7 +1042,7 @@
           <span id="copy-message-text"></span>
         </div>
         
-        <button type="button" class="button button--full-width" onclick="shareReferralLink()" style="margin-bottom: 0;">
+        <button type="button" class="button button--full-width" data-theme-action="share-referral-link" style="margin-bottom: 0;">
           {{ 'customer.account.referral.share_button' | t }}
         </button>
       </div>

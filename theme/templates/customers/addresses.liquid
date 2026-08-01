@@ -18,7 +18,7 @@
 
     <h1 class="d-flex flex-space-between flex-wrap">
       {{ 'customer.addresses.title' | t }}
-      <button type="button" class="button mt-2" onclick="toggleNewForm();">{{ 'customer.addresses.add_new' | t }}</button>
+      <button type="button" class="button mt-2" data-theme-action="toggle-new-address">{{ 'customer.addresses.add_new' | t }}</button>
     </h1>
     <p><a href="/account">← {{ 'customer.account.return' | t }}</a></p>
     
@@ -149,7 +149,7 @@
     
     
                 <p class="text-right">
-                  <button type="button" onclick="toggleNewForm();" class="button button--secondary">{{ 'customer.addresses.cancel' | t }}</button>&nbsp;&nbsp;
+                  <button type="button" data-theme-action="toggle-new-address" class="button button--secondary">{{ 'customer.addresses.cancel' | t }}</button>&nbsp;&nbsp;
                   <input type="submit" class="button" value="{{ 'customer.addresses.add' | t }}">
                 </p>
             </div>
@@ -313,7 +313,7 @@
                         </div>
       
                         <p class="text-right">
-                          <button type="button" onclick="toggleForm({{form.id}});" class="button button--secondary">{{ 'customer.addresses.cancel' | t }}</button>&nbsp;&nbsp;
+                          <button type="button" data-theme-action="toggle-address-form" data-address-id="{{ form.id }}" class="button button--secondary">{{ 'customer.addresses.cancel' | t }}</button>&nbsp;&nbsp;
                           <input type="submit" class="button" value="{{ 'customer.addresses.update' | t }}">
                         </p>
       

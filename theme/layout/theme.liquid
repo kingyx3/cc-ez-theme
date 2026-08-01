@@ -27,7 +27,16 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="{{ settings.colors_accent_1 }}">
   
-  {{ '//ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js' | script_tag }}
+  <script
+    src="https://code.jquery.com/jquery-3.7.1.min.js"
+    integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo="
+    crossorigin="anonymous"
+  ></script>
+  <script
+    src="https://code.jquery.com/jquery-migrate-3.6.0.min.js"
+    integrity="sha256-b6QJwscsMNfiHEBzOcWkgCwzNGYNmx3F4+onUrtqS2I="
+    crossorigin="anonymous"
+  ></script>
   
   <!-- Header hook for plugins ================================================== -->
   {{ content_for_header }}
@@ -179,6 +188,7 @@
       updateCart: {{ 'cart.general.update' | t | json }},
       soldOut: {{ 'products.product.sold_out' | t | json }},
       unavailable: {{ 'products.product.unavailable' | t | json }},
+      quickviewError: {{ 'products.product.quickview_error' | t | default: 'Product details could not be loaded. Please try again.' | json }},
     }
 
     window.accessibilityStrings = {
@@ -194,7 +204,7 @@
     }
 
     window.searchHistoryConfig = {
-      clearLabel: "Clear history",
+      clearLabel: {{ 'general.search.clear_history' | t | default: 'Clear history' | json }},
       customer: {% if customer %}true{% else %}false{% endif %},
       csrfToken: "{% csrf %}",
     }

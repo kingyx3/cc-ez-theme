@@ -131,7 +131,7 @@
               </div>
     
               <p class="text-right">
-                <button type="button" onclick="window.history.back();" class="button button--secondary">{{ 'customer.addresses.cancel' | t }}</button>&nbsp;&nbsp;
+                <button type="button" data-theme-action="history-back" class="button button--secondary">{{ 'customer.addresses.cancel' | t }}</button>&nbsp;&nbsp;
                 <input type="submit" class="button" value="{{ 'customer.recover_password.submit' | t }}">
               </p>
           </div>
@@ -217,7 +217,7 @@
               </svg>
               {{ 'customer.login.password' | t }}
             </strong><br>
-            <button type="button" onclick="viewChangePW();" class="change_password link">{{ 'customer.details.change_password' | t }}</button>
+            <button type="button" data-theme-action="toggle-password-form" class="change_password link">{{ 'customer.details.change_password' | t }}</button>
             <div class="confirm_password" style="display: none;">
               <div class="field">
                 <input type="password" placeholder="{{'customer.login.password' | t }}" id="DetailPassword" class="address_form" name="details[password1]">
@@ -230,7 +230,7 @@
               </div>
               <br>
               <div class="text-right">
-                <button type="button" onclick="viewChangePW();" class="button button--secondary button--small">{{ 'customer.addresses.cancel' | t }}</button>&nbsp;&nbsp;
+                <button type="button" data-theme-action="toggle-password-form" class="button button--secondary button--small">{{ 'customer.addresses.cancel' | t }}</button>&nbsp;&nbsp;
                 <input type="submit" class="button button--small" value="{{ 'customer.recover_password.submit' | t }}">
               </div>
             </div>
@@ -286,7 +286,7 @@
                   <span style="color: green;">{{ 'customer.details.verified' | t }}</span>
                 {% else %}
                   {% comment %} <a style="cursor: pointer;" href="/account/request-verify?customer_id={{ customer.id }}&method={{ key }}">Verify now</a> {% endcomment %}
-                  <button type="button" id="request-verify-{{ customer.id }}" class="link" onclick="requestVerify('{{ customer.id }}', '{{ key }}')">{{ 'customer.details.verify_now' | t }}</button>
+                  <button type="button" id="request-verify-{{ customer.id }}" class="link" data-theme-action="request-verification" data-customer-id="{{ customer.id }}" data-verification-method="{{ key | escape }}">{{ 'customer.details.verify_now' | t }}</button>
                 {% endif %}
               </p>
             </div>
