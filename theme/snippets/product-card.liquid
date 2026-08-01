@@ -15,30 +15,31 @@
 {% if image_ratio %}
   {% assign product_image_ratio = image_ratio %}
 {% endif %}
+{% assign product_card_alt = product.featured_image.alt | _default: product.title %}
 
 <div class="product-card-wrapper card-wrapper">
-  <a href="{{ product.url | within: collection | escape }}" class="full-unstyled-link">
-    {% if show_add_to_cart_button %}
-      <add-to-cart-button>
-        <div class="card__badge card__badge-top-right card__badge-float-edge">
-          <span class="badge badge-circle badge--bottom-right addToClassList" data-variant-id="{{product.sole_variant_id}}" data-product-handle="{{product.handle}}" data-product-price="{{product.price}}" data-product-price-max="{{product.price_max}}" data-product-available="{{product.available}}" data-product-id="{{product.id}}" data-token="{% csrf %}" data-quantity="1" data-url="{{ product.url | within: collection | escape }}">	
-            {% include 'svg-definitions' with 'icon-plus' %}
-            <span class="visually-hidden">{{ 'products.product.add_to_cart' | t }}: {{ product.title | escape }}</span>
-          </span>
-          <div class="loading-overlay hidden">
-            <div class="loading-overlay__spinner">
-              <svg aria-hidden="true" focusable="false" role="presentation" class="spinner" viewBox="0 0 66 66" xmlns="http://www.w3.org/2000/svg">
-                  <circle class="path" fill="none" stroke-width="6" cx="33" cy="33" r="30"></circle>
-              </svg>
-            </div>
+  {% if show_add_to_cart_button %}
+    <add-to-cart-button>
+      <div class="card__badge card__badge-top-right card__badge-float-edge">
+        <button type="button" class="badge badge-circle badge--bottom-right addToClassList" data-variant-id="{{product.sole_variant_id}}" data-product-handle="{{product.handle}}" data-product-price="{{product.price}}" data-product-price-max="{{product.price_max}}" data-product-available="{{product.available}}" data-product-id="{{product.id}}" data-token="{% csrf %}" data-quantity="1" data-url="{{ product.url | within: collection | escape }}">
+          {% include 'svg-definitions' with 'icon-plus' %}
+          <span class="visually-hidden">{{ 'products.product.add_to_cart' | t }}: {{ product.title | escape }}</span>
+        </button>
+        <div class="loading-overlay hidden">
+          <div class="loading-overlay__spinner">
+            <svg aria-hidden="true" focusable="false" role="presentation" class="spinner" viewBox="0 0 66 66" xmlns="http://www.w3.org/2000/svg">
+                <circle class="path" fill="none" stroke-width="6" cx="33" cy="33" r="30"></circle>
+            </svg>
           </div>
         </div>
-      </add-to-cart-button>
-    {% endif %}
+      </div>
+    </add-to-cart-button>
+  {% endif %}
+  <a href="{{ product.url | within: collection | escape }}" class="full-unstyled-link">
     <div class="card card--product grid-link__image--product" tabindex="-1">
       <div class="card__inner">
         <div class="media media--transparent media--{{product_image_ratio}} media--hover-effect">
-          <img src="{{ product.featured_image.src | img_url: settings.product_img_res }}" alt="{{ product.featured_image.alt | escape }}" loading="lazy">
+          <img src="{{ product.featured_image.src | img_url: settings.product_img_res }}" alt="{{ product_card_alt | escape }}" loading="lazy">
           {% if show_secondary_image and product.secondary_image.src != "" and product.secondary_image.src != null %}
             <img src="{{ product.secondary_image.src | img_url: settings.product_img_res }}" alt="{{ product.secondary_image.alt | escape }}" loading="lazy">
           {% endif %}

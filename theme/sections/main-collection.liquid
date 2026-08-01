@@ -29,14 +29,14 @@
 </div>
 
 <div id="CollectionProductGrid">
-  <div id="section-{{ section.__key }}" class="collection page-width">
+  <div id="section-{{ section.__key }}" class="collection page-width" style="--product-surface: {{ section.settings.product_bg_color }};">
     {% if shop.is_product_filter_enabled and collection.filters != blank %}
       <div class="float-filter-icon text-right h2 medium-hide large-up-hide">
-        <span filter-container-toggle>
+        <button type="button" filter-container-toggle aria-controls="filter-container" aria-expanded="false" aria-label="{{ 'collections.filter.filters' | t | default: 'Open filters' }}">
           {% include 'svg-definitions' with 'icon-filter' %}
-        </span>
+        </button>
       </div>
-      <aside id="filter-container">
+      <aside id="filter-container" aria-label="{{ 'collections.filter.filters' | t | default: 'Product filters' }}">
         {% include 'filters' %}
       </aside>
     {% endif %}
@@ -44,14 +44,14 @@
     <ul id="main-collection-product-grid" class="
       grid grid--2-col product-grid
       {% if section.settings.products_per_row < 3 %}grid--2-col-tablet{% else %}grid--3-col-tablet{% endif %} grid--one-third-max grid--{{section.settings.products_per_row}}-col-desktop grid--quarter-max">
-      {% if collection.products %}
+      {% if collection.products.size > 0 %}
         {% for product in collection.products %}
           <li class="grid__item">
             {% include 'product-card', show_secondary_image: section.settings.show_secondary_image, show_add_to_cart_button: section.settings.show_add_to_cart_button, image_ratio: section.settings.image_ratio, show_product_info: section.settings.show_product_info %}
           </li>
         {% endfor %}
       {% else %}
-        <p class="p-3"><em>{{ 'collections.general.no_matches' | t }}</em></p>
+        <li class="grid__item p-3" role="status"><em>{{ 'collections.general.no_matches' | t }}</em></li>
       {% endif %}
     </ul>
     
@@ -150,6 +150,14 @@
         "zh_TW": "顯示產品資料", 
         "zh_CN": "显示产品资料", 
         "ms_MY": "Tunjuk info Produk"
+      }
+    },
+    {
+      "type": "color",
+      "id": "product_bg_color",
+      "default": "rgba(245, 245, 245, 1)",
+      "label": {
+        "en_US": "Product background color"
       }
     }
   ]

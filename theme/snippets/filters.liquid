@@ -35,6 +35,17 @@
     [filter-container-toggle]{
       cursor: pointer;
     }
+    .filter-wrapper-backdrop{
+      display: none;
+      padding: 0;
+      border: 0;
+    }
+    .filter-close-row button{
+      padding: 0.6rem;
+      border: 0;
+      background: transparent;
+      color: inherit;
+    }
     .filter-close-row{
       margin-bottom: 10px;
     }
@@ -267,11 +278,11 @@
 </style>
 
 
-<div class="filter-wrapper">
+<div class="filter-wrapper" tabindex="-1">
   <div class="text-right filter-close-row">
-    <span filter-container-toggle class="medium-hide large-up-hide">
+    <button type="button" filter-container-toggle class="medium-hide large-up-hide" aria-label="{{ 'accessibility.close' | t }}">
       {% include 'svg-definitions' with 'icon-close', class: 'svg-icon' %}
-    </span>
+    </button>
   </div>
   
   
@@ -359,23 +370,25 @@
           </summary>
           <div class="filter-collapsible-content">
             {% for option in filter.values %}
-              <input id="{{ option.value }}" type="checkbox" {% if option.active %}checked{% endif %} class="styled-checkbox" data-type="{{filter.param_name}}" data-label="{{filter.label}}" value="{{ option.value }}" />
-              <label for="{{ option.value }}" style="display:inline">{{ option.label }}</label>
+              {% assign option_input_id = filter.param_name | handle | append: '-' | append: forloop.index %}
+              <input id="{{ option_input_id }}" type="checkbox" {% if option.active %}checked{% endif %} class="styled-checkbox" data-type="{{filter.param_name}}" data-label="{{filter.label}}" value="{{ option.value }}" />
+              <label for="{{ option_input_id }}" style="display:inline">{{ option.label }}</label>
               <br>
             {% endfor %}
           </div>
         </details>
     {% when 'boolean' %}
         <div class="filter-boolean-row">
-          <label for="{{ filter.label }}" class="flex" style="justify-content: space-between;align-items: center;width: 100%;cursor: pointer;">
+          {% assign boolean_filter_id = filter.param_name | handle | append: '-available' %}
+          <label for="{{ boolean_filter_id }}" class="flex" style="justify-content: space-between;align-items: center;width: 100%;cursor: pointer;">
             <h4>{{ filter.label }}</h4>
-            <input id="{{ filter.label }}" {% if option.active %}checked{% endif %} type="checkbox" class="styled-checkbox" data-type="purchasable" data-value="true" />
+            <input id="{{ boolean_filter_id }}" {% if filter.active_values.size > 0 %}checked{% endif %} type="checkbox" class="styled-checkbox" data-type="purchasable" data-value="true" />
           </label>
         </div>
 	{% endcase %}
   {% endfor %}
 </div>
-<div filter-container-toggle class="filter-wrapper-backdrop"></div>
+<button type="button" filter-container-toggle class="filter-wrapper-backdrop" aria-label="{{ 'accessibility.close' | t }}" tabindex="-1"></button>
 
 
 
@@ -390,8 +403,12 @@
     var purchasableCheckboxes = document.querySelectorAll('.styled-checkbox[data-type="purchasable"]');
     var sortByRadio = document.querySelectorAll('.filter-wrapper [name="SortBy"]');
     var filterToggle = document.querySelectorAll('[filter-container-toggle]');
+    var filterWrapper = document.querySelector('.filter-wrapper');
+    var filterOpenButton = document.querySelector('.float-filter-icon [filter-container-toggle]');
+    var filterError = null;
   
-	document.querySelector('.filter-wrapper [name="SortBy"][value="{{ collection.sort_by | default: collection.default_sort_by }}"]').setAttribute('checked',true)
+    var activeSort = document.querySelector('.filter-wrapper [name="SortBy"][value="{{ collection.sort_by | default: collection.default_sort_by }}"]');
+    if (activeSort) activeSort.setAttribute('checked', true);
 
   
     function getSelectedPurchasableValues(checkboxes) {
@@ -406,13 +423,21 @@
   
     filterToggle.forEach(function (button) {
         button.addEventListener('click', function () {
-            if(document.querySelector('.filter-wrapper.is-active')) {
-            	document.querySelector('.filter-wrapper').classList.remove('is-active')
-            } else {
-            	document.querySelector('.filter-wrapper').classList.add('is-active')
-            }
-				
+            var isOpen = filterWrapper.classList.toggle('is-active');
+            if (filterOpenButton) filterOpenButton.setAttribute('aria-expanded', String(isOpen));
+            if (isOpen) filterWrapper.focus();
+            else if (button !== filterOpenButton && filterOpenButton) filterOpenButton.focus();
         });
+    });
+
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && filterWrapper.classList.contains('is-active')) {
+        filterWrapper.classList.remove('is-active');
+        if (filterOpenButton) {
+          filterOpenButton.setAttribute('aria-expanded', 'false');
+          filterOpenButton.focus();
+        }
+      }
     });
 
     sortByRadio.forEach(function (radio) {
@@ -570,11 +595,15 @@
         var formattedMetafields = getSelectedVariantValues(metafieldCheckboxes);
         Object.assign(formattedVariants, formattedMetafields);
         var selectedPurchasable = getSelectedValues(purchasableCheckboxes);
-        var sortBy = document.querySelector('.filter-wrapper [name="SortBy"]:checked').value;
+        var selectedSort = document.querySelector('.filter-wrapper [name="SortBy"]:checked');
+        var sortBy = selectedSort ? selectedSort.value : '';
         var currentUrl = window.location.origin + window.location.pathname;
         var apiUrl = currentUrl + '/filtered_section_html';
       
-      	document.querySelector('#main-collection-product-grid').classList.add('filter-is-loading');
+        var productGrid = document.querySelector('#main-collection-product-grid');
+        productGrid.classList.add('filter-is-loading');
+        productGrid.setAttribute('aria-busy', 'true');
+        if (filterError) filterError.remove();
       
         // Construct query parameters
         var queryParams = new URLSearchParams({
@@ -606,17 +635,24 @@
           },
       	})
       	.then((response) => {
+			if (!response.ok) throw new Error('Unable to refresh products');
       		return response.json();
       	})
       	.then((response) => {
-          document.querySelector('#main-collection-product-grid').classList.remove('filter-is-loading');
-      		document.querySelector('#main-collection-product-grid').innerHTML = response.filtered_product_list;
+          productGrid.classList.remove('filter-is-loading');
+          productGrid.setAttribute('aria-busy', 'false');
+			productGrid.innerHTML = response.filtered_product_list;
       		document.querySelector('#pagination-container').innerHTML = response.pagination;
           window.scrollTo({top: document.querySelector('.collection-hero__title').offsetTop, behavior: "smooth"});
       	})
       	.catch((error) => {
-          document.querySelector('#main-collection-product-grid').classList.remove('filter-is-loading');
-      		console.log('Error refreshing section:', error);
+          productGrid.classList.remove('filter-is-loading');
+          productGrid.setAttribute('aria-busy', 'false');
+          filterError = document.createElement('p');
+          filterError.className = 'collection-filter-error';
+          filterError.setAttribute('role', 'alert');
+          filterError.textContent = 'Products could not be refreshed. Please try again.';
+          productGrid.before(filterError);
           window.scrollTo({top: document.querySelector('.collection-hero__title').offsetTop, behavior: "smooth"});
       	})
     }

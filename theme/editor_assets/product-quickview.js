@@ -21,6 +21,7 @@ class ProductQuickviewModal extends HTMLElement {
   }
 
   open(el, isUpdateCart = false) {
+    this.activeElement = el;
     this.isUpdateCart = isUpdateCart;
     this.modal.setAttribute('open', true);
     trapFocus(this, this.modal);
@@ -59,21 +60,21 @@ class ProductQuickviewModal extends HTMLElement {
           this.getProductModalPromotionList(res.product.url);
         })
         .catch(() => {
-          console.log("Failed to load product data");
+          this.modalLoading.classList.add('hidden');
+          this.modalBody.style.display = '';
+          this.modalBody.textContent = 'Product details could not be loaded. Please try again.';
         });
     }
   }
 
   close(event, elementToFocus = false) {
-    if (event !== undefined) {
-      document.body.classList.remove(`overflow-hidden`);
-      removeTrapFocus(elementToFocus);
-      this.modal.removeAttribute('open');
-      this.modalBody.style.display = 'none';
-      this.modalBody.innerHTML = ''; 
-      this.modalLoading.style.display = '';
-      this.modalLoading.classList.remove('hidden');
-    }
+    document.body.classList.remove(`overflow-hidden`);
+    removeTrapFocus(elementToFocus || this.activeElement);
+    this.modal.removeAttribute('open');
+    this.modalBody.style.display = 'none';
+    this.modalBody.innerHTML = '';
+    this.modalLoading.style.display = '';
+    this.modalLoading.classList.remove('hidden');
   }
 
   onFocusOut(event) {
@@ -116,7 +117,6 @@ class ProductQuickviewModal extends HTMLElement {
         variants_unavailable = variants.filter(value => value.available == false);
 
     var selectCallback = function(variant, selector) {
-      console.log('variant, selector',variant, selector);
       VariantSelector.onVariantChange(variant, 'ProductModal')
       if(variants_unavailable && variants_unavailable.length > 0 && VariantSelector.updateVariantsUnavailable) VariantSelector.updateVariantsUnavailable(variants,variants_unavailable);
       if(variant.featured_image != undefined && variant.featured_image.src) document.querySelector('#productModal-MainImg').src = variant.featured_image.src;

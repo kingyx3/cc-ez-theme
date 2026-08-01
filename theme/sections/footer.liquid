@@ -52,14 +52,14 @@
               <ul class="footer__list-social list-unstyled list-social footer-block__details-content" role="list">
                 {% if block.settings.twitter %}
                   <li class="list-social__item">
-                    <a href="{{ block.settings.twitter }}" class="link link--text list-social__link">
+                    <a href="{{ block.settings.twitter }}" class="link link--text list-social__link" aria-label="Cardboard Collective on Twitter" target="_blank" rel="noopener noreferrer">
                       {% include 'svg-definitions' with 'icon-twitter' %}
                     </a>
                   </li>
                 {% endif %}
                 {% if block.settings.facebook %}
                   <li class="list-social__item">
-                    <a href="{{ block.settings.facebook }}" class="link link--text list-social__link">
+                    <a href="{{ block.settings.facebook }}" class="link link--text list-social__link" aria-label="Cardboard Collective on Facebook" target="_blank" rel="noopener noreferrer">
                       {% include 'svg-definitions' with 'icon-facebook' %}
                     </a>
                   </li>
@@ -73,35 +73,35 @@
                 {% endif %}
                 {% if block.settings.tiktok %}
                   <li class="list-social__item">
-                    <a href="{{ block.settings.tiktok }}" class="link link--text list-social__link">
+                    <a href="{{ block.settings.tiktok }}" class="link link--text list-social__link" aria-label="Cardboard Collective on TikTok" target="_blank" rel="noopener noreferrer">
                       {% include 'svg-definitions' with 'icon-tiktok' %}
                     </a>
                   </li>
                 {% endif %}
                 {% if block.settings.whatsapp %}
                   <li class="list-social__item">
-                    <a href="{{ block.settings.whatsapp }}" class="link link--text list-social__link">
+                    <a href="{{ block.settings.whatsapp }}" class="link link--text list-social__link" aria-label="Join Cardboard Collective on WhatsApp" target="_blank" rel="noopener noreferrer">
                       {% include 'svg-definitions' with 'icon-whatsapp' %}
                     </a>
                   </li>
                 {% endif %}
                 {% if block.settings.line %}
                   <li class="list-social__item">
-                    <a href="{{ block.settings.line }}" class="link link--text list-social__link">
+                    <a href="{{ block.settings.line }}" class="link link--text list-social__link" aria-label="Cardboard Collective on Line" target="_blank" rel="noopener noreferrer">
                       {% include 'svg-definitions' with 'icon-line-footer' %}
                     </a>
                   </li>
                 {% endif %}
                 {% if block.settings.wechat %}
                   <li class="list-social__item">
-                    <a href="{{ block.settings.wechat }}" class="link link--text list-social__link">
+                    <a href="{{ block.settings.wechat }}" class="link link--text list-social__link" aria-label="Cardboard Collective on WeChat" target="_blank" rel="noopener noreferrer">
                       {% include 'svg-definitions' with 'icon-wechat' %}
                     </a>
                   </li>
                 {% endif %}
                 {% if block.settings.youtube %}
                   <li class="list-social__item">
-                    <a href="{{ block.settings.youtube }}" class="link link--text list-social__link">
+                    <a href="{{ block.settings.youtube }}" class="link link--text list-social__link" aria-label="Cardboard Collective on YouTube" target="_blank" rel="noopener noreferrer">
                       {% include 'svg-definitions' with 'icon-youtube' %}
                     </a>
                   </li>
@@ -113,13 +113,14 @@
                 <img
                   src="{{ block.settings.image }}"
                   style="max-width: min(100%, {{ block.settings.image_width }}px);"
+                  alt=""
                   loading="lazy"
                 >
               {% if block.settings.image_link %}</a>{% endif %}
             {% when 'shopping_app' %}
               <div>
                 <h2 class="footer-block__heading">{{ block.settings.title | escape }}</h2>
-                <a class="full-unstyled-link" href="{{ shop.shopping_app.download_url }}" target="_blank">
+                <a class="full-unstyled-link" href="{{ shop.shopping_app.download_url }}" target="_blank" rel="noopener noreferrer">
                   {% if shop.shopping_app.icon_url %}
                     <img
                       src="{{ shop.shopping_app.icon_url }}"
@@ -130,16 +131,17 @@
                       loading="lazy"
                     >
                   {% endif %}
-                  <img 
+                  <img
                     src="https://resources.easystore.co/admin/channels/shopping_app.png"
                     class="rounded"
                     width="50px"
                     height="50px"
+                    alt="{{ shop.name | escape }} app"
                     loading="lazy"
                   >
                 </a>
                 <p class="mt-1">{{ block.settings.text }}</p>
-                <a class="full-unstyled-link" href="{{ shop.shopping_app.download_url }}" target="_blank">
+                <a class="full-unstyled-link" href="{{ shop.shopping_app.download_url }}" target="_blank" rel="noopener noreferrer">
                   <img
                     src="https://resources.easystore.co/email-templates/badges/app-store-badge.png"
                     class="app-download-badge"

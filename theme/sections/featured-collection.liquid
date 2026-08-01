@@ -19,7 +19,7 @@
 <div
   id="section-{{ section.__key }}"
   class="sales-collection page-width{% if section.settings.swipe_on_mobile == true and products_to_display > 2 and section.settings.products_to_show > 2 %} page-width-desktop{% endif %}{% if section.settings.title == '' %} mt-0{% endif %}"
-  style="--section-accent: {{ section.settings.accent_color }};"
+  style="--section-accent: {{ section.settings.accent_color }}; --product-surface: {{ section.settings.product_bg_color }};"
 >
   <div class="sales-collection__header{% if products_to_display > 2 and section.settings.swipe_on_mobile and section.settings.products_to_show > 2 %} title-wrapper--self-padded-tablet-down{% endif %}{% if section.settings.center_title == true %} sales-collection__header--center{% endif %}">
     <div class="sales-collection__heading">
@@ -55,7 +55,8 @@
           <button
             type="button"
             class="slider-button slider-button--prev"
-            name="previous">{% include 'svg-definitions' with 'icon-caret' %}</button>
+            name="previous"
+            aria-label="{{ 'accessibility.previous_slide' | t }}">{% include 'svg-definitions' with 'icon-caret' %}</button>
           <div class="slider-counter caption">
             <span class="slider-counter--current">1</span>
             <span aria-hidden="true">
@@ -66,7 +67,8 @@
           <button
             type="button"
             class="slider-button slider-button--next"
-            name="next">{% include 'svg-definitions' with 'icon-caret' %}</button>
+            name="next"
+            aria-label="{{ 'accessibility.next_slide' | t }}">{% include 'svg-definitions' with 'icon-caret' %}</button>
         </div>
       {% endif %}
     </slider-component>
@@ -118,7 +120,7 @@
           <li class="grid__item text-center">
             {% capture placeholder_image_url %}https://themes.easystore.co/onboarding/placeholder/products/frame/product-frame-{{ i }}.png{% endcapture %}
             <a href="https://{{GLOBALS.ADMIN_DOMAIN}}/products/" class="full-unstyled-link">
-              <img src="{{ placeholder_image_url }}" width="100%">
+              <img src="{{ placeholder_image_url }}" alt="" width="550" height="550" loading="lazy">
               <div>
                 {{ 'home_page.onboarding.product_title' | t: i }}
               </div>

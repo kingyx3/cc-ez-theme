@@ -1,9 +1,5 @@
 <!doctype html>
-<!--[if lt IE 7]><html class="no-js lt-ie9 lt-ie8 lt-ie7" lang="en"> <![endif]-->
-<!--[if IE 7]><html class="no-js lt-ie9 lt-ie8" lang="en"> <![endif]-->
-<!--[if IE 8]><html class="no-js lt-ie9" lang="en"> <![endif]-->
-<!--[if IE 9 ]><html class="ie9 no-js"> <![endif]-->
-<!--[if (gt IE 9)|!(IE)]><!--> <html class="no-js"> <!--<![endif]-->
+<html class="no-js" lang="en">
 <head>
 
   <!-- Basic page needs ================================================== -->
@@ -28,7 +24,7 @@
 
   <!-- Helpers ================================================== -->
   <link rel="canonical" href="{{ canonical_url }}">
-  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="{{ settings.colors_accent_1 }}">
   
   {{ '//ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js' | script_tag }}
@@ -38,6 +34,7 @@
   
   
   <script src="{{ 'global.js' | asset_url }}" defer="defer"></script>
+  <script src="{{ 'search-history.js' | asset_url }}" defer="defer"></script>
 
   {% comment %}
     If you store has customer accounts disabled, you can remove the following JS file
@@ -46,6 +43,7 @@
     {{ 'shop_common.js' | global_asset_url | script_tag }}
     {{ 'customer_area.js' | global_asset_url | script_tag }}
   {% endif %}
+  {% if GA_code != blank %}
   <script>
   (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
   (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
@@ -56,6 +54,7 @@
   ga('myTracker.send', 'pageview');
 
   </script>
+  {% endif %}
   
   {{ 'storefront.js' | global_asset_url | script_tag }}
   
@@ -65,14 +64,16 @@
       @font-face {
         font-family: '{{ settings.type_body_font.font_family }}';
         font-style: normal;
-        font-weight: {{ settings.type_body_font.variant }};
+        font-display: swap;
+        font-weight: 400;
         src: local('{{ settings.type_body_font.font_family }} {{ settings.type_body_font.variant }}'), local('{{ settings.type_body_font.font_family }}-{{ settings.type_body_font.variant }}'), url({{settings.type_body_font.variant_file}}) format('truetype');
       }
 
       @font-face {
         font-family: '{{ settings.type_header_font.font_family }}';
         font-style: normal;
-        font-weight: {{ settings.type_header_font.variant }};
+        font-display: swap;
+        font-weight: 400;
         src: local('{{ settings.type_header_font.font_family }} {{ settings.type_header_font.variant }}'), local('{{ settings.type_header_font.font_family }}-{{ settings.type_header_font.variant }}'), url({{settings.type_header_font.variant_file}}) format('truetype');
       }
 
@@ -155,7 +156,9 @@
 </head>
 
 <body id="{{ page_title | handle }}" class="{% if customer %}customer-logged-in {% endif %}template-{{ template | replace: '.', ' ' | truncatewords: 1, '' | handle }}" >
-	
+
+  <a class="skip-to-content-link button visually-hidden" href="#MainContent">Skip to content</a>
+
   {% app_snippet 'global/body_start' %}
 	
  	{% section 'header' %}
@@ -172,22 +175,28 @@
   <script>
 
     window.variantStrings = {
-      addToCart: `{{ 'products.product.add_to_cart' | t }}`,
-      updateCart: `{{ 'cart.general.update' | t }}`,
-      soldOut: `{{ 'products.product.sold_out' | t }}`,
-      unavailable: `{{ 'products.product.unavailable' | t }}`,
+      addToCart: {{ 'products.product.add_to_cart' | t | json }},
+      updateCart: {{ 'cart.general.update' | t | json }},
+      soldOut: {{ 'products.product.sold_out' | t | json }},
+      unavailable: {{ 'products.product.unavailable' | t | json }},
     }
 
     window.accessibilityStrings = {
-      shareSuccess: `{{ 'general.social.copied_success_message' | t }}`,
+      shareSuccess: {{ 'general.social.copied_success_message' | t | json }},
     }
     
     window.promotionStrings = {
-      title: `{{ 'products.product.promotion' | t }}`,
+      title: {{ 'products.product.promotion' | t | json }},
     }
     
     window.productSettings = {
-      variantOptionsDisplay: `{{ settings.sections.main-product.settings.variant_options_display | _default: 'radio' }}`,
+      variantOptionsDisplay: {{ settings.sections.main-product.settings.variant_options_display | _default: 'radio' | json }},
+    }
+
+    window.searchHistoryConfig = {
+      clearLabel: "Clear history",
+      customer: {% if customer %}true{% else %}false{% endif %},
+      csrfToken: "{% csrf %}",
     }
   </script>
 

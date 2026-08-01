@@ -13,7 +13,7 @@
 {% endif %}
 
 <share-button class="share-button">
-  <button class="share-button__button hidden">
+  <button type="button" class="share-button__button hidden">
     {% if social-sharing == 'float-icon' %}
       <span class="button-circle">
         {% include 'svg-definitions' with 'icon-share' %}
@@ -39,23 +39,23 @@
       <div class="social-sharing-icons" data-permalink="{{ permalinkURL }}">
         <div class="sharing-icons-label"><small>{{ 'general.social.share' | t }}</small></div>
 
-        <a target="_blank" href="//www.facebook.com/sharer.php?u={{ permalinkURL }}" class="share-icon-button">
+        <a target="_blank" rel="noopener noreferrer" aria-label="Share on Facebook" href="//www.facebook.com/sharer.php?u={{ permalinkURL }}" class="share-icon-button">
           {% include 'svg-definitions' with 'icon-facebook' %}
         </a>
 
-        <a target="_blank" href="//twitter.com/share?text={{ shareTitle }}&amp;url={{ permalinkURL }}" class="share-icon-button">
+        <a target="_blank" rel="noopener noreferrer" aria-label="Share on Twitter" href="//twitter.com/share?text={{ shareTitle }}&amp;url={{ permalinkURL }}" class="share-icon-button">
           {% include 'svg-definitions' with 'icon-twitter' %}
         </a>
 
         {% if product.featured_image or article.image %}
 
-          <a target="_blank" href="//pinterest.com/pin/create/button/?url={{ permalinkURL }}&amp;media={% if template contains 'product' %}{{ product | img_url: 'social-share' }}{% else %}{{ article | img_url: 'social-share' }}{% endif %}&amp;description={{ shareTitle }}" class="share-icon-button">
+          <a target="_blank" rel="noopener noreferrer" aria-label="Share on Pinterest" href="//pinterest.com/pin/create/button/?url={{ permalinkURL }}&amp;media={% if template contains 'product' %}{{ product | img_url: 'social-share' }}{% else %}{{ article | img_url: 'social-share' }}{% endif %}&amp;description={{ shareTitle }}" class="share-icon-button">
             {% include 'svg-definitions' with 'icon-pinterest' %}
           </a>
 
         {% endif %}
         
-        <a target="_blank" href="//social-plugins.line.me/lineit/share?url={{ permalinkURL }}" class="share-icon-button">
+        <a target="_blank" rel="noopener noreferrer" aria-label="Share on Line" href="//social-plugins.line.me/lineit/share?url={{ permalinkURL }}" class="share-icon-button">
           {% include 'svg-definitions' with 'icon-line' %}
         </a>
 
@@ -76,11 +76,11 @@
           >
           <label class="field__label" for="url">{{ 'general.social.share_url' | t }}</label>
         </div>
-        <button class="share-button__close hidden no-js-hidden">
+        <button type="button" class="share-button__close hidden no-js-hidden">
           {% include 'svg-definitions' with 'icon-close' %}
           <span class="visually-hidden">{{ 'general.share.close' | t }}</span>
         </button>
-        <button class="share-button__copy no-js-hidden">
+        <button type="button" class="share-button__copy no-js-hidden">
           {% include 'svg-definitions' with 'icon-clipboard' %}
           <span class="visually-hidden">{{ 'general.share.copy_to_clipboard' | t }}</span>
         </button>

@@ -52,66 +52,6 @@
     height: 1.8rem;
   }
 
-  .search-modal__form{
-    position: relative;
-  }
-  
-  .dropdown {
-    display: none;
-    position: absolute;
-    top: 100%;
-    left: 0;
-    width: 100%;
-    padding: 5px 0;
-    background-color: #fff;
-    color:#000;
-    z-index: 1000;
-    border-bottom-left-radius: 15px;
-    border-bottom-right-radius: 15px;
-    border: 1px solid rgba(var(--color-foreground), 1);
-    border-top: none;
-    overflow-x: hidden;
-    overflow-y: auto;
-    max-height: 350px;
-  }
-  
-  .dropdown-item {
-    padding: 0.4rem 2rem;
-    cursor: pointer;
-    line-height: 1.4;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  
-  .dropdown-item:hover{
-    background-color: #f3f3f3;
-  }
-  
-  .search__input.is-focus{
-    border-radius: 15px;
-    border-bottom-left-radius: 0;
-    border-bottom-right-radius: 0;
-    border: 1px solid rgba(var(--color-foreground), 1);
-    border-bottom: none;
-    box-shadow: none;
-  }
-  
-  .clear-all {
-    text-align: right;
-    padding: 0 2rem 0.2rem;
-    line-height: 1;
-    font-size: 70%;
-    margin-bottom: -2px;
-  }
-  
-  .clear-all:hover{
-    background-color: #fff;
-  }
-  
-  .search-input-focus .easystore-section-header-hidden{
-    transform: none;
-  }
 </style>
 
 <svg xmlns="http://www.w3.org/2000/svg" class="hidden">
@@ -138,7 +78,7 @@
 
 
     <div class="template-search__search">
-      <form action="/search" method="get" role="search" class="search">
+      <form action="/search" method="get" role="search" class="search" data-search-history-form>
         <div class="field">
           <input
             class="search__input field__input"
@@ -148,10 +88,18 @@
             value="{{ search.terms | escape }}"
             placeholder="{{ 'general.search.placeholder' | t }}"
             autocomplete="off"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded="false"
+            aria-controls="Search-In-Template-History"
+            data-search-history-input
           >
           <label class="field__label" for="Search-In-Template">{{ 'general.search.placeholder' | t }}</label>
-          <div class="dropdown" id="searchDropdown"></div>
-          <input type="hidden" name="search_history" class="hidden_search_history"> 
+          <div class="search-history" data-search-history-panel hidden>
+            <div id="Search-In-Template-History" role="listbox" aria-label="Recent searches" data-search-history-list></div>
+            <button type="button" class="search-history__clear" data-search-history-clear>Clear history</button>
+          </div>
+          <input type="hidden" name="search_history" class="hidden_search_history">
               
           <button type="submit" class="search__button field__button" aria-label="{{ 'general.search.placeholder' | t }}">
             <svg class="icon icon-search">
@@ -161,10 +109,8 @@
         </div>
       </form>
     </div>
-    <br>
-        
     {% if search.performed and search.results_count > 0 %}
-      <ul class="grid grid--2-col product-grid grid--3-col-tablet grid--one-third-max grid--4-col-desktop grid--quarter-max negative-margin" role="list">
+      <ul class="grid grid--2-col product-grid grid--3-col-tablet grid--one-third-max grid--3-col-desktop negative-margin" role="list">
         {% for item in search.results %}
         {% assign product = item %}
           <li class="grid__item">
@@ -184,93 +130,5 @@
 </div>
 
 <script>
-  var _search_history_listings = {{ update_search_history.data.search_history_listings | json }}
-  if(_search_history_listings != "") localStorage.setItem('searchHistory', JSON.stringify(_search_history_listings));
-    
-  function clearAll() {
-    localStorage.removeItem('searchHistory'); 
-    
-    var customer = {{ customer | json }};
-    if(customer) {
-      // Your logic to clear all data or call an endpoint
-      fetch('/account/search_histories', {
-          method: 'DELETE',
-          headers: {
-            "Content-Type": "application/json",
-            "X-Requested-With": "XMLHttpRequest"
-          },
-          body: JSON.stringify({
-            _token: "{% csrf %}"
-          }),
-      })
-      .then(response => response.json())
-    }
-  }
-  // End - delete search history from local storage
-  
-  // search history dropdown  
-  var searchInputs = document.querySelectorAll('.search__input');
-  
-  if(searchInputs.length > 0) {
-    
-    searchInputs.forEach((searchInput)=> {
-    
-      searchInput.addEventListener('focus', function() {
-        var searchDropdown = searchInput.closest('form').querySelector('#searchDropdown');
-        searchDropdown.innerHTML = ''; // Clear existing items
-  
-        // retrieve data from local storage
-        var searchHistoryData = JSON.parse(localStorage.getItem('searchHistory')) || [];
-  
-        // Convert JSON to string
-        var search_history_json = JSON.stringify(searchHistoryData);
-  
-        // Set the value of the hidden input
-        searchInput.closest('form').querySelector(".hidden_search_history").value = search_history_json;
-  
-        // create dropdown items
-        var clearAllItem = document.createElement('div');
-        clearAllItem.className = 'dropdown-item clear-all';
-        clearAllItem.textContent = 'Clear';
-        clearAllItem.addEventListener('click', function() {
-          clearAll();
-          searchDropdown.style.display = 'none';
-          searchInput.classList.remove('is-focus');
-        });
-        searchDropdown.appendChild(clearAllItem);
-  
-        // create dropdown items
-        searchHistoryData.forEach(function(item) {
-          var dropdownItem = document.createElement('div');
-          dropdownItem.className = 'dropdown-item';
-          dropdownItem.textContent = item.term;
-          dropdownItem.addEventListener('click', function() {
-            searchInput.value = item.term;
-            searchInput.closest('form').submit();
-            searchDropdown.style.display = 'none';
-          });
-          searchDropdown.appendChild(dropdownItem);
-        });
-  
-        if(searchHistoryData.length > 0){
-          // display the dropdown
-          searchInput.classList.add('is-focus');
-          document.body.classList.add('search-input-focus');
-          searchDropdown.style.display = 'block';
-        }
-      });
-  
-      searchInput.addEventListener("focusout", (event) => {
-        var searchDropdown = searchInput.closest('form').querySelector('#searchDropdown');
-        searchInput.classList.remove('is-focus');
-        searchDropdown.classList.add('transparent');
-        setTimeout(()=>{
-          searchDropdown.style.display = 'none';
-          searchDropdown.classList.remove('transparent');
-          document.body.classList.remove('search-input-focus');
-        }, 400);
-      });
-    })
-  }
-  // End - search history dropdown
+  window.CardboardSearchHistorySeed = {{ update_search_history.data.search_history_listings | json }};
 </script>

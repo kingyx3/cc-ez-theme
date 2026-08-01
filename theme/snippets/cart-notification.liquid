@@ -14,7 +14,7 @@
         <form action="/cart" method="post" id="cart-notification-form">
           <input type="hidden" name="_token" value="{% csrf %}">
           <input type="hidden" name="current_currency" value="{{ shop.selected_currency }}">
-          <button class="button button--primary button--full-width" name="checkout" value="true">{{ 'cart.general.checkout' | t }}</button>
+          <button type="submit" class="button button--primary button--full-width" name="checkout" value="true">{{ 'cart.general.checkout' | t }}</button>
         </form>
         <a href="/collections/all" class="link button-label">{{ 'products.product.continue_shopping' | t }}</a>
       </div>

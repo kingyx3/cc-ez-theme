@@ -24,7 +24,7 @@
         </span>
       {% endif %}
     </button>
-    <iframe data-video-id="{{ section.settings.video_url }}" class="js-youtube" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+    <iframe title="{{ section.settings.heading | _default: 'Video' | escape }}" data-video-id="{{ section.settings.video_url }}" class="js-youtube" allow="autoplay; encrypted-media" allowfullscreen></iframe>
   </deferred-media>
 </div>
 

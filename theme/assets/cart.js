@@ -1,4 +1,4 @@
-document.getElementById('cart-form').addEventListener('submit',(event)=>{
+document.getElementById('cart-form')?.addEventListener('submit',(event)=>{
   if(event.submitter) event.submitter.classList.add('loading');
 })
 
@@ -8,7 +8,9 @@ document.body.addEventListener("click", function(event) {
         const targetId = trigger.getAttribute("data-target");
         const target = document.getElementById(targetId);
         if (target) {
+            const isOpening = window.getComputedStyle(target).display === 'none';
             slideToggle(target, 300, trigger);
+            trigger.setAttribute('aria-expanded', String(isOpening));
         }
     }
 });
@@ -105,7 +107,7 @@ customElements.define('discount-input', DiscountInput);
 class DiscountRemoveButton extends HTMLElement {
   constructor() {
     super();
-    this.button = this.querySelector('a');
+    this.button = this.querySelector('button');
     this.button.addEventListener('click', this.onButtonClick.bind(this))
   }
 
@@ -148,7 +150,7 @@ class CartItems extends HTMLElement {
   }
 
   onChange(event) {
-    this.updateQuantity(event.target.dataset.index, event.target.value, document.activeElement.getAttribute('name'));
+    this.updateQuantity(event.target.dataset.index, event.target.value, document.activeElement?.getAttribute('name'));
   }
 
   
@@ -157,9 +159,6 @@ class CartItems extends HTMLElement {
     this.hideErrorMsg();
 
     let body = JSON.parse(serializeForm(document.getElementById('cart-form')));
-
-    console.log('body',body);
-
 
     EasyStore.Action.updateCart(body,(cart)=>{
 
@@ -190,7 +189,9 @@ class CartItems extends HTMLElement {
     this.hideErrorMsg();
 
     let cartItem = this.querySelector(`#CartItem-${line}`);
+    if (!cartItem) return;
     let cartItemDeleteBtn = cartItem.querySelector(`cart-remove-button [data-item-id]`);
+    if (!cartItemDeleteBtn) return;
     let body = {
       variant_id: cartItemDeleteBtn.dataset.variantId,
       item_id: cartItemDeleteBtn.dataset.itemId,

@@ -21,7 +21,7 @@ class CartNotification extends HTMLElement {
     }, { once: true });
 
     document.body.addEventListener('click', this.onBodyClick);
-    
+
     if(document.querySelector('product-quickview-modal') && document.querySelector('product-quickview-modal').isOpen()) {
       document.querySelector('product-quickview-modal').close(true)
     }
@@ -36,32 +36,43 @@ class CartNotification extends HTMLElement {
   }
 
   renderContents(cart) {
-      document.getElementById('cart-notification-product').innerHTML = this.getSectionInnerHTML(cart);
-      document.querySelectorAll('.js-content-cart-count').forEach((el)=>{ el.innerHTML = cart.item_count; })
-      if(cart.item_count > 0) document.querySelector('.cart-count-bubble').classList.remove('hidden')
-      if(cart.item_count == 0) document.querySelector('.cart-count-bubble').classList.add('hidden')
+      this.renderProduct(cart);
+      document.querySelectorAll('.js-content-cart-count').forEach((el)=>{ el.textContent = cart.item_count; })
+      const cartBubble = document.querySelector('.cart-count-bubble');
+      if (cartBubble) cartBubble.classList.toggle('hidden', cart.item_count === 0);
       
       if (this.header) this.header.reveal();
       this.open();
   }
 
   updateCartCount(cart) {
-      document.querySelectorAll('.js-content-cart-count').forEach((el)=>{ el.innerHTML = cart.item_count; })
-      if(cart.item_count > 0) document.querySelector('.cart-count-bubble').classList.remove('hidden')
-      if(cart.item_count == 0) document.querySelector('.cart-count-bubble').classList.add('hidden')
+      document.querySelectorAll('.js-content-cart-count').forEach((el)=>{ el.textContent = cart.item_count; })
+      const cartBubble = document.querySelector('.cart-count-bubble');
+      if (cartBubble) cartBubble.classList.toggle('hidden', cart.item_count === 0);
   }
 
-  getSectionInnerHTML(cart) {
-    console.log(cart);
-    let added_item = cart.latest_items[0]
-    return `
-      <img class="cart-notification-product__image" src="${added_item.img_url ? added_item.img_url : '/assets/images/products/no_image.png'}" alt="Bo Ivy" width="70" height="70" loading="lazy">
-      <div class="cart-notification-product__info">
-        <h3 class="cart-notification-product__name h4">${added_item.product_name}</h3>
-        <div class="cart-notification-product__option h4">
-          ${added_item.variant_name ? added_item.variant_name : ''}
-        </div>
-      </div>`
+  renderProduct(cart) {
+    const container = document.getElementById('cart-notification-product');
+    const addedItem = cart.latest_items && cart.latest_items[0];
+    if (!container || !addedItem) return;
+
+    const image = document.createElement('img');
+    image.className = 'cart-notification-product__image';
+    image.src = addedItem.img_url || '/assets/images/products/no_image.png';
+    image.alt = addedItem.product_name || '';
+    image.width = 70;
+    image.height = 70;
+
+    const info = document.createElement('div');
+    info.className = 'cart-notification-product__info';
+    const name = document.createElement('h3');
+    name.className = 'cart-notification-product__name h4';
+    name.textContent = addedItem.product_name || '';
+    const variant = document.createElement('div');
+    variant.className = 'cart-notification-product__option h4';
+    variant.textContent = addedItem.variant_name || '';
+    info.append(name, variant);
+    container.replaceChildren(image, info);
   }
 
   handleBodyClick(evt) {

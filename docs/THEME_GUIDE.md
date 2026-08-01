@@ -12,7 +12,7 @@ EasyStore. The theme is designed around four goals:
 4. Produce a deterministic upload archive that EasyStore can import.
 
 The theme is presentation code. Products, inventory, customers, orders,
-collections, navigation records, wishlists, and installed apps remain managed
+collections, navigation records, and installed apps remain managed
 by EasyStore.
 
 ## 2. What is packaged
@@ -308,12 +308,12 @@ Keep product-type collections for the few categories customers actively browse,
 such as Collector Booster Boxes, Play Booster Boxes, Bundles, and Booster
 Packs. Use tags for narrower operational detail.
 
-## 9. Wishlist and out-of-stock interest
+## 9. Out-of-stock interest
 
-The store can use EasyStore's Wishlist integration to measure interest.
-Wishlist behavior belongs to the installed EasyStore app; the theme should
-leave product-level app hooks intact. Wishlist destinations are deliberately
-filtered out of the desktop header navigation.
+Wishlist is not part of this storefront experience. The theme filters it from
+EasyStore-provided navigation records and suppresses controls injected by app
+snippets so it cannot reappear on desktop, mobile, product, collection, or
+account surfaces.
 
 For out-of-stock products, a free manual alternative is a theme-rendered
 WhatsApp interest link containing the product title, selected variant, and
@@ -345,8 +345,8 @@ Calls such as `{% app_snippet 'collection/product_top' %}` are integration
 points. They allow installed EasyStore apps to inject storefront behavior.
 
 Do not remove app hooks merely because they render nothing in a local source
-review. Confirm the impact on installed apps such as Wishlist before changing
-them.
+review. App hooks are retained, while unsupported wishlist UI is removed by the
+theme's global storefront layer.
 
 ## 12. Accessibility requirements
 

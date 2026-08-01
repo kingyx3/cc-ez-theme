@@ -21,7 +21,7 @@
                   <strong>
                     {{location.name}}
                   </strong>
-                  {% if location.phone %} <a href="tel:{{location.email}}">{{location.phone}}</a> <br> {% endif %}
+                  {% if location.phone %} <a href="tel:{{ location.phone | replace: ' ', '' }}">{{location.phone}}</a> <br> {% endif %}
                   {% if location.email %} <a href="mailto:{{location.email}}">{{location.email}}</a> <br> {% endif %}
 
                   <address>
@@ -34,7 +34,7 @@
                   </address>
 
                 </div><br>
-                <a class="button button--tertiary" href="https://www.google.com/maps?q={{ location.formatted }}" target="_blank">{{ 'general.store_locator.navigate' | t }}</a>
+                <a class="button button--tertiary" href="https://www.google.com/maps?q={{ location.formatted | escape }}" target="_blank" rel="noopener noreferrer">{{ 'general.store_locator.navigate' | t }}</a>
               </div>
           </div>
         {% endfor %}
@@ -42,10 +42,10 @@
   </div>
 
 {% else %}
-  <center class='no-watermark'>
-    <br><img src="https://s3-ap-southeast-1.amazonaws.com/eesb.public/images/location-not-found.svg" width="500px"><br>
-    <p class="h2">{{ 'general.store_locator.location_not_found' | t }}</p><br><br>
-  </center>
+  <div class="no-watermark page-width center">
+    <img src="https://s3-ap-southeast-1.amazonaws.com/eesb.public/images/location-not-found.svg" alt="" width="500" height="360" loading="lazy">
+    <p class="h2">{{ 'general.store_locator.location_not_found' | t }}</p>
+  </div>
 {% endif %}
 
 {% if paginate.pages > 1 %}
@@ -169,26 +169,30 @@
     var businessHour = JSON.parse(locations[i].business_hour)
 
     var dropdown = document.createElement("div")
-    dropdown.className = "dropdown"
+    dropdown.className = "store-hours dropdown"
     dropdown.setAttribute("data-toggle","0")
 
-    var dropdownToggle = document.createElement("span")
+    var dropdownToggle = document.createElement("button")
+    dropdownToggle.type = "button"
     dropdownToggle.className = "dropdown-toggle"
+    dropdownToggle.setAttribute("aria-expanded", "false")
+    dropdownToggle.setAttribute("aria-controls", `business-hour-menu-${i}`)
 
     var caret = document.createElement("span")
     caret.className = "caret"
 
     var dropdownMenu = document.createElement("ul")
     dropdownMenu.className = "dropdown-menu list-unstyled"
+    dropdownMenu.id = `business-hour-menu-${i}`
 
     if(Object.keys(businessHour).length <= 0) {
 
       dropdownToggle.innerHTML = `<span style="color: green; font-weight: bold;">Open</span>`
 
       var li = document.createElement("li")
-      var a = document.createElement("a")
-      a.innerHTML = "Open for 24 hours"
-      li.appendChild(a)
+      var label = document.createElement("span")
+      label.textContent = "Open for 24 hours"
+      li.appendChild(label)
       dropdownMenu.appendChild(li)
 
     }
@@ -202,9 +206,9 @@
       }
 
       var li = document.createElement("li")
-      var a = document.createElement("a")
-      a.innerHTML = `Everyday: ${formatTime(businessHour.everyday)}`
-      li.appendChild(a)
+      var label = document.createElement("span")
+      label.textContent = `Everyday: ${formatTime(businessHour.everyday)}`
+      li.appendChild(label)
       dropdownMenu.appendChild(li)
     }
 
@@ -223,9 +227,9 @@
       for(var day in businessHour) {
 
         var li = document.createElement("li")
-        var a = document.createElement("a")
-        a.innerHTML = `${formatDay(day)}: ${businessHour[day] === 'closed' ? 'Closed': formatTime(businessHour[day])}`
-        li.appendChild(a)
+        var label = document.createElement("span")
+        label.textContent = `${formatDay(day)}: ${businessHour[day] === 'closed' ? 'Closed': formatTime(businessHour[day])}`
+        li.appendChild(label)
 
         listItems[ordering[day]] = li
 
@@ -235,8 +239,8 @@
 
     }
 
+    dropdownToggle.appendChild(caret)
     dropdown.appendChild(dropdownToggle)
-    dropdown.appendChild(caret)
     dropdown.appendChild(dropdownMenu)
 
 
@@ -247,20 +251,20 @@
   }
 
   var dropdowns = document.querySelectorAll("[data-toggle]");
-  dropdowns.forEach(function(btn){
-    btn.addEventListener('click', function(el) {
-       if(btn.getAttribute('data-toggle') != '0'){
-        btn.setAttribute("data-toggle", "0")
-      }else{
-       btn.setAttribute("data-toggle", "1")
-     }
-   });
+  dropdowns.forEach(function(dropdown){
+    var toggle = dropdown.querySelector('.dropdown-toggle');
+    toggle.addEventListener('click', function() {
+      var isOpen = dropdown.getAttribute('data-toggle') === '1';
+      dropdown.setAttribute('data-toggle', isOpen ? '0' : '1');
+      toggle.setAttribute('aria-expanded', String(!isOpen));
+    });
   });
 
   window.addEventListener('click', function(e){
-    dropdowns.forEach(function(btn){
-      if (!btn.contains(e.target)){
-        btn.setAttribute("data-toggle", "0")
+    dropdowns.forEach(function(dropdown){
+      if (!dropdown.contains(e.target)){
+        dropdown.setAttribute("data-toggle", "0")
+        dropdown.querySelector('.dropdown-toggle').setAttribute('aria-expanded', 'false')
       }
     });
   });
