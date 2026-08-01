@@ -185,13 +185,13 @@ class CartItems extends HTMLElement {
   }
 
   removeCartItem(line, isCheckProductProperties = true) {
-    this.enableLoading(line);
-    this.hideErrorMsg();
-
     let cartItem = this.querySelector(`#CartItem-${line}`);
     if (!cartItem) return;
     let cartItemDeleteBtn = cartItem.querySelector(`cart-remove-button [data-item-id]`);
     if (!cartItemDeleteBtn) return;
+
+    this.enableLoading(line);
+    this.hideErrorMsg();
     let body = {
       variant_id: cartItemDeleteBtn.dataset.variantId,
       item_id: cartItemDeleteBtn.dataset.itemId,
