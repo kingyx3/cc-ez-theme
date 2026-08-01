@@ -1,230 +1,26 @@
 {% comment %}
-  Renders Browse from two documented EasyStore data sources:
+  Renders the reliable, ordered first level from EasyStore's catalog.
+  browse-navigation.js enhances these links with descendants from the
+  serialized EasyStore collections family tree.
 
   Required:
   - navigation_mode: "desktop" or "mobile"
-
-  contents.catalog.links is the authoritative, ordered first level. Each link
-  is joined to collections by handle so descendants can be resolved through
-  collections[].id and collections[].parent_id. A failed join must never hide
-  the first-level catalog link.
 {% endcomment %}
 
 {% for catalog_link in contents.catalog.links %}
-  {% assign catalog_handle = catalog_link.handle %}
   {% assign catalog_url_parts = catalog_link.url | split: '/' %}
   {% assign catalog_url_handle = catalog_url_parts | last %}
-  {% if catalog_handle == blank %}
-    {% assign catalog_handle = catalog_url_handle %}
-  {% endif %}
-
-  {% assign catalog_collection = collections[catalog_handle] %}
-  {% if catalog_collection == blank %}
-    {% assign catalog_collection = collections[catalog_url_handle] %}
-  {% endif %}
-
-  {% assign parent_id = catalog_collection.id | append: '' %}
-  {% if parent_id == '' %}
-    {% capture matched_parent_id %}{% for catalog_collection in collections %}{% if catalog_collection.handle == catalog_handle or catalog_collection.handle == catalog_url_handle %}{{ catalog_collection.id }}{% endif %}{% endfor %}{% endcapture %}
-    {% assign parent_id = matched_parent_id | strip %}
-  {% endif %}
-
-  {% assign parent_has_children = false %}
-  {% if parent_id != '' %}
-    {% capture parent_child_matches %}{% for child_candidate in collections %}{% assign child_candidate_parent_id = child_candidate.parent_id | append: '' %}{% if child_candidate_parent_id == parent_id and child_candidate.is_locked != true and child_candidate.is_locked != 'true' %}1{% endif %}{% endfor %}{% endcapture %}
-    {% if parent_child_matches contains '1' %}
-      {% assign parent_has_children = true %}
-    {% endif %}
-  {% endif %}
-
-      {% if navigation_mode == 'mobile' %}
-        <li>
-          {% if parent_has_children %}
-            <details>
-              <summary class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
-                <span>{{ catalog_link.title | escape }}</span>
-                {% include 'svg-definitions' with 'icon-arrow' %}
-                {% include 'svg-definitions' with 'icon-caret' %}
-              </summary>
-              <div class="menu-drawer__submenu motion-reduce" tabindex="-1">
-                <div class="menu-drawer__inner-submenu">
-                  <button type="button" class="menu-drawer__close-button link link--text focus-inset">
-                    {% include 'svg-definitions' with 'icon-arrow' %}
-                    {{ catalog_link.title | escape }}
-                  </button>
-                  <ul class="menu-drawer__menu list-menu" role="list">
-                    {% for child_collection in collections %}
-                      {% assign child_parent_id = child_collection.parent_id | append: '' %}
-                      {% if child_parent_id == parent_id %}
-                        {% if child_collection.is_locked != true and child_collection.is_locked != 'true' %}
-                          {% assign child_id = child_collection.id | append: '' %}
-                          {% assign child_has_children = false %}
-                          {% capture child_grandchild_matches %}{% for grandchild_candidate in collections %}{% assign grandchild_candidate_parent_id = grandchild_candidate.parent_id | append: '' %}{% if grandchild_candidate_parent_id == child_id and grandchild_candidate.is_locked != true and grandchild_candidate.is_locked != 'true' %}1{% endif %}{% endfor %}{% endcapture %}
-                          {% if child_grandchild_matches contains '1' %}
-                            {% assign child_has_children = true %}
-                          {% endif %}
-                          <li>
-                            {% if child_has_children %}
-                              <details>
-                                <summary class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
-                                  <span>{{ child_collection.title | default: child_collection.name | escape }}</span>
-                                  {% include 'svg-definitions' with 'icon-arrow' %}
-                                  {% include 'svg-definitions' with 'icon-caret' %}
-                                </summary>
-                                <div class="menu-drawer__submenu motion-reduce" tabindex="-1">
-                                  <div class="menu-drawer__inner-submenu">
-                                    <button type="button" class="menu-drawer__close-button link link--text focus-inset">
-                                      {% include 'svg-definitions' with 'icon-arrow' %}
-                                      {{ child_collection.title | default: child_collection.name | escape }}
-                                    </button>
-                                    <ul class="menu-drawer__menu list-menu" role="list">
-                                      {% for grandchild_collection in collections %}
-                                        {% assign grandchild_parent_id = grandchild_collection.parent_id | append: '' %}
-                                        {% if grandchild_parent_id == child_id %}
-                                          {% if grandchild_collection.is_locked != true and grandchild_collection.is_locked != 'true' %}
-                                            {% assign grandchild_id = grandchild_collection.id | append: '' %}
-                                            {% assign grandchild_has_children = false %}
-                                            {% capture grandchild_descendant_matches %}{% for great_grandchild_candidate in collections %}{% assign great_grandchild_candidate_parent_id = great_grandchild_candidate.parent_id | append: '' %}{% if great_grandchild_candidate_parent_id == grandchild_id and great_grandchild_candidate.is_locked != true and great_grandchild_candidate.is_locked != 'true' %}1{% endif %}{% endfor %}{% endcapture %}
-                                            {% if grandchild_descendant_matches contains '1' %}
-                                              {% assign grandchild_has_children = true %}
-                                            {% endif %}
-                                            <li>
-                                              {% if grandchild_has_children %}
-                                                <details>
-                                                  <summary class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
-                                                    <span>{{ grandchild_collection.title | default: grandchild_collection.name | escape }}</span>
-                                                    {% include 'svg-definitions' with 'icon-arrow' %}
-                                                    {% include 'svg-definitions' with 'icon-caret' %}
-                                                  </summary>
-                                                  <div class="menu-drawer__submenu motion-reduce" tabindex="-1">
-                                                    <div class="menu-drawer__inner-submenu">
-                                                      <button type="button" class="menu-drawer__close-button link link--text focus-inset">
-                                                        {% include 'svg-definitions' with 'icon-arrow' %}
-                                                        {{ grandchild_collection.title | default: grandchild_collection.name | escape }}
-                                                      </button>
-                                                      <ul class="menu-drawer__menu list-menu" role="list">
-                                                        {% for great_grandchild_collection in collections %}
-                                                          {% assign great_grandchild_parent_id = great_grandchild_collection.parent_id | append: '' %}
-                                                          {% if great_grandchild_parent_id == grandchild_id %}
-                                                            {% if great_grandchild_collection.is_locked != true and great_grandchild_collection.is_locked != 'true' %}
-                                                              <li>
-                                                                <a href="/collections/{{ great_grandchild_collection.handle | escape }}" class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
-                                                                  {{ great_grandchild_collection.title | default: great_grandchild_collection.name | escape }}
-                                                                </a>
-                                                              </li>
-                                                            {% endif %}
-                                                          {% endif %}
-                                                        {% endfor %}
-                                                      </ul>
-                                                    </div>
-                                                  </div>
-                                                </details>
-                                              {% else %}
-                                                <a href="/collections/{{ grandchild_collection.handle | escape }}" class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
-                                                  {{ grandchild_collection.title | default: grandchild_collection.name | escape }}
-                                                </a>
-                                              {% endif %}
-                                            </li>
-                                          {% endif %}
-                                        {% endif %}
-                                      {% endfor %}
-                                    </ul>
-                                  </div>
-                                </div>
-                              </details>
-                            {% else %}
-                              <a href="/collections/{{ child_collection.handle | escape }}" class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
-                                {{ child_collection.title | default: child_collection.name | escape }}
-                              </a>
-                            {% endif %}
-                          </li>
-                        {% endif %}
-                      {% endif %}
-                    {% endfor %}
-                  </ul>
-                </div>
-              </div>
-            </details>
-          {% else %}
-            <a href="{{ catalog_link.url | escape }}" class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
-              {{ catalog_link.title | escape }}
-            </a>
-          {% endif %}
-        </li>
-      {% else %}
-        <li{% if parent_has_children %} class="browse-menu__item--has-children"{% endif %}>
-          <a href="{{ catalog_link.url | escape }}" class="header__menu-item list-menu__item link link--text focus-inset caption-large">
-            <span>{{ catalog_link.title | escape }}</span>
-            {% if parent_has_children %}
-              {% include 'svg-definitions' with 'icon-caret' , class : 'rotate-90' %}
-            {% endif %}
-          </a>
-          {% if parent_has_children %}
-            <ul class="header__submenu browse-menu__flyout list-menu list-menu--disclosure motion-reduce" role="list">
-              {% for child_collection in collections %}
-                {% assign child_parent_id = child_collection.parent_id | append: '' %}
-                {% if child_parent_id == parent_id %}
-                  {% if child_collection.is_locked != true and child_collection.is_locked != 'true' %}
-                    {% assign child_id = child_collection.id | append: '' %}
-                    {% assign child_has_children = false %}
-                    {% capture child_grandchild_matches %}{% for grandchild_candidate in collections %}{% assign grandchild_candidate_parent_id = grandchild_candidate.parent_id | append: '' %}{% if grandchild_candidate_parent_id == child_id and grandchild_candidate.is_locked != true and grandchild_candidate.is_locked != 'true' %}1{% endif %}{% endfor %}{% endcapture %}
-                    {% if child_grandchild_matches contains '1' %}
-                      {% assign child_has_children = true %}
-                    {% endif %}
-                    <li{% if child_has_children %} class="browse-menu__item--has-children"{% endif %}>
-                      <a href="/collections/{{ child_collection.handle | escape }}" class="header__menu-item list-menu__item link link--text focus-inset caption-large">
-                        <span>{{ child_collection.title | default: child_collection.name | escape }}</span>
-                        {% if child_has_children %}
-                          {% include 'svg-definitions' with 'icon-caret' , class : 'rotate-90' %}
-                        {% endif %}
-                      </a>
-                      {% if child_has_children %}
-                        <ul class="header__submenu browse-menu__flyout list-menu list-menu--disclosure motion-reduce" role="list">
-                          {% for grandchild_collection in collections %}
-                            {% assign grandchild_parent_id = grandchild_collection.parent_id | append: '' %}
-                            {% if grandchild_parent_id == child_id %}
-                              {% if grandchild_collection.is_locked != true and grandchild_collection.is_locked != 'true' %}
-                                {% assign grandchild_id = grandchild_collection.id | append: '' %}
-                                {% assign grandchild_has_children = false %}
-                                {% capture grandchild_descendant_matches %}{% for great_grandchild_candidate in collections %}{% assign great_grandchild_candidate_parent_id = great_grandchild_candidate.parent_id | append: '' %}{% if great_grandchild_candidate_parent_id == grandchild_id and great_grandchild_candidate.is_locked != true and great_grandchild_candidate.is_locked != 'true' %}1{% endif %}{% endfor %}{% endcapture %}
-                                {% if grandchild_descendant_matches contains '1' %}
-                                  {% assign grandchild_has_children = true %}
-                                {% endif %}
-                                <li{% if grandchild_has_children %} class="browse-menu__item--has-children"{% endif %}>
-                                  <a href="/collections/{{ grandchild_collection.handle | escape }}" class="header__menu-item list-menu__item link link--text focus-inset caption-large">
-                                    <span>{{ grandchild_collection.title | default: grandchild_collection.name | escape }}</span>
-                                    {% if grandchild_has_children %}
-                                      {% include 'svg-definitions' with 'icon-caret' , class : 'rotate-90' %}
-                                    {% endif %}
-                                  </a>
-                                  {% if grandchild_has_children %}
-                                    <ul class="header__submenu browse-menu__flyout list-menu list-menu--disclosure motion-reduce" role="list">
-                                      {% for great_grandchild_collection in collections %}
-                                        {% assign great_grandchild_parent_id = great_grandchild_collection.parent_id | append: '' %}
-                                        {% if great_grandchild_parent_id == grandchild_id %}
-                                          {% if great_grandchild_collection.is_locked != true and great_grandchild_collection.is_locked != 'true' %}
-                                            <li>
-                                              <a href="/collections/{{ great_grandchild_collection.handle | escape }}" class="header__menu-item list-menu__item link link--text focus-inset caption-large">
-                                                {{ great_grandchild_collection.title | default: great_grandchild_collection.name | escape }}
-                                              </a>
-                                            </li>
-                                          {% endif %}
-                                        {% endif %}
-                                      {% endfor %}
-                                    </ul>
-                                  {% endif %}
-                                </li>
-                              {% endif %}
-                            {% endif %}
-                          {% endfor %}
-                        </ul>
-                      {% endif %}
-                    </li>
-                  {% endif %}
-                {% endif %}
-              {% endfor %}
-            </ul>
-          {% endif %}
-        </li>
-      {% endif %}
+  <li
+    data-browse-root
+    data-browse-mode="{{ navigation_mode }}"
+    data-browse-link-handle="{{ catalog_link.handle | escape }}"
+    data-browse-url-handle="{{ catalog_url_handle | escape }}"
+  >
+    <a
+      href="{{ catalog_link.url | escape }}"
+      class="{% if navigation_mode == 'mobile' %}menu-drawer__menu-item list-menu__item link link--text focus-inset{% else %}header__menu-item list-menu__item link link--text focus-inset caption-large{% endif %}"
+    >
+      {{ catalog_link.title | escape }}
+    </a>
+  </li>
 {% endfor %}

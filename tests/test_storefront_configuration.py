@@ -438,36 +438,50 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertIn("catalog_link.handle", browse)
         self.assertIn("catalog_link.url | split: '/'", browse)
         self.assertIn("catalog_url_handle = catalog_url_parts | last", browse)
-        self.assertIn("collections[catalog_handle]", browse)
-        self.assertIn("collections[catalog_url_handle]", browse)
-        self.assertIn("{% capture matched_parent_id %}", browse)
-        self.assertIn("{% capture parent_child_matches %}", browse)
-        self.assertIn("parent_child_matches contains '1'", browse)
-        self.assertIn("{% capture child_grandchild_matches %}", browse)
-        self.assertIn("child_grandchild_matches contains '1'", browse)
-        self.assertIn("{% capture grandchild_descendant_matches %}", browse)
-        self.assertIn("grandchild_descendant_matches contains '1'", browse)
-        self.assertIn("catalog_collection.id | append: ''", browse)
+        self.assertIn("data-browse-root", browse)
+        self.assertIn('data-browse-mode="{{ navigation_mode }}"', browse)
+        self.assertIn("data-browse-link-handle", browse)
+        self.assertIn("data-browse-url-handle", browse)
         self.assertIn('href="{{ catalog_link.url | escape }}"', browse)
         self.assertIn("{{ catalog_link.title | escape }}", browse)
-        self.assertIn("child_collection.parent_id", browse)
-        self.assertIn("grandchild_collection.parent_id", browse)
-        self.assertIn("great_grandchild_collection.parent_id", browse)
-        self.assertIn("child_candidate.parent_id", browse)
-        self.assertIn("grandchild_candidate.parent_id", browse)
-        self.assertIn("great_grandchild_candidate.parent_id", browse)
-        self.assertIn("child_collection.is_locked != 'true'", browse)
-        self.assertIn('href="/collections/{{ child_collection.handle | escape }}"', browse)
-        self.assertIn('href="/collections/{{ grandchild_collection.handle | escape }}"', browse)
         self.assertNotIn("contents[", browse)
         self.assertIn("navigation_mode == 'mobile'", browse)
-        self.assertIsNone(
-            re.search(
-                r"<summary[^>]*>(?:(?!</summary>).)*<a\b",
-                browse,
-                flags=re.DOTALL,
-            )
+
+        self.assertIn('id="BrowseCollectionHierarchy"', header)
+        self.assertIn("{% for browse_collection in collections %}", header)
+        self.assertIn('"id": {{ browse_collection.id | json }}', header)
+        self.assertIn(
+            '"parent_id": {{ browse_collection.parent_id | json }}',
+            header,
         )
+        self.assertIn('"handle": {{ browse_collection.handle | json }}', header)
+        self.assertIn('"position": {{ browse_collection.position | json }}', header)
+        self.assertIn('"is_locked": {{ browse_collection.is_locked | json }}', header)
+        self.assertIn(
+            '<script src="{{ \'browse-navigation.js\' | asset_url }}"></script>',
+            header,
+        )
+
+        browse_script = (
+            THEME_ROOT / "assets" / "browse-navigation.js"
+        ).read_text(encoding="utf-8")
+        editor_browse_script = (
+            THEME_ROOT / "editor_assets" / "browse-navigation.js"
+        ).read_text(encoding="utf-8")
+        self.assertEqual(browse_script, editor_browse_script)
+        self.assertIn("JSON.parse(dataElement.textContent)", browse_script)
+        self.assertIn("const normalizeId", browse_script)
+        self.assertIn("const normalizeHandle", browse_script)
+        self.assertIn("const childrenByParentId = new Map()", browse_script)
+        self.assertIn("childrenByParentId.get(collection.parentId)", browse_script)
+        self.assertIn("childrenByParentId.get(rootCollection.id)", browse_script)
+        self.assertIn("const desktopItem", browse_script)
+        self.assertIn("const mobileItem", browse_script)
+        self.assertIn("dataset.browseStatus", browse_script)
+        self.assertIn("browse-navigation:ready", browse_script)
+        self.assertIn("encodeURIComponent(collection.handle)", browse_script)
+        self.assertIn("anchor.textContent = label", browse_script)
+        self.assertNotIn("innerHTML", browse_script)
         self.assertNotIn("{% continue %}", header)
         self.assertEqual(header.count('href="/collections/the-hobbit"'), 2)
         self.assertEqual(

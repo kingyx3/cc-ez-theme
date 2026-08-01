@@ -278,18 +278,22 @@ top-level destinations in a fixed order:
 
 About Us is pushed to the right edge of the desktop navigation area. The
 Browse always renders its ordered first level from EasyStore's
-`contents.catalog.links`. Each catalog link is then joined to the matching item
-in EasyStore's global `collections` object by direct handle lookup, with an
-iterative handle/URL-slug match as a compatibility fallback. Descendants are resolved
-by comparing `collection.parent_id` with the matched `collection.id`, and their
-storefront URLs are generated from `collection.handle`. If a catalog link does
-not match a collection record, the first-level link still renders without a
-flyout. Relationship checks use captured loop output so they do not depend on
-assignments escaping EasyStore Liquid's loop scope. It renders three descendant
-levels. On desktop, hovering or focusing a
-parent collection opens its child collection flyout; mobile retains nested
-drill-down navigation. The three fixed collection shortcuts remain direct
-EasyStore links.
+`contents.catalog.links`. The header serializes the documented fields from
+EasyStore's global `collections` object into JSON. A small navigation enhancer
+normalizes IDs, handles, locked values, and ordering before building a family
+map by `collection.parent_id` and `collection.id`. This avoids relying on
+EasyStore Liquid assignments escaping nested loop scope or comparing values of
+different runtime types. If data is invalid or a catalog link cannot be
+matched, the first-level link remains usable without a flyout.
+
+The enhancer renders every available descendant level and guards against
+cycles. On desktop, hovering or focusing a parent collection opens its child
+collection flyout; mobile uses nested drill-down navigation and includes a
+direct “View all” link for every parent. Each root receives a
+`data-browse-status` value, and the script emits a `browse-navigation:ready`
+event with collection and match counts so data-contract failures are
+observable. The three fixed collection shortcuts remain direct EasyStore
+links.
 
 The theme controls:
 
