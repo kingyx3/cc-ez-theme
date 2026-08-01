@@ -33,7 +33,7 @@
           {% for variant in product.variants %}
             {% if variant.available %}
 
-              <option {% if variant == product.selected_or_first_available_variant %} selected="selected" {% endif %} data-sku="{{ variant.sku }}" value="{{ variant.id }}">{{ variant.title }} - {{ variant.price | money: shop.money_format }}</option>
+              <option {% if variant == product.selected_or_first_available_variant %} selected="selected" {% endif %} data-sku="{{ variant.sku }}" data-inventory-quantity="{{ variant.inventory_quantity }}" value="{{ variant.id }}">{{ variant.title }} - {{ variant.price | money: shop.money_format }}</option>
 
             {% else %}
               <option disabled="disabled">
@@ -61,6 +61,7 @@
                 type="number"
                 name="quantity"
                 id="Quantity"
+                aria-describedby="QuantityLimit-ProductModal"
                 min="1"
                 value="1"
               >
@@ -68,6 +69,13 @@
               {% include 'svg-definitions' with 'icon-plus' %}
             </button>
           </quantity-input>
+          <p
+            id="QuantityLimit-ProductModal"
+            class="quantity-limit-message hidden"
+            data-quantity-limit-message
+            role="status"
+            aria-live="polite"
+          ></p>
         </div>
 
         <br>

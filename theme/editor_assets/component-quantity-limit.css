@@ -1,0 +1,43 @@
+.quantity-limit-message {
+  margin: 0.8rem 0 0;
+  padding: 1rem 1.2rem;
+  border: 0.1rem solid transparent;
+  border-radius: 1rem;
+  font-size: 1.3rem;
+  line-height: 1.45;
+}
+
+.quantity-limit-message--warning {
+  border-color: rgba(var(--color-foreground), 0.18);
+  color: rgba(var(--color-foreground), 0.82);
+  background: rgba(var(--color-foreground), 0.05);
+}
+
+.quantity-limit-message--error {
+  border-color: rgba(185, 28, 28, 0.35);
+  color: rgb(153, 27, 27);
+  background: rgba(254, 226, 226, 0.72);
+}
+
+.quantity-limit-exceeded .quantity {
+  border-color: rgb(185, 28, 28);
+  box-shadow: 0 0 0 0.2rem rgba(185, 28, 28, 0.12);
+}
+
+.quantity-limit-exceeded .quantity__input {
+  color: rgb(153, 27, 27);
+  font-weight: 700;
+}
+
+.quantity__button[disabled],
+.quantity__button[aria-disabled='true'] {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+@media (prefers-contrast: more) {
+  .quantity-limit-message--warning,
+  .quantity-limit-message--error {
+    border-width: 0.2rem;
+  }
+}

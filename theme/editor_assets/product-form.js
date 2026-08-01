@@ -12,7 +12,20 @@ if (!customElements.get('product-form')) {
 
       if (!this.form) return;
 
+      this.quantityInput = this.form.querySelector('[name="quantity"]');
+      this.quantityLimitMessage = this.querySelector('[data-quantity-limit-message]');
+      this.nativeQuantityMaximum = this.quantityInput
+        ? this.quantityInput.getAttribute('max')
+        : null;
+      this.currentVariant = null;
+      this.rejectedQuantityLimit = null;
+
       this.form.addEventListener('submit', this.onSubmitHandler.bind(this));
+      this.addEventListener('product:variant-change', this.onVariantChange.bind(this));
+      if (this.quantityInput) {
+        this.quantityInput.addEventListener('input', this.onQuantityChange.bind(this));
+        this.quantityInput.addEventListener('change', this.onQuantityChange.bind(this));
+      }
       if (this.buyNowButton) {
         this.buyNowButton.addEventListener('click', this.onBuyNowClick.bind(this));
       }
@@ -39,15 +52,209 @@ if (!customElements.get('product-form')) {
           this.onBuyNowLimitModalClick.bind(this)
         );
       }
+
+      this.validateQuantity();
+    }
+
+    onVariantChange(evt) {
+      this.currentVariant = evt.detail ? evt.detail.variant : null;
+      this.rejectedQuantityLimit = null;
+      this.validateQuantity();
+    }
+
+    onQuantityChange() {
+      this.validateQuantity();
+    }
+
+    toPositiveLimit(value) {
+      if (value == null || value === '' || typeof value === 'boolean') return null;
+      const parsed = Number(value);
+      return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : null;
+    }
+
+    getQuantityLimit() {
+      if (!this.quantityInput) return null;
+
+      const selectedOption = this.form.querySelector('[name="id"] option:checked');
+      const variant = this.currentVariant || {};
+      const inventory = this.toPositiveLimit(
+        variant.inventory_quantity != null
+          ? variant.inventory_quantity
+          : selectedOption && selectedOption.dataset.inventoryQuantity
+      );
+      const candidates = [];
+
+      if (inventory && variant.available !== false) {
+        candidates.push({ maximum: inventory, reason: 'available inventory' });
+      }
+
+      const metadataLimits = [
+        ['purchase limit', variant.max_purchase_quantity],
+        ['purchase limit', variant.maximum_purchase_quantity],
+        ['purchase limit', variant.purchase_limit],
+        ['store limit', variant.store_purchase_limit],
+        ['customer limit', variant.customer_purchase_limit],
+        ['promotion limit', variant.promotion_purchase_limit],
+        ['promotion limit', variant.promo_purchase_limit],
+        ['order limit', variant.max_order_quantity],
+        ['order limit', variant.order_limit],
+        ['quantity rule', variant.quantity_rule && variant.quantity_rule.max],
+        ['quantity rule', variant.quantity_limits && variant.quantity_limits.max],
+        ['quantity rule', variant.limits && variant.limits.max_quantity],
+        ['configured limit', this.quantityInput.dataset.maxQuantity],
+        ['configured limit', this.form.dataset.maxQuantity],
+      ];
+
+      metadataLimits.forEach(([reason, value]) => {
+        const maximum = this.toPositiveLimit(value);
+        if (maximum) candidates.push({ maximum, reason });
+      });
+
+      const nativeMaximum = this.toPositiveLimit(this.nativeQuantityMaximum);
+      if (nativeMaximum) candidates.push({ maximum: nativeMaximum, reason: 'configured limit' });
+
+      if (this.rejectedQuantityLimit) {
+        candidates.push(this.rejectedQuantityLimit);
+      }
+
+      if (!candidates.length) return null;
+      return candidates.reduce((strictest, candidate) => (
+        candidate.maximum < strictest.maximum ? candidate : strictest
+      ));
+    }
+
+    setPurchaseButtonsLimited(limited) {
+      this.querySelectorAll('[name="add"], [data-buy-now]').forEach((button) => {
+        if (limited) {
+          if (button.dataset.quantityLimitDisabled !== 'true') {
+            button.dataset.quantityLimitWasDisabled = button.matches('[disabled], [aria-disabled="true"]')
+              ? 'true'
+              : 'false';
+          }
+          button.dataset.quantityLimitDisabled = 'true';
+          button.setAttribute('disabled', true);
+          button.setAttribute('aria-disabled', 'true');
+          return;
+        }
+
+        if (button.dataset.quantityLimitDisabled === 'true') {
+          if (button.dataset.quantityLimitWasDisabled === 'false') {
+            button.removeAttribute('disabled');
+            button.removeAttribute('aria-disabled');
+          }
+          delete button.dataset.quantityLimitDisabled;
+          delete button.dataset.quantityLimitWasDisabled;
+        }
+      });
+    }
+
+    updatePlusButton(maximum, quantity) {
+      if (!this.quantityInput) return;
+      const plusButton = this.quantityInput
+        .closest('quantity-input')
+        ?.querySelector('[name="plus"]');
+      if (!plusButton) return;
+
+      if (maximum && quantity >= maximum) {
+        plusButton.dataset.quantityLimitDisabled = 'true';
+        plusButton.setAttribute('disabled', true);
+        plusButton.setAttribute('aria-disabled', 'true');
+      } else if (plusButton.dataset.quantityLimitDisabled === 'true') {
+        plusButton.removeAttribute('disabled');
+        plusButton.removeAttribute('aria-disabled');
+        delete plusButton.dataset.quantityLimitDisabled;
+      }
+    }
+
+    showQuantityLimit(message, state) {
+      if (!this.quantityInput || !this.quantityLimitMessage) return;
+      const wrapper = this.quantityInput.closest('.product-form__quantity');
+
+      this.quantityLimitMessage.textContent = message;
+      this.quantityLimitMessage.classList.remove('hidden', 'quantity-limit-message--warning', 'quantity-limit-message--error');
+      this.quantityLimitMessage.classList.add(`quantity-limit-message--${state}`);
+      this.quantityInput.setAttribute('aria-invalid', state === 'error' ? 'true' : 'false');
+      if (wrapper) wrapper.classList.toggle('quantity-limit-exceeded', state === 'error');
+    }
+
+    clearQuantityLimit() {
+      if (!this.quantityInput || !this.quantityLimitMessage) return;
+      const wrapper = this.quantityInput.closest('.product-form__quantity');
+
+      this.quantityLimitMessage.textContent = '';
+      this.quantityLimitMessage.classList.add('hidden');
+      this.quantityLimitMessage.classList.remove('quantity-limit-message--warning', 'quantity-limit-message--error');
+      this.quantityInput.removeAttribute('aria-invalid');
+      if (wrapper) wrapper.classList.remove('quantity-limit-exceeded');
+    }
+
+    validateQuantity(focusInvalid = false) {
+      if (!this.quantityInput) return true;
+
+      const quantity = Math.max(1, Number.parseInt(this.quantityInput.value, 10) || 1);
+      const limit = this.getQuantityLimit();
+      this.updatePlusButton(limit && limit.maximum, quantity);
+
+      if (!limit) {
+        if (this.nativeQuantityMaximum == null) {
+          this.quantityInput.removeAttribute('max');
+        } else {
+          this.quantityInput.setAttribute('max', this.nativeQuantityMaximum);
+        }
+        this.clearQuantityLimit();
+        this.setPurchaseButtonsLimited(false);
+        return true;
+      }
+
+      this.quantityInput.setAttribute('max', String(limit.maximum));
+
+      if (quantity > limit.maximum) {
+        const message = limit.message
+          || `You selected ${quantity}. The maximum allowed is ${limit.maximum} due to ${limit.reason}.`;
+        this.showQuantityLimit(message, 'error');
+        this.setPurchaseButtonsLimited(true);
+        if (focusInvalid) this.quantityInput.focus();
+        return false;
+      }
+
+      this.setPurchaseButtonsLimited(false);
+      if (quantity === limit.maximum) {
+        this.showQuantityLimit(
+          `Maximum allowed: ${limit.maximum} due to ${limit.reason}.`,
+          'warning'
+        );
+      } else {
+        this.clearQuantityLimit();
+      }
+      return true;
+    }
+
+    isQuantityLimitError(message) {
+      return /(limit|maximum|max\\b|exceed|stock|inventory|available|promotion|promo|customer|purchase|order quantity)/i
+        .test(String(message || ''));
+    }
+
+    rememberRejectedQuantity(variantId, quantity, message) {
+      if (!this.isQuantityLimitError(message)) return;
+
+      this.rejectedQuantityLimit = {
+        maximum: Math.max(0, quantity - 1),
+        reason: 'a store purchase rule',
+        message: String(message),
+        variantId: String(variantId || ''),
+      };
+      this.validateQuantity();
     }
 
     onBuyNowClick(evt) {
       evt.preventDefault();
+      if (!this.validateQuantity(true)) return;
       this.submitProduct(this.buyNowButton, true);
     }
 
     onSubmitHandler(evt) {
       evt.preventDefault();
+      if (!this.validateQuantity(true)) return;
 
       const submitButton = evt.submitter
         || this.querySelector('[name="add"]')
@@ -57,6 +264,7 @@ if (!customElements.get('product-form')) {
     }
 
     submitProduct(submitButton, buyNow) {
+      if (!this.validateQuantity(true)) return;
       if (!submitButton || submitButton.matches('[disabled], [aria-disabled="true"]')) return;
 
       const addButton = this.querySelector('[name="add"]');
@@ -104,6 +312,7 @@ if (!customElements.get('product-form')) {
         this.hideErrorMsg();
 
         if (cart.description != undefined) {
+          this.rememberRejectedQuantity(body.id, requestedQuantity, cart.description);
           if (buyNow) {
             this.openBuyNowLimitModal(String(cart.description));
           } else {
