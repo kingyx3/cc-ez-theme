@@ -272,10 +272,6 @@ fieldset.product-form__input .form__label {
   margin: 0;
 }
 
-.product-form__submit + .product-form__submit {
-  margin-top: 1rem;
-}
-
 .product-form__submit--accent-outline {
   --color-button: var(--color-base-accent-1);
   --color-button-text: var(--color-base-accent-1);
@@ -840,13 +836,26 @@ a.product__text {
   width: 2.2rem;
 }
 
-.product-form__buttons{
+.product-form__buttons {
+  display: grid;
+  gap: 1.2rem;
   margin-top: 2.5rem;
 }
 
-.product-form__buttons .btn{
-  display: flex;
+.product-form__buttons .button,
+.product-form__buttons .btn {
+  box-sizing: border-box;
   width: 100%;
+  min-height: 4.8rem;
+  margin: 0 !important;
+  border-radius: 4rem !important;
+}
+
+.product-form__buttons .button::before,
+.product-form__buttons .button::after,
+.product-form__buttons .btn::before,
+.product-form__buttons .btn::after {
+  border-radius: inherit;
 }
 
 .product__description.rte{
@@ -932,7 +941,7 @@ a.product__text {
 .modal {
   position: fixed; /* Stay in place */
   box-sizing: border-box;
-  z-index: 3; /* Sit on top */
+  z-index: 11; /* Sit on top */
   padding-top: 70px; /* Location of the box */
   padding-bottom: 30px; 
   left: 0;

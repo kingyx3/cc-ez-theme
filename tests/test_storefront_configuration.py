@@ -87,6 +87,13 @@ class StorefrontConfigurationTests(unittest.TestCase):
                 "--color-button-text: var(--color-base-accent-1);",
                 stylesheet,
             )
+            self.assertIn("display: grid;", stylesheet)
+            self.assertIn("gap: 1.2rem;", stylesheet)
+            self.assertIn("min-height: 4.8rem;", stylesheet)
+            self.assertIn("margin: 0 !important;", stylesheet)
+            self.assertIn("border-radius: 4rem !important;", stylesheet)
+            self.assertIn(".product-form__buttons .button::after", stylesheet)
+            self.assertIn(".product-form__buttons .btn::after", stylesheet)
             self.assertNotIn(".product-form__buy-now", stylesheet)
             self.assertNotIn(".product-form__submit--secondary", stylesheet)
 

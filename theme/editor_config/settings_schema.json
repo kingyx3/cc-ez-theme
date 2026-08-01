@@ -231,6 +231,28 @@
       ]
     },
     {
+      "label": {
+        "en_US": "Collection",
+        "zh_TW": "商品目錄", 
+        "zh_CN": "商品目录", 
+        "ms_MY": "Koleksi"
+      },
+      "type": "header",
+      "options" : [
+        {
+          "type": "checkbox",
+          "label": {
+            "en_US": "Display variant image",
+            "zh_TW": "顯示規格照片", 
+            "zh_CN": "显示规格照片", 
+            "ms_MY": "Paparan pilihan imej"
+          },
+          "id": "collection_show_variant_img",
+          "default": true
+        }
+      ]
+    },
+    {
       "label": { "en_US": "Image", "zh_TW": "圖片", "zh_CN": "图片", "ms_MY": "Imej" },
       "type": "header",
       "options" : [
