@@ -12,7 +12,10 @@
 {% assign browse_links = contents.catalog.links %}
 
 {% for browse_link in browse_links %}
-  {% assign child_links = contents[browse_link.handle].links %}
+  {% assign child_links = browse_link.links %}
+  {% if child_links == blank %}
+    {% assign child_links = contents[browse_link.handle].links %}
+  {% endif %}
 
   {% if navigation_mode == 'mobile' %}
     <li>
@@ -31,7 +34,10 @@
                 </button>
                 <ul class="menu-drawer__menu list-menu" role="list">
                   {% for child_link in child_links %}
-                    {% assign grandchild_links = contents[child_link.handle].links %}
+                    {% assign grandchild_links = child_link.links %}
+                    {% if grandchild_links == blank %}
+                      {% assign grandchild_links = contents[child_link.handle].links %}
+                    {% endif %}
 
                     <li>
                       {% if grandchild_links != blank %}
@@ -87,7 +93,10 @@
               </summary>
               <ul class="header__submenu list-menu list-menu--disclosure motion-reduce" role="list">
                 {% for child_link in child_links %}
-                  {% assign grandchild_links = contents[child_link.handle].links %}
+                  {% assign grandchild_links = child_link.links %}
+                  {% if grandchild_links == blank %}
+                    {% assign grandchild_links = contents[child_link.handle].links %}
+                  {% endif %}
 
                   <li>
                     {% if grandchild_links != blank %}

@@ -435,6 +435,8 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertIn('class="header__nav-item--browse"', header)
         self.assertIn('class="menu-drawer__nav-item--browse"', header)
         self.assertIn("contents.catalog.links", browse)
+        self.assertIn("browse_link.links", browse)
+        self.assertIn("child_link.links", browse)
         self.assertIn("contents[browse_link.handle].links", browse)
         self.assertIn("contents[child_link.handle].links", browse)
         self.assertIn("navigation_mode == 'mobile'", browse)
@@ -504,6 +506,16 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertIn("margin-left: auto;", stylesheet)
         self.assertIn("padding-top: 0;", stylesheet)
         self.assertIn("padding-bottom: 0;", stylesheet)
+        self.assertIn(
+            ".header__nav-item--browse .header__submenu > li",
+            stylesheet,
+        )
+        self.assertIn(
+            "details[open] > .header__submenu",
+            stylesheet,
+        )
+        self.assertIn("left: 100%;", stylesheet)
+        self.assertIn("pointer-events: auto;", stylesheet)
 
     def test_unsupported_saved_items_code_is_absent(self) -> None:
         unsupported_term = "wish" + "list"
