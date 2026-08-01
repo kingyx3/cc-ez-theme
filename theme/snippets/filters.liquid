@@ -588,7 +588,13 @@
     }
     updateSortBySummary();
 
+    let filterRequestController;
+    let filterRequestSequence = 0;
+
     function refreshSection() {
+        if (filterRequestController) filterRequestController.abort();
+        filterRequestController = new AbortController();
+        const requestSequence = ++filterRequestSequence;
         var selectedBrands = getSelectedTagValues(brandCheckboxes);
         var selectedTags = getSelectedTagValues(tagCheckboxes);
         var formattedVariants = getSelectedVariantValues(variantCheckboxes);
@@ -627,25 +633,28 @@
         // Set window.location.search to the new query string
         window.history.replaceState({}, '', window.location.pathname + '?' + queryString);
       
-      	fetch(apiUrlWithParams, {
+        fetch(apiUrlWithParams, {
           method: 'GET',
           headers: {
             "Content-Type": "application/json",
             "X-Requested-With": "XMLHttpRequest",
           },
-      	})
-      	.then((response) => {
-			if (!response.ok) throw new Error('Unable to refresh products');
-      		return response.json();
-      	})
-      	.then((response) => {
+          signal: filterRequestController.signal,
+        })
+        .then((response) => {
+          if (requestSequence !== filterRequestSequence) throw new DOMException('Superseded request', 'AbortError');
+          if (!response.ok) throw new Error('Unable to refresh products');
+          return response.json();
+        })
+        .then((response) => {
           productGrid.classList.remove('filter-is-loading');
           productGrid.setAttribute('aria-busy', 'false');
-			productGrid.innerHTML = response.filtered_product_list;
-      		document.querySelector('#pagination-container').innerHTML = response.pagination;
+          productGrid.innerHTML = response.filtered_product_list;
+          document.querySelector('#pagination-container').innerHTML = response.pagination;
           window.scrollTo({top: document.querySelector('.collection-hero__title').offsetTop, behavior: "smooth"});
-      	})
-      	.catch((error) => {
+        })
+        .catch((error) => {
+          if (error.name === 'AbortError' || requestSequence !== filterRequestSequence) return;
           productGrid.classList.remove('filter-is-loading');
           productGrid.setAttribute('aria-busy', 'false');
           filterError = document.createElement('p');
@@ -654,7 +663,7 @@
           filterError.textContent = 'Products could not be refreshed. Please try again.';
           productGrid.before(filterError);
           window.scrollTo({top: document.querySelector('.collection-hero__title').offsetTop, behavior: "smooth"});
-      	})
+        })
     }
 
     function getSelectedValues(checkboxes) {

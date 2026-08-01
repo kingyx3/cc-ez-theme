@@ -531,16 +531,7 @@
           });
     
           
-          flatpickr.localize({
-            weekdays: {
-                shorthand: ["{{ 'date_formats.days.sun' | t }}", "{{ 'date_formats.days.mon' | t }}", "{{ 'date_formats.days.tue' | t }}", "{{ 'date_formats.days.wed' | t }}", "{{ 'date_formats.days.thu' | t }}", "{{ 'date_formats.days.fri' | t }}", "{{ 'date_formats.days.sat' | t }}"],
-                longhand: ["{{ 'date_formats.days.sun' | t }}", "{{ 'date_formats.days.mon' | t }}", "{{ 'date_formats.days.tue' | t }}", "{{ 'date_formats.days.wed' | t }}", "{{ 'date_formats.days.thu' | t }}", "{{ 'date_formats.days.fri' | t }}", "{{ 'date_formats.days.sat' | t }}"],
-            },
-            months: {
-                shorthand: ["{{ 'date_formats.months.jan' | t }}","{{ 'date_formats.months.feb' | t }}","{{ 'date_formats.months.mar' | t }}","{{ 'date_formats.months.apr' | t }}","{{ 'date_formats.months.may' | t }}","{{ 'date_formats.months.jun' | t }}","{{ 'date_formats.months.jul' | t }}","{{ 'date_formats.months.aug' | t }}","{{ 'date_formats.months.sep' | t }}","{{ 'date_formats.months.oct' | t }}","{{ 'date_formats.months.nov' | t }}","{{ 'date_formats.months.dec' | t }}"],
-                longhand: ["{{ 'date_formats.months.jan' | t }}","{{ 'date_formats.months.feb' | t }}","{{ 'date_formats.months.mar' | t }}","{{ 'date_formats.months.apr' | t }}","{{ 'date_formats.months.may' | t }}","{{ 'date_formats.months.jun' | t }}","{{ 'date_formats.months.jul' | t }}","{{ 'date_formats.months.aug' | t }}","{{ 'date_formats.months.sep' | t }}","{{ 'date_formats.months.oct' | t }}","{{ 'date_formats.months.nov' | t }}","{{ 'date_formats.months.dec' | t }}"],
-            }
-          })
+          flatpickr.localize({% include 'flatpickr-locale' %})
           
           let input_birthdate = flatpickr("#DetailBirthdate",{
             maxDate: "today",
@@ -1073,7 +1064,7 @@
     if (action === 'copy') {
       if (referralInput && copyMessage && copyMessageText) {
         navigator.clipboard.writeText(referralUrl).then(function() {
-          copyMessageText.textContent = "{{ 'customer.account.referral.copy_success' | t }}";
+        copyMessageText.textContent = {{ 'customer.account.referral.copy_success' | t | json }};
           copyMessage.classList.remove('hidden');
           copyMessage.style.color = '#28a745'; 
           
@@ -1085,7 +1076,7 @@
             if (successIcon) successIcon.style.display = 'none';
           }, 3000);
         }).catch(function(error) {
-          copyMessageText.textContent = "{{ 'customer.account.referral.copy_error' | t }}";
+        copyMessageText.textContent = {{ 'customer.account.referral.copy_error' | t | json }};
           copyMessage.classList.remove('hidden');
           copyMessage.style.color = '#dc3545'; 
           
@@ -1099,7 +1090,7 @@
         });
       }
     } else if (action === 'share' && navigator.share) {
-      const shareMessage = "{{ 'customer.account.referral.share_message' | t: '__SHOP_NAME__' }}";
+    const shareMessage = {{ 'customer.account.referral.share_message' | t: '__SHOP_NAME__' | json }};
       navigator.share({
         title: shareTitle,
         text: shareMessage.replace('__SHOP_NAME__', shareTitle),
@@ -1221,7 +1212,7 @@
 
       // Update step 1 description
       if (step1Element) {
-        const step1Template = "{{ 'customer.account.referral.modal.step1_description' | t: '__REFEREE_CREDIT__' }}";
+      const step1Template = {{ 'customer.account.referral.modal.step1_description' | t: '__REFEREE_CREDIT__' | json }};
         const step1Text = step1Template.replace('__REFEREE_CREDIT__', formatMoney(refereeCreditAmount));
         step1Element.textContent = step1Text;
       } 
@@ -1229,17 +1220,17 @@
       // Update step 2 description
       if (step2Element) {
         if (minSpend > 0) {
-          const step2Template = "{{ 'customer.account.referral.modal.step2_description' | t: '__MIN_SPEND__' }}";
+        const step2Template = {{ 'customer.account.referral.modal.step2_description' | t: '__MIN_SPEND__' | json }};
           const step2Text = step2Template.replace('__MIN_SPEND__', formatMoney(minSpend));
           step2Element.textContent = step2Text;
         } else {
-          step2Element.textContent = "{{ 'customer.account.referral.modal.step2_description2' | t }}";
+        step2Element.textContent = {{ 'customer.account.referral.modal.step2_description2' | t | json }};
         }
       }
       
       // Update step 3 description
       if (step3Element) {
-        const step3Template = "{{ 'customer.account.referral.modal.step3_description' | t: '__REFERRER_CREDIT__' }}";
+      const step3Template = {{ 'customer.account.referral.modal.step3_description' | t: '__REFERRER_CREDIT__' | json }};
         const step3Text = step3Template.replace('__REFERRER_CREDIT__', formatMoney(referrerCreditAmount));
         step3Element.textContent = step3Text;
       }

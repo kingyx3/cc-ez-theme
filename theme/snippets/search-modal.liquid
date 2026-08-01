@@ -31,7 +31,7 @@
               >
               <label class="field__label" for="{{ search_input_id }}">{{ 'general.search.placeholder' | t }}</label>
               <div class="search-history" data-search-history-panel hidden>
-                <div id="{{ search_input_id }}-History" role="listbox" aria-label="{% include 'translation-fallback', translation_key: 'general.search.recent_searches', fallback: 'Recent searches' %}" data-search-history-list></div>
+                <div id="{{ search_input_id }}-History" role="listbox" aria-label="{% include 'translation-fallback', translation_key: 'general.search.recent_searches', fallback: 'Recent searches', escape_output: true %}" data-search-history-list></div>
                 <button type="button" class="search-history__clear" data-search-history-clear>{% include 'translation-fallback', translation_key: 'general.search.clear_history', fallback: 'Clear history' %}</button>
               </div>
               <input type="hidden" name="search_history" class="hidden_search_history">

@@ -1,6 +1,9 @@
 {%- assign translated_value = translation_key | t -%}
 {%- if translated_value == blank or translated_value == translation_key -%}
-  {{- fallback -}}
+  {%- assign translated_value = fallback -%}
+{%- endif -%}
+{%- if escape_output -%}
+  {{- translated_value | escape -}}
 {%- else -%}
   {{- translated_value -}}
 {%- endif -%}

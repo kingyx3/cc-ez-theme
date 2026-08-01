@@ -32,11 +32,11 @@
   <div id="section-{{ section.__key }}" class="collection page-width" style="--product-surface: {{ section.settings.product_bg_color }};">
     {% if shop.is_product_filter_enabled and collection.filters != blank %}
       <div class="float-filter-icon text-right h2 medium-hide large-up-hide">
-        <button type="button" filter-container-toggle aria-controls="filter-container" aria-expanded="false" aria-label="{% include 'translation-fallback', translation_key: 'collections.filter.filters', fallback: 'Open filters' %}">
+        <button type="button" filter-container-toggle aria-controls="filter-container" aria-expanded="false" aria-label="{% include 'translation-fallback', translation_key: 'collections.filter.filters', fallback: 'Open filters', escape_output: true %}">
           {% include 'svg-definitions' with 'icon-filter' %}
         </button>
       </div>
-      <aside id="filter-container" aria-label="{% include 'translation-fallback', translation_key: 'collections.filter.filters', fallback: 'Product filters' %}">
+      <aside id="filter-container" aria-label="{% include 'translation-fallback', translation_key: 'collections.filter.filters', fallback: 'Product filters', escape_output: true %}">
         {% include 'filters' %}
       </aside>
     {% endif %}

@@ -241,6 +241,8 @@
     const sectionSelector = `#collection-list_${sectionId}`;
     const allTitles = document.querySelectorAll(`${sectionSelector} .featured-collections-tab__item`);
     const allCollections = document.querySelectorAll(`${sectionSelector} .collection-list-wrapper`);
+    const previouslyVisibleCollections = Array.from(allCollections).filter(el => !el.classList.contains('hide'));
+    const previousTitle = Array.from(allTitles).find(el => el.classList.contains('featured-collections-tab__item--active'));
     const loading = document.querySelector(`#collection-list-wrapper_${sectionId} .collection_skeleton-card-wrapper`);
 
     // Remove active class from all titles
@@ -287,7 +289,10 @@
 
       // Fetch and render the collection block
       fetch(`/collections/${CollectionId}/collection_list_section_html?${collectionListParams}`, { method: "GET" })
-        .then(response => response.json())
+        .then(response => {
+          if (!response.ok) throw new Error('Unable to load collection');
+          return response.json();
+        })
         .then(res => {
           if (res.collection_list_items_html) {
             let wrapper = document.querySelector(`#collection-list-wrapper_${sectionId}`),
@@ -295,13 +300,22 @@
             if (wrapper) {
               if(seletedBlock == blockId) loading.classList.add('hide')
               wrapper.insertAdjacentHTML("beforeend", res.collection_list_items_html);
-              if(EasyStore !== undefined && EasyStore.Currencies !== undefined) EasyStore.Currencies.convertAll();
-              if(seletedBlock != blockId) document.querySelector(`${sectionSelector} #collection-${CollectionId}`).classList.add("hide");
+              if (window.EasyStore?.Currencies) window.EasyStore.Currencies.convertAll();
+              const insertedCollection = document.querySelector(`${sectionSelector} #collection-${CollectionId}`);
+              if(seletedBlock != blockId && insertedCollection) insertedCollection.classList.add("hide");
             }
           }
         })
         .catch(error => {
           renderedBlock.delete(blockId);
+          loading.classList.add('hide');
+          previouslyVisibleCollections.forEach(el => el.classList.remove("hide"));
+          allTitles.forEach(el => {
+            const isPrevious = el === previousTitle;
+            el.classList.toggle('featured-collections-tab__item--active', isPrevious);
+            el.setAttribute('aria-selected', String(isPrevious));
+          });
+          if (previousTitle) previousTitle.focus();
           console.error("Error fetching collection list:", error);
         });
     }

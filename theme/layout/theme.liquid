@@ -185,6 +185,14 @@
   {% capture quantity_exceeded_label %}{% include 'translation-fallback', translation_key: 'products.product.quantity_exceeded', fallback: 'You selected __QUANTITY__. The maximum allowed is __MAXIMUM__ due to __REASON__.' %}{% endcapture %}
   {% capture quantity_maximum_label %}{% include 'translation-fallback', translation_key: 'products.product.quantity_maximum', fallback: 'Maximum allowed: __MAXIMUM__ due to __REASON__.' %}{% endcapture %}
   {% capture add_limit_error_label %}{% include 'translation-fallback', translation_key: 'products.product.add_limit_error', fallback: 'This item could not be added because it may exceed a customer, store, or stock limit.' %}{% endcapture %}
+  {% capture inventory_limit_label %}{% include 'translation-fallback', translation_key: 'products.product.inventory_limit', fallback: 'available inventory' %}{% endcapture %}
+  {% capture purchase_limit_label %}{% include 'translation-fallback', translation_key: 'products.product.purchase_limit', fallback: 'a purchase limit' %}{% endcapture %}
+  {% capture store_limit_label %}{% include 'translation-fallback', translation_key: 'products.product.store_limit', fallback: 'a store limit' %}{% endcapture %}
+  {% capture customer_limit_label %}{% include 'translation-fallback', translation_key: 'products.product.customer_limit', fallback: 'a customer limit' %}{% endcapture %}
+  {% capture promotion_limit_label %}{% include 'translation-fallback', translation_key: 'products.product.promotion_limit', fallback: 'a promotion limit' %}{% endcapture %}
+  {% capture order_limit_label %}{% include 'translation-fallback', translation_key: 'products.product.order_limit', fallback: 'an order limit' %}{% endcapture %}
+  {% capture quantity_rule_label %}{% include 'translation-fallback', translation_key: 'products.product.quantity_rule', fallback: 'a quantity rule' %}{% endcapture %}
+  {% capture configured_limit_label %}{% include 'translation-fallback', translation_key: 'products.product.configured_limit', fallback: 'a configured limit' %}{% endcapture %}
   {% capture clear_history_label %}{% include 'translation-fallback', translation_key: 'general.search.clear_history', fallback: 'Clear history' %}{% endcapture %}
 
   <script>
@@ -209,6 +217,14 @@
       quantityExceeded: {{ quantity_exceeded_label | strip | json }},
       quantityMaximum: {{ quantity_maximum_label | strip | json }},
       addLimitError: {{ add_limit_error_label | strip | json }},
+      inventoryLimit: {{ inventory_limit_label | strip | json }},
+      purchaseLimit: {{ purchase_limit_label | strip | json }},
+      storeLimit: {{ store_limit_label | strip | json }},
+      customerLimit: {{ customer_limit_label | strip | json }},
+      promotionLimit: {{ promotion_limit_label | strip | json }},
+      orderLimit: {{ order_limit_label | strip | json }},
+      quantityRule: {{ quantity_rule_label | strip | json }},
+      configuredLimit: {{ configured_limit_label | strip | json }},
     }
     
     window.productSettings = {

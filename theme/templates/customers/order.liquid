@@ -384,13 +384,13 @@
                 toggleButton.type = "button";
                 toggleButton.className = "parcel-details-toggle";
                 toggleButton.setAttribute('aria-expanded', 'false');
-                toggleButton.innerHTML = `{{ 'general.show_details' | t }} <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6l6 -6"></path></svg>`;
+                toggleButton.innerHTML = `${{ 'general.show_details' | t | json }} <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6l6 -6"></path></svg>`;
 
                 toggleButton.addEventListener('click', () => {
                     wrapper.classList.toggle("hide-details");
                     toggleButton.classList.toggle("is-active");
                     toggleButton.setAttribute('aria-expanded', String(!wrapper.classList.contains("hide-details")));
-                    toggleButton.innerHTML = `${wrapper.classList.contains("hide-details") ? "{{ 'general.show_details' | t }}" : "{{ 'general.hide_details' | t }}"} <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6l6 -6"></path></svg>`;
+                    toggleButton.innerHTML = `${wrapper.classList.contains("hide-details") ? {{ 'general.show_details' | t | json }} : {{ 'general.hide_details' | t | json }}} <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6l6 -6"></path></svg>`;
                 });
 
                 wrapper.appendChild(toggleButton);
@@ -687,7 +687,7 @@
   // Remove attachment
   function removeAttachment(id) {
     var selected_row = document.getElementById('attachment-row-'+id),
-        c = confirm("{{ 'checkout.payment_reference.delete_attachment_confirm' | t }}");
+        c = confirm({{ 'checkout.payment_reference.delete_attachment_confirm' | t | json }});
 
     if(c == true){
       fetch("/orders/{{ order.token }}/attachment/"+id, {
@@ -767,18 +767,18 @@
   
           this_el("input[name='reference_id']").disabled = true;
   
-          this_el("#success_message").innerHTML = "<p>{{ 'checkout.payment_reference.update_reference_success' | t }}</p>"
+          this_el("#success_message").textContent = {{ 'checkout.payment_reference.update_reference_success' | t | json }}
           this_el("#success_message").style.display = "block"; 
         }
         else{
           this_el("#submit_reference").disabled = false;
   
-          this_el("#error_message").innerHTML = "<p>{{ 'checkout.payment_reference.update_reference_fail' | t }}</p>"
+          this_el("#error_message").textContent = {{ 'checkout.payment_reference.update_reference_fail' | t | json }}
           this_el("#error_message").style.display = "block"; 
         }
       })
       .catch((error) => {
-          this_el("#error_message").innerHTML = "<p>{{ 'checkout.payment_reference.update_reference_fail' | t }}</p>"
+          this_el("#error_message").textContent = {{ 'checkout.payment_reference.update_reference_fail' | t | json }}
           this_el("#error_message").style.display = "block"
           this_el('#submit_reference').disabled = false
           this_el('#submit_reference').classList.remove('btn--loading');
