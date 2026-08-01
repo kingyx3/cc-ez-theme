@@ -286,7 +286,7 @@
       }
 
       // Fetch and render the collection block
-      fetch(`collections/${CollectionId}/collection_list_section_html?${collectionListParams}`, { method: "GET" })
+      fetch(`/collections/${CollectionId}/collection_list_section_html?${collectionListParams}`, { method: "GET" })
         .then(response => response.json())
         .then(res => {
           if (res.collection_list_items_html) {

@@ -188,6 +188,22 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertIn("this.setPurchaseButtonsLimited(true)", product_form)
         self.assertIn("this.rememberRejectedQuantity(", product_form)
         self.assertIn("this.validateQuantity(true)", product_form)
+        self.assertIn("button.dataset.submissionWasDisabled", product_form)
+        self.assertIn("const variantUnavailable", product_form)
+        self.assertNotIn(
+            "else {\n            button.removeAttribute('disabled');\n"
+            "            button.removeAttribute('aria-disabled');",
+            product_form,
+        )
+
+        layout = (THEME_ROOT / "layout" / "theme.liquid").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("window.purchaseStrings", layout)
+        self.assertIn("products.product.quantity_exceeded", layout)
+        self.assertIn("window.purchaseStrings.quantityExceeded", product_form)
+        self.assertIn("window.purchaseStrings.quantityMaximum", product_form)
+        self.assertIn("window.purchaseStrings.addLimitError", product_form)
 
         quantity_css = (
             THEME_ROOT / "assets" / "component-quantity-limit.css"
@@ -200,6 +216,44 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertIn(".quantity-limit-message--error", quantity_css)
         self.assertIn(".quantity-limit-exceeded .quantity", quantity_css)
         self.assertIn("prefers-contrast: more", quantity_css)
+
+    def test_reviewed_theme_regressions_are_covered(self) -> None:
+        collection_list = (
+            THEME_ROOT / "sections" / "collection-list.liquid"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            "fetch(`/collections/${CollectionId}/collection_list_section_html",
+            collection_list,
+        )
+        self.assertNotIn(
+            "fetch(`collections/${CollectionId}/collection_list_section_html",
+            collection_list,
+        )
+
+        main_cart = (THEME_ROOT / "sections" / "main-cart.liquid").read_text(
+            encoding="utf-8"
+        )
+        cart_template = (
+            THEME_ROOT / "snippets" / "cart-template.liquid"
+        ).read_text(encoding="utf-8")
+        self.assertIn('id="modal-discount-code"', main_cart)
+        self.assertIn('for="modal-discount-code"', main_cart)
+        self.assertNotIn('id="input-discount_code"', main_cart)
+        self.assertIn('id="input-discount_code"', cart_template)
+
+        header = (THEME_ROOT / "sections" / "header.liquid").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("function updateReferralData(data)", header)
+        self.assertIn("function removeReferralData()", header)
+        self.assertEqual(
+            header.count("localStorage.setItem('referral_notification_data'"),
+            1,
+        )
+        self.assertEqual(
+            header.count("localStorage.removeItem('referral_notification_data'"),
+            1,
+        )
 
     def test_homepage_collections_are_six_products_in_three_columns(self) -> None:
         expected = {

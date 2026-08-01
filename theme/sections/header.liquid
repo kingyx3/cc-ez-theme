@@ -639,11 +639,28 @@
   const referralMessageTemplate = {{ "customer.account.referral.signup_message" | t: "__CURRENCY_CODE__", "__CREDIT_AMOUNT__" | json }};
   const shopCurrency = {{ shop.money_prefix | json }};
 
+  function updateReferralData(data) {
+    try {
+      localStorage.setItem('referral_notification_data', JSON.stringify(data));
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function removeReferralData() {
+    try {
+      localStorage.removeItem('referral_notification_data');
+    } catch (error) {
+      // Storage can be unavailable under strict browser privacy policies.
+    }
+  }
+
   function readReferralData() {
     try {
       return JSON.parse(localStorage.getItem('referral_notification_data')) || {};
     } catch (error) {
-      localStorage.removeItem('referral_notification_data');
+      removeReferralData();
       return {};
     }
   }
@@ -674,7 +691,7 @@
     if (referralData.timestamp && referralData.expirationDays) {
       const expirationTime = referralData.timestamp + (referralData.expirationDays * 24 * 60 * 60 * 1000);
       if (Date.now() > expirationTime) {
-        localStorage.removeItem('referral_notification_data');
+        removeReferralData();
         return;
       }
     }
@@ -718,7 +735,7 @@
         referralData.dismissed = referralData.dismissed || false;
         referralData.timestamp = Date.now();
         referralData.expirationDays = 3;
-        localStorage.setItem('referral_notification_data', JSON.stringify(referralData));
+        updateReferralData(referralData);
         
         displayReferralNotification(refereeCreditAmount);
       })
@@ -772,7 +789,7 @@
     
     if (referralData.creditAmount !== undefined) {
       referralData.creditAmount = null;
-      localStorage.setItem('referral_notification_data', JSON.stringify(referralData));
+      updateReferralData(referralData);
     }
   });
 
@@ -790,7 +807,7 @@
     referralData.timestamp = referralData.timestamp || Date.now();
     referralData.expirationDays = referralData.expirationDays || 3;
     
-    localStorage.setItem('referral_notification_data', JSON.stringify(referralData));
+    updateReferralData(referralData);
     
     closeReferralNotification();
   }
@@ -810,7 +827,7 @@
     referralData.dismissed = true;
     referralData.timestamp = referralData.timestamp || Date.now();
     referralData.expirationDays = referralData.expirationDays || 3;
-    localStorage.setItem('referral_notification_data', JSON.stringify(referralData));
+    updateReferralData(referralData);
   }
 
   function goToSignupPageFromMobile() {

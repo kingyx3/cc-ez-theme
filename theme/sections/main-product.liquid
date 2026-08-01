@@ -181,7 +181,7 @@
                   class="product-form__submit product-form__buy-now button button--full-width button--primary btn--radius"
                 {% if product.selected_or_first_available_variant.available == false %}disabled{% endif %}
                 >
-                  Buy now
+                  {{ 'products.product.buy_now' | t | default: 'Buy now' }}
                 </button>
 
                 {% app_snippet 'product/button' %}
@@ -220,13 +220,13 @@
                 </button>
 
                 <h2 id="BuyNowLimitTitle-{{ section.__key }}" class="buy-now-limit-modal__title">
-                  Continue without this item?
+                  {{ 'products.product.continue_without_item' | t | default: 'Continue without this item?' }}
                 </h2>
 
                 <div id="BuyNowLimitDescription-{{ section.__key }}">
                   <p class="buy-now-limit-modal__reason" data-checkout-limit-message></p>
                   <p class="buy-now-limit-modal__text">
-                    The item was not added to your cart. You can adjust your selection, or continue to checkout with your current cart.
+                    {{ 'products.product.not_added_checkout_current_cart' | t | default: 'The item was not added to your cart. You can adjust your selection, or continue to checkout with your current cart.' }}
                   </p>
                 </div>
 
@@ -236,14 +236,14 @@
                     class="button button--secondary btn--radius"
                     data-checkout-limit-cancel
                   >
-                    Stay on product page
+                    {{ 'products.product.stay_on_product_page' | t | default: 'Stay on product page' }}
                   </button>
                   <button
                     type="button"
                     class="button button--primary btn--radius"
                     data-checkout-limit-continue
                   >
-                    Continue to checkout
+                    {{ 'products.product.continue_to_checkout' | t | default: 'Continue to checkout' }}
                   </button>
                 </div>
               </div>
