@@ -287,7 +287,7 @@
   
   
   <div class="flex flex-space-between flex-align-center">
-    <div>{{ 'collections.filter.filters' | t | default: 'Filters' }}</div>
+    <div>{% include 'translation-fallback', translation_key: 'collections.filter.filters', fallback: 'Filters' %}</div>
     <small><a href="#MainContent" data-theme-action="reset-filter">{{ 'collections.sorting.reset' | t }}</a></small>
   </div>
 
@@ -331,7 +331,7 @@
           <div class="filter-collapsible-content">
             <div class="price-range-inputs">
               <label class="price-range-field">
-                <span class="price-range-label">{{ 'collections.filter.min' | t | default: 'Min' }}</span>
+                <span class="price-range-label">{% include 'translation-fallback', translation_key: 'collections.filter.min', fallback: 'Min' %}</span>
                 <span class="price-range-input-wrap">
                   <span class="price-range-prefix">{{ shop.money_prefix }}</span>
                   <input name="rangeOne" type="number" inputmode="numeric" value="{{ filter.min_value.value | round: shop.format_decimals }}" min="0" max="{{ filter.range_max | round: shop.format_decimals }}" step="1" placeholder="0" />
@@ -340,7 +340,7 @@
               </label>
               <span class="price-range-separator">-</span>
               <label class="price-range-field">
-                <span class="price-range-label">{{ 'collections.filter.max' | t | default: 'Max' }}</span>
+                <span class="price-range-label">{% include 'translation-fallback', translation_key: 'collections.filter.max', fallback: 'Max' %}</span>
                 <span class="price-range-input-wrap">
                   <span class="price-range-prefix">{{ shop.money_prefix }}</span>
                   <input name="rangeTwo" type="number" inputmode="numeric" value="{{ filter.max_value.value | round: shop.format_decimals }}" min="0" max="{{ filter.range_max | round: shop.format_decimals }}" step="1" placeholder="{{ filter.range_max | round: shop.format_decimals }}" />

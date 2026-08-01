@@ -566,8 +566,15 @@ class StorefrontConfigurationTests(unittest.TestCase):
                 self.assertIn("fetch(", source)
 
     def test_repeated_storefront_labels_use_translation_fallbacks(self) -> None:
+        fallback_snippet = (
+            THEME_ROOT / "snippets" / "translation-fallback.liquid"
+        ).read_text(encoding="utf-8")
+        self.assertIn("translated_value == translation_key", fallback_snippet)
+        self.assertIn("translated_value == blank", fallback_snippet)
+
         expected = {
             "layout/theme.liquid": "general.search.clear_history",
+            "sections/main-product.liquid": "products.product.buy_now",
             "snippets/search-modal.liquid": "general.search.recent_searches",
             "snippets/product-card.liquid": "general.show_details",
             "templates/customers/order.liquid": "customer.addresses.edit",
@@ -577,7 +584,13 @@ class StorefrontConfigurationTests(unittest.TestCase):
             source = (THEME_ROOT / relative).read_text(encoding="utf-8")
             with self.subTest(path=relative):
                 self.assertIn(translation_key, source)
-                self.assertIn("| t", source)
+                self.assertIn("translation-fallback", source)
+
+        broken_fallback = re.compile(r"\|\s*t(?:\s*:[^|}]*)?\s*\|\s*default")
+        for path in THEME_ROOT.rglob("*.liquid"):
+            source = path.read_text(encoding="utf-8")
+            with self.subTest(path=path.relative_to(THEME_ROOT)):
+                self.assertIsNone(broken_fallback.search(source))
 
     def test_share_widget_instances_have_unique_controls(self) -> None:
         share_snippet = (

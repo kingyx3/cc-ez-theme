@@ -518,7 +518,7 @@
       <div class="mb-4">
         <div class="title-edit-container">
           <h2>{{ 'customer.order.remarks' | t }}</h2>
-          <button type="button" class="link" data-edit-remark aria-controls="edit-remark" aria-expanded="false">{{ 'customer.addresses.edit' | t | default: 'Edit' }}</button>
+          <button type="button" class="link" data-edit-remark aria-controls="edit-remark" aria-expanded="false">{% include 'translation-fallback', translation_key: 'customer.addresses.edit', fallback: 'Edit' %}</button>
         </div>
         <div id="edit-details" class="details">
           <p name="remark">{{order.remark | escape }}</p>
@@ -534,7 +534,7 @@
       <div class="mb-4">
         <div class="title-edit-container">
           <h2>{{ 'checkout.payment_reference._' | t }}</h2>
-          <button type="button" class="link" data-edit-payment aria-controls="edit-reference" aria-expanded="false">{{ 'customer.addresses.edit' | t | default: 'Edit' }}</button>
+          <button type="button" class="link" data-edit-payment aria-controls="edit-reference" aria-expanded="false">{% include 'translation-fallback', translation_key: 'customer.addresses.edit', fallback: 'Edit' %}</button>
         </div>
         <div id="edit-payment" class="details">
           <p name="payment">{{ order.ref_number | escape }}</p>

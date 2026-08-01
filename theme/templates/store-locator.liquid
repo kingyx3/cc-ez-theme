@@ -53,26 +53,40 @@
 {% endif %}
 
 {% if locations.size > 0 %}
+{% capture store_open_label %}{% include 'translation-fallback', translation_key: 'general.store_locator.open', fallback: 'Open' %}{% endcapture %}
+{% capture store_closed_label %}{% include 'translation-fallback', translation_key: 'general.store_locator.closed', fallback: 'Closed' %}{% endcapture %}
+{% capture store_closes_label %}{% include 'translation-fallback', translation_key: 'general.store_locator.closes', fallback: 'Closes' %}{% endcapture %}
+{% capture store_everyday_label %}{% include 'translation-fallback', translation_key: 'general.store_locator.everyday', fallback: 'Everyday' %}{% endcapture %}
+{% capture store_hours_unavailable_label %}{% include 'translation-fallback', translation_key: 'general.store_locator.hours_unavailable', fallback: 'Hours unavailable' %}{% endcapture %}
+{% capture store_contact_hours_label %}{% include 'translation-fallback', translation_key: 'general.store_locator.contact_for_hours', fallback: 'Please contact the store for opening hours' %}{% endcapture %}
+{% capture store_open_all_day_label %}{% include 'translation-fallback', translation_key: 'general.store_locator.open_all_day', fallback: 'Open for 24 hours' %}{% endcapture %}
+{% capture day_mon_label %}{% include 'translation-fallback', translation_key: 'date_formats.days.mon', fallback: 'Mon' %}{% endcapture %}
+{% capture day_tue_label %}{% include 'translation-fallback', translation_key: 'date_formats.days.tue', fallback: 'Tue' %}{% endcapture %}
+{% capture day_wed_label %}{% include 'translation-fallback', translation_key: 'date_formats.days.wed', fallback: 'Wed' %}{% endcapture %}
+{% capture day_thu_label %}{% include 'translation-fallback', translation_key: 'date_formats.days.thu', fallback: 'Thu' %}{% endcapture %}
+{% capture day_fri_label %}{% include 'translation-fallback', translation_key: 'date_formats.days.fri', fallback: 'Fri' %}{% endcapture %}
+{% capture day_sat_label %}{% include 'translation-fallback', translation_key: 'date_formats.days.sat', fallback: 'Sat' %}{% endcapture %}
+{% capture day_sun_label %}{% include 'translation-fallback', translation_key: 'date_formats.days.sun', fallback: 'Sun' %}{% endcapture %}
 <script>
 
   var locations = {{locations | json}};
 
   const storeLocatorStrings = {
-    open: {{ 'general.store_locator.open' | t | default: 'Open' | json }},
-    closed: {{ 'general.store_locator.closed' | t | default: 'Closed' | json }},
-    closes: {{ 'general.store_locator.closes' | t | default: 'Closes' | json }},
-    everyday: {{ 'general.store_locator.everyday' | t | default: 'Everyday' | json }},
-    hoursUnavailable: {{ 'general.store_locator.hours_unavailable' | t | default: 'Hours unavailable' | json }},
-    contactForHours: {{ 'general.store_locator.contact_for_hours' | t | default: 'Please contact the store for opening hours' | json }},
-    openAllDay: {{ 'general.store_locator.open_all_day' | t | default: 'Open for 24 hours' | json }},
+    open: {{ store_open_label | strip | json }},
+    closed: {{ store_closed_label | strip | json }},
+    closes: {{ store_closes_label | strip | json }},
+    everyday: {{ store_everyday_label | strip | json }},
+    hoursUnavailable: {{ store_hours_unavailable_label | strip | json }},
+    contactForHours: {{ store_contact_hours_label | strip | json }},
+    openAllDay: {{ store_open_all_day_label | strip | json }},
     days: {
-      mon: {{ 'date_formats.days.mon' | t | default: 'Mon' | json }},
-      tue: {{ 'date_formats.days.tue' | t | default: 'Tue' | json }},
-      wed: {{ 'date_formats.days.wed' | t | default: 'Wed' | json }},
-      thur: {{ 'date_formats.days.thu' | t | default: 'Thu' | json }},
-      fri: {{ 'date_formats.days.fri' | t | default: 'Fri' | json }},
-      sat: {{ 'date_formats.days.sat' | t | default: 'Sat' | json }},
-      sun: {{ 'date_formats.days.sun' | t | default: 'Sun' | json }},
+      mon: {{ day_mon_label | strip | json }},
+      tue: {{ day_tue_label | strip | json }},
+      wed: {{ day_wed_label | strip | json }},
+      thur: {{ day_thu_label | strip | json }},
+      fri: {{ day_fri_label | strip | json }},
+      sat: {{ day_sat_label | strip | json }},
+      sun: {{ day_sun_label | strip | json }},
     },
   };
 

@@ -181,6 +181,12 @@
 
   {% include 'currencies' %}
 
+  {% capture quickview_error_label %}{% include 'translation-fallback', translation_key: 'products.product.quickview_error', fallback: 'Product details could not be loaded. Please try again.' %}{% endcapture %}
+  {% capture quantity_exceeded_label %}{% include 'translation-fallback', translation_key: 'products.product.quantity_exceeded', fallback: 'You selected __QUANTITY__. The maximum allowed is __MAXIMUM__ due to __REASON__.' %}{% endcapture %}
+  {% capture quantity_maximum_label %}{% include 'translation-fallback', translation_key: 'products.product.quantity_maximum', fallback: 'Maximum allowed: __MAXIMUM__ due to __REASON__.' %}{% endcapture %}
+  {% capture add_limit_error_label %}{% include 'translation-fallback', translation_key: 'products.product.add_limit_error', fallback: 'This item could not be added because it may exceed a customer, store, or stock limit.' %}{% endcapture %}
+  {% capture clear_history_label %}{% include 'translation-fallback', translation_key: 'general.search.clear_history', fallback: 'Clear history' %}{% endcapture %}
+
   <script>
 
     window.variantStrings = {
@@ -188,7 +194,7 @@
       updateCart: {{ 'cart.general.update' | t | json }},
       soldOut: {{ 'products.product.sold_out' | t | json }},
       unavailable: {{ 'products.product.unavailable' | t | json }},
-      quickviewError: {{ 'products.product.quickview_error' | t | default: 'Product details could not be loaded. Please try again.' | json }},
+      quickviewError: {{ quickview_error_label | strip | json }},
     }
 
     window.accessibilityStrings = {
@@ -200,9 +206,9 @@
     }
 
     window.purchaseStrings = {
-      quantityExceeded: {{ 'products.product.quantity_exceeded' | t | default: 'You selected __QUANTITY__. The maximum allowed is __MAXIMUM__ due to __REASON__.' | json }},
-      quantityMaximum: {{ 'products.product.quantity_maximum' | t | default: 'Maximum allowed: __MAXIMUM__ due to __REASON__.' | json }},
-      addLimitError: {{ 'products.product.add_limit_error' | t | default: 'This item could not be added because it may exceed a customer, store, or stock limit.' | json }},
+      quantityExceeded: {{ quantity_exceeded_label | strip | json }},
+      quantityMaximum: {{ quantity_maximum_label | strip | json }},
+      addLimitError: {{ add_limit_error_label | strip | json }},
     }
     
     window.productSettings = {
@@ -210,7 +216,7 @@
     }
 
     window.searchHistoryConfig = {
-      clearLabel: {{ 'general.search.clear_history' | t | default: 'Clear history' | json }},
+      clearLabel: {{ clear_history_label | strip | json }},
       customer: {% if customer %}true{% else %}false{% endif %},
       csrfToken: "{% csrf %}",
     }
