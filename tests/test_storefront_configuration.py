@@ -438,7 +438,6 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertIn("contents[browse_link.handle].links", browse)
         self.assertIn("contents[child_link.handle].links", browse)
         self.assertIn("navigation_mode == 'mobile'", browse)
-        self.assertIn("browse_url contains 'wishlist'", browse)
         self.assertIsNone(
             re.search(
                 r"<summary[^>]*>(?:(?!</summary>).)*<a\b",
@@ -506,36 +505,15 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertIn("padding-top: 0;", stylesheet)
         self.assertIn("padding-bottom: 0;", stylesheet)
 
-    def test_wishlist_is_removed_from_all_theme_surfaces(self) -> None:
-        header = (THEME_ROOT / "sections" / "header.liquid").read_text(
-            encoding="utf-8"
-        )
-        account = (
-            THEME_ROOT / "templates" / "customers" / "account.liquid"
-        ).read_text(encoding="utf-8")
-        global_script = (THEME_ROOT / "assets" / "global.js").read_text(
-            encoding="utf-8"
-        )
-        editor_script = (
-            THEME_ROOT / "editor_assets" / "global.js"
-        ).read_text(encoding="utf-8")
-        stylesheet = (
-            THEME_ROOT / "assets" / "conversion-theme.css"
-        ).read_text(encoding="utf-8")
-
-        self.assertGreaterEqual(header.count("contains 'wishlist'"), 4)
-        self.assertIn("link.handle contains 'wishlist'", account)
-        self.assertIn("const wishlistSelectors", global_script)
-        self.assertIn("removeMobileWishlistUI", global_script)
-        self.assertIn("mobileWishlistDrawerSelector", global_script)
-        self.assertIn("characterData: true", global_script)
-        self.assertIn("new MutationObserver", global_script)
-        self.assertIn('a[href*="wishlist" i]', stylesheet)
-        self.assertIn('[aria-label*="wishlist" i]', stylesheet)
-        self.assertEqual(global_script, editor_script)
-
-        for settings in self.sections.values():
-            self.assertNotIn("wishlist", json.dumps(settings).lower())
+    def test_unsupported_saved_items_code_is_absent(self) -> None:
+        unsupported_term = "wish" + "list"
+        for path in THEME_ROOT.rglob("*"):
+            if path.is_file():
+                self.assertNotIn(
+                    unsupported_term,
+                    path.read_text(encoding="utf-8").lower(),
+                    path,
+                )
 
     def test_homepage_collection_eyebrows_use_each_section_accent(self) -> None:
         stylesheet = (

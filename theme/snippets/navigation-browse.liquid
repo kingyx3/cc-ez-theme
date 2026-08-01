@@ -12,14 +12,11 @@
 {% assign browse_links = contents.catalog.links %}
 
 {% for browse_link in browse_links %}
-  {% assign browse_url = browse_link.url | downcase %}
-  {% assign browse_title = browse_link.title | downcase %}
   {% assign child_links = contents[browse_link.handle].links %}
 
-  {% unless browse_url contains 'wishlist' or browse_title contains 'wishlist' %}
-    {% if navigation_mode == 'mobile' %}
-      <li>
-        {% if child_links != blank %}
+  {% if navigation_mode == 'mobile' %}
+    <li>
+      {% if child_links != blank %}
           <details>
             <summary class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
               <span>{{ browse_link.title | escape }}</span>
@@ -34,13 +31,10 @@
                 </button>
                 <ul class="menu-drawer__menu list-menu" role="list">
                   {% for child_link in child_links %}
-                    {% assign child_url = child_link.url | downcase %}
-                    {% assign child_title = child_link.title | downcase %}
                     {% assign grandchild_links = contents[child_link.handle].links %}
 
-                    {% unless child_url contains 'wishlist' or child_title contains 'wishlist' %}
-                      <li>
-                        {% if grandchild_links != blank %}
+                    <li>
+                      {% if grandchild_links != blank %}
                           <details>
                             <summary class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
                               <span>{{ child_link.title | escape }}</span>
@@ -55,41 +49,36 @@
                                 </button>
                                 <ul class="menu-drawer__menu list-menu" role="list">
                                   {% for grandchild_link in grandchild_links %}
-                                    {% assign grandchild_url = grandchild_link.url | downcase %}
-                                    {% assign grandchild_title = grandchild_link.title | downcase %}
-                                    {% unless grandchild_url contains 'wishlist' or grandchild_title contains 'wishlist' %}
-                                      <li>
-                                        <a href="{{ grandchild_link.url }}"{% if grandchild_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
-                                          {{ grandchild_link.title | escape }}
-                                        </a>
-                                      </li>
-                                    {% endunless %}
+                                    <li>
+                                      <a href="{{ grandchild_link.url }}"{% if grandchild_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
+                                        {{ grandchild_link.title | escape }}
+                                      </a>
+                                    </li>
                                   {% endfor %}
                                 </ul>
                               </div>
                             </div>
                           </details>
-                        {% else %}
+                      {% else %}
                           <a href="{{ child_link.url }}"{% if child_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
                             {{ child_link.title | escape }}
                           </a>
-                        {% endif %}
-                      </li>
-                    {% endunless %}
+                      {% endif %}
+                    </li>
                   {% endfor %}
                 </ul>
               </div>
             </div>
           </details>
-        {% else %}
+      {% else %}
           <a href="{{ browse_link.url }}"{% if browse_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
             {{ browse_link.title | escape }}
           </a>
-        {% endif %}
-      </li>
-    {% else %}
-      <li>
-        {% if child_links != blank %}
+      {% endif %}
+    </li>
+  {% else %}
+    <li>
+      {% if child_links != blank %}
           <details-disclosure>
             <details>
               <summary class="header__menu-item list-menu__item link link--text focus-inset">
@@ -98,13 +87,10 @@
               </summary>
               <ul class="header__submenu list-menu list-menu--disclosure motion-reduce" role="list">
                 {% for child_link in child_links %}
-                  {% assign child_url = child_link.url | downcase %}
-                  {% assign child_title = child_link.title | downcase %}
                   {% assign grandchild_links = contents[child_link.handle].links %}
 
-                  {% unless child_url contains 'wishlist' or child_title contains 'wishlist' %}
-                    <li>
-                      {% if grandchild_links != blank %}
+                  <li>
+                    {% if grandchild_links != blank %}
                         <details-disclosure>
                           <details>
                             <summary class="header__menu-item list-menu__item link link--text focus-inset caption-large">
@@ -113,36 +99,30 @@
                             </summary>
                             <ul class="header__submenu list-menu list-menu--disclosure motion-reduce" role="list">
                               {% for grandchild_link in grandchild_links %}
-                                {% assign grandchild_url = grandchild_link.url | downcase %}
-                                {% assign grandchild_title = grandchild_link.title | downcase %}
-                                {% unless grandchild_url contains 'wishlist' or grandchild_title contains 'wishlist' %}
-                                  <li>
-                                    <a href="{{ grandchild_link.url }}"{% if grandchild_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="header__menu-item list-menu__item link link--text focus-inset caption-large">
-                                      {{ grandchild_link.title | escape }}
-                                    </a>
-                                  </li>
-                                {% endunless %}
+                                <li>
+                                  <a href="{{ grandchild_link.url }}"{% if grandchild_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="header__menu-item list-menu__item link link--text focus-inset caption-large">
+                                    {{ grandchild_link.title | escape }}
+                                  </a>
+                                </li>
                               {% endfor %}
                             </ul>
                           </details>
                         </details-disclosure>
-                      {% else %}
+                    {% else %}
                         <a href="{{ child_link.url }}"{% if child_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="header__menu-item list-menu__item link link--text focus-inset caption-large">
                           {{ child_link.title | escape }}
                         </a>
-                      {% endif %}
-                    </li>
-                  {% endunless %}
+                    {% endif %}
+                  </li>
                 {% endfor %}
               </ul>
             </details>
           </details-disclosure>
-        {% else %}
+      {% else %}
           <a href="{{ browse_link.url }}"{% if browse_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="header__menu-item list-menu__item link link--text focus-inset caption-large">
             {{ browse_link.title | escape }}
           </a>
-        {% endif %}
-      </li>
-    {% endif %}
-  {% endunless %}
+      {% endif %}
+    </li>
+  {% endif %}
 {% endfor %}

@@ -220,9 +220,6 @@
       <div class="card-box mb-30">
 		<div class="account-navigation__list">
           {% for link in contents.account_navigation.links %}
-            {% assign navigation_url = link.url | downcase %}
-            {% assign navigation_title = link.title | downcase %}
-            {% unless navigation_url contains 'wishlist' or navigation_title contains 'wishlist' or link.handle contains 'wishlist' %}
             <a class="navigation-item heading-nav_link" href="{% if link.handle == 'orders' %}{{ link.url }}?filter=to_pay{% else %}{{ link.url }}{% endif %}">
               <span class="navigation-icon d-flex">
                 {% if link.handle == 'details' %}{% include 'svg-definitions' with 'icon-profile' %}
@@ -237,7 +234,6 @@
               <div class="navigation-title">{{ navigation | t }}</div>
               <span class="chevron d-flex">{% include 'svg-definitions' with 'icon-chevron-right' %}</span>
             </a>
-            {% endunless %}
           {% endfor %}
         </div>
       </div>

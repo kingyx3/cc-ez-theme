@@ -313,11 +313,6 @@ Packs. Use tags for narrower operational detail.
 
 ## 9. Out-of-stock interest
 
-Wishlist is not part of this storefront experience. The theme filters it from
-EasyStore-provided navigation records and suppresses controls injected by app
-snippets so it cannot reappear on desktop, mobile, product, collection, or
-account surfaces.
-
 For out-of-stock products, a free manual alternative is a theme-rendered
 WhatsApp interest link containing the product title, selected variant, and
 product URL. Automatic restock detection, subscriber storage, consent
@@ -348,8 +343,7 @@ Calls such as `{% app_snippet 'collection/product_top' %}` are integration
 points. They allow installed EasyStore apps to inject storefront behavior.
 
 Do not remove app hooks merely because they render nothing in a local source
-review. App hooks are retained, while unsupported wishlist UI is removed by the
-theme's global storefront layer.
+review. Installed apps own any storefront UI they inject through these hooks.
 
 ## 12. Accessibility requirements
 
