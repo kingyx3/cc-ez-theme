@@ -520,7 +520,8 @@ class StorefrontConfigurationTests(unittest.TestCase):
         workflow = (
             REPOSITORY_ROOT / ".github" / "workflows" / "package-theme.yml"
         ).read_text(encoding="utf-8")
-        self.assertEqual(workflow.count('- "**"'), 2)
+        self.assertEqual(workflow.count('- "**"'), 1)
+        self.assertNotIn("pull_request:", workflow)
         self.assertIn("if: github.event_name != 'pull_request'", workflow)
 
     def test_unsupported_saved_items_code_is_absent(self) -> None:

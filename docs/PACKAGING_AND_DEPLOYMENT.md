@@ -133,7 +133,6 @@ The archive must not contain:
 
 The `Package EasyStore theme` workflow runs:
 
-- on pull requests targeting any branch;
 - on pushes to any branch;
 - through manual workflow dispatch.
 
