@@ -50,7 +50,16 @@ class StorefrontConfigurationTests(unittest.TestCase):
             r'data-buy-now[\s\S]+?product-form__buy-now[^"]*button--primary',
         )
         self.assertIn("Buy now", main_product)
-        self.assertEqual(main_product.count("data-buy-now"), 1)
+        self.assertEqual(
+            len(re.findall(r"\\sdata-buy-now(?:\\s|>)", main_product)),
+            1,
+        )
+        self.assertIn("data-checkout-limit-modal", main_product)
+        self.assertIn("data-checkout-limit-message", main_product)
+        self.assertIn("data-checkout-limit-cancel", main_product)
+        self.assertIn("data-checkout-limit-continue", main_product)
+        self.assertIn("Continue without this item?", main_product)
+        self.assertIn("Continue to checkout", main_product)
         self.assertIn("{% app_snippet 'product/button' %}", main_product)
         self.assertIn('class="product-media-video"', main_product)
         self.assertIn('class="product__media-fallback"', main_product)
@@ -76,10 +85,14 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertIn("itemCount >= minimumItemCount", product_form)
         self.assertIn("latestItems.length > 0", product_form)
         self.assertIn("if (buyNow && !cartConfirmed)", product_form)
-        self.assertIn("window.location.assign('/checkout')", product_form)
+        self.assertIn("this.openBuyNowLimitModal(String(cart.description))", product_form)
+        self.assertIn("this.openBuyNowLimitModal(", product_form)
+        self.assertIn("this.buyNowLimitModal.showModal()", product_form)
+        self.assertIn("this.closeBuyNowLimitModal()", product_form)
+        self.assertEqual(product_form.count("window.location.assign('/checkout')"), 2)
         self.assertLess(
             product_form.index("if (buyNow && !cartConfirmed)"),
-            product_form.index("window.location.assign('/checkout')"),
+            product_form.rindex("window.location.assign('/checkout')"),
         )
 
         for asset_directory in ("assets", "editor_assets"):
@@ -109,6 +122,10 @@ class StorefrontConfigurationTests(unittest.TestCase):
             self.assertIn("border-radius: 4rem !important;", stylesheet)
             self.assertIn(".product-form__buttons .button::after", stylesheet)
             self.assertIn(".product-form__buttons .btn::after", stylesheet)
+            self.assertIn(".buy-now-limit-modal::backdrop", stylesheet)
+            self.assertIn(".buy-now-limit-modal__actions", stylesheet)
+            self.assertIn("grid-template-columns: 1fr 1fr;", stylesheet)
+            self.assertIn("width: min(calc(100% - 3rem), 48rem);", stylesheet)
             self.assertNotIn(".product-form__buy-now", stylesheet)
             self.assertNotIn(".product-form__submit--secondary", stylesheet)
 

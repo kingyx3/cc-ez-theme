@@ -858,6 +858,98 @@ a.product__text {
   border-radius: inherit;
 }
 
+.buy-now-limit-modal {
+  box-sizing: border-box;
+  width: min(calc(100% - 3rem), 48rem);
+  max-width: 48rem;
+  padding: 0;
+  border: 0;
+  border-radius: 2.4rem;
+  color: rgb(var(--color-foreground));
+  background: rgb(var(--color-background));
+  box-shadow: 0 2.4rem 7rem rgba(0, 0, 0, 0.28);
+}
+
+.buy-now-limit-modal::backdrop {
+  background: rgba(14, 18, 22, 0.58);
+  backdrop-filter: blur(0.2rem);
+}
+
+.buy-now-limit-modal__content {
+  position: relative;
+  padding: clamp(2.4rem, 6vw, 3.6rem);
+}
+
+.buy-now-limit-modal__close {
+  position: absolute;
+  top: 1.4rem;
+  right: 1.4rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 4rem;
+  height: 4rem;
+  padding: 0;
+  border: 0.1rem solid rgba(var(--color-foreground), 0.14);
+  border-radius: 50%;
+  color: rgb(var(--color-foreground));
+  background: transparent;
+  cursor: pointer;
+}
+
+.buy-now-limit-modal__close:hover {
+  background: rgba(var(--color-foreground), 0.06);
+}
+
+.buy-now-limit-modal__close .icon {
+  width: 1.6rem;
+  height: 1.6rem;
+}
+
+.buy-now-limit-modal__title {
+  margin: 0;
+  padding-right: 4.8rem;
+  font-size: clamp(2.2rem, 5vw, 2.8rem);
+  line-height: 1.2;
+}
+
+.buy-now-limit-modal__reason {
+  margin: 2rem 0 0;
+  padding: 1.4rem 1.6rem;
+  border-radius: 1.2rem;
+  background: rgba(var(--color-foreground), 0.06);
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.buy-now-limit-modal__text {
+  margin: 1.6rem 0 0;
+  color: rgba(var(--color-foreground), 0.72);
+  line-height: 1.6;
+}
+
+.buy-now-limit-modal__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.2rem;
+  margin-top: 2.4rem;
+}
+
+.buy-now-limit-modal__actions .button,
+.buy-now-limit-modal__actions .btn {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 4.8rem;
+  margin: 0 !important;
+  border-radius: 4rem !important;
+}
+
+@media screen and (max-width: 549px) {
+  .buy-now-limit-modal__actions {
+    grid-template-columns: 1fr;
+  }
+}
+
 .product__description.rte{
   margin-top: 3rem;
 }

@@ -5,6 +5,8 @@ if (!customElements.get('product-form')) {
 
       this.form = this.querySelector('form');
       this.buyNowButton = this.querySelector('[data-buy-now]');
+      this.buyNowLimitModal = this.querySelector('[data-checkout-limit-modal]');
+      this.buyNowLimitMessage = this.querySelector('[data-checkout-limit-message]');
       this.cartNotification = document.querySelector('cart-notification');
 
       if (!this.form) return;
@@ -12,6 +14,29 @@ if (!customElements.get('product-form')) {
       this.form.addEventListener('submit', this.onSubmitHandler.bind(this));
       if (this.buyNowButton) {
         this.buyNowButton.addEventListener('click', this.onBuyNowClick.bind(this));
+      }
+
+      if (this.buyNowLimitModal) {
+        this.buyNowLimitModal
+          .querySelectorAll('[data-checkout-limit-cancel]')
+          .forEach((button) => {
+            button.addEventListener('click', this.closeBuyNowLimitModal.bind(this));
+          });
+
+        const continueButton = this.buyNowLimitModal.querySelector(
+          '[data-checkout-limit-continue]'
+        );
+        if (continueButton) {
+          continueButton.addEventListener('click', () => {
+            this.closeBuyNowLimitModal();
+            window.location.assign('/checkout');
+          });
+        }
+
+        this.buyNowLimitModal.addEventListener(
+          'click',
+          this.onBuyNowLimitModalClick.bind(this)
+        );
       }
     }
 
@@ -78,7 +103,11 @@ if (!customElements.get('product-form')) {
         this.hideErrorMsg();
 
         if (cart.description != undefined) {
-          this.renderErrorMsg(cart.description);
+          if (buyNow) {
+            this.openBuyNowLimitModal(String(cart.description));
+          } else {
+            this.renderErrorMsg(cart.description);
+          }
           setSubmitting(false);
           return;
         }
@@ -91,7 +120,9 @@ if (!customElements.get('product-form')) {
           && latestItems.length > 0;
 
         if (buyNow && !cartConfirmed) {
-          this.renderErrorMsg('We could not confirm this item in your cart. Please try again.');
+          this.openBuyNowLimitModal(
+            'This item could not be added because it may exceed a customer, store, or stock limit.'
+          );
           setSubmitting(false);
           return;
         }
@@ -112,6 +143,41 @@ if (!customElements.get('product-form')) {
           setSubmitting(false);
         }
       });
+    }
+
+    openBuyNowLimitModal(message) {
+      if (!this.buyNowLimitModal || !this.buyNowLimitMessage) {
+        this.renderErrorMsg(message);
+        return;
+      }
+
+      this.buyNowLimitMessage.textContent = message;
+
+      if (typeof this.buyNowLimitModal.showModal === 'function') {
+        if (!this.buyNowLimitModal.open) {
+          this.buyNowLimitModal.showModal();
+        }
+      } else {
+        this.buyNowLimitModal.setAttribute('open', '');
+      }
+    }
+
+    closeBuyNowLimitModal() {
+      if (!this.buyNowLimitModal) return;
+
+      if (typeof this.buyNowLimitModal.close === 'function') {
+        if (this.buyNowLimitModal.open) {
+          this.buyNowLimitModal.close();
+        }
+      } else {
+        this.buyNowLimitModal.removeAttribute('open');
+      }
+    }
+
+    onBuyNowLimitModalClick(evt) {
+      if (evt.target === this.buyNowLimitModal) {
+        this.closeBuyNowLimitModal();
+      }
     }
 
     renderErrorMsg(html) {

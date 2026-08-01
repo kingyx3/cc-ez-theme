@@ -186,6 +186,53 @@
               </div>
 
             </form>
+
+            <dialog
+              class="buy-now-limit-modal"
+              data-checkout-limit-modal
+              aria-modal="true"
+              aria-labelledby="BuyNowLimitTitle-{{ section.__key }}"
+              aria-describedby="BuyNowLimitDescription-{{ section.__key }}"
+            >
+              <div class="buy-now-limit-modal__content">
+                <button
+                  type="button"
+                  class="buy-now-limit-modal__close"
+                  data-checkout-limit-cancel
+                  aria-label="{{ 'accessibility.close' | t }}"
+                >
+                  {% include 'svg-definitions' with 'icon-close' %}
+                </button>
+
+                <h2 id="BuyNowLimitTitle-{{ section.__key }}" class="buy-now-limit-modal__title">
+                  Continue without this item?
+                </h2>
+
+                <div id="BuyNowLimitDescription-{{ section.__key }}">
+                  <p class="buy-now-limit-modal__reason" data-checkout-limit-message></p>
+                  <p class="buy-now-limit-modal__text">
+                    The item was not added to your cart. You can adjust your selection, or continue to checkout with your current cart.
+                  </p>
+                </div>
+
+                <div class="buy-now-limit-modal__actions">
+                  <button
+                    type="button"
+                    class="button button--secondary btn--radius"
+                    data-checkout-limit-cancel
+                  >
+                    Stay on product page
+                  </button>
+                  <button
+                    type="button"
+                    class="button button--primary btn--radius"
+                    data-checkout-limit-continue
+                  >
+                    Continue to checkout
+                  </button>
+                </div>
+              </div>
+            </dialog>
           </product-form>
 
 
