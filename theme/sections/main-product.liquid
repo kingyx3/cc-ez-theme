@@ -5,22 +5,11 @@
 <style>
   .product-wrapper_color{
     background-color: {{section.settings.wrapper_bg_color}};
-    padding: 30px;
-    border-radius: 20px;
+    padding: clamp(1.8rem, 4vw, 3rem);
+    border-radius: clamp(1.2rem, 3vw, 2rem);
   }
   .product__info-wrapper .product-card-wrapper{
     background-color: {{section.settings.wrapper_bg_color}};
-  }
-  .product-media-open {
-    width: 100%;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    cursor: zoom-in;
-  }
-  .product-media-open img {
-    display: block;
-    width: 100%;
   }
 </style>
 
@@ -41,7 +30,7 @@
               {% for image in product.images %}
                 <li id="image-item-{{image.id}}" class="main-image product__media-item grid__item slider__slide d-flex flex-align-center" data-image-id="{{ image.id }}">
                   {% if image.type == "Youtube" %}
-                    <iframe title="{{ product.title | escape }} video" width="90%" height="320" src="https://www.youtube.com/embed/{{ image.id }}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                    <iframe class="product-media-video" title="{{ product.title | escape }} video" width="560" height="315" src="https://www.youtube.com/embed/{{ image.id }}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
                   {% else %}
                     {% assign product_image_alt = image.alt | _default: product.title %}
                     <button type="button" class="product-media-open js-image-modal-toggle" aria-label="Enlarge {{ product_image_alt | escape }}">
@@ -51,9 +40,9 @@
                 </li>
               {% endfor %}
             </ul>
-            <div class="slider-buttons no-js-hidden {% if product.images.size < 1 %} medium-hide small-hide {% endif %}">
+            <div class="slider-buttons no-js-hidden {% if product.images.size < 2 %} medium-hide small-hide {% endif %}">
               <button type="button" class="slider-button slider-button--prev" name="previous" aria-label="{{ 'accessibility.previous_slide' | t }}">{% include 'svg-definitions' with 'icon-caret' %}</button>
-              <div class="slider-counter caption">
+              <div class="slider-counter caption" aria-live="polite">
                 <span class="slider-counter--current">1</span>
                 <span aria-hidden="true"> / </span>
                 <span class="slider-counter--total">{{ product.images.size }}</span>
@@ -68,7 +57,7 @@
 
       <div class="grid__item product__media-wrapper text-center">
         {% assign featured_image = product.selected_or_first_available_variant.featured_image | default: product.featured_image %}
-        <img src="{{ featured_image | img_url: '1024x' }}" alt="{{ featured_image.alt | _default: product.title | escape }}" width="1024" height="1024" loading="eager" fetchpriority="high">
+        <img class="product__media-fallback" src="{{ featured_image | img_url: '1024x' }}" alt="{{ featured_image.alt | _default: product.title | escape }}" width="1024" height="1024" loading="eager" fetchpriority="high">
       </div>
       
     {% endif %}
@@ -166,7 +155,7 @@
                   type="submit"
                   name="add"
                   id="AddToCart"
-                  class="product-form__submit product-form__submit--secondary button button--full-width button--secondary btn--radius"
+                  class="product-form__submit product-form__submit--accent-outline button button--full-width button--secondary btn--radius"
                 {% if product.selected_or_first_available_variant.available == false %}disabled{% endif %}
                 >
                     {% if product.selected_or_first_available_variant.available %}
@@ -174,15 +163,6 @@
                     {% else %}
                       {{ 'products.product.sold_out' | t }}
                     {% endif %}
-                </button>
-
-                <button
-                  type="submit"
-                  name="buy_now"
-                  class="product-form__submit product-form__buy-now button button--full-width button--primary btn--radius"
-                {% if product.selected_or_first_available_variant.available == false %}disabled{% endif %}
-                >
-                  Buy now
                 </button>
 
                 {% app_snippet 'product/button' %}
