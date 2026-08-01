@@ -60,6 +60,12 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertIn("data-checkout-limit-continue", main_product)
         self.assertIn("Continue without this item?", main_product)
         self.assertIn("Continue to checkout", main_product)
+        self.assertRegex(
+            main_product,
+            r'<form action="/cart" method="post" data-buy-now-checkout-form hidden>'
+            r'[\s\S]+?name="_token" value="{% csrf %}"'
+            r'[\s\S]+?name="checkout" value="true"',
+        )
         self.assertIn("{% app_snippet 'product/button' %}", main_product)
         self.assertIn('class="product-media-video"', main_product)
         self.assertIn('class="product__media-fallback"', main_product)
@@ -89,10 +95,18 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertIn("this.openBuyNowLimitModal(", product_form)
         self.assertIn("this.buyNowLimitModal.showModal()", product_form)
         self.assertIn("this.closeBuyNowLimitModal()", product_form)
-        self.assertEqual(product_form.count("window.location.assign('/checkout')"), 2)
+        self.assertIn(
+            "this.checkoutForm = this.querySelector('[data-buy-now-checkout-form]')",
+            product_form,
+        )
+        self.assertEqual(product_form.count("this.goToCheckout();"), 2)
+        self.assertIn("this.checkoutForm.requestSubmit()", product_form)
+        self.assertIn("this.checkoutForm.submit()", product_form)
+        self.assertIn("window.location.assign('/cart')", product_form)
+        self.assertNotIn("window.location.assign('/checkout')", product_form)
         self.assertLess(
             product_form.index("if (buyNow && !cartConfirmed)"),
-            product_form.rindex("window.location.assign('/checkout')"),
+            product_form.rindex("this.goToCheckout();"),
         )
 
         for asset_directory in ("assets", "editor_assets"):
@@ -432,6 +446,10 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertNotIn("jquery/1.11", layout)
         self.assertIn("jquery-3.7.1.min.js", layout)
         self.assertIn("jquery-migrate-3.6.0.min.js", layout)
+        self.assertIn(
+            'integrity="sha256-LWwll4H5AAC/20gH21NFgk4rYMvZhvc1KD0c5iG7QvM="',
+            layout,
+        )
         self.assertEqual(layout.count('integrity="sha256-'), 2)
 
         for relative in (
