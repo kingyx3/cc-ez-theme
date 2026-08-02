@@ -26,17 +26,20 @@ class CardNavigationPolishTests(unittest.TestCase):
 
         self.assertEqual(storefront, editor)
 
-    def test_product_images_are_clipped_to_the_card_radius(self) -> None:
+    def test_product_images_inherit_and_clip_to_the_card_radius(self) -> None:
         stylesheet = (
             THEME_ROOT / "assets" / "card-navigation-polish.css"
         ).read_text(encoding="utf-8")
 
-        self.assertIn("--product-card-visual-radius: 1.2rem", stylesheet)
-        self.assertIn("--product-card-visual-radius: 1.6rem", stylesheet)
+        self.assertIn(".product-card-wrapper > a", stylesheet)
+        self.assertIn("border-radius: inherit", stylesheet)
         self.assertIn(".product-card-wrapper > a > .card--product .media", stylesheet)
+        self.assertIn(".card--product .media > img", stylesheet)
         self.assertIn("overflow: hidden", stylesheet)
-        self.assertIn("border-radius: var(--product-card-visual-radius)", stylesheet)
+        self.assertIn("border-bottom-left-radius: 0", stylesheet)
+        self.assertIn("border-bottom-right-radius: 0", stylesheet)
         self.assertIn(".card--product:only-child", stylesheet)
+        self.assertNotIn("--product-card-visual-radius", stylesheet)
 
     def test_browse_arrows_are_reduced_on_desktop_only(self) -> None:
         stylesheet = (
