@@ -48,7 +48,8 @@ class ProductListingCartControlTests(unittest.TestCase):
             "component-product-card-cart-controls.css",
             product_card,
         )
-        self.assertIn("product_card_cart_controls_styles_loaded", product_card)
+        self.assertIn("product-card-cart-feedback.js", product_card)
+        self.assertIn("product_card_cart_controls_assets_loaded", product_card)
 
     def test_listing_cart_buttons_are_not_clipped_by_card_borders(self) -> None:
         stylesheets = []
@@ -68,7 +69,7 @@ class ProductListingCartControlTests(unittest.TestCase):
 
         self.assertEqual(stylesheets[0], stylesheets[1])
 
-    def test_listing_cart_buttons_are_compact_and_corner_inset(self) -> None:
+    def test_listing_cart_buttons_are_small_borderless_and_touch_friendly(self) -> None:
         stylesheets = []
         for directory in ("assets", "editor_assets"):
             stylesheet = (
@@ -78,17 +79,40 @@ class ProductListingCartControlTests(unittest.TestCase):
             ).read_text(encoding="utf-8")
             stylesheets.append(stylesheet)
 
-            self.assertIn("top: 0.7rem;", stylesheet)
-            self.assertIn("right: 0.7rem;", stylesheet)
-            self.assertIn("width: 3.6rem;", stylesheet)
-            self.assertIn("height: 3.6rem;", stylesheet)
-            self.assertIn("border-width: 0.2rem;", stylesheet)
+            self.assertIn("top: 0.6rem;", stylesheet)
+            self.assertIn("right: 0.6rem;", stylesheet)
             self.assertIn("width: 3.4rem;", stylesheet)
             self.assertIn("height: 3.4rem;", stylesheet)
+            self.assertIn("border: 0 !important;", stylesheet)
+            self.assertIn("width: 2.8rem;", stylesheet)
+            self.assertIn("height: 2.8rem;", stylesheet)
+            self.assertIn("inset: -0.8rem;", stylesheet)
+            self.assertIn("width: 1rem;", stylesheet)
+            self.assertIn("height: 1rem;", stylesheet)
             self.assertNotIn("width: 4.4rem;", stylesheet)
             self.assertNotIn("height: 4.4rem;", stylesheet)
 
         self.assertEqual(stylesheets[0], stylesheets[1])
+
+    def test_listing_cart_failures_show_an_accessible_message(self) -> None:
+        scripts = []
+        for directory in ("assets", "editor_assets"):
+            script = (
+                THEME_ROOT / directory / "product-card-cart-feedback.js"
+            ).read_text(encoding="utf-8")
+            scripts.append(script)
+
+            self.assertIn("cart.description", script)
+            self.assertIn("minimumItemCount", script)
+            self.assertIn("cartConfirmed", script)
+            self.assertIn("window.purchaseStrings.addLimitError", script)
+            self.assertIn("data-product-listing-cart-alert", script)
+            self.assertIn("aria-live", script)
+            self.assertIn("assertive", script)
+            self.assertIn("this.setLoading(false)", script)
+            self.assertIn("customElements.whenDefined('add-to-cart-button')", script)
+
+        self.assertEqual(scripts[0], scripts[1])
 
 
 if __name__ == "__main__":
