@@ -1,0 +1,45 @@
+/* Product-card image clipping and desktop Browse-menu icon sizing. */
+
+.product-card-wrapper {
+  --product-card-visual-radius: 1.2rem;
+}
+
+.sales-collection .product-card-wrapper,
+.template-collection .product-card-wrapper,
+.template-search .product-card-wrapper,
+.product-recommendations .product-card-wrapper {
+  --product-card-visual-radius: 1.6rem;
+}
+
+/*
+ * The wrapper remains overflow-visible for the floating add-to-cart control.
+ * Clip the media stack itself so product artwork follows the card shell.
+ */
+.product-card-wrapper > a > .card--product,
+.product-card-wrapper > a > .card--product .card__inner,
+.product-card-wrapper > a > .card--product .media {
+  overflow: hidden;
+  border-radius: var(--product-card-visual-radius)
+    var(--product-card-visual-radius) 0 0;
+}
+
+.product-card-wrapper > a > .card--product .media > img {
+  border-radius: inherit;
+}
+
+/* Image-only cards keep rounded corners on all four sides. */
+.product-card-wrapper > a > .card--product:only-child,
+.product-card-wrapper > a > .card--product:only-child .card__inner,
+.product-card-wrapper > a > .card--product:only-child .media {
+  border-radius: var(--product-card-visual-radius);
+}
+
+@media screen and (min-width: 990px) {
+  .header__nav-item--browse .header__menu-item > .icon-caret {
+    width: 0.8rem;
+    min-width: 0.8rem;
+    height: 0.8rem;
+    flex: 0 0 0.8rem;
+    margin-left: 0.7rem;
+  }
+}
