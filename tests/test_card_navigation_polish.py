@@ -51,6 +51,21 @@ class CardNavigationPolishTests(unittest.TestCase):
         self.assertIn("min-width: 0", stylesheet)
         self.assertNotIn("justify-content: space-between", stylesheet)
 
+    def test_short_product_grids_do_not_collapse_the_final_row_height(self) -> None:
+        stylesheet = (
+            THEME_ROOT / "assets" / "card-navigation-polish.css"
+        ).read_text(encoding="utf-8")
+        featured_collection = (
+            THEME_ROOT / "sections" / "featured-collection.liquid"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("products_to_display < section.settings.products_to_show", featured_collection)
+        self.assertIn("negative-margin", featured_collection)
+        self.assertIn(".product-grid.negative-margin", stylesheet)
+        self.assertIn(".product-grid.negative-margin--small", stylesheet)
+        self.assertIn("margin-bottom: 0", stylesheet)
+        self.assertNotIn("margin-bottom: -5rem", stylesheet)
+
     def test_browse_arrows_are_reduced_on_desktop_only(self) -> None:
         stylesheet = (
             THEME_ROOT / "assets" / "card-navigation-polish.css"
