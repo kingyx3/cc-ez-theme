@@ -443,6 +443,22 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertIn("{{ catalog_link.title | escape }}", browse)
         self.assertIn("navigation_mode == 'mobile'", browse)
 
+        # A <summary> must not wrap an <a>: nesting interactive elements is
+        # invalid, and it makes the disclosure impossible to operate reliably.
+        # The stock EasyStore theme does this; Browse uses a <span> instead.
+        self.assertIsNone(
+            re.search(
+                r"<summary[^>]*>(?:(?!</summary>).)*<a\b",
+                browse,
+                flags=re.DOTALL,
+            )
+        )
+
+        # A link flagged to open in a new tab is honoured, with rel hardening.
+        self.assertEqual(
+            browse.count('target="_blank" rel="noopener noreferrer"'), 11
+        )
+
         # EasyStore stores every navigation tier as its own content record, so
         # a link's children are read back with contents[link.handle].links.
         # Browse must walk that chain to the full depth EasyStore supports for

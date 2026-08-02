@@ -60,8 +60,8 @@
               </button>
               <ul class="menu-drawer__menu list-menu" role="list" tabindex="-1">
                 <li>
-                  <a href="{{ catalog_link.url | escape }}" class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
-                    {{ catalog_link.title | escape }}
+                  <a href="{{ catalog_link.url | escape }}"{% if catalog_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
+                    View all {{ catalog_link.title | escape }}
                   </a>
                 </li>
                 {% for level_2_link in level_1_links %}
@@ -92,8 +92,8 @@
                             </button>
                             <ul class="menu-drawer__menu list-menu" role="list" tabindex="-1">
                               <li>
-                                <a href="{{ level_2_link.url | escape }}" class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
-                                  {{ level_2_link.title | escape }}
+                                <a href="{{ level_2_link.url | escape }}"{% if level_2_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
+                                  View all {{ level_2_link.title | escape }}
                                 </a>
                               </li>
                               {% for level_3_link in level_2_links %}
@@ -124,8 +124,8 @@
                                           </button>
                                           <ul class="menu-drawer__menu list-menu" role="list" tabindex="-1">
                                             <li>
-                                              <a href="{{ level_3_link.url | escape }}" class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
-                                                {{ level_3_link.title | escape }}
+                                              <a href="{{ level_3_link.url | escape }}"{% if level_3_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
+                                                View all {{ level_3_link.title | escape }}
                                               </a>
                                             </li>
                                             {% for level_4_link in level_3_links %}
@@ -138,7 +138,7 @@
                                               {% endif %}
                                               {% assign browse_seen_handles = browse_seen_handles | append: '|' | append: level_4_seen_key | append: '|' %}
                                               <li>
-                                                <a href="{{ level_4_link.url | escape }}" class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
+                                                <a href="{{ level_4_link.url | escape }}"{% if level_4_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
                                                   {{ level_4_link.title | escape }}
                                                 </a>
                                               </li>
@@ -148,7 +148,7 @@
                                       </div>
                                     </details>
                                   {% else %}
-                                    <a href="{{ level_3_link.url | escape }}" class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
+                                    <a href="{{ level_3_link.url | escape }}"{% if level_3_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
                                       {{ level_3_link.title | escape }}
                                     </a>
                                   {% endif %}
@@ -159,7 +159,7 @@
                         </div>
                       </details>
                     {% else %}
-                      <a href="{{ level_2_link.url | escape }}" class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
+                      <a href="{{ level_2_link.url | escape }}"{% if level_2_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
                         {{ level_2_link.title | escape }}
                       </a>
                     {% endif %}
@@ -170,7 +170,7 @@
           </div>
         </details>
       {% else %}
-        <a href="{{ catalog_link.url | escape }}" class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
+        <a href="{{ catalog_link.url | escape }}"{% if catalog_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
           {{ catalog_link.title | escape }}
         </a>
       {% endif %}
@@ -218,7 +218,7 @@
     {% assign level_1_links = contents[catalog_link.handle].links %}
     {% assign level_1_count = level_1_links | size %}
     <li{% if level_1_count > 0 %} class="browse-menu__item--has-children"{% endif %}>
-      <a href="{{ catalog_link.url | escape }}" class="header__menu-item list-menu__item link link--text focus-inset caption-large">
+      <a href="{{ catalog_link.url | escape }}"{% if catalog_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="header__menu-item list-menu__item link link--text focus-inset caption-large">
         <span>{{ catalog_link.title | escape }}</span>
         {% if level_1_count > 0 %}
           <span class="browse-menu__indicator" aria-hidden="true">&rsaquo;</span>
@@ -238,7 +238,7 @@
             {% assign level_2_links = contents[level_2_link.handle].links %}
             {% assign level_2_count = level_2_links | size %}
             <li{% if level_2_count > 0 %} class="browse-menu__item--has-children"{% endif %}>
-              <a href="{{ level_2_link.url | escape }}" class="header__menu-item list-menu__item link link--text focus-inset caption-large">
+              <a href="{{ level_2_link.url | escape }}"{% if level_2_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="header__menu-item list-menu__item link link--text focus-inset caption-large">
                 <span>{{ level_2_link.title | escape }}</span>
                 {% if level_2_count > 0 %}
                   <span class="browse-menu__indicator" aria-hidden="true">&rsaquo;</span>
@@ -258,7 +258,7 @@
                     {% assign level_3_links = contents[level_3_link.handle].links %}
                     {% assign level_3_count = level_3_links | size %}
                     <li{% if level_3_count > 0 %} class="browse-menu__item--has-children"{% endif %}>
-                      <a href="{{ level_3_link.url | escape }}" class="header__menu-item list-menu__item link link--text focus-inset caption-large">
+                      <a href="{{ level_3_link.url | escape }}"{% if level_3_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="header__menu-item list-menu__item link link--text focus-inset caption-large">
                         <span>{{ level_3_link.title | escape }}</span>
                         {% if level_3_count > 0 %}
                           <span class="browse-menu__indicator" aria-hidden="true">&rsaquo;</span>
@@ -276,7 +276,7 @@
                             {% endif %}
                             {% assign browse_seen_handles = browse_seen_handles | append: '|' | append: level_4_seen_key | append: '|' %}
                             <li>
-                              <a href="{{ level_4_link.url | escape }}" class="header__menu-item list-menu__item link link--text focus-inset caption-large">
+                              <a href="{{ level_4_link.url | escape }}"{% if level_4_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="header__menu-item list-menu__item link link--text focus-inset caption-large">
                                 <span>{{ level_4_link.title | escape }}</span>
                               </a>
                             </li>
