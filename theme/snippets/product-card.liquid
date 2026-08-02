@@ -17,8 +17,13 @@
 {% endif %}
 {% assign product_card_alt = product.featured_image.alt | _default: product.title %}
 
+{% assign show_listing_add_to_cart = true %}
+{% if settings.show_add_to_cart_button == false or settings.show_add_to_cart_button == 0 or settings.show_add_to_cart_button == '0' %}
+  {% assign show_listing_add_to_cart = false %}
+{% endif %}
+
 <div class="product-card-wrapper card-wrapper">
-  {% if show_add_to_cart_button %}
+  {% if show_listing_add_to_cart %}
     <add-to-cart-button>
       <div class="card__badge card__badge-top-right card__badge-float-edge">
         <button type="button" class="badge badge-circle badge--bottom-right addToClassList" data-variant-id="{{product.sole_variant_id}}" data-product-handle="{{product.handle}}" data-product-price="{{product.price}}" data-product-price-max="{{product.price_max}}" data-product-available="{{product.available}}" data-product-id="{{product.id}}" data-token="{% csrf %}" data-quantity="1" data-url="{{ product.url | within: collection | escape }}">
