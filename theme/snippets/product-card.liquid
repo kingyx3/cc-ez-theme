@@ -51,7 +51,7 @@
         <div class="media media--transparent media--{{product_image_ratio}} media--hover-effect">
           <img src="{{ product.featured_image.src | img_url: settings.product_img_res }}" alt="{{ product_card_alt | escape }}" width="800" height="800" loading="lazy">
           {% if show_secondary_image and product.secondary_image.src != "" and product.secondary_image.src != null %}
-            <img src="{{ product.secondary_image.src | img_url: '80x' }}" alt="{{ product.secondary_image.alt | _default: product.title | escape }}" width="800" height="800" loading="lazy">
+            <img src="{{ product.secondary_image.src | img_url: settings.product_img_res }}" alt="{{ product.secondary_image.alt | _default: product.title | escape }}" width="800" height="800" loading="lazy">
           {% endif %}
         </div>
         {% if on_sale %}
