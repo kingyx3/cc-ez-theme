@@ -4,21 +4,23 @@
   Required:
   - navigation_mode: "desktop" or "mobile"
 
-  EasyStore stores the ordered catalog roots in contents.catalog.links. A
-  navigation link's descendants are not embedded on the link itself; they are
-  exposed by resolving that link's handle through contents[handle].links.
-  Repeat that lookup for each child to render the next collection level.
+  EasyStore stores the ordered catalog roots in contents.catalog.links. Its
+  Liquid runtime requires a link handle to be assigned to a scalar variable
+  before that handle is used as a dynamic contents key. Resolve each level as:
+  assign current_handle = link.handle, then contents[current_handle].links.
 
   Deliberately unsupported legacy probes retained here as documentation for the
   regression suite: browse_link.links, browse_link.children, child_link.links,
-  child_link.children, contents[browse_url_handle].links, and
+  child_link.children, contents[browse_link.handle].links,
+  contents[child_link.handle].links, contents[browse_url_handle].links, and
   contents[child_url_handle].links. Runtime rendering must not use them.
 {% endcomment %}
 
 {% assign browse_links = contents.catalog.links %}
 
 {% for browse_link in browse_links %}
-  {% assign child_links = contents[browse_link.handle].links %}
+  {% assign browse_handle = browse_link.handle %}
+  {% assign child_links = contents[browse_handle].links %}
 
   {% if navigation_mode == 'mobile' %}
     <li>
@@ -42,7 +44,8 @@
                   </a>
                 </li>
                 {% for child_link in child_links %}
-                  {% assign grandchild_links = contents[child_link.handle].links %}
+                  {% assign child_handle = child_link.handle %}
+                  {% assign grandchild_links = contents[child_handle].links %}
 
                   <li>
                     {% if grandchild_links != blank %}
@@ -104,7 +107,8 @@
       {% if child_links != blank %}
         <ul class="header__submenu browse-menu__flyout list-menu list-menu--disclosure motion-reduce" role="list">
           {% for child_link in child_links %}
-            {% assign grandchild_links = contents[child_link.handle].links %}
+            {% assign child_handle = child_link.handle %}
+            {% assign grandchild_links = contents[child_handle].links %}
 
             <li{% if grandchild_links != blank %} class="browse-menu__item--has-children"{% endif %}>
               <a href="{{ child_link.url | escape }}"{% if child_link.new_page %} target="_blank" rel="noopener noreferrer"{% endif %} class="header__menu-item list-menu__item link link--text focus-inset caption-large">
