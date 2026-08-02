@@ -1,6 +1,7 @@
-{% unless product_card_cart_controls_styles_loaded %}
+{% unless product_card_cart_controls_assets_loaded %}
   {{ 'component-product-card-cart-controls.css' | asset_url | stylesheet_tag }}
-  {% assign product_card_cart_controls_styles_loaded = true %}
+  <script src="{{ 'product-card-cart-feedback.js' | asset_url }}" defer="defer"></script>
+  {% assign product_card_cart_controls_assets_loaded = true %}
 {% endunless %}
 
 {% assign on_sale = false %}
