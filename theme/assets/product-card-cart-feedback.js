@@ -29,13 +29,16 @@
     return alert;
   }
 
-  function showError(message) {
+  function showError(rawMessage, context = {}) {
     const alert = getAlert();
     const messageElement = alert.querySelector(
       '[data-product-listing-cart-alert-message]'
     );
+    const feedback = window.PurchaseLimitFeedback;
 
-    messageElement.textContent = String(message);
+    messageElement.textContent = feedback
+      ? feedback.format({ ...context, rawMessage, mode: 'error' })
+      : String(rawMessage || '').replace(/<[^>]*>/g, '').trim();
     alert.hidden = false;
 
     window.clearTimeout(alert.hideTimer);
@@ -75,6 +78,15 @@
         1,
         Number.parseInt(this.button.dataset.quantity, 10) || 1
       );
+      const variantId = this.button.dataset.variantId;
+      const feedback = window.PurchaseLimitFeedback;
+      const currentQuantity = feedback
+        ? feedback.getCartQuantity(variantId)
+        : 0;
+      const errorContext = {
+        currentQuantity,
+        requestedQuantity,
+      };
       const cartCount = document.querySelector('.js-content-cart-count');
       const parsedItemCount = Number.parseInt(
         cartCount ? cartCount.textContent : '0',
@@ -86,7 +98,7 @@
 
       const body = {
         _token: this.button.dataset.token,
-        id: this.button.dataset.variantId,
+        id: variantId,
         quantity: requestedQuantity,
       };
 
@@ -94,7 +106,7 @@
         cart = cart || {};
 
         if (cart.description != null && cart.description !== '') {
-          showError(cart.description);
+          showError(cart.description, errorContext);
           this.setLoading(false);
           return;
         }
@@ -109,7 +121,7 @@
           && latestItems.length > 0;
 
         if (!cartConfirmed) {
-          showError(fallbackError());
+          showError(fallbackError(), errorContext);
           this.setLoading(false);
           return;
         }
