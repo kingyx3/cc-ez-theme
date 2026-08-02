@@ -89,31 +89,20 @@
     );
   };
 
-  const limitStatement = (reason, maximum) => {
+  const maximumDescription = (reason, maximum) => {
     switch (reason.key) {
       case 'inventory':
-        return `only ${unitLabel(maximum)} ${maximum === 1 ? 'is' : 'are'} available`;
+        return `${unitLabel(maximum)} available`;
       case 'customer':
-        return `customer limit is ${unitLabel(maximum)}`;
+        return `${unitLabel(maximum)} per customer`;
       case 'promotion':
-        return `promotion limit is ${unitLabel(maximum)}`;
+        return `${unitLabel(maximum)} for this promotion`;
       case 'store':
-        return `store limit is ${unitLabel(maximum)}`;
+        return `${unitLabel(maximum)} under the store limit`;
       case 'order':
-        return `order limit is ${unitLabel(maximum)}`;
+        return `${unitLabel(maximum)} per order`;
       default:
-        return `maximum is ${unitLabel(maximum)} (${reason.label})`;
-    }
-  };
-
-  const reasonName = (reason) => {
-    switch (reason.key) {
-      case 'inventory': return 'inventory limit';
-      case 'customer': return 'customer limit';
-      case 'promotion': return 'promotion limit';
-      case 'store': return 'store limit';
-      case 'order': return 'order limit';
-      default: return reason.label || 'purchase limit';
+        return `${unitLabel(maximum)} maximum`;
     }
   };
 
@@ -133,34 +122,37 @@
 
     if (parsedMaximum != null) {
       const remaining = Math.max(0, parsedMaximum - current);
+      const maximumCopy = maximumDescription(inferredReason, parsedMaximum);
 
-      if (mode === 'warning') {
+      if (mode === 'reached') {
         if (current > 0) {
-          return `Maximum reached: ${unitLabel(current)} in cart + ${unitLabel(requested)} selected = ${unitLabel(parsedMaximum)} (${reasonName(inferredReason)}).`;
+          return `Maximum quantity reached. ${unitLabel(current)} in cart + ${unitLabel(requested)} selected = ${maximumCopy}.`;
         }
-        return `Maximum reached: ${unitLabel(requested)} selected (${reasonName(inferredReason)}).`;
+        return `Maximum quantity reached. ${maximumCopy}.`;
       }
 
       if (current > 0 && remaining === 0) {
-        return `Limit reached: ${unitLabel(current)} in cart; ${limitStatement(inferredReason, parsedMaximum)}. Remove an item before adding more.`;
+        if (inferredReason.key === 'inventory') {
+          return `Stock limit reached. You already have ${unitLabel(current)} in your cart; only ${unitLabel(parsedMaximum)} ${parsedMaximum === 1 ? 'is' : 'are'} available.`;
+        }
+        return `Purchase limit reached. You already have ${unitLabel(current)} in your cart (maximum ${maximumCopy}).`;
       }
 
-      if (current > 0 && requested > remaining) {
-        return `You have ${unitLabel(current)} in your cart; ${limitStatement(inferredReason, parsedMaximum)}. You can add ${unitLabel(remaining)} more.`;
+      if (requested > remaining) {
+        if (remaining > 0) {
+          return `Quantity limit exceeded. You can add up to ${unitLabel(remaining)} more (maximum ${maximumCopy}).`;
+        }
+        return `Quantity limit exceeded. Maximum ${maximumCopy}.`;
       }
 
-      if (requested > parsedMaximum) {
-        return `You requested ${unitLabel(requested)}; ${limitStatement(inferredReason, parsedMaximum)}.`;
-      }
-
-      return `Unable to add item: ${limitStatement(inferredReason, parsedMaximum)}.`;
+      return `Unable to add this item. Maximum ${maximumCopy}.`;
     }
 
     if (cleanMessage) return cleanMessage;
 
     return window.purchaseStrings && window.purchaseStrings.addLimitError
       ? stripMarkup(window.purchaseStrings.addLimitError)
-      : 'Unable to add item: an inventory or purchase limit was reached.';
+      : 'Unable to add this item because a quantity limit was reached.';
   };
 
   const getVariantId = (productForm) => {
@@ -180,6 +172,20 @@
     Object.defineProperty(prototype, 'contextualPurchaseLimitsEnhanced', {
       value: true,
     });
+
+    prototype.bindPurchaseLimitInteraction = function bindPurchaseLimitInteraction() {
+      if (!this.quantityInput || this.quantityInput.dataset.purchaseLimitInteractionBound === 'true') {
+        return;
+      }
+
+      const markInteraction = () => {
+        this.purchaseLimitInteracted = true;
+      };
+
+      this.quantityInput.dataset.purchaseLimitInteractionBound = 'true';
+      this.quantityInput.addEventListener('input', markInteraction, { capture: true });
+      this.quantityInput.addEventListener('change', markInteraction, { capture: true });
+    };
 
     prototype.getCurrentCartQuantity = function getCurrentCartQuantity(variantId) {
       return getCartQuantity(variantId || getVariantId(this));
@@ -203,30 +209,59 @@
       };
     };
 
-    prototype.updatePlusButton = function updateContextualPlusButton(maximum, quantity) {
+    prototype.updatePlusButton = function updateContextualPlusButton(maximum) {
       if (!this.quantityInput) return;
       const plusButton = this.quantityInput
         .closest('quantity-input')
         ?.querySelector('[name="plus"]');
       if (!plusButton) return;
 
-      if (maximum != null && quantity >= maximum) {
-        plusButton.dataset.quantityLimitDisabled = 'true';
-        plusButton.setAttribute('disabled', true);
-        plusButton.setAttribute('aria-disabled', 'true');
-      } else if (plusButton.dataset.quantityLimitDisabled === 'true') {
+      if (plusButton.dataset.quantityLimitDisabled === 'true') {
         plusButton.removeAttribute('disabled');
         plusButton.removeAttribute('aria-disabled');
         delete plusButton.dataset.quantityLimitDisabled;
       }
+
+      plusButton.dataset.purchaseLimitMaximum = maximum == null ? '' : String(maximum);
+
+      if (plusButton.dataset.purchaseLimitFeedbackBound === 'true') return;
+      plusButton.dataset.purchaseLimitFeedbackBound = 'true';
+      plusButton.addEventListener('click', () => {
+        const allowedMaximum = Number.parseInt(
+          plusButton.dataset.purchaseLimitMaximum,
+          10
+        );
+        const selectedQuantity = Math.max(
+          1,
+          Number.parseInt(this.quantityInput.value, 10) || 1
+        );
+
+        if (!Number.isFinite(allowedMaximum) || selectedQuantity < allowedMaximum) return;
+
+        const limit = this.getQuantityLimit();
+        if (!limit) return;
+
+        this.purchaseLimitInteracted = true;
+        this.showQuantityLimit(
+          format({
+            currentQuantity: limit.currentQuantity,
+            requestedQuantity: selectedQuantity,
+            maximum: limit.totalMaximum,
+            reason: limit.reason,
+            mode: 'reached',
+          }),
+          'warning'
+        );
+      });
     };
 
     prototype.validateQuantity = function validateContextualQuantity(focusInvalid = false) {
       if (!this.quantityInput) return true;
+      this.bindPurchaseLimitInteraction();
 
       const quantity = Math.max(1, Number.parseInt(this.quantityInput.value, 10) || 1);
       const limit = this.getQuantityLimit();
-      this.updatePlusButton(limit && limit.maximum, quantity);
+      this.updatePlusButton(limit && limit.maximum);
 
       if (!limit) {
         if (this.nativeQuantityMaximum == null) {
@@ -249,18 +284,20 @@
       };
 
       if (quantity > limit.maximum) {
-        this.showQuantityLimit(format({ ...context, mode: 'error' }), 'error');
-        this.setPurchaseButtonsLimited(true);
-        if (focusInvalid) this.quantityInput.focus();
+        const shouldShow = focusInvalid || this.purchaseLimitInteracted === true;
+        if (shouldShow) {
+          this.showQuantityLimit(format({ ...context, mode: 'error' }), 'error');
+          this.setPurchaseButtonsLimited(true);
+          if (focusInvalid) this.quantityInput.focus();
+        } else {
+          this.clearQuantityLimit();
+          this.setPurchaseButtonsLimited(false);
+        }
         return false;
       }
 
+      this.clearQuantityLimit();
       this.setPurchaseButtonsLimited(false);
-      if (quantity === limit.maximum) {
-        this.showQuantityLimit(format({ ...context, mode: 'warning' }), 'warning');
-      } else {
-        this.clearQuantityLimit();
-      }
       return true;
     };
 
