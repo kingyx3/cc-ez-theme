@@ -1,4 +1,4 @@
-/* Product-card image clipping and desktop Browse-menu icon sizing. */
+/* Product-card image clipping, grid stability, and desktop Browse-menu icon sizing. */
 
 /*
  * The wrapper remains overflow-visible for the floating add-to-cart control.
@@ -25,6 +25,16 @@
 /* Image-only cards keep the inherited radius on all four sides. */
 .product-card-wrapper > a > .card--product:only-child {
   border-radius: inherit;
+}
+
+/*
+ * Grid items must keep the width declared by their column class. The base
+ * theme previously allowed every item to grow, which enlarged incomplete
+ * final rows and could push a lone card outside its section background.
+ */
+.grid > .grid__item {
+  min-width: 0;
+  flex-grow: 0;
 }
 
 @media screen and (min-width: 990px) {
