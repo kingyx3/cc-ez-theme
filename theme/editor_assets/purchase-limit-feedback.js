@@ -48,27 +48,27 @@
     const strings = window.purchaseStrings || {};
 
     if (/(inventory|stock|available|only left|left\s+\d+\s+unit)/i.test(text)) {
-      return { key: 'inventory', label: strings.inventoryLimit || 'available inventory' };
+      return { key: 'inventory', label: strings.inventoryLimit || 'inventory' };
     }
     if (/(customer|member|per customer)/i.test(text)) {
-      return { key: 'customer', label: strings.customerLimit || 'a customer purchase limit' };
+      return { key: 'customer', label: strings.customerLimit || 'customer limit' };
     }
     if (/(promotion|promo)/i.test(text)) {
-      return { key: 'promotion', label: strings.promotionLimit || 'a promotion limit' };
+      return { key: 'promotion', label: strings.promotionLimit || 'promotion limit' };
     }
     if (/(store limit|store purchase)/i.test(text)) {
-      return { key: 'store', label: strings.storeLimit || 'a store purchase limit' };
+      return { key: 'store', label: strings.storeLimit || 'store limit' };
     }
     if (/(order limit|per order|order quantity)/i.test(text)) {
-      return { key: 'order', label: strings.orderLimit || 'an order limit' };
+      return { key: 'order', label: strings.orderLimit || 'order limit' };
     }
     if (/(quantity rule|configured limit)/i.test(text)) {
-      return { key: 'quantity', label: fallbackLabel || strings.quantityRule || 'a quantity rule' };
+      return { key: 'quantity', label: fallbackLabel || strings.quantityRule || 'quantity limit' };
     }
 
     return {
       key: 'purchase',
-      label: fallbackLabel || strings.purchaseLimit || 'a purchase limit',
+      label: fallbackLabel || strings.purchaseLimit || 'purchase limit',
     };
   };
 
@@ -89,20 +89,31 @@
     );
   };
 
-  const reasonSentence = (reason, maximum) => {
+  const limitStatement = (reason, maximum) => {
     switch (reason.key) {
       case 'inventory':
-        return `Only ${unitLabel(maximum)} ${maximum === 1 ? 'is' : 'are'} available in inventory.`;
+        return `only ${unitLabel(maximum)} ${maximum === 1 ? 'is' : 'are'} available`;
       case 'customer':
-        return `The customer purchase limit is ${unitLabel(maximum)}.`;
+        return `customer limit is ${unitLabel(maximum)}`;
       case 'promotion':
-        return `The promotion limit is ${unitLabel(maximum)}.`;
+        return `promotion limit is ${unitLabel(maximum)}`;
       case 'store':
-        return `The store purchase limit is ${unitLabel(maximum)}.`;
+        return `store limit is ${unitLabel(maximum)}`;
       case 'order':
-        return `The order limit is ${unitLabel(maximum)}.`;
+        return `order limit is ${unitLabel(maximum)}`;
       default:
-        return `The maximum allowed is ${unitLabel(maximum)} because of ${reason.label}.`;
+        return `maximum is ${unitLabel(maximum)} (${reason.label})`;
+    }
+  };
+
+  const reasonName = (reason) => {
+    switch (reason.key) {
+      case 'inventory': return 'inventory limit';
+      case 'customer': return 'customer limit';
+      case 'promotion': return 'promotion limit';
+      case 'store': return 'store limit';
+      case 'order': return 'order limit';
+      default: return reason.label || 'purchase limit';
     }
   };
 
@@ -119,46 +130,37 @@
     const requested = Math.max(1, toQuantity(requestedQuantity, 1));
     const parsedMaximum = extractMaximum(cleanMessage, maximum);
     const inferredReason = inferReason(cleanMessage, reason);
-    const attemptedTotal = current + requested;
-    const sentences = [];
-
-    if (current > 0) {
-      sentences.push(`You already have ${unitLabel(current)} in your cart.`);
-      sentences.push(
-        mode === 'warning'
-          ? `Adding ${unitLabel(requested)} will bring your cart to ${unitLabel(attemptedTotal)}.`
-          : `Adding ${unitLabel(requested)} would bring your cart to ${unitLabel(attemptedTotal)}.`
-      );
-    } else {
-      sentences.push(
-        mode === 'warning'
-          ? `You are adding ${unitLabel(requested)}.`
-          : `You tried to add ${unitLabel(requested)}.`
-      );
-    }
 
     if (parsedMaximum != null) {
-      sentences.push(reasonSentence(inferredReason, parsedMaximum));
       const remaining = Math.max(0, parsedMaximum - current);
 
       if (mode === 'warning') {
-        sentences.push('This reaches the maximum allowed quantity.');
-      } else if (remaining === 0) {
-        sentences.push('You cannot add another unit unless you reduce the quantity already in your cart.');
-      } else if (requested > remaining) {
-        sentences.push(`You can add up to ${unitLabel(remaining)} more.`);
+        if (current > 0) {
+          return `Maximum reached: ${unitLabel(current)} in cart + ${unitLabel(requested)} selected = ${unitLabel(parsedMaximum)} (${reasonName(inferredReason)}).`;
+        }
+        return `Maximum reached: ${unitLabel(requested)} selected (${reasonName(inferredReason)}).`;
       }
-    } else if (cleanMessage) {
-      sentences.push(cleanMessage);
-    } else {
-      sentences.push(
-        window.purchaseStrings && window.purchaseStrings.addLimitError
-          ? stripMarkup(window.purchaseStrings.addLimitError)
-          : 'This item could not be added because an inventory or purchase limit was reached.'
-      );
+
+      if (current > 0 && remaining === 0) {
+        return `Limit reached: ${unitLabel(current)} in cart; ${limitStatement(inferredReason, parsedMaximum)}. Remove an item before adding more.`;
+      }
+
+      if (current > 0 && requested > remaining) {
+        return `You have ${unitLabel(current)} in your cart; ${limitStatement(inferredReason, parsedMaximum)}. You can add ${unitLabel(remaining)} more.`;
+      }
+
+      if (requested > parsedMaximum) {
+        return `You requested ${unitLabel(requested)}; ${limitStatement(inferredReason, parsedMaximum)}.`;
+      }
+
+      return `Unable to add item: ${limitStatement(inferredReason, parsedMaximum)}.`;
     }
 
-    return sentences.join(' ');
+    if (cleanMessage) return cleanMessage;
+
+    return window.purchaseStrings && window.purchaseStrings.addLimitError
+      ? stripMarkup(window.purchaseStrings.addLimitError)
+      : 'Unable to add item: an inventory or purchase limit was reached.';
   };
 
   const getVariantId = (productForm) => {
@@ -275,13 +277,13 @@
         cleanMessage,
         Math.max(currentQuantity, currentQuantity + requestedQuantity - 1)
       );
-      const reason = inferReason(cleanMessage);
+      const inferredReason = inferReason(cleanMessage);
 
       this.rejectedQuantityLimit = {
         maximum,
         totalMaximum: maximum,
-        reason: reason.label,
-        reasonKey: reason.key,
+        reason: inferredReason.label,
+        reasonKey: inferredReason.key,
         message: cleanMessage,
         variantId: String(variantId || ''),
       };
@@ -290,7 +292,7 @@
         currentQuantity,
         requestedQuantity,
         maximum,
-        reason: reason.label,
+        reason: inferredReason.label,
         mode: 'error',
       };
       this.validateQuantity();
