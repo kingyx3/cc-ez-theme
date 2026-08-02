@@ -1,0 +1,37 @@
+.product-card-wrapper > add-to-cart-button .card__badge.card__badge-top-right.card__badge-float-edge {
+  top: 0.7rem;
+  right: 0.7rem;
+  margin: 0;
+}
+
+.product-card-wrapper > add-to-cart-button .card__badge .badge.addToClassList {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.6rem;
+  min-width: 3.6rem;
+  height: 3.6rem;
+  min-height: 3.6rem;
+  padding: 0;
+  border-width: 0.2rem;
+  box-shadow: 0 0.4rem 1.2rem rgba(19, 23, 34, 0.16);
+}
+
+.product-card-wrapper > add-to-cart-button .card__badge .badge.addToClassList .icon {
+  width: 1.3rem;
+  height: 1.3rem;
+}
+
+@media screen and (max-width: 749px) {
+  .product-card-wrapper > add-to-cart-button .card__badge.card__badge-top-right.card__badge-float-edge {
+    top: 0.6rem;
+    right: 0.6rem;
+  }
+
+  .product-card-wrapper > add-to-cart-button .card__badge .badge.addToClassList {
+    width: 3.4rem;
+    min-width: 3.4rem;
+    height: 3.4rem;
+    min-height: 3.4rem;
+  }
+}
