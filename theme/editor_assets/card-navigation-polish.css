@@ -1,0 +1,38 @@
+/* Product-card image clipping and desktop Browse-menu icon sizing. */
+
+/*
+ * The wrapper remains overflow-visible for the floating add-to-cart control.
+ * Pass its computed radius through the link and clip the product-media stack.
+ */
+.product-card-wrapper > a {
+  border-radius: inherit;
+}
+
+.product-card-wrapper > a > .card--product {
+  overflow: hidden;
+  border-radius: inherit;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.product-card-wrapper > a > .card--product .card__inner,
+.product-card-wrapper > a > .card--product .media,
+.product-card-wrapper > a > .card--product .media > img {
+  overflow: hidden;
+  border-radius: inherit;
+}
+
+/* Image-only cards keep the inherited radius on all four sides. */
+.product-card-wrapper > a > .card--product:only-child {
+  border-radius: inherit;
+}
+
+@media screen and (min-width: 990px) {
+  .header__nav-item--browse .header__menu-item > .icon-caret {
+    width: 0.8rem;
+    min-width: 0.8rem;
+    height: 0.8rem;
+    flex: 0 0 0.8rem;
+    margin-left: 0.7rem;
+  }
+}
