@@ -1,0 +1,46 @@
+name: Sync EasyStore customers to HubSpot
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Run mode
+        required: true
+        default: probe
+        type: choice
+        options:
+          - probe
+          - dry-run
+          - sync
+  schedule:
+    - cron: '17 * * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: easystore-hubspot-customer-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      EASYSTORE_SHOP: ${{ secrets.EASYSTORE_SHOP }}
+      EASYSTORE_ACCESS_TOKEN: ${{ secrets.EASYSTORE_ACCESS_TOKEN }}
+      HUBSPOT_ACCESS_TOKEN: ${{ secrets.HUBSPOT_ACCESS_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Probe credentials
+        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'probe'
+        run: python scripts/sync_easystore_customers_to_hubspot.py --source api --probe
+      - name: Dry run
+        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'dry-run'
+        run: python scripts/sync_easystore_customers_to_hubspot.py --source api --dry-run
+      - name: Sync customers
+        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'sync')
+        run: python scripts/sync_easystore_customers_to_hubspot.py --source api
