@@ -1,3 +1,7 @@
+{% unless product_card_cart_controls_styles_loaded %}
+  {{ 'component-product-card-cart-controls.css' | asset_url | stylesheet_tag }}
+  {% assign product_card_cart_controls_styles_loaded = true %}
+{% endunless %}
 
 {% assign on_sale = false %}
 {% assign sale_text = 'products.product.sale' | t %}
