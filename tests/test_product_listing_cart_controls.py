@@ -44,6 +44,11 @@ class ProductListingCartControlTests(unittest.TestCase):
         self.assertIn("{% if show_listing_add_to_cart %}", product_card)
         self.assertNotIn("{% if show_add_to_cart_button %}", product_card)
         self.assertIn("<add-to-cart-button>", product_card)
+        self.assertIn(
+            "component-product-card-cart-controls.css",
+            product_card,
+        )
+        self.assertIn("product_card_cart_controls_styles_loaded", product_card)
 
     def test_listing_cart_buttons_are_not_clipped_by_card_borders(self) -> None:
         stylesheets = []
@@ -60,6 +65,28 @@ class ProductListingCartControlTests(unittest.TestCase):
                 stylesheet,
             )
             self.assertIn("z-index: 5;", stylesheet)
+
+        self.assertEqual(stylesheets[0], stylesheets[1])
+
+    def test_listing_cart_buttons_are_compact_and_corner_inset(self) -> None:
+        stylesheets = []
+        for directory in ("assets", "editor_assets"):
+            stylesheet = (
+                THEME_ROOT
+                / directory
+                / "component-product-card-cart-controls.css"
+            ).read_text(encoding="utf-8")
+            stylesheets.append(stylesheet)
+
+            self.assertIn("top: 0.7rem;", stylesheet)
+            self.assertIn("right: 0.7rem;", stylesheet)
+            self.assertIn("width: 3.6rem;", stylesheet)
+            self.assertIn("height: 3.6rem;", stylesheet)
+            self.assertIn("border-width: 0.2rem;", stylesheet)
+            self.assertIn("width: 3.4rem;", stylesheet)
+            self.assertIn("height: 3.4rem;", stylesheet)
+            self.assertNotIn("width: 4.4rem;", stylesheet)
+            self.assertNotIn("height: 4.4rem;", stylesheet)
 
         self.assertEqual(stylesheets[0], stylesheets[1])
 
