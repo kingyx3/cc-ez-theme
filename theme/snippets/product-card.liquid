@@ -55,7 +55,7 @@
     
     {% if show_product_info == true %}
     <div class="card-information">
-      <div class="card-information__wrapper">
+      <div class="card-information__wrapper card-information__wrapper--primary">
         {% app_snippet 'collection/product_top' %}
         <span class="card-information__text">
           {{ product.title | escape }}
@@ -63,10 +63,6 @@
         {% app_snippet 'collection/product_middle' %}
         <span class="caption-large light"></span>
         {% include 'price' %}
-        <span class="product-card__cta" aria-hidden="true">
-          <span>{% include 'translation-fallback', translation_key: 'general.show_details', fallback: 'View details' %}</span>
-          <span>→</span>
-        </span>
       </div>
       {% if settings.collection_show_variant_img %}
         <div class="card-information__wrapper d-flex flex-align-center">
@@ -101,6 +97,10 @@
         </div>
       {% endif %}
       {% app_snippet 'collection/product_bottom' %}
+      <span class="product-card__cta" aria-hidden="true">
+        <span>{% include 'translation-fallback', translation_key: 'general.show_details', fallback: 'View details' %}</span>
+        <span>→</span>
+      </span>
     </div>
     {% endif %}
   </a>
