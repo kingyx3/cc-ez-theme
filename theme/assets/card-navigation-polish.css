@@ -37,6 +37,16 @@
   flex-grow: 0;
 }
 
+/*
+ * Legacy product-grid negative margins were sized to cancel 2–5rem of item
+ * padding. The compact spacing layer now uses a much smaller row gap, so the
+ * old margin can subtract part of the final card row from the section height.
+ */
+.product-grid.negative-margin,
+.product-grid.negative-margin--small {
+  margin-bottom: 0;
+}
+
 @media screen and (min-width: 990px) {
   .header__nav-item--browse .header__menu-item > .icon-caret {
     width: 0.8rem;
