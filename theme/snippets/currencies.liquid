@@ -1,6 +1,16 @@
 {{ 'compact-spacing.css' | asset_url | stylesheet_tag }}
 
 <script>
+  window.purchaseCartQuantities = {};
+  {% for item in cart.items %}
+    window.purchaseCartQuantities[String({{ item.variant_id | json }})] =
+      (window.purchaseCartQuantities[String({{ item.variant_id | json }})] || 0)
+      + {{ item.quantity | default: 0 }};
+  {% endfor %}
+</script>
+<script src="{{ 'purchase-limit-feedback.js' | asset_url }}"></script>
+
+<script>
   EasyStore.Currencies.init({{ shop.enabled_currencies |json }}, {{ settings.is_server_side_currency_conversion }})
 </script>
 
