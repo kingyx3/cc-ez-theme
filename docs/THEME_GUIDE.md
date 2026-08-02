@@ -276,24 +276,55 @@ top-level destinations in a fixed order:
 4. Strixhaven (`/collections/secrets-of-strixhaven`)
 5. About Us (`/pages/about-us`)
 
-About Us is pushed to the right edge of the desktop navigation area. The
-Browse always renders its ordered first level from EasyStore's
-`contents.catalog.links`. The header serializes the documented fields from
-EasyStore's global `collections` object into JSON. A small navigation enhancer
-normalizes IDs, handles, locked values, and ordering before building a family
-map by `collection.parent_id` and `collection.id`. This avoids relying on
-EasyStore Liquid assignments escaping nested loop scope or comparing values of
-different runtime types. If data is invalid or a catalog link cannot be
-matched, the first-level link remains usable without a flyout.
+About Us is pushed to the right edge of the desktop navigation area. Browse is
+rendered entirely in Liquid by `snippets/navigation-browse.liquid`, so the
+hierarchy is present in the initial HTML and needs no client-side script.
 
-The enhancer renders every available descendant level and guards against
-cycles. On desktop, hovering or focusing a parent collection opens its child
-collection flyout; mobile uses nested drill-down navigation and includes a
-direct “View all” link for every parent. Each root receives a
-`data-browse-status` value, and the script emits a `browse-navigation:ready`
-event with collection and match counts so data-contract failures are
-observable. The three fixed collection shortcuts remain direct EasyStore
-links.
+EasyStore keeps a collection hierarchy in navigation records rather than on the
+collection object. Each tier is stored as its own content record, and a link's
+children are read back with `contents[link.handle].links` — the same traversal
+EasyStore's stock themes use for nested menus. Sub-collections created under
+Products > Collections automatically form these tiers inside the system Catalog
+menu, so Browse walks `contents.catalog.links` down four levels, which covers
+the three levels of sub-collection nesting EasyStore supports.
+
+Four details keep that traversal reliable:
+
+- **Only the link handle resolves children.** `contents` is a flat namespace,
+  so retrying with a handle scraped from the link URL would adopt an unrelated
+  content record as a collection's children — and a collection handled
+  `catalog` would make the traversal re-enter its own root.
+- **Emptiness is decided by `| size`, never by `blank`.** Liquid
+  implementations disagree on how an absent record compares against `blank`,
+  and getting it wrong renders an empty drop-down panel on every leaf
+  collection.
+- **Nothing is dropped.** After the menu tree is rendered, a final pass appends
+  any collection from the global `collections` object that never appeared in
+  the tree, so a collection missing from the Catalog menu is still reachable
+  from Browse. `frontpage` is excluded. Collections are matched by handle and
+  by URL (with and without a trailing slash) against the handles accumulated
+  while rendering, so the pass never duplicates the tree. It also runs when the
+  Catalog menu is empty, which is the one case where it is the only thing that
+  can produce output.
+- **Only a `/collections/` link contributes a handle** to that accumulator. A
+  Catalog link pointing at a page or product would otherwise claim a same-named
+  collection's handle and silently hide it.
+
+On desktop, hovering or focusing a parent collection opens its child flyout
+through CSS alone. Because a coarse pointer has no hover — and tapping a parent
+follows its link — `conversion-theme.css` expands the whole hierarchy inline
+under `@media (hover: none)` so nested collections stay reachable on a large
+touch screen. Mobile uses the theme's nested drawer drill-down and gives every
+parent panel a direct link to the parent collection. The three fixed collection
+shortcuts remain direct EasyStore links.
+
+Two known limits: with a fine pointer, a screen reader's virtual cursor does
+not move focus, so nested flyouts stay outside the virtual buffer until the
+parent link is focused; and a fourth-level flyout can run past the right edge
+of a 990–1024px viewport, since each tier is offset by one panel width.
+
+`collection.parent_id`, `collection.position`, and `collection.is_locked` are
+not EasyStore collection properties. Browse must not be rebuilt around them.
 
 The theme controls:
 

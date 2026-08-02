@@ -1,26 +1,324 @@
 {% comment %}
-  Renders the reliable, ordered first level from EasyStore's catalog.
-  browse-navigation.js enhances these links with descendants from the
-  serialized EasyStore collections family tree.
+  Renders EasyStore's complete product collection hierarchy inside Browse.
 
   Required:
   - navigation_mode: "desktop" or "mobile"
+
+  EasyStore stores each navigation tier as its own content record. A link's
+  children are read back with contents[link.handle].links, which is the same
+  traversal EasyStore's own themes use for nested menus. Sub-collections
+  created under Products > Collections auto-form these tiers in the system
+  Catalog menu, so walking contents.catalog.links to its full depth renders
+  every collection level EasyStore supports.
+
+  Only contents[link.handle] is followed. A handle taken from the link URL
+  would also resolve unrelated content records, and a collection handled
+  "catalog" would make the traversal re-enter its own root.
+
+  Whether a tier has children is decided with | size. Liquid implementations
+  disagree on how an absent record compares against blank, and treating one as
+  present renders an empty drop-down panel on every leaf collection.
+
+  A final pass appends any collection the Catalog menu never listed, so a
+  collection can never be missing from Browse. It runs when the Catalog menu is
+  empty, and whenever handle accumulation produced results; skipping it in the
+  remaining case keeps it from duplicating a tree it cannot match against.
+  Only a /collections/ link contributes a bare handle to that accumulator: a
+  Catalog link to a page or product would otherwise claim a same-named
+  collection's handle and silently hide it.
 {% endcomment %}
 
-{% for catalog_link in contents.catalog.links %}
-  {% assign catalog_url_parts = catalog_link.url | split: '/' %}
-  {% assign catalog_url_handle = catalog_url_parts | last %}
-  <li
-    data-browse-root
-    data-browse-mode="{{ navigation_mode }}"
-    data-browse-link-handle="{{ catalog_link.handle | escape }}"
-    data-browse-url-handle="{{ catalog_url_handle | escape }}"
-  >
-    <a
-      href="{{ catalog_link.url | escape }}"
-      class="{% if navigation_mode == 'mobile' %}menu-drawer__menu-item list-menu__item link link--text focus-inset{% else %}header__menu-item list-menu__item link link--text focus-inset caption-large{% endif %}"
-    >
-      {{ catalog_link.title | escape }}
-    </a>
-  </li>
-{% endfor %}
+{% assign browse_seen_handles = '' %}
+
+{% if navigation_mode == 'mobile' %}
+
+  {% for catalog_link in contents.catalog.links %}
+    {% assign catalog_url_clean = catalog_link.url | split: '?' | first %}
+    {% assign catalog_url_parts = catalog_url_clean | split: '/' %}
+    {% assign catalog_url_handle = catalog_url_parts | last %}
+    {% assign catalog_seen_key = catalog_url_clean %}
+    {% if catalog_url_clean contains '/collections/' %}
+      {% assign catalog_seen_key = catalog_url_handle | append: '|' | append: catalog_url_clean %}
+    {% endif %}
+    {% assign browse_seen_handles = browse_seen_handles | append: '|' | append: catalog_seen_key | append: '|' %}
+    {% assign level_1_links = contents[catalog_link.handle].links %}
+    {% assign level_1_count = level_1_links | size %}
+    {% assign level_1_index = forloop.index %}
+    <li>
+      {% if level_1_count > 0 %}
+        <details>
+          <summary class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
+            <span>{{ catalog_link.title | escape }}</span>
+            {% include 'svg-definitions' with 'icon-arrow' %}
+            {% include 'svg-definitions' with 'icon-caret' %}
+          </summary>
+          <div id="BrowseMobileSubmenu-{{ level_1_index }}" class="menu-drawer__submenu motion-reduce" tabindex="-1">
+            <div class="menu-drawer__inner-submenu">
+              <button type="button" class="menu-drawer__close-button link link--text focus-inset">
+                {% include 'svg-definitions' with 'icon-arrow' %}
+                {{ catalog_link.title | escape }}
+              </button>
+              <ul class="menu-drawer__menu list-menu" role="list" tabindex="-1">
+                <li>
+                  <a href="{{ catalog_link.url | escape }}" class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
+                    {{ catalog_link.title | escape }}
+                  </a>
+                </li>
+                {% for level_2_link in level_1_links %}
+                  {% assign level_2_url_clean = level_2_link.url | split: '?' | first %}
+                  {% assign level_2_url_parts = level_2_url_clean | split: '/' %}
+                  {% assign level_2_url_handle = level_2_url_parts | last %}
+                  {% assign level_2_seen_key = level_2_url_clean %}
+                  {% if level_2_url_clean contains '/collections/' %}
+                    {% assign level_2_seen_key = level_2_url_handle | append: '|' | append: level_2_url_clean %}
+                  {% endif %}
+                  {% assign browse_seen_handles = browse_seen_handles | append: '|' | append: level_2_seen_key | append: '|' %}
+                  {% assign level_2_links = contents[level_2_link.handle].links %}
+                  {% assign level_2_count = level_2_links | size %}
+                  {% assign level_2_index = forloop.index %}
+                  <li>
+                    {% if level_2_count > 0 %}
+                      <details>
+                        <summary class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
+                          <span>{{ level_2_link.title | escape }}</span>
+                          {% include 'svg-definitions' with 'icon-arrow' %}
+                          {% include 'svg-definitions' with 'icon-caret' %}
+                        </summary>
+                        <div id="BrowseMobileSubmenu-{{ level_1_index }}-{{ level_2_index }}" class="menu-drawer__submenu motion-reduce" tabindex="-1">
+                          <div class="menu-drawer__inner-submenu">
+                            <button type="button" class="menu-drawer__close-button link link--text focus-inset">
+                              {% include 'svg-definitions' with 'icon-arrow' %}
+                              {{ level_2_link.title | escape }}
+                            </button>
+                            <ul class="menu-drawer__menu list-menu" role="list" tabindex="-1">
+                              <li>
+                                <a href="{{ level_2_link.url | escape }}" class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
+                                  {{ level_2_link.title | escape }}
+                                </a>
+                              </li>
+                              {% for level_3_link in level_2_links %}
+                                {% assign level_3_url_clean = level_3_link.url | split: '?' | first %}
+                                {% assign level_3_url_parts = level_3_url_clean | split: '/' %}
+                                {% assign level_3_url_handle = level_3_url_parts | last %}
+                                {% assign level_3_seen_key = level_3_url_clean %}
+                                {% if level_3_url_clean contains '/collections/' %}
+                                  {% assign level_3_seen_key = level_3_url_handle | append: '|' | append: level_3_url_clean %}
+                                {% endif %}
+                                {% assign browse_seen_handles = browse_seen_handles | append: '|' | append: level_3_seen_key | append: '|' %}
+                                {% assign level_3_links = contents[level_3_link.handle].links %}
+                                {% assign level_3_count = level_3_links | size %}
+                                {% assign level_3_index = forloop.index %}
+                                <li>
+                                  {% if level_3_count > 0 %}
+                                    <details>
+                                      <summary class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
+                                        <span>{{ level_3_link.title | escape }}</span>
+                                        {% include 'svg-definitions' with 'icon-arrow' %}
+                                        {% include 'svg-definitions' with 'icon-caret' %}
+                                      </summary>
+                                      <div id="BrowseMobileSubmenu-{{ level_1_index }}-{{ level_2_index }}-{{ level_3_index }}" class="menu-drawer__submenu motion-reduce" tabindex="-1">
+                                        <div class="menu-drawer__inner-submenu">
+                                          <button type="button" class="menu-drawer__close-button link link--text focus-inset">
+                                            {% include 'svg-definitions' with 'icon-arrow' %}
+                                            {{ level_3_link.title | escape }}
+                                          </button>
+                                          <ul class="menu-drawer__menu list-menu" role="list" tabindex="-1">
+                                            <li>
+                                              <a href="{{ level_3_link.url | escape }}" class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
+                                                {{ level_3_link.title | escape }}
+                                              </a>
+                                            </li>
+                                            {% for level_4_link in level_3_links %}
+                                              {% assign level_4_url_clean = level_4_link.url | split: '?' | first %}
+                                              {% assign level_4_url_parts = level_4_url_clean | split: '/' %}
+                                              {% assign level_4_url_handle = level_4_url_parts | last %}
+                                              {% assign level_4_seen_key = level_4_url_clean %}
+                                              {% if level_4_url_clean contains '/collections/' %}
+                                                {% assign level_4_seen_key = level_4_url_handle | append: '|' | append: level_4_url_clean %}
+                                              {% endif %}
+                                              {% assign browse_seen_handles = browse_seen_handles | append: '|' | append: level_4_seen_key | append: '|' %}
+                                              <li>
+                                                <a href="{{ level_4_link.url | escape }}" class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
+                                                  {{ level_4_link.title | escape }}
+                                                </a>
+                                              </li>
+                                            {% endfor %}
+                                          </ul>
+                                        </div>
+                                      </div>
+                                    </details>
+                                  {% else %}
+                                    <a href="{{ level_3_link.url | escape }}" class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
+                                      {{ level_3_link.title | escape }}
+                                    </a>
+                                  {% endif %}
+                                </li>
+                              {% endfor %}
+                            </ul>
+                          </div>
+                        </div>
+                      </details>
+                    {% else %}
+                      <a href="{{ level_2_link.url | escape }}" class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
+                        {{ level_2_link.title | escape }}
+                      </a>
+                    {% endif %}
+                  </li>
+                {% endfor %}
+              </ul>
+            </div>
+          </div>
+        </details>
+      {% else %}
+        <a href="{{ catalog_link.url | escape }}" class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
+          {{ catalog_link.title | escape }}
+        </a>
+      {% endif %}
+    </li>
+  {% endfor %}
+
+  {% assign browse_seen_size = browse_seen_handles | size %}
+  {% assign browse_catalog_count = contents.catalog.links | size %}
+  {% if browse_catalog_count == 0 or browse_seen_size > 0 %}
+    {% for browse_collection in collections %}
+      {% assign browse_collection_handle = browse_collection.handle %}
+      {% assign browse_collection_handle_size = browse_collection_handle | size %}
+      {% assign browse_collection_url = browse_collection.url %}
+      {% assign browse_collection_url_size = browse_collection_url | size %}
+      {% if browse_collection_url_size == 0 %}
+        {% assign browse_collection_url = '/collections/' | append: browse_collection_handle %}
+      {% endif %}
+      {% assign browse_collection_key = '|' | append: browse_collection_handle | append: '|' %}
+      {% assign browse_collection_url_key = '|' | append: browse_collection_url | append: '|' %}
+      {% assign browse_collection_url_slash_key = '|' | append: browse_collection_url | append: '/|' %}
+      {% unless browse_collection_handle_size == 0 or browse_collection_handle == 'frontpage' %}
+        {% unless browse_seen_handles contains browse_collection_key or browse_seen_handles contains browse_collection_url_key or browse_seen_handles contains browse_collection_url_slash_key %}
+          {% assign browse_seen_handles = browse_seen_handles | append: browse_collection_key | append: browse_collection_url | append: '|' %}
+          <li>
+            <a href="{{ browse_collection_url | escape }}" class="menu-drawer__menu-item list-menu__item link link--text focus-inset">
+              {{ browse_collection.title | default: browse_collection.name | escape }}
+            </a>
+          </li>
+        {% endunless %}
+      {% endunless %}
+    {% endfor %}
+  {% endif %}
+
+{% else %}
+
+  {% for catalog_link in contents.catalog.links %}
+    {% assign catalog_url_clean = catalog_link.url | split: '?' | first %}
+    {% assign catalog_url_parts = catalog_url_clean | split: '/' %}
+    {% assign catalog_url_handle = catalog_url_parts | last %}
+    {% assign catalog_seen_key = catalog_url_clean %}
+    {% if catalog_url_clean contains '/collections/' %}
+      {% assign catalog_seen_key = catalog_url_handle | append: '|' | append: catalog_url_clean %}
+    {% endif %}
+    {% assign browse_seen_handles = browse_seen_handles | append: '|' | append: catalog_seen_key | append: '|' %}
+    {% assign level_1_links = contents[catalog_link.handle].links %}
+    {% assign level_1_count = level_1_links | size %}
+    <li{% if level_1_count > 0 %} class="browse-menu__item--has-children"{% endif %}>
+      <a href="{{ catalog_link.url | escape }}" class="header__menu-item list-menu__item link link--text focus-inset caption-large">
+        <span>{{ catalog_link.title | escape }}</span>
+        {% if level_1_count > 0 %}
+          <span class="browse-menu__indicator" aria-hidden="true">&rsaquo;</span>
+        {% endif %}
+      </a>
+      {% if level_1_count > 0 %}
+        <ul class="header__submenu browse-menu__flyout list-menu list-menu--disclosure motion-reduce" role="list">
+          {% for level_2_link in level_1_links %}
+            {% assign level_2_url_clean = level_2_link.url | split: '?' | first %}
+            {% assign level_2_url_parts = level_2_url_clean | split: '/' %}
+            {% assign level_2_url_handle = level_2_url_parts | last %}
+            {% assign level_2_seen_key = level_2_url_clean %}
+            {% if level_2_url_clean contains '/collections/' %}
+              {% assign level_2_seen_key = level_2_url_handle | append: '|' | append: level_2_url_clean %}
+            {% endif %}
+            {% assign browse_seen_handles = browse_seen_handles | append: '|' | append: level_2_seen_key | append: '|' %}
+            {% assign level_2_links = contents[level_2_link.handle].links %}
+            {% assign level_2_count = level_2_links | size %}
+            <li{% if level_2_count > 0 %} class="browse-menu__item--has-children"{% endif %}>
+              <a href="{{ level_2_link.url | escape }}" class="header__menu-item list-menu__item link link--text focus-inset caption-large">
+                <span>{{ level_2_link.title | escape }}</span>
+                {% if level_2_count > 0 %}
+                  <span class="browse-menu__indicator" aria-hidden="true">&rsaquo;</span>
+                {% endif %}
+              </a>
+              {% if level_2_count > 0 %}
+                <ul class="header__submenu browse-menu__flyout list-menu list-menu--disclosure motion-reduce" role="list">
+                  {% for level_3_link in level_2_links %}
+                    {% assign level_3_url_clean = level_3_link.url | split: '?' | first %}
+                    {% assign level_3_url_parts = level_3_url_clean | split: '/' %}
+                    {% assign level_3_url_handle = level_3_url_parts | last %}
+                    {% assign level_3_seen_key = level_3_url_clean %}
+                    {% if level_3_url_clean contains '/collections/' %}
+                      {% assign level_3_seen_key = level_3_url_handle | append: '|' | append: level_3_url_clean %}
+                    {% endif %}
+                    {% assign browse_seen_handles = browse_seen_handles | append: '|' | append: level_3_seen_key | append: '|' %}
+                    {% assign level_3_links = contents[level_3_link.handle].links %}
+                    {% assign level_3_count = level_3_links | size %}
+                    <li{% if level_3_count > 0 %} class="browse-menu__item--has-children"{% endif %}>
+                      <a href="{{ level_3_link.url | escape }}" class="header__menu-item list-menu__item link link--text focus-inset caption-large">
+                        <span>{{ level_3_link.title | escape }}</span>
+                        {% if level_3_count > 0 %}
+                          <span class="browse-menu__indicator" aria-hidden="true">&rsaquo;</span>
+                        {% endif %}
+                      </a>
+                      {% if level_3_count > 0 %}
+                        <ul class="header__submenu browse-menu__flyout list-menu list-menu--disclosure motion-reduce" role="list">
+                          {% for level_4_link in level_3_links %}
+                            {% assign level_4_url_clean = level_4_link.url | split: '?' | first %}
+                            {% assign level_4_url_parts = level_4_url_clean | split: '/' %}
+                            {% assign level_4_url_handle = level_4_url_parts | last %}
+                            {% assign level_4_seen_key = level_4_url_clean %}
+                            {% if level_4_url_clean contains '/collections/' %}
+                              {% assign level_4_seen_key = level_4_url_handle | append: '|' | append: level_4_url_clean %}
+                            {% endif %}
+                            {% assign browse_seen_handles = browse_seen_handles | append: '|' | append: level_4_seen_key | append: '|' %}
+                            <li>
+                              <a href="{{ level_4_link.url | escape }}" class="header__menu-item list-menu__item link link--text focus-inset caption-large">
+                                <span>{{ level_4_link.title | escape }}</span>
+                              </a>
+                            </li>
+                          {% endfor %}
+                        </ul>
+                      {% endif %}
+                    </li>
+                  {% endfor %}
+                </ul>
+              {% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    </li>
+  {% endfor %}
+
+  {% assign browse_seen_size = browse_seen_handles | size %}
+  {% assign browse_catalog_count = contents.catalog.links | size %}
+  {% if browse_catalog_count == 0 or browse_seen_size > 0 %}
+    {% for browse_collection in collections %}
+      {% assign browse_collection_handle = browse_collection.handle %}
+      {% assign browse_collection_handle_size = browse_collection_handle | size %}
+      {% assign browse_collection_url = browse_collection.url %}
+      {% assign browse_collection_url_size = browse_collection_url | size %}
+      {% if browse_collection_url_size == 0 %}
+        {% assign browse_collection_url = '/collections/' | append: browse_collection_handle %}
+      {% endif %}
+      {% assign browse_collection_key = '|' | append: browse_collection_handle | append: '|' %}
+      {% assign browse_collection_url_key = '|' | append: browse_collection_url | append: '|' %}
+      {% assign browse_collection_url_slash_key = '|' | append: browse_collection_url | append: '/|' %}
+      {% unless browse_collection_handle_size == 0 or browse_collection_handle == 'frontpage' %}
+        {% unless browse_seen_handles contains browse_collection_key or browse_seen_handles contains browse_collection_url_key or browse_seen_handles contains browse_collection_url_slash_key %}
+          {% assign browse_seen_handles = browse_seen_handles | append: browse_collection_key | append: browse_collection_url | append: '|' %}
+          <li>
+            <a href="{{ browse_collection_url | escape }}" class="header__menu-item list-menu__item link link--text focus-inset caption-large">
+              <span>{{ browse_collection.title | default: browse_collection.name | escape }}</span>
+            </a>
+          </li>
+        {% endunless %}
+      {% endunless %}
+    {% endfor %}
+  {% endif %}
+
+{% endif %}

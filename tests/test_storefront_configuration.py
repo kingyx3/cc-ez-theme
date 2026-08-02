@@ -436,52 +436,131 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertIn('class="menu-drawer__nav-item--browse"', header)
         self.assertIn("{% for catalog_link in contents.catalog.links %}", browse)
         self.assertIn("catalog_link.handle", browse)
-        self.assertIn("catalog_link.url | split: '/'", browse)
+        self.assertIn("catalog_link.url | split: '?' | first", browse)
+        self.assertIn("catalog_url_parts = catalog_url_clean | split: '/'", browse)
         self.assertIn("catalog_url_handle = catalog_url_parts | last", browse)
-        self.assertIn("data-browse-root", browse)
-        self.assertIn('data-browse-mode="{{ navigation_mode }}"', browse)
-        self.assertIn("data-browse-link-handle", browse)
-        self.assertIn("data-browse-url-handle", browse)
         self.assertIn('href="{{ catalog_link.url | escape }}"', browse)
         self.assertIn("{{ catalog_link.title | escape }}", browse)
-        self.assertNotIn("contents[", browse)
         self.assertIn("navigation_mode == 'mobile'", browse)
 
-        self.assertIn('id="BrowseCollectionHierarchy"', header)
-        self.assertIn("{% for browse_collection in collections %}", header)
-        self.assertIn('"id": {{ browse_collection.id | json }}', header)
+        # EasyStore stores every navigation tier as its own content record, so
+        # a link's children are read back with contents[link.handle].links.
+        # Browse must walk that chain to the full depth EasyStore supports for
+        # sub-collections, otherwise deeper collections never appear.
         self.assertIn(
-            '"parent_id": {{ browse_collection.parent_id | json }}',
-            header,
+            "{% assign level_1_links = contents[catalog_link.handle].links %}",
+            browse,
         )
-        self.assertIn('"handle": {{ browse_collection.handle | json }}', header)
-        self.assertIn('"position": {{ browse_collection.position | json }}', header)
-        self.assertIn('"is_locked": {{ browse_collection.is_locked | json }}', header)
         self.assertIn(
-            '<script src="{{ \'browse-navigation.js\' | asset_url }}"></script>',
-            header,
+            "{% assign level_2_links = contents[level_2_link.handle].links %}",
+            browse,
+        )
+        self.assertIn(
+            "{% assign level_3_links = contents[level_3_link.handle].links %}",
+            browse,
+        )
+        self.assertIn("{% for level_2_link in level_1_links %}", browse)
+        self.assertIn("{% for level_3_link in level_2_links %}", browse)
+        self.assertIn("{% for level_4_link in level_3_links %}", browse)
+
+        # Whether a tier has children is decided by size, never by comparing an
+        # absent content record against blank. Liquid implementations disagree
+        # on undefined-vs-blank, and getting it wrong renders an empty
+        # drop-down panel on every leaf collection.
+        for level in (1, 2, 3):
+            self.assertIn(
+                "{%% assign level_%d_count = level_%d_links | size %%}"
+                % (level, level),
+                browse,
+            )
+            self.assertIn("{%% if level_%d_count > 0 %%}" % level, browse)
+        self.assertNotIn("!= blank", browse)
+        self.assertNotIn("== blank", browse)
+
+        # Children are resolved by link handle only. `contents` is a flat
+        # namespace, so retrying with a handle scraped from the link URL would
+        # adopt unrelated content records as sub-collections, and a collection
+        # handled "catalog" would make the traversal re-enter its own root.
+        for url_handle in (
+            "catalog_url_handle",
+            "level_2_url_handle",
+            "level_3_url_handle",
+        ):
+            self.assertNotIn("contents[%s]" % url_handle, browse)
+
+        # Desktop renders one hover flyout per parent tier and mobile renders
+        # one drill-down panel per parent tier.
+        self.assertEqual(
+            browse.count('class="browse-menu__item--has-children"'), 3
+        )
+        self.assertEqual(browse.count("browse-menu__flyout"), 3)
+        self.assertEqual(browse.count("<details>"), 3)
+        self.assertEqual(browse.count("menu-drawer__close-button"), 3)
+
+        # No collection may be dropped. Anything the Catalog menu omitted is
+        # appended from the collections list, and the accumulated handles stop
+        # that pass from duplicating what the tree already rendered.
+        self.assertEqual(
+            browse.count("{% for browse_collection in collections %}"), 2
+        )
+        # The pass must also run when the Catalog menu is empty - that is
+        # exactly the case where it is the only thing that can produce output.
+        self.assertEqual(
+            browse.count(
+                "{% if browse_catalog_count == 0 or browse_seen_size > 0 %}"
+            ),
+            2,
+        )
+        self.assertEqual(
+            browse.count(
+                "{% assign browse_catalog_count = contents.catalog.links | size %}"
+            ),
+            2,
         )
 
-        browse_script = (
-            THEME_ROOT / "assets" / "browse-navigation.js"
-        ).read_text(encoding="utf-8")
-        editor_browse_script = (
-            THEME_ROOT / "editor_assets" / "browse-navigation.js"
-        ).read_text(encoding="utf-8")
-        self.assertEqual(browse_script, editor_browse_script)
-        self.assertIn("JSON.parse(dataElement.textContent)", browse_script)
-        self.assertIn("const normalizeId", browse_script)
-        self.assertIn("const normalizeHandle", browse_script)
-        self.assertIn("const childrenByParentId = new Map()", browse_script)
-        self.assertIn("childrenByParentId.get(collection.parentId)", browse_script)
-        self.assertIn("childrenByParentId.get(rootCollection.id)", browse_script)
-        self.assertIn("const desktopItem", browse_script)
-        self.assertIn("const mobileItem", browse_script)
-        self.assertIn("dataset.browseStatus", browse_script)
-        self.assertIn("browse-navigation:ready", browse_script)
-        self.assertIn("encodeURIComponent(collection.handle)", browse_script)
-        self.assertIn("anchor.textContent = label", browse_script)
-        self.assertNotIn("innerHTML", browse_script)
+        # Only a collection link may contribute a bare handle to the accumulator.
+        # A Catalog link to /pages/gift-cards would otherwise claim the token
+        # "|gift-cards|" and silently hide the gift-cards collection.
+        for var in ("catalog", "level_2", "level_3", "level_4"):
+            self.assertIn(
+                "{%% if %s_url_clean contains '/collections/' %%}" % var, browse
+            )
+            self.assertIn(
+                "{%% assign %s_seen_key = %s_url_handle | append: '|'"
+                " | append: %s_url_clean %%}" % (var, var, var),
+                browse,
+            )
+        # A collection is matched against the rendered tree by handle and by
+        # URL, with and without a trailing slash, so a menu link whose URL
+        # shape differs from the collection's own URL cannot produce a
+        # duplicate Browse entry.
+        self.assertEqual(
+            browse.count(
+                "{% unless browse_seen_handles contains browse_collection_key"
+                " or browse_seen_handles contains browse_collection_url_key"
+                " or browse_seen_handles contains"
+                " browse_collection_url_slash_key %}"
+            ),
+            2,
+        )
+        self.assertIn(
+            "browse_seen_handles = browse_seen_handles | append:", browse
+        )
+        self.assertIn(
+            "browse_collection.title | default: browse_collection.name", browse
+        )
+        self.assertIn("'/collections/' | append: browse_collection_handle", browse)
+
+        # collection.parent_id is not a documented EasyStore field. Browse must
+        # not depend on it, nor on rebuilding the hierarchy in the browser.
+        self.assertNotIn("parent_id", browse)
+        self.assertNotIn("parent_id", header)
+        self.assertNotIn("BrowseCollectionHierarchy", header)
+        self.assertNotIn("browse-navigation.js", header)
+        self.assertFalse((THEME_ROOT / "assets" / "browse-navigation.js").exists())
+        self.assertFalse(
+            (THEME_ROOT / "editor_assets" / "browse-navigation.js").exists()
+        )
         self.assertNotIn("{% continue %}", header)
         self.assertEqual(header.count('href="/collections/the-hobbit"'), 2)
         self.assertEqual(
@@ -550,6 +629,18 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertIn(".browse-menu__flyout", stylesheet)
         self.assertIn("left: 100%;", stylesheet)
         self.assertIn("pointer-events: auto;", stylesheet)
+
+        # A coarse pointer has no hover and tapping a parent follows its link,
+        # so the hierarchy is expanded inline there instead of behind a flyout.
+        self.assertIn(
+            "@media screen and (min-width: 990px) and (hover: none) {",
+            stylesheet,
+        )
+        coarse_pointer_rules = stylesheet.split(
+            "@media screen and (min-width: 990px) and (hover: none) {", 1
+        )[1]
+        self.assertIn("position: static;", coarse_pointer_rules)
+        self.assertIn("visibility: visible;", coarse_pointer_rules)
 
         workflow = (
             REPOSITORY_ROOT / ".github" / "workflows" / "package-theme.yml"

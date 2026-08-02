@@ -266,6 +266,41 @@ body {
   }
 }
 
+/* A coarse pointer has no hover, and tapping a parent collection follows its
+   link, so a hover-only flyout would put every nested collection out of reach
+   on a large touch screen. Expand the hierarchy inline there instead. */
+@media screen and (min-width: 990px) and (hover: none) {
+  .header__nav-item--browse .browse-menu__flyout {
+    position: static;
+    width: auto;
+    border: 0;
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
+    transform: none;
+  }
+
+  .header__nav-item--browse .browse-menu__flyout .header__menu-item {
+    padding-left: 3.5rem;
+  }
+
+  .header__nav-item--browse .browse-menu__flyout .browse-menu__flyout .header__menu-item {
+    padding-left: 5rem;
+  }
+
+  .header__nav-item--browse
+    .browse-menu__flyout
+    .browse-menu__flyout
+    .browse-menu__flyout
+    .header__menu-item {
+    padding-left: 6.5rem;
+  }
+
+  .header__nav-item--browse .browse-menu__indicator {
+    display: none;
+  }
+}
+
 .menu-drawer__nav-item--browse .browse-menu__indicator {
   margin-left: auto;
   font-size: 2rem;
