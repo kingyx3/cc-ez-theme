@@ -42,7 +42,7 @@
       "use_original_image": "1",
       "collection_show_variant_img": "1",
       "product_img_res": "grande",
-      "show_add_to_cart_button": 1,
+      "show_add_to_cart_button": 0,
       "sections": {
         "header": {
           "type": "header",
