@@ -249,6 +249,17 @@
           },
           "id": "collection_show_variant_img",
           "default": true
+        },
+        {
+          "type": "checkbox",
+          "label": {
+            "en_US": "Show add to cart buttons on product listings",
+            "zh_TW": "在商品列表顯示加入購物車按鈕",
+            "zh_CN": "在商品列表显示加入购物车按钮",
+            "ms_MY": "Tunjukkan butang tambah ke troli pada senarai produk"
+          },
+          "id": "show_add_to_cart_button",
+          "default": true
         }
       ]
     },

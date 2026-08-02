@@ -58,7 +58,13 @@
 }
 
 .product-card-wrapper{
+  isolation: isolate;
+  overflow: visible !important;
   border-radius: 1.2rem;
+}
+
+.product-card-wrapper > add-to-cart-button .card__badge {
+  z-index: 5;
 }
 
 .product-card-wrapper .card-information{
