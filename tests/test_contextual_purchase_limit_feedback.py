@@ -34,29 +34,36 @@ class ContextualPurchaseLimitFeedbackTests(unittest.TestCase):
         self.assertIn("container.textContent", storefront)
         self.assertIn("const extractMaximum", storefront)
         self.assertIn("only\\s+(?:has\\s+)?(?:left\\s+)?", storefront)
-        self.assertIn("Limit reached:", storefront)
-        self.assertIn("Maximum reached:", storefront)
-        self.assertIn("Remove an item before adding more.", storefront)
-        self.assertIn("You can add ${unitLabel(remaining)} more.", storefront)
-        self.assertIn("customer limit is", storefront)
-        self.assertNotIn("You already have", storefront)
-        self.assertNotIn("would bring your cart to", storefront)
+        self.assertIn("Stock limit reached.", storefront)
+        self.assertIn("Purchase limit reached.", storefront)
+        self.assertIn("Quantity limit exceeded.", storefront)
+        self.assertIn("Maximum quantity reached.", storefront)
+        self.assertIn("You can add up to", storefront)
         self.assertIn("Math.max(0, totalMaximum - currentQuantity)", storefront)
+        self.assertNotIn("would bring your cart to", storefront)
+        self.assertNotIn("Remove an item before adding more.", storefront)
 
-    def test_product_forms_receive_contextual_validation_and_safe_messages(self) -> None:
+    def test_product_forms_only_show_feedback_after_a_blocked_action(self) -> None:
         helper = (
             THEME_ROOT / "assets" / "purchase-limit-feedback.js"
         ).read_text(encoding="utf-8")
 
         self.assertIn("customElements.whenDefined('product-form')", helper)
+        self.assertIn("prototype.bindPurchaseLimitInteraction", helper)
         self.assertIn("prototype.getQuantityLimit", helper)
         self.assertIn("prototype.validateQuantity", helper)
         self.assertIn("prototype.rememberRejectedQuantity", helper)
         self.assertIn("prototype.openBuyNowLimitModal", helper)
         self.assertIn("prototype.renderErrorMsg", helper)
+        self.assertIn("purchaseLimitFeedbackBound", helper)
+        self.assertIn("mode: 'reached'", helper)
+        self.assertIn("const shouldShow = focusInvalid", helper)
+        self.assertIn("this.purchaseLimitInteracted === true", helper)
         self.assertIn("content.textContent = format", helper)
-        self.assertIn("this.showQuantityLimit(format", helper)
-        self.assertIn("this.lastRejectedQuantityContext", helper)
+        self.assertIn("this.showQuantityLimit(", helper)
+        self.assertIn("this.clearQuantityLimit();", helper)
+        self.assertNotIn("quantity === limit.maximum", helper)
+        self.assertNotIn("mode === 'warning'", helper)
         self.assertNotIn("content.innerHTML = message", helper)
 
     def test_listing_alerts_use_the_shared_contextual_formatter(self) -> None:
