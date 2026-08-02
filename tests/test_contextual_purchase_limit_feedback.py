@@ -34,10 +34,13 @@ class ContextualPurchaseLimitFeedbackTests(unittest.TestCase):
         self.assertIn("container.textContent", storefront)
         self.assertIn("const extractMaximum", storefront)
         self.assertIn("only\\s+(?:has\\s+)?(?:left\\s+)?", storefront)
-        self.assertIn("You already have", storefront)
-        self.assertIn("would bring your cart to", storefront)
-        self.assertIn("available in inventory", storefront)
-        self.assertIn("customer purchase limit", storefront)
+        self.assertIn("Limit reached:", storefront)
+        self.assertIn("Maximum reached:", storefront)
+        self.assertIn("Remove an item before adding more.", storefront)
+        self.assertIn("You can add ${unitLabel(remaining)} more.", storefront)
+        self.assertIn("customer limit is", storefront)
+        self.assertNotIn("You already have", storefront)
+        self.assertNotIn("would bring your cart to", storefront)
         self.assertIn("Math.max(0, totalMaximum - currentQuantity)", storefront)
 
     def test_product_forms_receive_contextual_validation_and_safe_messages(self) -> None:
