@@ -7,21 +7,25 @@
 
 {% assign collection_id = section.settings.collection__id %}
 {% assign collection = collections[collection_id] %}
+{% assign products_to_show = section.settings.products_to_show %}
 
+{% if section.__key == '1684403242688' or section.__key == '1684412368816' or section.__key == '1684412368817' %}
+  {% assign products_to_show = 3 %}
+{% endif %}
 
 {% assign products_to_display = collection.product_count | default: 0 %}
 
-{% if products_to_display > section.settings.products_to_show %}
-  {% assign products_to_display = section.settings.products_to_show %}
+{% if products_to_display > products_to_show %}
+  {% assign products_to_display = products_to_show %}
   {% assign more_in_collection = true %}
 {% endif %}
 
 <div
   id="section-{{ section.__key }}"
-  class="sales-collection page-width{% if section.settings.swipe_on_mobile == true and products_to_display > 2 and section.settings.products_to_show > 2 %} page-width-desktop{% endif %}{% if section.settings.title == '' %} mt-0{% endif %}"
+  class="sales-collection page-width{% if section.settings.swipe_on_mobile == true and products_to_display > 2 and products_to_show > 2 %} page-width-desktop{% endif %}{% if section.settings.title == '' %} mt-0{% endif %}"
   style="--section-accent: {{ section.settings.accent_color }}; --product-surface: {{ section.settings.product_bg_color }};"
 >
-  <div class="sales-collection__header{% if products_to_display > 2 and section.settings.swipe_on_mobile and section.settings.products_to_show > 2 %} title-wrapper--self-padded-tablet-down{% endif %}{% if section.settings.center_title == true %} sales-collection__header--center{% endif %}">
+  <div class="sales-collection__header{% if products_to_display > 2 and section.settings.swipe_on_mobile and products_to_show > 2 %} title-wrapper--self-padded-tablet-down{% endif %}{% if section.settings.center_title == true %} sales-collection__header--center{% endif %}">
     <div class="sales-collection__heading">
       {% if section.settings.eyebrow != blank %}
         <p class="sales-collection__eyebrow">{{ section.settings.eyebrow | escape }}</p>
@@ -43,14 +47,14 @@
   {% if collection_id != blank and products_to_display > 0 %}
 
     <slider-component class="slider-mobile-gutter">
-      <ul class="sales-collection__grid grid grid--2-col grid--3-col-tablet grid--{{ section.settings.products_per_row }}-col-desktop product-grid{% if products_to_display > 2 and section.settings.swipe_on_mobile and section.settings.products_to_show > 2 %} slider slider--tablet grid--peek{% endif %}{% if section.settings.show_view_all == false or products_to_display < section.settings.products_to_show %} negative-margin{% endif %}{% if section.settings.show_view_all and products_to_display > section.settings.products_to_show %} negative-margin--small{% endif %}" role="list">
-        {% for product in collection.products limit: section.settings.products_to_show %}
-          <li class="grid__item{% if products_to_display > 2 and section.settings.swipe_on_mobile and section.settings.products_to_show > 2 %} slider__slide{% endif %}">
+      <ul class="sales-collection__grid grid grid--2-col grid--3-col-tablet grid--{{ section.settings.products_per_row }}-col-desktop product-grid{% if products_to_display > 2 and section.settings.swipe_on_mobile and products_to_show > 2 %} slider slider--tablet grid--peek{% endif %}{% if section.settings.show_view_all == false or products_to_display < products_to_show %} negative-margin{% endif %}{% if section.settings.show_view_all and products_to_display > products_to_show %} negative-margin--small{% endif %}" role="list">
+        {% for product in collection.products limit: products_to_show %}
+          <li class="grid__item{% if products_to_display > 2 and section.settings.swipe_on_mobile and products_to_show > 2 %} slider__slide{% endif %}">
             {% include 'product-card', show_secondary_image: section.settings.show_secondary_image, show_add_to_cart_button: false, image_ratio: section.settings.image_ratio, show_product_info: section.settings.show_product_info %}
           </li>
         {% endfor %}
       </ul>
-      {% if products_to_display > 2 and section.settings.swipe_on_mobile and section.settings.products_to_show > 2 %}
+      {% if products_to_display > 2 and section.settings.swipe_on_mobile and products_to_show > 2 %}
         <div class="slider-buttons no-js-hidden{% if products_to_display < 4 %} medium-hide{% endif %}{% if products_to_display < 3 %} small-hide{% endif %}">
           <button
             type="button"
@@ -116,7 +120,7 @@
     </style>
     <div class="collection-placeholder-wrapper">
       <ul class="collection-placeholder-grid grid grid--2-col grid--{{ section.settings.products_per_row }}-col-desktop">
-        {% for i in (1..section.settings.products_to_show) %}
+        {% for i in (1..products_to_show) %}
           <li class="grid__item text-center">
             {% capture placeholder_image_url %}https://themes.easystore.co/onboarding/placeholder/products/frame/product-frame-{{ i }}.png{% endcapture %}
             <a href="https://{{GLOBALS.ADMIN_DOMAIN}}/products/" class="full-unstyled-link">
