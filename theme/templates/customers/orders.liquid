@@ -38,6 +38,8 @@
 {{ 'component-slider.css' | asset_url | stylesheet_tag }}
 
 
+{% include 'customer-order-limit-history' %}
+
 <div class="customer account">
   <div style="margin-bottom: 20px;">
     <h1>{{ 'customer.orders.title' | t }}</h1>

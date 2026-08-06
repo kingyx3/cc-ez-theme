@@ -19,6 +19,8 @@
 
   const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
 
+  const nowMs = () => new Date().getTime();
+
   const unitLabel = (value) => {
     const count = quantity(value, 0);
     return `${count} unit${count === 1 ? '' : 's'}`;
@@ -205,6 +207,177 @@
     }
     return `Customer purchase limit exceeded. Reduce this product to ${unitLabel(allowed)} before checkout. ${limitSuffix}`;
   };
+
+  // --- purchase history ------------------------------------------------------
+  // `customer.orders` carries line items on the account order pages, but a
+  // product or cart page can receive the orders list without them. The inline
+  // Liquid pass then counts zero units and the limit silently stops applying
+  // across orders. When the page reports that it read no line items, history is
+  // treated as unknown rather than as "nothing purchased", and is loaded from
+  // the account order page, which publishes it as JSON.
+  const HISTORY_URL = '/account/orders';
+  const HISTORY_PAYLOAD_ID = 'customer-order-limit-history';
+  const HISTORY_CACHE_KEY = 'customerOrderLimitHistory';
+  const HISTORY_MAX_AGE_MS = 300000;
+
+  const diagnostics = source.diagnostics || {};
+  // Only line items actually read prove the page saw history. Zero orders is
+  // ambiguous for a signed-in shopper — no orders, or orders not loaded here —
+  // and guessing "no orders" is what let the limit lapse.
+  const inlineHistoryRead = quantity(diagnostics.lineItemsSeen, 0) > 0;
+
+  // 'inline'      the page read history itself, nothing to load
+  // 'unknown'     history is missing and has not been loaded yet
+  // 'pending'     a load is in flight
+  // 'loaded'      history came from the account order page
+  // 'unavailable' the load failed; limits fall back to cart-only enforcement
+  let historyState = inlineHistoryRead ? 'inline' : 'unknown';
+  let historyRequest = null;
+
+  const historyKnown = () => historyState === 'inline' || historyState === 'loaded';
+  const historyResolving = () => historyState === 'unknown' || historyState === 'pending';
+
+  const historyLines = (payload) => (
+    Array.isArray(payload && payload.lines) ? payload.lines : []
+  );
+
+  const purchasedFromLines = (handle, rule, lines) => {
+    const normalized = normalizeHandle(handle);
+    const windowStart = quantity(rule && rule.windowStart, 0);
+    return lines.reduce((total, line) => {
+      if (!Array.isArray(line)) return total;
+      const lineHandle = normalizeHandle(line[0]);
+      const lineSku = normalizeHandle(line[1]);
+      if (lineHandle !== normalized && lineSku !== normalized) return total;
+      if (quantity(line[2], 0) < windowStart) return total;
+      return total + quantity(line[3], 0);
+    }, 0);
+  };
+
+  const applyHistory = (payload) => {
+    const lines = historyLines(payload);
+    Object.entries(rules).forEach(([handle, rule]) => {
+      const purchased = purchasedFromLines(handle, rule, lines);
+      const maximum = quantity(rule.maximum, 0);
+      rule.purchased = purchased;
+      rule.allowedCartQuantity = Math.max(0, maximum - purchased);
+    });
+    commitCartTotals(currentCartTotals());
+    decorateCartForm(document.getElementById('cart-form'));
+    document.dispatchEvent(new CustomEvent('customer-order-limits:history'));
+    document.dispatchEvent(new CustomEvent('customer-order-limits:cart-sync'));
+  };
+
+  const cachedHistory = () => {
+    try {
+      const raw = window.sessionStorage?.getItem(HISTORY_CACHE_KEY);
+      if (!raw) return null;
+      const cached = JSON.parse(raw);
+      const sameCustomer = String(cached.customer || '')
+        === String(source.customerId || cached.customer || '');
+      const fresh = quantity(cached.storedAt, 0) + HISTORY_MAX_AGE_MS > nowMs();
+      return sameCustomer && fresh ? cached.payload : null;
+    } catch (_error) {
+      return null;
+    }
+  };
+
+  const storeHistory = (payload) => {
+    try {
+      window.sessionStorage?.setItem(HISTORY_CACHE_KEY, JSON.stringify({
+        customer: payload && payload.customer,
+        storedAt: nowMs(),
+        payload,
+      }));
+    } catch (_error) {
+      // A full or unavailable sessionStorage only costs an extra request.
+    }
+  };
+
+  const parseHistoryDocument = (html) => {
+    const parsed = new DOMParser().parseFromString(html, 'text/html');
+    const payload = parsed.getElementById(HISTORY_PAYLOAD_ID);
+    if (!payload) throw new Error('history payload missing');
+    return JSON.parse(payload.textContent || '{}');
+  };
+
+  // Loading needs fetch and DOMParser. Without them the limit stays cart-only
+  // rather than throwing from a purchase handler or from page load.
+  const historySupported = () => (
+    typeof fetch === 'function'
+    && typeof DOMParser === 'function'
+    && typeof Promise === 'function'
+  );
+
+  const loadHistory = () => {
+    if (historyKnown() || historyState === 'unavailable') return Promise.resolve();
+    if (shopperSignedOut() || !historySupported()) {
+      historyState = 'unavailable';
+      return Promise.resolve();
+    }
+    if (historyRequest) return historyRequest;
+
+    const cached = cachedHistory();
+    if (cached) {
+      historyState = 'loaded';
+      applyHistory(cached);
+      return Promise.resolve();
+    }
+
+    historyState = 'pending';
+    let request;
+    try {
+      request = fetch(HISTORY_URL, {
+        credentials: 'same-origin',
+        headers: { Accept: 'text/html' },
+      });
+    } catch (_error) {
+      historyState = 'unavailable';
+      return Promise.resolve();
+    }
+
+    historyRequest = request
+      .then((response) => {
+        if (!response.ok) throw new Error(`history request failed: ${response.status}`);
+        return response.text();
+      })
+      .then((html) => {
+        const payload = parseHistoryDocument(html);
+        historyState = 'loaded';
+        storeHistory(payload);
+        applyHistory(payload);
+      })
+      .catch(() => {
+        // Never block buying because history could not be read.
+        historyState = 'unavailable';
+        document.dispatchEvent(new CustomEvent('customer-order-limits:history-unavailable'));
+      })
+      .then(() => { historyRequest = null; });
+
+    return historyRequest;
+  };
+
+  // A purchase attempt made while history is still unknown must not be measured
+  // against an allowance that assumes nothing was ever bought. The attempt is
+  // held, history is loaded, and the shopper is told to try again a moment later.
+  const HISTORY_PENDING_MESSAGE = 'Checking your purchase limit for this product. One moment, then try again.';
+
+  const historyBlocks = (handle) => {
+    const rule = ruleFor(handle);
+    if (!rule || loginRequiredForRule(rule)) return false;
+    if (!historyResolving() || !historySupported()) return false;
+    loadHistory();
+    return historyResolving();
+  };
+
+  const historyBlocksCart = (totals = null) => (
+    Object.entries(rules).some(([handle, rule]) => {
+      const cartQuantity = totals && hasOwn(totals, handle)
+        ? quantity(totals[handle], 0)
+        : quantity(rule.cartQuantity, 0);
+      return cartQuantity > 0 && historyBlocks(handle);
+    })
+  );
 
   const additionViolation = (handle, requestedQuantity) => {
     const normalized = normalizeHandle(handle);
@@ -459,6 +632,12 @@
         loginRequiredForHandle(listingButton.dataset.productHandle)
         && sendToLogin(event)
       ) return;
+      if (historyBlocks(listingButton.dataset.productHandle)) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        showListingError(HISTORY_PENDING_MESSAGE);
+        return;
+      }
       const violation = additionViolation(
         listingButton.dataset.productHandle,
         listingButton.dataset.quantity
@@ -477,6 +656,12 @@
       const form = owner?.querySelector('form');
       const handle = formHandle(form);
       if (loginRequiredForHandle(handle) && sendToLogin(event)) return;
+      if (historyBlocks(handle)) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        showProductError(form, HISTORY_PENDING_MESSAGE);
+        return;
+      }
       const violation = additionViolation(
         handle,
         form?.querySelector('[name="quantity"]')?.value
@@ -502,6 +687,12 @@
     const cartForm = event.target.closest('#cart-form');
     if (cartForm && event.target.closest('.cart__ctas')) {
       if (loginRequiredForCartForm(cartForm) && sendToLogin(event)) return;
+      if (historyBlocksCart(cartTotalsFromForm(cartForm))) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        showCartError(HISTORY_PENDING_MESSAGE);
+        return;
+      }
       if (cartForm.dataset.customerOrderLimitCheckoutBlocked === 'true') {
         const violation = cartViolationFromForm(cartForm);
         if (violation) {
@@ -520,6 +711,12 @@
     if (isAddToCartForm(form)) {
       const handle = formHandle(form);
       if (loginRequiredForHandle(handle) && sendToLogin(event)) return;
+      if (historyBlocks(handle)) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        showProductError(form, HISTORY_PENDING_MESSAGE);
+        return;
+      }
       const violation = additionViolation(
         handle,
         form.querySelector('[name="quantity"]')?.value
@@ -540,6 +737,12 @@
         || submitter.id === 'checkout';
       if (!isCheckout) return;
       if (loginRequiredForCartForm(form) && sendToLogin(event)) return;
+      if (historyBlocksCart(cartTotalsFromForm(form))) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        showCartError(HISTORY_PENDING_MESSAGE);
+        return;
+      }
       const violation = cartViolationFromForm(form);
       if (violation) {
         event.preventDefault();
@@ -560,6 +763,8 @@
     loginRedirectUrl,
     redirectToLogin,
     cartTotalsFromForm,
+    historyState: () => historyState,
+    loadHistory,
     remainingForHandle,
     cartQuantityForHandle,
     quantityLimitForHandle,
@@ -578,4 +783,12 @@
 
   decorateCartForm(document.getElementById('cart-form'));
   document.dispatchEvent(new CustomEvent('customer-order-limits:ready'));
+
+  // Start loading before the shopper can click, so the held-purchase path above
+  // is a rare fallback rather than the normal experience.
+  if (historyResolving()) {
+    if (historySupported()) loadHistory();
+    // Report the honest state so nothing waits for a load that cannot happen.
+    else historyState = 'unavailable';
+  }
 })();

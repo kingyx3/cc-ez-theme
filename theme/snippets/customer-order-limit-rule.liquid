@@ -4,6 +4,7 @@
 {% assign customer_order_limit_rule_cart_quantity = rule_cart_quantity | default: 0 | plus: 0 %}
 {% assign customer_order_limit_rule_refresh_at = rule_refresh_at | default: '' | strip %}
 {% assign customer_order_limit_rule_window_label = rule_window_label | default: '' | strip %}
+{% assign customer_order_limit_rule_window_start = rule_window_start | default: 0 | plus: 0 %}
 {% if customer_order_limit_rule_handle != blank and customer_order_limit_rule_maximum > 0 %}
   {% comment %}
     When a refresh timestamp has passed, purchased counts only cover orders from
@@ -60,6 +61,7 @@
       cartExceeded: {{ customer_order_limit_rule_cart_exceeded | json }},
       refreshAt: {{ customer_order_limit_rule_refresh_at | json }},
       limitWindowLabel: {{ customer_order_limit_rule_window_label | json }},
+      windowStart: {{ customer_order_limit_rule_window_start | json }},
       message: {{ customer_order_limit_rule_message | strip | json }}
     };
   </script>

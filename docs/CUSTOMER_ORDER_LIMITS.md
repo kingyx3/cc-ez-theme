@@ -47,6 +47,20 @@ A line is matched on **either** its product handle **or** its SKU. A configured 
 
 `window.customerOrderLimitsV2.diagnostics` reports what the history pass could actually read: `ordersSeen`, `lineItemsSeen`, and an `identifiers` sample in `handle/sku×quantity` form. `ordersSeen: 0` for a signed-in customer with orders means the storefront cannot see order history at all; a populated sample whose values never match a configured slot means the identifiers differ from what is configured.
 
+## When a page cannot see order history
+
+`customer.orders` carries line items on the account order pages — `templates/customers/orders.liquid` renders them — but a product or cart page can receive the orders list without them, or without orders at all. The inline pass then counts zero units and the limit quietly stops applying across orders, which is how a customer could reorder a limited product after paid and fulfilled orders.
+
+So history is loaded when the page could not read it:
+
+1. `templates/customers/orders.liquid` publishes every non-cancelled line item as JSON in `#customer-order-limit-history` — handle, SKU, order date, quantity, capped at 500 lines. It does no filtering; the reading page applies its own configured handles and refresh windows, so there is one matching implementation.
+2. A page whose `diagnostics.lineItemsSeen` is `0` treats history as **unknown**, not as "nothing purchased", and fetches `/account/orders` in the background as the page loads. The result is cached in `sessionStorage` for five minutes per customer, so it costs one request per session.
+3. `purchased` is recomputed from the payload, allowances and copy update, and `customer-order-limits:history` fires alongside the usual `cart-sync`.
+
+A purchase attempted while history is still unknown is **held** rather than measured against an allowance that assumes nothing was bought: the shopper sees "Checking your purchase limit for this product. One moment, then try again." Because the load starts at page load, that window is normally too short to see.
+
+Every failure path falls open to cart-only enforcement rather than blocking a sale: a failed or redirected request, a missing payload (an account template that was not updated), a browser without `fetch` or `DOMParser`, and a shopper proven to be signed out, who is never fetched for. `window.CustomerOrderLimits.historyState()` reports which case applies — `inline`, `loaded`, `pending`, `unknown`, or `unavailable`.
+
 The shared validator integrates with the native theme paths:
 
 - product page, featured product, and quick-view quantity validation;
@@ -111,7 +125,7 @@ Before merging or publishing, upload the exact workflow ZIP to an unpublished Ea
 6. rejected requests do not reduce the remaining allowance;
 7. signed out, Add to Cart, Buy Now, listing quick-add, and cart checkout on a limited product open the login page and return to the original page after signing in, with no limit message, disabled control, or clamped quantity shown first;
 8. signed in, every purchase path works normally on desktop and mobile and never reaches an account page — check a limited product, an unlimited product, and an unlimited product bought while a limited product sits in the cart;
-9. signed in, `window.customerOrderLimitsV2.customerAuthenticated` is `true`, `diagnostics.ordersSeen` matches the customer's non-cancelled order count, and each rule's `purchased` matches prior orders — buy one unit, complete the order, then reload the product page and confirm `purchased` increased;
+9. signed in, `window.customerOrderLimitsV2.customerAuthenticated` is `true` and each rule's `purchased` matches prior orders — buy one unit, complete the order, then reload the product page and confirm `purchased` increased. If `diagnostics.lineItemsSeen` is `0`, the page could not read history itself: confirm `window.CustomerOrderLimits.historyState()` reports `loaded` and that `/account/orders` contains `#customer-order-limit-history` with the expected lines;
 10. with a refresh timestamp set in the past, `purchased` drops to zero for orders placed before it, `limitWindowLabel` is set, and the copy names that date; with one set in the future, nothing changes and `refreshAt` still reports the configured value;
 11. on a product with a limit of 1: Buy Now from an empty cart adds one unit and reaches checkout; Buy Now again goes straight to checkout without adding; the buttons never stay disabled or spinning; and every message on the page reflects the current cart.
 

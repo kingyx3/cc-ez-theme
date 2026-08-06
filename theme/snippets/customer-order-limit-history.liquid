@@ -1,0 +1,49 @@
+{% comment %}
+  Publishes the signed-in customer's purchased line items as JSON so other pages
+  can read purchase history they cannot see themselves.
+
+  `customer.orders` carries line items on the account order pages — this theme's
+  own order list renders them — but a product or cart page may receive the orders
+  list without them. When that happens the inline pass on those pages counts zero
+  units and a limit never applies across orders. Those pages fetch this payload
+  instead.
+
+  Deliberately unfiltered: every line item is listed with its order date, and the
+  reading page applies its own configured handles and refresh windows. That keeps
+  one matching implementation, in customer-order-limits.js.
+{% endcomment %}
+{% assign customer_order_limit_history_now = 'now' | date: '%s' | plus: 0 %}
+{% assign customer_order_limit_history_count = 0 %}
+{% assign customer_order_limit_history_truncated = false %}
+{% capture customer_order_limit_history_lines %}
+  {%- if customer -%}
+    {%- assign customer_order_limit_history_orders = customer.orders | default: customer.recent_orders -%}
+    {%- for order in customer_order_limit_history_orders -%}
+      {%- unless order.is_cancelled -%}
+        {%- assign customer_order_limit_history_epoch = order.created_at | date: '%s' | plus: 0 -%}
+        {%- if customer_order_limit_history_epoch == 0 -%}
+          {%- assign customer_order_limit_history_epoch = order.processed_at | date: '%s' | plus: 0 -%}
+        {%- endif -%}
+        {%- if customer_order_limit_history_epoch == 0 -%}
+          {%- assign customer_order_limit_history_epoch = customer_order_limit_history_now -%}
+        {%- endif -%}
+        {%- assign customer_order_limit_history_items = order.line_items | default: order.items -%}
+        {%- for line_item in customer_order_limit_history_items -%}
+          {%- if customer_order_limit_history_count >= 500 -%}
+            {%- assign customer_order_limit_history_truncated = true -%}
+          {%- else -%}
+            {%- assign customer_order_limit_history_handle = line_item.product.handle | default: line_item.handle | default: '' | strip | downcase -%}
+            {%- assign customer_order_limit_history_sku = line_item.sku | default: line_item.variant.sku | default: line_item.product.sku | default: '' | strip | downcase -%}
+            {%- assign customer_order_limit_history_quantity = line_item.quantity | default: line_item.qty | default: 0 | plus: 0 -%}
+            {%- if customer_order_limit_history_count > 0 -%},{%- endif -%}
+            [{{ customer_order_limit_history_handle | json }},{{ customer_order_limit_history_sku | json }},{{ customer_order_limit_history_epoch | json }},{{ customer_order_limit_history_quantity | json }}]
+            {%- assign customer_order_limit_history_count = customer_order_limit_history_count | plus: 1 -%}
+          {%- endif -%}
+        {%- endfor -%}
+      {%- endunless -%}
+    {%- endfor -%}
+  {%- endif -%}
+{% endcapture %}
+<script type="application/json" id="customer-order-limit-history">
+{"customer":{{ customer.id | default: '' | append: '' | json }},"renderedAt":{{ customer_order_limit_history_now | json }},"truncated":{{ customer_order_limit_history_truncated | json }},"lines":[{{ customer_order_limit_history_lines | strip }}]}
+</script>
