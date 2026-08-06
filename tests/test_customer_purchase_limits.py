@@ -20,18 +20,19 @@ class CustomerPurchaseLimitRollbackTests(unittest.TestCase):
             with self.subTest(path=path.relative_to(REPOSITORY_ROOT)):
                 self.assertFalse(path.exists())
 
-    def test_global_currency_loader_matches_pre_pr56_behavior(self) -> None:
+    def test_global_currency_loader_does_not_restore_pr56_runtime(self) -> None:
         currencies = (
             THEME_ROOT / "snippets" / "currencies.liquid"
         ).read_text(encoding="utf-8")
 
         self.assertNotIn("customer-purchase-limits", currencies)
         self.assertNotIn("customerPurchaseLimits", currencies)
+        self.assertIn("customer-order-limits", currencies)
         self.assertIn("purchase-limit-feedback.js", currencies)
         self.assertIn("window.purchaseCartQuantities", currencies)
         self.assertIn("EasyStore.Currencies.init", currencies)
 
-    def test_custom_across_order_identifiers_are_absent_from_runtime(self) -> None:
+    def test_retired_pr56_identifiers_are_absent_from_runtime(self) -> None:
         forbidden = (
             "customer-purchase-limits",
             "customerPurchaseLimits",
@@ -40,9 +41,8 @@ class CustomerPurchaseLimitRollbackTests(unittest.TestCase):
             "purchaseCartLines",
             "recordAdditionForVariant",
             "recordRemovalForVariant",
-            "cartViolationFromForm",
             "customerLimitPreviousValue",
-            'name="product_handles[]"',
+            "enhancedUpdateCart",
         )
 
         runtime_files = [
@@ -62,6 +62,7 @@ class CustomerPurchaseLimitRollbackTests(unittest.TestCase):
     def test_native_commerce_paths_remain_intact_and_mirrored(self) -> None:
         mirrored_assets = (
             "cart.js",
+            "customer-order-limits.js",
             "product-card-cart-feedback.js",
             "product-form.js",
         )
@@ -82,11 +83,15 @@ class CustomerPurchaseLimitRollbackTests(unittest.TestCase):
         product_form = (
             THEME_ROOT / "assets" / "product-form.js"
         ).read_text(encoding="utf-8")
+        limits = (
+            THEME_ROOT / "assets" / "customer-order-limits.js"
+        ).read_text(encoding="utf-8")
 
         self.assertIn("EasyStore.Action.updateCart", cart)
         self.assertIn("EasyStore.Action.removeCartItem", cart)
         self.assertIn("EasyStore.Action.addToCart", listing)
         self.assertIn("EasyStore.Action.addToCart", product_form)
+        self.assertNotIn("EasyStore.Action", limits)
 
 
 if __name__ == "__main__":

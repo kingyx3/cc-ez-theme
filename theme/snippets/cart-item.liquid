@@ -1,4 +1,4 @@
-<tr class="cart-item" id="CartItem-{{item.id}}{{forloop.index}}">
+<tr class="cart-item" id="CartItem-{{item.id}}{{forloop.index}}" data-product-handle="{{ item.product.handle | default: item.handle | downcase | escape }}">
   <td class="cart-item__media">
      <a href="{{ item.url }}">
        <img class="cart-item__image" src="{{ item.image_url }}" alt="{{ item.title | escape }}" loading="lazy" width="100" height="100">

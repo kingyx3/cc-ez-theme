@@ -79,6 +79,19 @@
         Number.parseInt(this.button.dataset.quantity, 10) || 1
       );
       const variantId = this.button.dataset.variantId;
+      const productHandle = this.button.dataset.productHandle;
+      const customerOrderLimitViolation = window.CustomerOrderLimits
+        ? window.CustomerOrderLimits.additionViolation(
+          productHandle,
+          requestedQuantity
+        )
+        : null;
+      if (customerOrderLimitViolation) {
+        showError(customerOrderLimitViolation.message, { requestedQuantity });
+        this.setLoading(false);
+        return;
+      }
+
       const feedback = window.PurchaseLimitFeedback;
       const currentQuantity = feedback
         ? feedback.getCartQuantity(variantId)
@@ -124,6 +137,13 @@
           showError(fallbackError(), errorContext);
           this.setLoading(false);
           return;
+        }
+
+        if (window.CustomerOrderLimits) {
+          window.CustomerOrderLimits.recordAddition(
+            productHandle,
+            requestedQuantity
+          );
         }
 
         if (window.location.pathname === '/cart') {

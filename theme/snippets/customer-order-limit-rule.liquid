@@ -1,0 +1,52 @@
+{% assign customer_order_limit_rule_handle = rule_handle | default: '' | strip | downcase %}
+{% assign customer_order_limit_rule_maximum = rule_maximum | default: 0 | plus: 0 %}
+{% assign customer_order_limit_rule_purchased = rule_purchased | default: 0 | plus: 0 %}
+{% assign customer_order_limit_rule_cart_quantity = rule_cart_quantity | default: 0 | plus: 0 %}
+{% if customer_order_limit_rule_handle != blank and customer_order_limit_rule_maximum > 0 %}
+  {% assign customer_order_limit_rule_login_required = true %}
+  {% if rule_customer_authenticated %}
+    {% assign customer_order_limit_rule_login_required = false %}
+  {% endif %}
+
+  {% assign customer_order_limit_rule_allowed_cart_quantity = customer_order_limit_rule_maximum | minus: customer_order_limit_rule_purchased %}
+  {% if customer_order_limit_rule_allowed_cart_quantity < 0 %}
+    {% assign customer_order_limit_rule_allowed_cart_quantity = 0 %}
+  {% endif %}
+  {% if customer_order_limit_rule_login_required %}
+    {% assign customer_order_limit_rule_allowed_cart_quantity = 0 %}
+  {% endif %}
+
+  {% assign customer_order_limit_rule_remaining = customer_order_limit_rule_allowed_cart_quantity | minus: customer_order_limit_rule_cart_quantity %}
+  {% if customer_order_limit_rule_remaining < 0 %}
+    {% assign customer_order_limit_rule_remaining = 0 %}
+  {% endif %}
+
+  {% assign customer_order_limit_rule_cart_exceeded = false %}
+  {% if customer_order_limit_rule_cart_quantity > customer_order_limit_rule_allowed_cart_quantity %}
+    {% assign customer_order_limit_rule_cart_exceeded = true %}
+  {% endif %}
+
+  {% capture customer_order_limit_rule_message %}
+    {% if customer_order_limit_rule_login_required %}
+      Sign in to purchase this limited item. The limit is {{ customer_order_limit_rule_maximum }} per customer across orders.
+    {% elsif customer_order_limit_rule_cart_exceeded %}
+      Your cart contains {{ customer_order_limit_rule_cart_quantity }} units, but only {{ customer_order_limit_rule_allowed_cart_quantity }} are available after previous orders. Reduce the quantity before checkout.
+    {% elsif customer_order_limit_rule_remaining == 0 %}
+      Customer purchase limit reached. You have purchased or added {{ customer_order_limit_rule_maximum }} of {{ customer_order_limit_rule_maximum }} allowed units.
+    {% else %}
+      You can add up to {{ customer_order_limit_rule_remaining }} more. The limit is {{ customer_order_limit_rule_maximum }} per customer across orders.
+    {% endif %}
+  {% endcapture %}
+  <script>
+    window.customerOrderLimitsV2.rules[{{ customer_order_limit_rule_handle | json }}] = {
+      maximum: {{ customer_order_limit_rule_maximum | json }},
+      purchased: {{ customer_order_limit_rule_purchased | json }},
+      cartQuantity: {{ customer_order_limit_rule_cart_quantity | json }},
+      allowedCartQuantity: {{ customer_order_limit_rule_allowed_cart_quantity | json }},
+      remaining: {{ customer_order_limit_rule_remaining | json }},
+      loginRequired: {{ customer_order_limit_rule_login_required | json }},
+      cartExceeded: {{ customer_order_limit_rule_cart_exceeded | json }},
+      message: {{ customer_order_limit_rule_message | strip | json }}
+    };
+  </script>
+{% endif %}
