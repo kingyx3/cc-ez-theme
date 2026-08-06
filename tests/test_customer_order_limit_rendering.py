@@ -290,6 +290,25 @@ class CustomerOrderLimitRenderingTests(unittest.TestCase):
 
         self.assertEqual(rule["purchased"], 1)
 
+    def test_an_unconfigured_slot_never_activates_a_window(self) -> None:
+        # A live store reported copy counting "since Jan 01, 1970": an empty
+        # refresh reached the epoch comparison and won it.
+        rule = self.rule(self.render(orders=[self.order(days_ago=30, handle=LOWER)]))
+
+        self.assertEqual(rule["limitWindowLabel"], "")
+        self.assertEqual(rule["windowStart"], 0)
+        self.assertNotIn("since", rule["message"])
+        self.assertEqual(rule["purchased"], 1)
+
+    def test_a_refresh_at_the_epoch_start_is_treated_as_unset(self) -> None:
+        rule = self.rule(self.render(
+            refresh="1970-01-01 00:00:00 +0000",
+            orders=[self.order(days_ago=30, handle=LOWER)],
+        ))
+
+        self.assertEqual(rule["limitWindowLabel"], "")
+        self.assertEqual(rule["purchased"], 1)
+
     def test_an_unreadable_refresh_leaves_the_limit_alone(self) -> None:
         rule = self.rule(self.render(
             refresh="whenever",

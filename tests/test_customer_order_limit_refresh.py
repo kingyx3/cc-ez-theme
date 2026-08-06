@@ -52,20 +52,28 @@ class CustomerOrderLimitRefreshTests(unittest.TestCase):
 
         # Default fallback, then epoch comparison, then the display label.
         self.assertIn("{% assign customer_order_limit_window = 0 %}", window)
+        # Values are forced to strings and compared with '', not with `blank`,
+        # and the epoch must land past 1970: a live store activated a window at
+        # epoch 0 from an unconfigured slot.
         self.assertIn(
-            "{% assign customer_order_limit_window_refresh = window_refresh | default: '' | strip %}",
+            "{% assign customer_order_limit_window_refresh = window_refresh"
+            " | default: '' | append: '' | strip %}",
             window,
         )
         self.assertIn(
-            "{% assign customer_order_limit_window_refresh = window_default | default: '' | strip %}",
+            "{% assign customer_order_limit_window_refresh = window_default"
+            " | default: '' | append: '' | strip %}",
             window,
         )
+        self.assertIn("{% if customer_order_limit_window_refresh == '' %}", window)
+        self.assertIn("{% if customer_order_limit_window_refresh != '' %}", window)
         self.assertIn("| date: '%s' | plus: 0 %}", window)
         self.assertIn(
-            "{% if customer_order_limit_window_epoch > 0 "
+            "{% if customer_order_limit_window_epoch > 86400 "
             "and customer_order_limit_window_current >= customer_order_limit_window_epoch %}",
             window,
         )
+        self.assertNotIn("!= blank", window)
         self.assertIn("| date: '%b %d, %Y' %}", window)
 
     def test_every_slot_resolves_its_own_window(self) -> None:

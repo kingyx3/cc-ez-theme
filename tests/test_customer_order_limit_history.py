@@ -54,6 +54,18 @@ class HistoryPayloadStructureTests(unittest.TestCase):
         self.assertIn("customer_order_limit_history_count >= 500", history)
         # No filtering by handle here: the reading page applies its own config.
         self.assertNotIn("customer_order_limit_handle_1", history)
+        # The list is tab filtered and paginated, so the reader needs to know
+        # which tabs hold orders and where the next page is. A live store
+        # returned zero lines because the default tab held none.
+        self.assertIn('"currentTab":', history)
+        self.assertIn('"tabs":[', history)
+        self.assertIn('"pages":', history)
+        self.assertIn('"nextUrl":', history)
+        self.assertIn("customer.paginate.filter.tabs", history)
+        self.assertIn("paginate.next.url", history)
+        # Each line carries its order token so the same line seen under two tabs
+        # is counted once.
+        self.assertIn("customer_order_limit_history_token", history)
 
     def test_liquid_booleans_are_read_by_value_not_by_identity(self) -> None:
         limits = self.read("assets/customer-order-limits.js")
@@ -108,6 +120,13 @@ class HistoryPayloadStructureTests(unittest.TestCase):
         # loadHistory runs at the end of page setup, so a browser without fetch
         # or DOMParser must degrade instead of throwing from there or from a
         # purchase handler.
+        # Every tab that reports orders is walked, following pagination, with a
+        # request cap and de-duplication by order token.
+        self.assertIn("const HISTORY_MAX_REQUESTS = 12;", limits)
+        self.assertIn("const historyUrlsFrom = (payload, fetched) => {", limits)
+        self.assertIn("if (/cancel/i.test(status)) return;", limits)
+        self.assertIn("if (quantity(tab.count, 0) === 0) return;", limits)
+        self.assertIn("const key = line.slice(0, 5).join('|');", limits)
         self.assertIn("const historySupported = () => (", limits)
         self.assertIn("typeof fetch === 'function'", limits)
         self.assertIn("typeof DOMParser === 'function'", limits)

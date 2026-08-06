@@ -14,17 +14,23 @@
 
   A refresh timestamp that has not arrived yet leaves the window at 0, so the
   allowance only renews once the timestamp passes.
+
+  Comparisons are against '' on values forced to strings, not against `blank`,
+  and the epoch must land past 1970. A live store activated a window at epoch 0
+  from an unconfigured slot and told shoppers their limit counted "since Jan 01,
+  1970", because `blank` comparisons and numeric coercion do not behave the same
+  on every Liquid engine.
 {% endcomment %}
 {% assign customer_order_limit_window = 0 %}
 {% assign customer_order_limit_window_label = '' %}
-{% assign customer_order_limit_window_refresh = window_refresh | default: '' | strip %}
-{% if customer_order_limit_window_refresh == blank %}
-  {% assign customer_order_limit_window_refresh = window_default | default: '' | strip %}
+{% assign customer_order_limit_window_refresh = window_refresh | default: '' | append: '' | strip %}
+{% if customer_order_limit_window_refresh == '' %}
+  {% assign customer_order_limit_window_refresh = window_default | default: '' | append: '' | strip %}
 {% endif %}
-{% if customer_order_limit_window_refresh != blank %}
+{% if customer_order_limit_window_refresh != '' %}
   {% assign customer_order_limit_window_epoch = customer_order_limit_window_refresh | date: '%s' | plus: 0 %}
   {% assign customer_order_limit_window_current = window_now | default: 0 | plus: 0 %}
-  {% if customer_order_limit_window_epoch > 0 and customer_order_limit_window_current >= customer_order_limit_window_epoch %}
+  {% if customer_order_limit_window_epoch > 86400 and customer_order_limit_window_current >= customer_order_limit_window_epoch %}
     {% assign customer_order_limit_window = customer_order_limit_window_epoch %}
     {% assign customer_order_limit_window_label = customer_order_limit_window_refresh | date: '%b %d, %Y' %}
   {% endif %}

@@ -248,6 +248,47 @@
     Array.isArray(payload && payload.lines) ? payload.lines : []
   );
 
+  // The order list is tab filtered and paginated, so one request only covers the
+  // default tab's first page — a live store returned zero lines that way. Every
+  // tab that reports orders is walked, following its pages, with a request cap so
+  // a large history cannot turn into an unbounded crawl.
+  const HISTORY_MAX_REQUESTS = 12;
+
+  const historyUrlsFrom = (payload, fetched) => {
+    const urls = [];
+    const push = (url) => {
+      if (url && !fetched.has(url) && !urls.includes(url)) urls.push(url);
+    };
+
+    const tabs = Array.isArray(payload && payload.tabs) ? payload.tabs : [];
+    tabs.forEach((tab) => {
+      const status = String((tab && tab.status) || '').trim();
+      if (!status || status === String(payload.currentTab || '')) return;
+      if (quantity(tab.count, 0) === 0) return;
+      // Cancelled orders are excluded from the tally anyway.
+      if (/cancel/i.test(status)) return;
+      push(`${HISTORY_URL}?filter=${encodeURIComponent(status)}`);
+    });
+
+    push(String((payload && payload.nextUrl) || '').trim());
+    return urls;
+  };
+
+  const mergeHistory = (payloads) => {
+    const seen = new Set();
+    const lines = [];
+    payloads.forEach((payload) => {
+      historyLines(payload).forEach((line) => {
+        if (!Array.isArray(line)) return;
+        const key = line.slice(0, 5).join('|');
+        if (seen.has(key)) return;
+        seen.add(key);
+        lines.push(line);
+      });
+    });
+    return { lines, truncated: payloads.some((payload) => payload && payload.truncated) };
+  };
+
   const purchasedFromLines = (handle, rule, lines) => {
     const normalized = normalizeHandle(handle);
     const windowStart = quantity(rule && rule.windowStart, 0);
@@ -332,24 +373,52 @@
     }
 
     historyState = 'pending';
-    let request;
-    try {
-      request = fetch(HISTORY_URL, {
-        credentials: 'same-origin',
-        headers: { Accept: 'text/html' },
+
+    const fetchPayload = (url) => fetch(url, {
+      credentials: 'same-origin',
+      headers: { Accept: 'text/html' },
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error(`history request failed: ${response.status}`);
+        return response.text();
+      })
+      .then(parseHistoryDocument);
+
+    const walk = (url, fetched, collected) => {
+      if (fetched.size >= HISTORY_MAX_REQUESTS) return Promise.resolve(collected);
+      fetched.add(url);
+      return fetchPayload(url).then((payload) => {
+        collected.push(payload);
+        const next = historyUrlsFrom(payload, fetched);
+        return next.reduce(
+          (chain, candidate) => chain.then((soFar) => (
+            fetched.has(candidate) || fetched.size >= HISTORY_MAX_REQUESTS
+              ? soFar
+              : walk(candidate, fetched, soFar)
+          )),
+          Promise.resolve(collected)
+        );
       });
+    };
+
+    let started;
+    try {
+      started = walk(HISTORY_URL, new Set(), []);
     } catch (_error) {
       historyState = 'unavailable';
       return Promise.resolve();
     }
 
-    historyRequest = request
-      .then((response) => {
-        if (!response.ok) throw new Error(`history request failed: ${response.status}`);
-        return response.text();
-      })
-      .then((html) => {
-        const payload = parseHistoryDocument(html);
+    historyRequest = started
+      .then((payloads) => {
+        if (!payloads.length) throw new Error('history payload missing');
+        const merged = mergeHistory(payloads);
+        const payload = {
+          customer: payloads[0].customer,
+          renderedAt: payloads[0].renderedAt,
+          truncated: merged.truncated,
+          lines: merged.lines,
+        };
         historyState = 'loaded';
         storeHistory(payload);
         applyHistory(payload);

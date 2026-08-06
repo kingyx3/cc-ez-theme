@@ -35,6 +35,8 @@ Write timestamps with the store's timezone offset:
 {% assign customer_order_limit_refresh_10 = '2026-09-01 00:00:00 +0800' %}
 ```
 
+A slot with no refresh configured must leave the window inert. Comparisons in `customer-order-limit-window.liquid` are against `''` on values forced to strings rather than against `blank`, and the resolved epoch has to land past 1970, because a live store activated a window at epoch 0 from an unconfigured slot and told shoppers their limit counted "since Jan 01, 1970".
+
 Renewal is evaluated when the page renders, so it takes effect on the next page load after the timestamp passes. Storefront copy names the date once a window is active — "The limit is 1 unit per customer across orders since Sep 01, 2026" — and each rule publishes `refreshAt` and `limitWindowLabel` so the configuration can be verified in the browser console.
 
 To renew a limit, set the timestamp rather than clearing the maximum: clearing the maximum disables the slot entirely, while a refresh keeps the limit enforced for purchases made from that date onwards.
@@ -45,6 +47,8 @@ Liquid makes one pass through the customer's orders and one pass through `cart.i
 
 A line is matched on **either** its product handle **or** its SKU. A configured value such as `MTG-HOB-SCN-EN-SET2` is both the storefront handle and the SKU, and order line items do not expose the same identifier on every store — matching only `product.handle` counted zero units, which let a customer reorder the same product in order after order. Blank identifiers are replaced with sentinels so an unconfigured slot can never match a line that simply has no handle or no SKU. Quantities and the order and line collections each read a fallback field name for the same reason.
 
+Booleans published by these snippets are read by value, not by identity: EasyStore's `json` filter renders a Liquid boolean as `1` or `0`, so a strict `=== true` check is false for every signed-in customer.
+
 `window.customerOrderLimitsV2.diagnostics` reports what the history pass could actually read: `ordersSeen`, `lineItemsSeen`, and an `identifiers` sample in `handle/sku×quantity` form. `ordersSeen: 0` for a signed-in customer with orders means the storefront cannot see order history at all; a populated sample whose values never match a configured slot means the identifiers differ from what is configured.
 
 ## When a page cannot see order history
@@ -54,7 +58,7 @@ A line is matched on **either** its product handle **or** its SKU. A configured 
 So history is loaded when the page could not read it:
 
 1. `templates/customers/orders.liquid` publishes every non-cancelled line item as JSON in `#customer-order-limit-history` — handle, SKU, order date, quantity, capped at 500 lines. It does no filtering; the reading page applies its own configured handles and refresh windows, so there is one matching implementation.
-2. A page whose `diagnostics.lineItemsSeen` is `0` treats history as **unknown**, not as "nothing purchased", and fetches `/account/orders` in the background as the page loads. The result is cached in `sessionStorage` for five minutes per customer, so it costs one request per session.
+2. A page whose `diagnostics.lineItemsSeen` is `0` treats history as **unknown**, not as "nothing purchased", and fetches `/account/orders` in the background as the page loads. That list is tab filtered and paginated, so one request only covers the default tab's first page — on a live store that returned zero lines because the default tab held none of the customer's completed orders. The loader therefore walks every tab that reports a non-zero count, skipping cancelled tabs, follows each tab's pagination, de-duplicates lines by order token, and stops at twelve requests. The merged result is cached in `sessionStorage` for five minutes per customer, so it costs one walk per session.
 3. `purchased` is recomputed from the payload, allowances and copy update, and `customer-order-limits:history` fires alongside the usual `cart-sync`.
 
 A purchase attempted while history is still unknown is **held** rather than measured against an allowance that assumes nothing was bought: the shopper sees "Checking your purchase limit for this product. One moment, then try again." Because the load starts at page load, that window is normally too short to see.
