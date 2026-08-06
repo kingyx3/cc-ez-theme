@@ -113,6 +113,23 @@ Signals 1 and 3 come from the layout and header, which render from the `{% if cu
 
 The first deployed version compared uppercase configured handles with lowercase storefront handles, so no rule matched. It also relied mainly on document listeners and missed native Buy Now and cart paths. The corrected version normalizes both sides and validates inside the existing product, listing, and cart components, with delegated capture guards as defense in depth.
 
+## Checking a live product page
+
+The feature logs nothing, so an empty console is normal and not a symptom. Its state lives on `window.customerOrderLimitsV2` and `window.CustomerOrderLimits`.
+
+Paste `scripts/limit-check.console.js` into the browser console on a product page that has a configured limit, signed in as a customer who has bought that product before. It prints sign-in state, what history the page could read, the numbers for that product, whether the account payload is reachable, and one of these verdicts:
+
+| Verdict | Meaning |
+| --- | --- |
+| `WORKING` | past orders are counted for this product |
+| `NO PURCHASES COUNTED` | the customer has not bought it, or the identifiers do not match the configured handle — compare `identifiers` and `payload lines` in the output |
+| `BROKEN` | history could not be read or loaded; only the current cart is capped |
+| `NOT LIMITED` | no rule for this handle |
+| `GUEST` | not signed in, so limits do not apply and purchase clicks go to login |
+| `older build is published` | the uploaded theme predates the diagnostics field |
+
+Without the console: buy one unit of a product whose limit is 1, complete the order, then reload its product page. Add to Cart should be disabled with "Maximum quantity reached", and Buy Now should go straight to checkout rather than adding a second unit.
+
 ## Preview validation
 
 Before merging or publishing, upload the exact workflow ZIP to an unpublished EasyStore theme and verify:
