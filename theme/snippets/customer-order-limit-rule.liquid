@@ -2,7 +2,17 @@
 {% assign customer_order_limit_rule_maximum = rule_maximum | default: 0 | plus: 0 %}
 {% assign customer_order_limit_rule_purchased = rule_purchased | default: 0 | plus: 0 %}
 {% assign customer_order_limit_rule_cart_quantity = rule_cart_quantity | default: 0 | plus: 0 %}
+{% assign customer_order_limit_rule_refresh_at = rule_refresh_at | default: '' | strip %}
+{% assign customer_order_limit_rule_window_label = rule_window_label | default: '' | strip %}
 {% if customer_order_limit_rule_handle != blank and customer_order_limit_rule_maximum > 0 %}
+  {% comment %}
+    When a refresh timestamp has passed, purchased counts only cover orders from
+    that date onwards, so the copy says which date the limit is counted from.
+  {% endcomment %}
+  {% assign customer_order_limit_rule_since = '' %}
+  {% if customer_order_limit_rule_window_label != blank %}
+    {% capture customer_order_limit_rule_since %} since {{ customer_order_limit_rule_window_label }}{% endcapture %}
+  {% endif %}
   {% comment %}
     Limits are per-customer totals across orders, so they can only be measured
     for a signed-in customer. When login is required the storefront sends the
@@ -30,13 +40,13 @@
 
   {% capture customer_order_limit_rule_message %}
     {% if customer_order_limit_rule_login_required %}
-      Sign in to purchase this limited item. The limit is {{ customer_order_limit_rule_maximum }} per customer across orders.
+      Sign in to purchase this limited item. The limit is {{ customer_order_limit_rule_maximum }} per customer across orders{{ customer_order_limit_rule_since }}.
     {% elsif customer_order_limit_rule_cart_exceeded %}
-      Your cart contains {{ customer_order_limit_rule_cart_quantity }} units, but only {{ customer_order_limit_rule_allowed_cart_quantity }} are available after previous orders. Reduce the quantity before checkout.
+      Your cart contains {{ customer_order_limit_rule_cart_quantity }} units, but only {{ customer_order_limit_rule_allowed_cart_quantity }} are available after previous orders{{ customer_order_limit_rule_since }}. Reduce the quantity before checkout.
     {% elsif customer_order_limit_rule_remaining == 0 %}
       Customer purchase limit reached. You have purchased or added {{ customer_order_limit_rule_maximum }} of {{ customer_order_limit_rule_maximum }} allowed units.
     {% else %}
-      You can add up to {{ customer_order_limit_rule_remaining }} more. The limit is {{ customer_order_limit_rule_maximum }} per customer across orders.
+      You can add up to {{ customer_order_limit_rule_remaining }} more. The limit is {{ customer_order_limit_rule_maximum }} per customer across orders{{ customer_order_limit_rule_since }}.
     {% endif %}
   {% endcapture %}
   <script>
@@ -48,6 +58,8 @@
       remaining: {{ customer_order_limit_rule_remaining | json }},
       loginRequired: {{ customer_order_limit_rule_login_required | json }},
       cartExceeded: {{ customer_order_limit_rule_cart_exceeded | json }},
+      refreshAt: {{ customer_order_limit_rule_refresh_at | json }},
+      limitWindowLabel: {{ customer_order_limit_rule_window_label | json }},
       message: {{ customer_order_limit_rule_message | strip | json }}
     };
   </script>

@@ -1,0 +1,31 @@
+{% comment %}
+  Resolves one configured refresh timestamp into the window that purchases are
+  counted from.
+
+  Input:  window_refresh  slot timestamp, blank to fall back to window_default
+          window_default  shared timestamp for slots without their own
+          window_now      current time in epoch seconds
+
+  Output: customer_order_limit_window         epoch seconds to count orders from,
+                                              0 when every past order still counts
+          customer_order_limit_window_label   display date for storefront copy
+          customer_order_limit_window_refresh resolved timestamp, even when it is
+                                              still in the future
+
+  A refresh timestamp that has not arrived yet leaves the window at 0, so the
+  allowance only renews once the timestamp passes.
+{% endcomment %}
+{% assign customer_order_limit_window = 0 %}
+{% assign customer_order_limit_window_label = '' %}
+{% assign customer_order_limit_window_refresh = window_refresh | default: '' | strip %}
+{% if customer_order_limit_window_refresh == blank %}
+  {% assign customer_order_limit_window_refresh = window_default | default: '' | strip %}
+{% endif %}
+{% if customer_order_limit_window_refresh != blank %}
+  {% assign customer_order_limit_window_epoch = customer_order_limit_window_refresh | date: '%s' | plus: 0 %}
+  {% assign customer_order_limit_window_current = window_now | default: 0 | plus: 0 %}
+  {% if customer_order_limit_window_epoch > 0 and customer_order_limit_window_current >= customer_order_limit_window_epoch %}
+    {% assign customer_order_limit_window = customer_order_limit_window_epoch %}
+    {% assign customer_order_limit_window_label = customer_order_limit_window_refresh | date: '%b %d, %Y' %}
+  {% endif %}
+{% endif %}

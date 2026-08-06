@@ -1,1 +1,2 @@
 coverage==7.15.2
+python-liquid==2.3.0

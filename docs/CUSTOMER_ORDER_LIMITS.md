@@ -4,24 +4,42 @@ This feature limits a signed-in customer to a configured number of units for an 
 
 ## Configured limits
 
-| EasyStore product handle | Per-customer maximum |
-| --- | ---: |
-| `MTG-HOB-BDL-EN` | 2 |
-| `MTG-HOB-CBB-EN` | 2 |
-| `MTG-HOB-CBB-EN-CASE6` | 1 |
-| `MTG-HOB-CBB-EN-PACK` | 1 |
-| `MTG-HOB-DNK-EN` | 3 |
-| `MTG-HOB-GFB-EN` | 1 |
-| `MTG-HOB-PBB-EN` | 12 |
-| `MTG-HOB-PRK-EN-SET4` | 1 |
-| `MTG-HOB-OBP-EN` | 1 |
-| `MTG-HOB-SCN-EN-SET2` | 1 |
+| Slot | EasyStore product handle | Per-customer maximum | Refresh |
+| ---: | --- | ---: | --- |
+| 1 | `MTG-HOB-BDL-EN` | 2 | — |
+| 2 | `MTG-HOB-CBB-EN` | 2 | — |
+| 3 | `MTG-HOB-CBB-EN-CASE6` | 1 | — |
+| 4 | `MTG-HOB-CBB-EN-PACK` | 1 | — |
+| 5 | `MTG-HOB-DNK-EN` | 3 | — |
+| 6 | `MTG-HOB-GFB-EN` | 1 | — |
+| 7 | `MTG-HOB-PBB-EN` | 12 | — |
+| 8 | `MTG-HOB-PRK-EN-SET4` | 1 | — |
+| 9 | `MTG-HOB-OBP-EN` | 1 | — |
+| 10 | `MTG-HOB-SCN-EN-SET2` | 1 | — |
 
 The values remain explicit in `theme/snippets/customer-order-limit-config.liquid`. Every configured and storefront handle is normalized to lowercase before comparison because EasyStore product URLs use lowercase handles even when administrative values are capitalized.
 
+## Renewing an allowance
+
+Each slot has a `customer_order_limit_refresh_N` timestamp, and `customer_order_limit_refresh_all` covers every slot that leaves its own blank. Once a refresh timestamp has passed, orders placed before it stop counting, so every customer starts that limit again from zero. A timestamp in the future changes nothing until it arrives, and a blank one keeps counting every past order forever.
+
+Write timestamps with the store's timezone offset:
+
+```liquid
+{% assign customer_order_limit_refresh_10 = '2026-09-01 00:00:00 +0800' %}
+```
+
+Renewal is evaluated when the page renders, so it takes effect on the next page load after the timestamp passes. Storefront copy names the date once a window is active — "The limit is 1 unit per customer across orders since Sep 01, 2026" — and each rule publishes `refreshAt` and `limitWindowLabel` so the configuration can be verified in the browser console.
+
+To renew a limit, set the timestamp rather than clearing the maximum: clearing the maximum disables the slot entirely, while a refresh keeps the limit enforced for purchases made from that date onwards.
+
 ## Enforcement
 
-Liquid makes one pass through `customer.orders` and one pass through `cart.items`, combining quantities for all variants with the same normalized product handle. Cancelled orders are ignored.
+Liquid makes one pass through the customer's orders and one pass through `cart.items`, combining quantities for every line with the same normalized identifier. Cancelled orders are ignored, and orders older than the slot's refresh window are skipped.
+
+A line is matched on **either** its product handle **or** its SKU. A configured value such as `MTG-HOB-SCN-EN-SET2` is both the storefront handle and the SKU, and order line items do not expose the same identifier on every store — matching only `product.handle` counted zero units, which let a customer reorder the same product in order after order. Blank identifiers are replaced with sentinels so an unconfigured slot can never match a line that simply has no handle or no SKU. Quantities and the order and line collections each read a fallback field name for the same reason.
+
+`window.customerOrderLimitsV2.diagnostics` reports what the history pass could actually read: `ordersSeen`, `lineItemsSeen`, and an `identifiers` sample in `handle/sku×quantity` form. `ordersSeen: 0` for a signed-in customer with orders means the storefront cannot see order history at all; a populated sample whose values never match a configured slot means the identifiers differ from what is configured.
 
 The shared validator integrates with the native theme paths:
 
@@ -87,8 +105,9 @@ Before merging or publishing, upload the exact workflow ZIP to an unpublished Ea
 6. rejected requests do not reduce the remaining allowance;
 7. signed out, Add to Cart, Buy Now, listing quick-add, and cart checkout on a limited product open the login page and return to the original page after signing in, with no limit message, disabled control, or clamped quantity shown first;
 8. signed in, every purchase path works normally on desktop and mobile and never reaches an account page — check a limited product, an unlimited product, and an unlimited product bought while a limited product sits in the cart;
-9. signed in, `window.customerOrderLimitsV2.customerAuthenticated` is `true` and each rule's `purchased` matches prior non-cancelled orders;
-10. on a product with a limit of 1: Buy Now from an empty cart adds one unit and reaches checkout; Buy Now again goes straight to checkout without adding; the buttons never stay disabled or spinning; and every message on the page reflects the current cart.
+9. signed in, `window.customerOrderLimitsV2.customerAuthenticated` is `true`, `diagnostics.ordersSeen` matches the customer's non-cancelled order count, and each rule's `purchased` matches prior orders — buy one unit, complete the order, then reload the product page and confirm `purchased` increased;
+10. with a refresh timestamp set in the past, `purchased` drops to zero for orders placed before it, `limitWindowLabel` is set, and the copy names that date; with one set in the future, nothing changes and `refreshAt` still reports the configured value;
+11. on a product with a limit of 1: Buy Now from an empty cart adds one unit and reaches checkout; Buy Now again goes straight to checkout without adding; the buttons never stay disabled or spinning; and every message on the page reflects the current cart.
 
 ## Enforcement boundary
 

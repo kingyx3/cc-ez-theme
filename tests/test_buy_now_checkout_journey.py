@@ -62,12 +62,14 @@ class BuyNowCheckoutJourneyTests(unittest.TestCase):
         self.assertIn("You can add up to ${unitLabel(remaining)} more.", limits)
         self.assertIn("Reduce this product to ${unitLabel(allowed)} before checkout.", limits)
         self.assertIn("Remove this product before checkout.", limits)
-        self.assertIn("The limit is ${unitLabel(maximum)} per customer across orders.", limits)
+        self.assertIn(
+            "The limit is ${unitLabel(maximum)} per customer across orders${sinceLabel(rule)}.",
+            limits,
+        )
 
     def test_storefront_and_editor_journey_assets_match(self) -> None:
         for filename in (
             "buy-now-limit-checkout.js",
-            "customer-order-limit-copy.js",
             "customer-order-limits.js",
             "product-form.js",
         ):

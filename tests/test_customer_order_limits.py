@@ -42,9 +42,13 @@ class CustomerOrderLimitTests(unittest.TestCase):
     def test_liquid_normalizes_handles_and_passes_authentication_explicitly(self) -> None:
         liquid = self.read("snippets/customer-order-limits.liquid")
         rule = self.read("snippets/customer-order-limit-rule.liquid")
-        self.assertEqual(liquid.count("{% for order in customer.orders %}"), 1)
-        self.assertEqual(liquid.count("{% for line_item in order.line_items %}"), 1)
+        # One pass each, over collections resolved with a fallback name so a
+        # different EasyStore field name cannot silently read nothing.
+        self.assertEqual(liquid.count("{% for order in customer_order_limit_orders %}"), 1)
+        self.assertEqual(liquid.count("{% for line_item in customer_order_limit_lines %}"), 1)
         self.assertEqual(liquid.count("{% for cart_item in cart.items %}"), 1)
+        self.assertIn("customer.orders | default: customer.recent_orders", liquid)
+        self.assertIn("order.line_items | default: order.items", liquid)
         self.assertEqual(
             liquid.count("{% include 'customer-order-limit-rule'"),
             10,
@@ -55,7 +59,8 @@ class CustomerOrderLimitTests(unittest.TestCase):
             ),
             10,
         )
-        self.assertIn("customer.id != blank or customer.email != blank", liquid)
+        self.assertIn("customer_order_limit_customer_id != '' or customer_order_limit_customer_email != ''", liquid)
+        self.assertIn("customer.id | default: '' | append: '' | strip", liquid)
         self.assertIn("customerAuthenticated:", liquid)
         self.assertIn("customer_order_limit_handle_10_normalized", liquid)
         self.assertIn("line_item.product.handle", liquid)

@@ -1,24 +1,44 @@
 {% comment %}
 Configure up to ten EasyStore product-handle limits.
 Leave a handle blank to disable that slot. Handles are normalized to lowercase at runtime.
+
+Refresh timestamps renew an allowance. Once a refresh timestamp has passed, orders
+placed before it stop counting, so every customer starts the limit again from zero.
+A timestamp in the future changes nothing until it arrives.
+
+Write timestamps with the store's timezone offset, for example
+'2026-09-01 00:00:00 +0800'. A slot with a blank refresh falls back to
+customer_order_limit_refresh_all, and when that is blank too every past order
+keeps counting forever.
 {% endcomment %}
+{% assign customer_order_limit_refresh_all = '' %}
 {% assign customer_order_limit_handle_1 = 'MTG-HOB-BDL-EN' %}
 {% assign customer_order_limit_maximum_1 = 2 %}
+{% assign customer_order_limit_refresh_1 = '' %}
 {% assign customer_order_limit_handle_2 = 'MTG-HOB-CBB-EN' %}
 {% assign customer_order_limit_maximum_2 = 2 %}
+{% assign customer_order_limit_refresh_2 = '' %}
 {% assign customer_order_limit_handle_3 = 'MTG-HOB-CBB-EN-CASE6' %}
 {% assign customer_order_limit_maximum_3 = 1 %}
+{% assign customer_order_limit_refresh_3 = '' %}
 {% assign customer_order_limit_handle_4 = 'MTG-HOB-CBB-EN-PACK' %}
 {% assign customer_order_limit_maximum_4 = 1 %}
+{% assign customer_order_limit_refresh_4 = '' %}
 {% assign customer_order_limit_handle_5 = 'MTG-HOB-DNK-EN' %}
 {% assign customer_order_limit_maximum_5 = 3 %}
+{% assign customer_order_limit_refresh_5 = '' %}
 {% assign customer_order_limit_handle_6 = 'MTG-HOB-GFB-EN' %}
 {% assign customer_order_limit_maximum_6 = 1 %}
+{% assign customer_order_limit_refresh_6 = '' %}
 {% assign customer_order_limit_handle_7 = 'MTG-HOB-PBB-EN' %}
 {% assign customer_order_limit_maximum_7 = 12 %}
+{% assign customer_order_limit_refresh_7 = '' %}
 {% assign customer_order_limit_handle_8 = 'MTG-HOB-PRK-EN-SET4' %}
 {% assign customer_order_limit_maximum_8 = 1 %}
+{% assign customer_order_limit_refresh_8 = '' %}
 {% assign customer_order_limit_handle_9 = 'MTG-HOB-OBP-EN' %}
 {% assign customer_order_limit_maximum_9 = 1 %}
+{% assign customer_order_limit_refresh_9 = '' %}
 {% assign customer_order_limit_handle_10 = 'MTG-HOB-SCN-EN-SET2' %}
 {% assign customer_order_limit_maximum_10 = 1 %}
+{% assign customer_order_limit_refresh_10 = '' %}
