@@ -1,6 +1,7 @@
 (() => {
-  const MIN_OTP_CELLS = 4;
-  const MAX_OTP_CELLS = 8;
+  const MIN_CELLS = 4;
+  const MAX_CELLS = 8;
+  const PROXY_ATTR = 'data-otp-autofill-proxy';
   const OTP_HINT_SELECTOR = [
     'input[autocomplete="one-time-code"]',
     'input[name*="otp" i]',
@@ -22,63 +23,45 @@
   const EMAIL_FALLBACK_PATTERN = /(?:continue|use|verify|sign\s*in|log\s*in)\s+(?:with\s+)?email(?:\s+instead)?/i;
   const PHONE_FIELD_PATTERN = /(?:phone|mobile|telephone|country[-_ ]?code)/i;
 
-  const normaliseText = (value) => String(value || '').replace(/\s+/g, ' ').trim();
-
-  const getAttribute = (element, name) => (
+  const text = (value) => String(value || '').replace(/\s+/g, ' ').trim();
+  const digits = (value, limit = MAX_CELLS) => String(value || '').replace(/\D/g, '').slice(0, limit);
+  const attr = (element, name) => (
     element && typeof element.getAttribute === 'function' ? element.getAttribute(name) : null
   );
-
-  const setAttribute = (element, name, value) => {
+  const setAttr = (element, name, value) => {
     if (element && typeof element.setAttribute === 'function') element.setAttribute(name, value);
   };
+  const isProxy = (input) => attr(input, PROXY_ATTR) === 'true';
 
   const inputCanReceiveOtp = (input) => {
-    if (!input || input.disabled || input.readOnly) return false;
-
-    const type = normaliseText(getAttribute(input, 'type') || input.type || 'text').toLowerCase();
+    if (!input || input.disabled || input.readOnly || isProxy(input)) return false;
+    const type = text(attr(input, 'type') || input.type || 'text').toLowerCase();
     if (['hidden', 'password', 'submit', 'button', 'checkbox', 'radio', 'email'].includes(type)) return false;
-
     const identity = [
-      getAttribute(input, 'name'),
-      getAttribute(input, 'id'),
-      getAttribute(input, 'autocomplete'),
-      getAttribute(input, 'aria-label'),
-      getAttribute(input, 'placeholder'),
+      attr(input, 'name'), attr(input, 'id'), attr(input, 'autocomplete'),
+      attr(input, 'aria-label'), attr(input, 'placeholder'),
     ].join(' ');
-
-    if (PHONE_FIELD_PATTERN.test(identity) && !VERIFICATION_PATTERN.test(identity)) return false;
-    return true;
+    return !PHONE_FIELD_PATTERN.test(identity) || VERIFICATION_PATTERN.test(identity);
   };
 
   const inputHasOtpHint = (input) => {
-    if (!input) return false;
+    if (!input || isProxy(input)) return false;
     if (typeof input.matches === 'function' && input.matches(OTP_HINT_SELECTOR)) return true;
-
-    const context = [
-      getAttribute(input, 'name'),
-      getAttribute(input, 'id'),
-      getAttribute(input, 'class'),
-      getAttribute(input, 'autocomplete'),
-      getAttribute(input, 'aria-label'),
-      getAttribute(input, 'placeholder'),
-      getAttribute(input, 'data-testid'),
-    ].join(' ');
-    return VERIFICATION_PATTERN.test(context);
+    return VERIFICATION_PATTERN.test([
+      attr(input, 'name'), attr(input, 'id'), attr(input, 'class'),
+      attr(input, 'autocomplete'), attr(input, 'aria-label'),
+      attr(input, 'placeholder'), attr(input, 'data-testid'),
+    ].join(' '));
   };
 
   const inputLooksLikeOtpCell = (input) => {
     if (!inputCanReceiveOtp(input)) return false;
     if (inputHasOtpHint(input)) return true;
-
-    const maxLength = Number(input.maxLength || getAttribute(input, 'maxlength') || 0);
-    const inputMode = normaliseText(getAttribute(input, 'inputmode') || input.inputMode).toLowerCase();
-    const pattern = normaliseText(getAttribute(input, 'pattern'));
-    const type = normaliseText(getAttribute(input, 'type') || input.type || 'text').toLowerCase();
-
-    return maxLength === 1
-      || inputMode === 'numeric'
-      || type === 'number'
-      || /(?:\\d|0-9|[0-9])/.test(pattern);
+    const maxLength = Number(input.maxLength || attr(input, 'maxlength') || 0);
+    const inputMode = text(attr(input, 'inputmode') || input.inputMode).toLowerCase();
+    const pattern = text(attr(input, 'pattern'));
+    const type = text(attr(input, 'type') || input.type || 'text').toLowerCase();
+    return maxLength === 1 || inputMode === 'numeric' || type === 'number' || /(?:\\d|0-9|[0-9])/.test(pattern);
   };
 
   const queryInputs = (container) => {
@@ -86,53 +69,36 @@
     return Array.from(container.querySelectorAll('input')).filter(inputCanReceiveOtp);
   };
 
-  const isPlausibleOtpGroup = (inputs, anchor = null) => {
-    if (inputs.length < MIN_OTP_CELLS || inputs.length > MAX_OTP_CELLS) return false;
+  const plausibleGroup = (inputs, anchor = null) => {
+    if (inputs.length < MIN_CELLS || inputs.length > MAX_CELLS) return false;
     if (anchor && !inputs.includes(anchor)) return false;
-
-    const cellLikeCount = inputs.filter(inputLooksLikeOtpCell).length;
-    return cellLikeCount >= Math.max(MIN_OTP_CELLS, inputs.length - 1);
+    return inputs.filter(inputLooksLikeOtpCell).length >= Math.max(MIN_CELLS, inputs.length - 1);
   };
 
-  const findGroupAroundAnchor = (anchor, boundary) => {
+  const findGroupAroundAnchor = (anchor, form) => {
     let container = anchor;
-    while (container && container !== boundary) {
+    while (container && container !== form) {
       const inputs = queryInputs(container);
-      if (isPlausibleOtpGroup(inputs, anchor)) return inputs;
+      if (plausibleGroup(inputs, anchor)) return inputs;
       container = container.parentElement;
     }
-
-    if (boundary) {
-      const inputs = queryInputs(boundary);
-      if (isPlausibleOtpGroup(inputs, anchor)) return inputs;
-    }
-    return [];
+    const formInputs = queryInputs(form);
+    return plausibleGroup(formInputs, anchor) ? formInputs : [];
   };
 
   const formLooksLikeVerification = (form, documentObject, windowObject) => {
-    const locationPath = windowObject && windowObject.location ? windowObject.location.pathname : '';
-    const action = getAttribute(form, 'action') || '';
-    const formContext = [
-      locationPath,
-      action,
-      form && form.id,
-      form && form.className,
-      getAttribute(form, 'aria-label'),
-      form && form.textContent,
+    const pathname = windowObject && windowObject.location ? windowObject.location.pathname : '';
+    const context = [
+      pathname, attr(form, 'action'), form && form.id, form && form.className,
+      attr(form, 'aria-label'), form && form.textContent,
     ].join(' ');
-
-    if (VERIFICATION_PATTERN.test(formContext) || VERIFICATION_COPY_PATTERN.test(formContext)) return true;
-
-    const bodyCopy = documentObject && documentObject.body ? documentObject.body.textContent : '';
-    return VERIFICATION_COPY_PATTERN.test(normaliseText(bodyCopy));
+    if (VERIFICATION_PATTERN.test(context) || VERIFICATION_COPY_PATTERN.test(context)) return true;
+    return VERIFICATION_COPY_PATTERN.test(text(documentObject && documentObject.body && documentObject.body.textContent));
   };
 
   const findOtpCells = (form, documentObject, windowObject) => {
     const inputs = queryInputs(form);
-    if (!inputs.length) return [];
-
-    const anchors = inputs.filter(inputHasOtpHint);
-    for (const anchor of anchors) {
+    for (const anchor of inputs.filter(inputHasOtpHint)) {
       const group = findGroupAroundAnchor(anchor, form);
       if (group.length) return group;
     }
@@ -143,28 +109,22 @@
       if (!byParent.has(parent)) byParent.set(parent, []);
       byParent.get(parent).push(input);
     });
-    for (const group of byParent.values()) {
-      if (isPlausibleOtpGroup(group)) return group;
-    }
+    for (const group of byParent.values()) if (plausibleGroup(group)) return group;
 
     if (formLooksLikeVerification(form, documentObject, windowObject)) {
-      const cellLikeInputs = inputs.filter(inputLooksLikeOtpCell);
-      if (isPlausibleOtpGroup(cellLikeInputs)) return cellLikeInputs;
-      if (isPlausibleOtpGroup(inputs)) return inputs;
+      const cellLike = inputs.filter(inputLooksLikeOtpCell);
+      if (plausibleGroup(cellLike)) return cellLike;
+      if (plausibleGroup(inputs)) return inputs;
     }
-
     return [];
   };
 
-  const setNativeInputValue = (input, value, windowObject) => {
-    const inputPrototype = windowObject && windowObject.HTMLInputElement
+  const setNativeValue = (input, value, windowObject) => {
+    const prototype = windowObject && windowObject.HTMLInputElement
       ? windowObject.HTMLInputElement.prototype
       : null;
-    const descriptor = inputPrototype
-      ? Object.getOwnPropertyDescriptor(inputPrototype, 'value')
-      : null;
-
-    if (descriptor && typeof descriptor.set === 'function') descriptor.set.call(input, value);
+    const setter = prototype && Object.getOwnPropertyDescriptor(prototype, 'value');
+    if (setter && typeof setter.set === 'function') setter.set.call(input, value);
     else input.value = value;
   };
 
@@ -173,57 +133,47 @@
       ? windowObject.Event
       : (typeof Event !== 'undefined' ? Event : null);
     if (!EventConstructor || typeof input.dispatchEvent !== 'function') return;
-
     input.dispatchEvent(new EventConstructor('input', { bubbles: true }));
     input.dispatchEvent(new EventConstructor('change', { bubbles: true }));
   };
 
   const setCellValue = (cell, value, windowObject) => {
     if (String(cell.value || '') === value) return;
-    setNativeInputValue(cell, value, windowObject);
+    setNativeValue(cell, value, windowObject);
     dispatchValueEvents(cell, windowObject);
   };
 
+  const syncCellsFromCode = (cells, code, windowObject) => {
+    const codeDigits = digits(code, cells.length);
+    const form = cells[0] && cells[0].form;
+    if (form && form.dataset) form.dataset.otpCodeDistributing = 'true';
+    cells.forEach((cell, index) => setCellValue(cell, codeDigits[index] || '', windowObject));
+    if (form && form.dataset) delete form.dataset.otpCodeDistributing;
+    return codeDigits;
+  };
+
   const distributeOtpCode = (cells, code, windowObject, startIndex = 0) => {
-    if (!cells.length) return false;
-
-    const digits = String(code || '').replace(/\D/g, '').slice(0, cells.length - startIndex);
-    if (!digits) return false;
-
+    const codeDigits = digits(code, cells.length - startIndex);
+    if (!cells.length || !codeDigits) return false;
     const form = cells[0].form;
     if (form && form.dataset) form.dataset.otpCodeDistributing = 'true';
-
     cells.forEach((cell, index) => {
-      if (index < startIndex) return;
-      setCellValue(cell, digits[index - startIndex] || '', windowObject);
+      if (index >= startIndex) setCellValue(cell, codeDigits[index - startIndex] || '', windowObject);
     });
-
     if (form && form.dataset) delete form.dataset.otpCodeDistributing;
-
-    const finalIndex = Math.min(startIndex + digits.length, cells.length - 1);
-    const focusFinalCell = () => {
-      if (cells[finalIndex] && typeof cells[finalIndex].focus === 'function') cells[finalIndex].focus();
-    };
-    if (windowObject && typeof windowObject.requestAnimationFrame === 'function') {
-      windowObject.requestAnimationFrame(focusFinalCell);
-    } else {
-      focusFinalCell();
-    }
     return true;
   };
 
   const removeEmailFallback = (root) => {
     if (!root || typeof root.querySelectorAll !== 'function') return 0;
-
     let removed = 0;
     root.querySelectorAll('a, button, [role="button"], input[type="button"], input[type="submit"], [onclick]')
       .forEach((element) => {
-        const label = normaliseText(element.textContent || element.value || getAttribute(element, 'aria-label'));
+        const label = text(element.textContent || element.value || attr(element, 'aria-label'));
         if (!EMAIL_FALLBACK_PATTERN.test(label)) return;
-
         if (typeof element.remove === 'function') element.remove();
         else {
-          setAttribute(element, 'hidden', 'hidden');
+          setAttr(element, 'hidden', 'hidden');
           if (element.style && typeof element.style.setProperty === 'function') {
             element.style.setProperty('display', 'none', 'important');
           }
@@ -233,136 +183,171 @@
     return removed;
   };
 
-  const configureOtpCells = (form, cells, windowObject) => {
-    cells.forEach((cell, index) => {
-      setAttribute(cell, 'maxlength', index === 0 ? String(cells.length) : '1');
-      setAttribute(cell, 'inputmode', 'numeric');
-      setAttribute(cell, 'pattern', '[0-9]*');
-      setAttribute(cell, 'autocapitalize', 'off');
-      setAttribute(cell, 'spellcheck', 'false');
-      setAttribute(cell, 'autocomplete', index === 0 ? 'one-time-code' : 'off');
+  const proxyContainer = (cells, form) => {
+    let container = cells[0] && cells[0].parentElement;
+    while (container && container !== form) {
+      const inputs = queryInputs(container);
+      if (inputs.length === cells.length && cells.every((cell) => inputs.includes(cell))) return container;
+      container = container.parentElement;
+    }
+    return (cells[0] && cells[0].parentElement) || form;
+  };
 
+  const focusProxy = (proxy) => {
+    if (!proxy || typeof proxy.focus !== 'function') return;
+    try { proxy.focus({ preventScroll: true }); } catch (error) { proxy.focus(); }
+    const end = String(proxy.value || '').length;
+    if (typeof proxy.setSelectionRange === 'function') {
+      try { proxy.setSelectionRange(end, end); } catch (error) { /* unsupported */ }
+    }
+  };
+
+  const createOtpProxy = (form, cells, documentObject, windowObject) => {
+    if (form && form.__cardboardOtpAutofillProxy) {
+      form.__cardboardOtpAutofillProxy.__otpCells = cells;
+      return form.__cardboardOtpAutofillProxy;
+    }
+    if (!documentObject || typeof documentObject.createElement !== 'function') return null;
+
+    const proxy = documentObject.createElement('input');
+    proxy.type = 'text';
+    proxy.__otpCells = cells;
+    setAttr(proxy, PROXY_ATTR, 'true');
+    setAttr(proxy, 'autocomplete', 'one-time-code');
+    setAttr(proxy, 'inputmode', 'numeric');
+    setAttr(proxy, 'pattern', '[0-9]*');
+    setAttr(proxy, 'maxlength', String(cells.length));
+    setAttr(proxy, 'aria-label', 'Verification code');
+    setAttr(proxy, 'autocapitalize', 'off');
+    setAttr(proxy, 'spellcheck', 'false');
+    setAttr(proxy, 'enterkeyhint', 'done');
+
+    const container = proxyContainer(cells, form);
+    if (container && container.style && typeof container.style.setProperty === 'function') {
+      if (!text(container.style.position) || container.style.position === 'static') {
+        container.style.setProperty('position', 'relative');
+      }
+    }
+    if (proxy.style && typeof proxy.style.setProperty === 'function') {
+      [
+        ['position', 'absolute'], ['inset', '0'], ['width', '100%'], ['height', '100%'],
+        ['opacity', '0.01'], ['z-index', '2147483647'], ['border', '0'], ['margin', '0'],
+        ['padding', '0'], ['background', 'transparent'], ['color', 'transparent'],
+        ['caret-color', 'transparent'], ['font-size', '16px'], ['box-sizing', 'border-box'],
+      ].forEach(([name, value]) => proxy.style.setProperty(name, value));
+    }
+    if (container && typeof container.appendChild === 'function') container.appendChild(proxy);
+    else if (form && typeof form.appendChild === 'function') form.appendChild(proxy);
+    else return null;
+
+    const sync = () => {
+      const codeDigits = syncCellsFromCode(proxy.__otpCells || cells, proxy.value, windowObject);
+      if (String(proxy.value || '') !== codeDigits) setNativeValue(proxy, codeDigits, windowObject);
+      if (proxy.dataset) proxy.dataset.lastOtpValue = codeDigits;
+      focusProxy(proxy);
+    };
+
+    if (typeof proxy.addEventListener === 'function') {
+      proxy.addEventListener('input', sync, true);
+      proxy.addEventListener('change', sync, true);
+      proxy.addEventListener('compositionend', sync, true);
+      proxy.addEventListener('paste', (event) => {
+        const clipboard = event && (event.clipboardData || (windowObject && windowObject.clipboardData));
+        if (!clipboard || typeof clipboard.getData !== 'function') return;
+        const pasted = digits(clipboard.getData('text'), cells.length);
+        if (!pasted) return;
+        if (typeof event.preventDefault === 'function') event.preventDefault();
+        setNativeValue(proxy, pasted, windowObject);
+        sync();
+      }, true);
+    }
+    if (form && typeof form.addEventListener === 'function') form.addEventListener('submit', sync, true);
+    if (form) form.__cardboardOtpAutofillProxy = proxy;
+    return proxy;
+  };
+
+  const configureOtpCells = (form, cells, windowObject, documentObject = null) => {
+    cells.forEach((cell, index) => {
+      setAttr(cell, 'maxlength', '1');
+      setAttr(cell, 'inputmode', 'numeric');
+      setAttr(cell, 'pattern', '[0-9]*');
+      setAttr(cell, 'autocapitalize', 'off');
+      setAttr(cell, 'spellcheck', 'false');
+      setAttr(cell, 'autocomplete', 'off');
       if (cell.dataset && cell.dataset.otpCellEnhanced === 'true') return;
       if (cell.dataset) cell.dataset.otpCellEnhanced = 'true';
 
       const handleInput = () => {
         if (form.dataset && form.dataset.otpCodeDistributing === 'true') return;
-
-        const digits = String(cell.value || '').replace(/\D/g, '');
-        if (digits.length > 1) {
-          distributeOtpCode(cells, digits, windowObject, index);
-          return;
-        }
-
-        if (String(cell.value || '') !== digits) setNativeInputValue(cell, digits.slice(0, 1), windowObject);
-        if (digits && index < cells.length - 1 && typeof cells[index + 1].focus === 'function') {
-          cells[index + 1].focus();
-        }
+        const valueDigits = digits(cell.value, cells.length - index);
+        if (valueDigits.length > 1) distributeOtpCode(cells, valueDigits, windowObject, index);
+        else if (String(cell.value || '') !== valueDigits) setNativeValue(cell, valueDigits, windowObject);
       };
-
       if (typeof cell.addEventListener === 'function') {
-        cell.addEventListener('beforeinput', (event) => {
-          const incomingDigits = String(event && event.data || '').replace(/\D/g, '');
-          if (incomingDigits.length <= 1) return;
-          if (event && typeof event.preventDefault === 'function') event.preventDefault();
-          distributeOtpCode(cells, incomingDigits, windowObject, index);
-        }, true);
         cell.addEventListener('input', handleInput, true);
         cell.addEventListener('change', handleInput, true);
-        cell.addEventListener('compositionend', handleInput, true);
         cell.addEventListener('paste', (event) => {
           const clipboard = event && (event.clipboardData || (windowObject && windowObject.clipboardData));
           if (!clipboard || typeof clipboard.getData !== 'function') return;
-          const digits = String(clipboard.getData('text') || '').replace(/\D/g, '');
-          if (digits.length <= 1) return;
-
+          const pasted = digits(clipboard.getData('text'), cells.length - index);
+          if (pasted.length <= 1) return;
           if (typeof event.preventDefault === 'function') event.preventDefault();
-          distributeOtpCode(cells, digits, windowObject, index);
+          distributeOtpCode(cells, pasted, windowObject, index);
         }, true);
-        cell.addEventListener('keydown', (event) => {
-          if (event.key === 'Backspace' && !cell.value && index > 0 && typeof cells[index - 1].focus === 'function') {
-            cells[index - 1].focus();
-          }
+      }
+    });
+
+    const proxy = createOtpProxy(form, cells, documentObject, windowObject);
+    if (proxy) cells.forEach((cell) => {
+      if (cell.dataset && cell.dataset.otpProxyFocusBound === 'true') return;
+      if (cell.dataset) cell.dataset.otpProxyFocusBound = 'true';
+      if (typeof cell.addEventListener === 'function') {
+        cell.addEventListener('focus', () => focusProxy(proxy));
+        cell.addEventListener('pointerdown', (event) => {
+          if (event && typeof event.preventDefault === 'function') event.preventDefault();
+          focusProxy(proxy);
         });
       }
     });
+    return proxy;
   };
 
   const scanAndEnhance = (documentObject, windowObject) => {
     if (!documentObject || typeof documentObject.querySelectorAll !== 'function') return [];
-
-    const forms = Array.from(documentObject.querySelectorAll('form'));
     const groups = [];
-    forms.forEach((form) => {
+    Array.from(documentObject.querySelectorAll('form')).forEach((form) => {
       const cells = findOtpCells(form, documentObject, windowObject);
       if (!cells.length) return;
-      configureOtpCells(form, cells, windowObject);
+      const proxy = configureOtpCells(form, cells, windowObject, documentObject);
       groups.push(cells);
+      if (!proxy) return;
+      const current = digits(proxy.value, cells.length);
+      const previous = proxy.dataset ? proxy.dataset.lastOtpValue || '' : '';
+      if (current !== previous) {
+        syncCellsFromCode(cells, current, windowObject);
+        if (proxy.dataset) proxy.dataset.lastOtpValue = current;
+      }
     });
 
-    const hasOtpHint = typeof documentObject.querySelector === 'function'
-      && documentObject.querySelector(OTP_HINT_SELECTOR);
-    const pageLooksRelevant = groups.length > 0
-      || Boolean(hasOtpHint)
-      || VERIFICATION_PATTERN.test(windowObject && windowObject.location ? windowObject.location.pathname : '');
-    if (pageLooksRelevant) removeEmailFallback(documentObject);
-
-    groups.forEach((cells) => {
-      cells.forEach((cell, index) => {
-        const digits = String(cell.value || '').replace(/\D/g, '');
-        if (digits.length > 1) distributeOtpCode(cells, digits, windowObject, index);
-      });
-    });
+    const hasHint = typeof documentObject.querySelector === 'function' && documentObject.querySelector(OTP_HINT_SELECTOR);
+    const pathname = windowObject && windowObject.location ? windowObject.location.pathname : '';
+    if (groups.length || hasHint || VERIFICATION_PATTERN.test(pathname)) removeEmailFallback(documentObject);
     return groups;
   };
 
   const boot = (windowObject, documentObject) => {
     const run = () => scanAndEnhance(documentObject, windowObject);
-
-    if (typeof documentObject.addEventListener === 'function') {
-      documentObject.addEventListener('beforeinput', (event) => {
-        const target = event.target;
-        if (!inputCanReceiveOtp(target)) return;
-        const digits = String(event.data || '').replace(/\D/g, '');
-        if (digits.length <= 1) return;
-
-        const form = target.form || (typeof target.closest === 'function' ? target.closest('form') : null);
-        if (!form) return;
-        const cells = findOtpCells(form, documentObject, windowObject);
-        if (!cells.includes(target)) return;
-
-        if (typeof event.preventDefault === 'function') event.preventDefault();
-        distributeOtpCode(cells, digits, windowObject, cells.indexOf(target));
-      }, true);
-      documentObject.addEventListener('input', (event) => {
-        const target = event.target;
-        if (!inputCanReceiveOtp(target)) return;
-        const digits = String(target.value || '').replace(/\D/g, '');
-        if (digits.length <= 1) return;
-
-        const form = target.form || (typeof target.closest === 'function' ? target.closest('form') : null);
-        if (!form) return;
-        const cells = findOtpCells(form, documentObject, windowObject);
-        if (!cells.includes(target)) return;
-        distributeOtpCode(cells, digits, windowObject, cells.indexOf(target));
-      }, true);
-    }
-
     run();
-
     if (windowObject && typeof windowObject.MutationObserver === 'function' && documentObject.documentElement) {
       const observer = new windowObject.MutationObserver(run);
       observer.observe(documentObject.documentElement, { childList: true, subtree: true });
     }
-
     if (windowObject && typeof windowObject.setInterval === 'function') {
       let scans = 0;
-      const intervalId = windowObject.setInterval(() => {
+      const interval = windowObject.setInterval(() => {
         run();
         scans += 1;
-        if (scans >= 240 && typeof windowObject.clearInterval === 'function') {
-          windowObject.clearInterval(intervalId);
-        }
+        if (scans >= 240 && typeof windowObject.clearInterval === 'function') windowObject.clearInterval(interval);
       }, 250);
     }
   };
@@ -370,6 +355,7 @@
   const api = {
     boot,
     configureOtpCells,
+    createOtpProxy,
     distributeOtpCode,
     findOtpCells,
     inputCanReceiveOtp,
@@ -377,6 +363,7 @@
     inputLooksLikeOtpCell,
     removeEmailFallback,
     scanAndEnhance,
+    syncCellsFromCode,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
