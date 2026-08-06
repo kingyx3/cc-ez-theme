@@ -4,6 +4,12 @@
   {% assign product_card_cart_controls_assets_loaded = true %}
 {% endunless %}
 
+{% assign on_sale = false %}
+{% assign sale_text = 'products.product.sale' | t %}
+{% if product.compare_at_price > product.price %}
+  {% assign on_sale = true %}
+{% endif %}
+
 {% assign sold_out = true %}
 {% assign sold_out_text = 'products.product.sold_out' | t %}
 {% if product.available %}
@@ -48,6 +54,9 @@
             <img src="{{ product.secondary_image.src | img_url: settings.product_img_res }}" alt="{{ product.secondary_image.alt | _default: product.title | escape }}" width="800" height="800" loading="lazy">
           {% endif %}
         </div>
+        {% if on_sale %}
+          <div class="card__badge card__badge-on_sale card__badge-top-left"><span class="badge badge-ribbon badge--top-left color-accent-2" aria-hidden="true">{{sale_text}}</span></div>
+        {% endif %}
         {% if sold_out %}
           <div class="card__badge card__badge-sold_out card__badge-top-left"><span class="badge badge-ribbon badge--top-left" aria-hidden="true">{{sold_out_text}}</span></div>
         {% endif %}
