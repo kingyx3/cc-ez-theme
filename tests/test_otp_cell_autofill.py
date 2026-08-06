@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import unittest
 from pathlib import Path
 
@@ -7,101 +8,87 @@ from pathlib import Path
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 THEME_ROOT = REPOSITORY_ROOT / "theme"
 
+# Every runtime script the theme loads on the storefront.
+ASSET_DIRECTORIES = ("assets", "editor_assets")
 
-class OtpCellAutofillTests(unittest.TestCase):
+
+def code_only(source: str) -> str:
+    """Strip comments so assertions describe behaviour, not prose.
+
+    Only whole-line `//` comments and `/* */` blocks are removed, so a `//`
+    inside a string literal (a URL, say) is never mistaken for a comment.
+    """
+    without_blocks = re.sub(r"/\*.*?\*/", "", source, flags=re.DOTALL)
+    return "\n".join(
+        line for line in without_blocks.splitlines()
+        if not line.strip().startswith("//")
+    )
+
+
+class OtpFieldsAreLeftAloneTests(unittest.TestCase):
+    """Regression guard for the "Customer already exists (phone)" outage.
+
+    The one-time-code step at /account/auth is rendered by EasyStore, not by
+    this theme, and the widget posts its verification itself. Theme scripts that
+    wrote into those cells and dispatched synthetic input/change events made the
+    widget fire that request more than once: the first call created the customer
+    and the second came back "Customer already exists (phone)", so signup broke
+    for every new phone number.
+
+    The widget also submits over fetch rather than a native form submit, so a
+    submit-event guard cannot deduplicate it from the theme side. Until the
+    real markup is known, the theme stays out of these fields entirely - which
+    is the behaviour that shipped before PR #65 and PR #66.
+    """
+
     @classmethod
     def setUpClass(cls) -> None:
-        cls.storefront_script = (
-            THEME_ROOT / "assets" / "otp-cell-autofill.js"
-        ).read_text(encoding="utf-8")
-        cls.editor_script = (
-            THEME_ROOT / "editor_assets" / "otp-cell-autofill.js"
-        ).read_text(encoding="utf-8")
+        cls.scripts = {
+            path: code_only(path.read_text(encoding="utf-8"))
+            for directory in ASSET_DIRECTORIES
+            for path in sorted((THEME_ROOT / directory).glob("*.js"))
+        }
         cls.currencies = (
             THEME_ROOT / "snippets" / "currencies.liquid"
         ).read_text(encoding="utf-8")
 
-    def test_otp_fix_is_loaded_after_the_existing_global_assets(self) -> None:
-        self.assertIn("otp-cell-autofill.js", self.currencies)
-        self.assertIn('defer="defer"', self.currencies)
+    def test_the_otp_module_is_not_shipped(self) -> None:
+        for directory in ASSET_DIRECTORIES:
+            with self.subTest(directory=directory):
+                self.assertFalse(
+                    (THEME_ROOT / directory / "otp-cell-autofill.js").exists()
+                )
 
-    def test_storefront_and_editor_scripts_match(self) -> None:
-        self.assertEqual(self.storefront_script, self.editor_script)
+    def test_no_layout_or_snippet_loads_an_otp_script(self) -> None:
+        self.assertNotIn("otp-cell-autofill", self.currencies)
+        for liquid in THEME_ROOT.rglob("*.liquid"):
+            with self.subTest(template=liquid.name):
+                self.assertNotIn(
+                    "otp-cell-autofill", liquid.read_text(encoding="utf-8")
+                )
 
-    def test_cells_are_detected_structurally_rather_than_by_url(self) -> None:
-        # The platform renders the verification step under form actions and URLs
-        # the theme cannot predict, so detection keys off the widget shape.
-        self.assertIn("const looksLikeOtpCell", self.storefront_script)
-        self.assertIn("input.maxLength === 1", self.storefront_script)
-        self.assertIn("'size') === '1'", self.storefront_script)
-        self.assertIn("const findOtpGroups", self.storefront_script)
-        self.assertIn("document.querySelectorAll('input')", self.storefront_script)
+    def test_no_theme_script_claims_one_time_code_fields(self) -> None:
+        for path, source in self.scripts.items():
+            with self.subTest(script=path.name):
+                self.assertNotIn("one-time-code", source)
+                self.assertNotIn("OTPCredential", source)
 
-    def test_cells_outside_a_form_are_still_enhanced(self) -> None:
-        self.assertIn("const groupContainer", self.storefront_script)
-        self.assertIn("node.contains(candidate)", self.storefront_script)
-        self.assertIn("MAX_CONTAINER_DEPTH", self.storefront_script)
-        self.assertIn("node !== document.body", self.storefront_script)
-
-    def test_unrelated_code_fields_are_never_treated_as_otp_cells(self) -> None:
-        self.assertIn("NON_OTP_NAME_PATTERN", self.storefront_script)
-        for token in ("country", "postal", "discount", "search"):
-            self.assertIn(token, self.storefront_script)
-
-    def test_autofilled_code_is_distributed_across_otp_cells(self) -> None:
-        self.assertIn("const distributeOtpCode", self.storefront_script)
-        self.assertIn("digits[index - begin] || ''", self.storefront_script)
-        self.assertIn("if (digits.length > 1)", self.storefront_script)
-        self.assertIn("cell.addEventListener('input'", self.storefront_script)
-        # Some autofill paths only report a "change".
-        self.assertIn("cell.addEventListener('change'", self.storefront_script)
-
-    def test_a_full_length_code_always_starts_at_the_first_cell(self) -> None:
-        self.assertIn("digits.length >= cells.length", self.storefront_script)
-
-    def test_every_cell_accepts_the_whole_code_for_autofill(self) -> None:
-        # maxlength="1" makes browsers truncate the autofilled code to a single
-        # digit, which is why only the first cell used to be filled.
-        self.assertIn("'maxlength', String(cells.length)", self.storefront_script)
-        self.assertIn("'autocomplete', 'one-time-code'", self.storefront_script)
-
-    def test_web_otp_credential_is_spread_over_every_cell(self) -> None:
-        self.assertIn("'OTPCredential' in window", self.storefront_script)
-        self.assertIn("otp: { transport: ['sms'] }", self.storefront_script)
-        self.assertIn("distributeOtpCode(cells, credential.code, 0)", self.storefront_script)
-
-    def test_only_one_change_event_is_emitted_per_distribution(self) -> None:
-        # Firing "change" per cell makes widgets that submit on change post the
-        # verification twice, which fails with "Customer already exists (phone)".
-        self.assertEqual(
-            self.storefront_script.count("new Event('change', { bubbles: true })"),
-            1,
-        )
-
-    def test_duplicate_verification_submits_are_dropped(self) -> None:
-        self.assertIn("const guardDuplicateSubmit", self.storefront_script)
-        self.assertIn("otpSubmitInFlight", self.storefront_script)
-        self.assertIn("event.stopImmediatePropagation()", self.storefront_script)
-        self.assertIn("DUPLICATE_SUBMIT_LOCK_MS", self.storefront_script)
-        self.assertIn("guardDuplicateSubmit(cells[0].form)", self.storefront_script)
-
-    def test_email_fallback_is_hidden_during_mobile_otp(self) -> None:
-        self.assertIn("continue\\s+with\\s+email\\s+instead", self.storefront_script)
-        self.assertIn("element.hidden = true", self.storefront_script)
-        self.assertIn("mobileOtpFallbackHidden", self.storefront_script)
-
-    def test_single_field_verification_forms_skip_search_boxes(self) -> None:
-        self.assertIn("SEARCH_FORM_SELECTOR", self.storefront_script)
-        self.assertIn("data-search-history-form", self.storefront_script)
-        self.assertIn('role="search"', self.storefront_script)
-
-    def test_dynamic_verification_markup_is_observed(self) -> None:
-        self.assertIn("new MutationObserver", self.storefront_script)
-        self.assertIn("enhanceDocument()", self.storefront_script)
-        self.assertIn("scheduleEnhance", self.storefront_script)
+    def test_no_theme_script_writes_synthetic_events_into_otp_cells(self) -> None:
+        # The double submit came from dispatching input/change on cells the
+        # platform widget owns.
+        for path, source in self.scripts.items():
+            with self.subTest(script=path.name):
+                self.assertNotIn("distributeOtpCode", source)
+                self.assertNotIn("otpCell", source)
 
 
 class AccountSubmitGuardTests(unittest.TestCase):
+    """The theme's own account forms are still guarded.
+
+    These are theme-rendered templates with native form submits, so a submit
+    lock does work here - unlike the platform's OTP widget.
+    """
+
     @classmethod
     def setUpClass(cls) -> None:
         cls.global_script = (THEME_ROOT / "assets" / "global.js").read_text(

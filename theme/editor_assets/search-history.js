@@ -169,10 +169,11 @@
     'input[name="customer[birthdate]"]',
     'input[name="details[birthdate]"]',
   ].join(',');
-  // One-time-code fields are owned by otp-cell-autofill.js. Two scripts
-  // rewriting the same autocomplete attributes, and both opening a WebOTP
-  // request, fought over the SMS code and left five of the six cells empty, so
-  // this module keeps to the gender and birthdate fields.
+  // Deliberately no verification-code handling here. The one-time-code step at
+  // /account/auth is EasyStore's, and the widget posts its own request; theme
+  // scripts that wrote into those cells made it post twice, which broke signup
+  // with "Customer already exists (phone)". This module stays on gender and
+  // birthdate. See tests/test_otp_cell_autofill.py.
 
   const injectStyles = () => {
     if (document.getElementById('customer-form-enhancements-styles')) return;
