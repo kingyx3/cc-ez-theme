@@ -1,6 +1,7 @@
 {% comment %}
-Configure up to ten EasyStore product-handle limits.
+Configure EasyStore product-handle limits.
 Leave a handle blank to disable that slot. Handles are normalized to lowercase at runtime.
+Handles omitted from this file, including rows with a blank promo maximum, remain unlimited.
 {% endcomment %}
 {% assign customer_order_limit_handle_1 = 'MTG-HOB-BDL-EN' %}
 {% assign customer_order_limit_maximum_1 = 2 %}
@@ -12,13 +13,21 @@ Leave a handle blank to disable that slot. Handles are normalized to lowercase a
 {% assign customer_order_limit_maximum_4 = 1 %}
 {% assign customer_order_limit_handle_5 = 'MTG-HOB-DNK-EN' %}
 {% assign customer_order_limit_maximum_5 = 3 %}
-{% assign customer_order_limit_handle_6 = 'MTG-HOB-GFB-EN' %}
-{% assign customer_order_limit_maximum_6 = 1 %}
-{% assign customer_order_limit_handle_7 = 'MTG-HOB-PBB-EN' %}
-{% assign customer_order_limit_maximum_7 = 12 %}
-{% assign customer_order_limit_handle_8 = 'MTG-HOB-PRK-EN-SET4' %}
+{% assign customer_order_limit_handle_6 = 'MTG-HOB-PBB-EN' %}
+{% assign customer_order_limit_maximum_6 = 12 %}
+{% assign customer_order_limit_handle_7 = 'MTG-HOB-PRK-EN-SET4' %}
+{% assign customer_order_limit_maximum_7 = 1 %}
+{% assign customer_order_limit_handle_8 = 'MTG-HOB-OBP-EN' %}
 {% assign customer_order_limit_maximum_8 = 1 %}
-{% assign customer_order_limit_handle_9 = 'MTG-HOB-OBP-EN' %}
+{% assign customer_order_limit_handle_9 = 'MTG-HOB-SCN-EN-SET2' %}
 {% assign customer_order_limit_maximum_9 = 1 %}
-{% assign customer_order_limit_handle_10 = 'MTG-HOB-SCN-EN-SET2' %}
+{% assign customer_order_limit_handle_10 = 'CC-BDL-SCENES3-EN' %}
 {% assign customer_order_limit_maximum_10 = 1 %}
+{% assign customer_order_limit_handle_11 = 'CC-BDL-FRIENDS3-EN-SPM' %}
+{% assign customer_order_limit_maximum_11 = 1 %}
+{% assign customer_order_limit_handle_12 = 'CC-BDL-FRIENDS3-EN-MSH' %}
+{% assign customer_order_limit_maximum_12 = 1 %}
+{% assign customer_order_limit_handle_13 = 'CC-BDL-SPIDERVAULT-EN' %}
+{% assign customer_order_limit_maximum_13 = 1 %}
+{% assign customer_order_limit_handle_14 = 'CC-BDL-UNEXPECTED-EN' %}
+{% assign customer_order_limit_maximum_14 = 2 %}
