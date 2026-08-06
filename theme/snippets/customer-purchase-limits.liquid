@@ -7,110 +7,114 @@
   Rule format:
     easystore-product-handle|maximum-units|refresh-date-1,refresh-date-2
 
-  Separate multiple product rules with semicolons.
+  Separate multiple product rules with semicolons. Refresh dates are optional.
 
   Example:
     {% assign customer_purchase_limit_rules = 'limited-coffee|2|2026-09-01,2027-01-01;members-box|1|2026-12-01' %}
 
-  Refresh dates are optional. On each listed date, orders placed before that date
-  stop counting toward the entitlement. The latest elapsed refresh date is used.
-  Refresh dates stay server-side and are not included in customer-facing data.
-  Limited products require a signed-in customer so order history can be checked.
-
-  Leave the value blank to disable configured cross-order purchase limits.
+  Leave the value blank to disable the feature. When disabled, this snippet emits
+  no data and loads no JavaScript, so normal product and cart behavior is untouched.
 {% endcomment %}
 {% assign customer_purchase_limit_rules = '' %}
+{% assign customer_purchase_limit_rules_source = customer_purchase_limit_rules | strip %}
 
-{% assign customer_purchase_limit_rule_list = customer_purchase_limit_rules | split: ';' %}
-{% assign customer_purchase_limit_now = 'now' | date: '%s' | plus: 0 %}
+{% if customer_purchase_limit_rules_source != blank %}
+  {% assign customer_purchase_limit_rule_list = customer_purchase_limit_rules_source | split: ';' %}
+  {% assign customer_purchase_limit_now = 'now' | date: '%s' | plus: 0 %}
 
-<script>
-  window.customerPurchaseLimits = {
-    loggedIn: {% if customer %}true{% else %}false{% endif %},
-    loginUrl: '/account/login',
-    rules: {}
-  };
-  window.customerPurchaseLimitVariantHandles = {};
-  window.purchaseCartHandleQuantities = {};
-  window.purchaseCartLines = [];
-</script>
+  <script>
+    window.customerPurchaseLimits = {
+      version: 2,
+      enabled: true,
+      loggedIn: {% if customer %}true{% else %}false{% endif %},
+      loginUrl: '/account/login',
+      rules: {},
+      variantHandles: {},
+      cart: {
+        handles: {},
+        lines: []
+      }
+    };
+  </script>
 
-{% for raw_rule in customer_purchase_limit_rule_list %}
-  {% assign rule = raw_rule | strip %}
-  {% if rule != blank %}
-    {% assign rule_parts = rule | split: '|' %}
-    {% assign product_handle = rule_parts[0] | strip %}
-    {% assign maximum_units = rule_parts[1] | strip | plus: 0 %}
-    {% assign refresh_date_list = rule_parts[2] | default: '' | split: ',' %}
+  {% for raw_rule in customer_purchase_limit_rule_list limit: 20 %}
+    {% assign rule = raw_rule | strip %}
+    {% if rule != blank %}
+      {% assign rule_parts = rule | split: '|' %}
+      {% assign product_handle = rule_parts[0] | strip %}
+      {% assign maximum_units = rule_parts[1] | strip | plus: 0 %}
+      {% assign refresh_date_list = rule_parts[2] | default: '' | split: ',' %}
 
-    {% if product_handle != blank and maximum_units > 0 %}
-      {% assign active_refresh_epoch = 0 %}
+      {% if product_handle != blank and maximum_units > 0 %}
+        {% assign active_refresh_epoch = 0 %}
 
-      {% for raw_refresh_date in refresh_date_list %}
-        {% assign refresh_date = raw_refresh_date | strip %}
-        {% if refresh_date != blank %}
-          {% assign refresh_epoch = refresh_date | date: '%s' | plus: 0 %}
-          {% if refresh_epoch <= customer_purchase_limit_now and refresh_epoch > active_refresh_epoch %}
-            {% assign active_refresh_epoch = refresh_epoch %}
-          {% endif %}
-        {% endif %}
-      {% endfor %}
-
-      {% assign purchased_quantity = 0 %}
-      {% if customer %}
-        {% for order in customer.orders %}
-          {% assign order_epoch = order.created_at | date: '%s' | plus: 0 %}
-          {% assign order_is_cancelled = false %}
-          {% if order.is_cancelled == true or order.is_cancelled == 1 %}
-            {% assign order_is_cancelled = true %}
-          {% endif %}
-
-          {% if order_is_cancelled == false and order_epoch >= active_refresh_epoch %}
-            {% for line_item in order.line_items %}
-              {% assign line_product_handle = line_item.product.handle | default: line_item.handle %}
-              {% if line_product_handle == product_handle %}
-                {% assign purchased_quantity = purchased_quantity | plus: line_item.quantity %}
-              {% endif %}
-            {% endfor %}
+        {% for raw_refresh_date in refresh_date_list limit: 20 %}
+          {% assign refresh_date = raw_refresh_date | strip %}
+          {% if refresh_date != blank %}
+            {% assign refresh_epoch = refresh_date | date: '%s' | plus: 0 %}
+            {% if refresh_epoch <= customer_purchase_limit_now and refresh_epoch > active_refresh_epoch %}
+              {% assign active_refresh_epoch = refresh_epoch %}
+            {% endif %}
           {% endif %}
         {% endfor %}
-      {% endif %}
 
-      <script>
-        window.customerPurchaseLimits.rules[{{ product_handle | json }}] = {
-          handle: {{ product_handle | json }},
-          maximum: {{ maximum_units | json }},
-          purchased: {{ purchased_quantity | json }}
-        };
-      </script>
+        {% assign purchased_quantity = 0 %}
+        {% if customer %}
+          {% for order in customer.orders %}
+            {% assign order_epoch = order.created_at | date: '%s' | plus: 0 %}
+            {% assign order_is_cancelled = false %}
+            {% if order.is_cancelled == true or order.is_cancelled == 1 %}
+              {% assign order_is_cancelled = true %}
+            {% endif %}
 
-      {% assign limited_product = products[product_handle] %}
-      {% if limited_product %}
-        <script>
-          {% for variant in limited_product.variants %}
-            window.customerPurchaseLimitVariantHandles[String({{ variant.id | json }})] =
-              {{ product_handle | json }};
+            {% if order_is_cancelled == false and order_epoch >= active_refresh_epoch %}
+              {% for line_item in order.line_items %}
+                {% assign line_product_handle = line_item.product.handle | default: line_item.handle %}
+                {% if line_product_handle == product_handle %}
+                  {% assign purchased_quantity = purchased_quantity | plus: line_item.quantity %}
+                {% endif %}
+              {% endfor %}
+            {% endif %}
           {% endfor %}
+        {% endif %}
+
+        <script>
+          window.customerPurchaseLimits.rules[{{ product_handle | json }}] = {
+            handle: {{ product_handle | json }},
+            maximum: {{ maximum_units | json }},
+            purchased: {{ purchased_quantity | json }}
+          };
         </script>
+
+        {% assign limited_product = products[product_handle] %}
+        {% if limited_product %}
+          <script>
+            {% for variant in limited_product.variants %}
+              window.customerPurchaseLimits.variantHandles[String({{ variant.id | json }})] =
+                {{ product_handle | json }};
+            {% endfor %}
+          </script>
+        {% endif %}
       {% endif %}
     {% endif %}
-  {% endif %}
-{% endfor %}
-
-<script>
-  {% for item in cart.items %}
-    {% assign cart_product_handle = item.product.handle | default: item.handle %}
-    {% if cart_product_handle != blank %}
-      window.purchaseCartHandleQuantities[{{ cart_product_handle | json }}] =
-        (window.purchaseCartHandleQuantities[{{ cart_product_handle | json }}] || 0)
-        + {{ item.quantity | default: 0 | json }};
-    {% endif %}
-
-    window.purchaseCartLines.push({
-      itemId: {{ item.id | default: item.item_id | json }},
-      variantId: {{ item.variant_id | json }},
-      handle: {{ cart_product_handle | json }},
-      quantity: {{ item.quantity | default: 0 | json }}
-    });
   {% endfor %}
-</script>
+
+  <script>
+    {% for item in cart.items %}
+      {% assign cart_product_handle = item.product.handle | default: item.handle %}
+      {% if cart_product_handle != blank %}
+        window.customerPurchaseLimits.cart.handles[{{ cart_product_handle | json }}] =
+          (window.customerPurchaseLimits.cart.handles[{{ cart_product_handle | json }}] || 0)
+          + {{ item.quantity | default: 0 | json }};
+      {% endif %}
+
+      window.customerPurchaseLimits.cart.lines.push({
+        itemId: {{ item.id | default: item.item_id | json }},
+        variantId: {{ item.variant_id | json }},
+        handle: {{ cart_product_handle | json }},
+        quantity: {{ item.quantity | default: 0 | json }}
+      });
+    {% endfor %}
+  </script>
+  <script src="{{ 'customer-purchase-limits.js' | asset_url }}" defer="defer"></script>
+{% endif %}

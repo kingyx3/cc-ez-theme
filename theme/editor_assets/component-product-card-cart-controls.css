@@ -1,7 +1,3 @@
-.product-card-wrapper .card__badge-on_sale {
-  display: none;
-}
-
 .product-card-wrapper > add-to-cart-button .card__badge.card__badge-top-right.card__badge-float-edge {
   top: 0.6rem;
   right: 0.6rem;

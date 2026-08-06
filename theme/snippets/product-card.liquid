@@ -55,7 +55,7 @@
           {% endif %}
         </div>
         {% if on_sale %}
-          <div class="card__badge card__badge-on_sale card__badge-top-left"><span class="badge badge-ribbon badge--top-left color-accent-2" aria-hidden="true">{{sale_text}}</span></div>
+          <div class="card__badge card__badge-on_sale card__badge-top-left" hidden="hidden" aria-hidden="true"><span class="badge badge-ribbon badge--top-left color-accent-2">{{sale_text}}</span></div>
         {% endif %}
         {% if sold_out %}
           <div class="card__badge card__badge-sold_out card__badge-top-left"><span class="badge badge-ribbon badge--top-left" aria-hidden="true">{{sold_out_text}}</span></div>

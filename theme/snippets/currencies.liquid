@@ -12,7 +12,6 @@
   {% endfor %}
 </script>
 <script src="{{ 'purchase-limit-feedback.js' | asset_url }}"></script>
-<script src="{{ 'customer-purchase-limits.js' | asset_url }}"></script>
 
 <script>
   EasyStore.Currencies.init({{ shop.enabled_currencies |json }}, {{ settings.is_server_side_currency_conversion }})
