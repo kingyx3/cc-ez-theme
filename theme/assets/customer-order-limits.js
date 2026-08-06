@@ -21,6 +21,13 @@
 
   const nowMs = () => new Date().getTime();
 
+  // EasyStore's `json` filter renders a Liquid boolean as 1 or 0, so a strict
+  // `=== true` read of anything the snippets publish is false for a signed-in
+  // customer. Every flag from Liquid goes through here.
+  const truthy = (value) => (
+    value === true || value === 1 || value === '1' || value === 'true'
+  );
+
   const unitLabel = (value) => {
     const count = quantity(value, 0);
     return `${count} unit${count === 1 ? '' : 's'}`;
@@ -63,7 +70,7 @@
 
   const ruleFor = (handle) => rules[normalizeHandle(handle)] || null;
 
-  const customerAuthenticated = source.customerAuthenticated === true;
+  const customerAuthenticated = truthy(source.customerAuthenticated);
 
   // `body.customer-logged-in` comes from the layout and the markers come from
   // the header, both rendered by the same `customer` check the rest of the theme

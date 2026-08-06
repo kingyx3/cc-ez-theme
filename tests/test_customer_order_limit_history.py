@@ -55,6 +55,28 @@ class HistoryPayloadStructureTests(unittest.TestCase):
         # No filtering by handle here: the reading page applies its own config.
         self.assertNotIn("customer_order_limit_handle_1", history)
 
+    def test_liquid_booleans_are_read_by_value_not_by_identity(self) -> None:
+        limits = self.read("assets/customer-order-limits.js")
+
+        # EasyStore's json filter renders a Liquid boolean as 1 or 0, so a strict
+        # `=== true` read of the sign-in flag is false for a signed-in customer.
+        self.assertIn("const truthy = (value) => (", limits)
+        self.assertIn("value === true || value === 1 || value === '1' || value === 'true'", limits)
+        self.assertIn("const customerAuthenticated = truthy(source.customerAuthenticated);", limits)
+        self.assertNotIn("source.customerAuthenticated === true", limits)
+
+    def test_the_console_check_survives_an_older_published_build(self) -> None:
+        snippet = (ROOT / "scripts" / "limit-check.console.js").read_text(encoding="utf-8")
+
+        # It crashed on a build without the history loader instead of reporting
+        # that the published theme was out of date.
+        self.assertIn("typeof api.historyState === 'function'", snippet)
+        self.assertIn("typeof api.loadHistory === 'function'", snippet)
+        self.assertIn("BUILD IS OLD", snippet)
+        self.assertIn("CANNOT TELL", snippet)
+        # The load is only attempted when the build can do it.
+        self.assertIn("if (hasHistoryLoader && (state() === 'unknown'", snippet)
+
     def test_rules_publish_the_window_start_for_client_filtering(self) -> None:
         rule = self.read("snippets/customer-order-limit-rule.liquid")
         limits = self.read("snippets/customer-order-limits.liquid")

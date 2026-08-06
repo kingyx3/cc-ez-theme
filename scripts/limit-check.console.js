@@ -3,13 +3,22 @@
   const api = window.CustomerOrderLimits;
   const out = (label, value) => console.log(label.padEnd(26), value);
 
-  if (!config) return console.log('LIMITS: not on this page — no rule configured for this product, or the theme is older than this feature.');
-  if (!config.diagnostics) return console.log('LIMITS: an older build is published — no diagnostics field. Upload the current artifact first.');
-  if (!api) return console.log('LIMITS: customer-order-limits.js did not run. Check the browser console for an earlier error.');
+  if (!config) return console.log('LIMITS: not on this page — no rule configured for this product, or the theme predates this feature.');
+  if (!api) return console.log('LIMITS: customer-order-limits.js did not run. Check the console for an earlier error.');
+
+  const hasDiagnostics = Boolean(config.diagnostics);
+  const hasHistoryLoader = typeof api.historyState === 'function' && typeof api.loadHistory === 'function';
+  const state = () => (hasHistoryLoader ? api.historyState() : 'not in this build');
+  if (!hasDiagnostics || !hasHistoryLoader) {
+    console.log('BUILD IS OLD: this page is missing', [
+      !hasDiagnostics ? 'diagnostics' : null,
+      !hasHistoryLoader ? 'the history loader' : null,
+    ].filter(Boolean).join(' and ') + '. Upload the current artifact, then run this again.');
+  }
 
   const handle = (location.pathname.match(/\/products\/([^/?#]+)/) || [])[1] || '';
   const rule = api.ruleFor(handle);
-  const d = config.diagnostics;
+  const d = config.diagnostics || {};
 
   console.log('--- sign in ---');
   out('liquid says signed in', config.customerAuthenticated);
@@ -17,15 +26,15 @@
   out('header marker', document.querySelector('[data-customer-authenticated]')?.dataset.customerAuthenticated ?? 'none');
 
   console.log('--- history the page read ---');
-  out('ordersSeen', d.ordersSeen);
-  out('lineItemsSeen', d.lineItemsSeen);
-  out('identifiers', JSON.stringify(d.identifiers));
-  out('historyState', api.historyState());
+  out('lineItemsSeen', d.lineItemsSeen ?? 'not in this build');
+  out('identifiers', JSON.stringify(d.identifiers ?? 'not in this build'));
+  out('ordersSeen', d.ordersSeen ?? 'not in this build');
+  out('historyState', state());
 
-  if (api.historyState() === 'unknown' || api.historyState() === 'pending') {
+  if (hasHistoryLoader && (state() === 'unknown' || state() === 'pending')) {
     console.log('loading history…');
     await api.loadHistory();
-    out('historyState after load', api.historyState());
+    out('historyState after load', state());
   }
 
   console.log('--- this product ---');
@@ -60,7 +69,8 @@
   const signedIn = config.customerAuthenticated || document.body.classList.contains('customer-logged-in');
   if (!signedIn) console.log('GUEST: limits do not apply. Purchase clicks should go to the login page.');
   else if (!rule) console.log('NOT LIMITED: this product has no configured limit.');
-  else if (api.historyState() === 'unavailable') console.log('BROKEN: history could not be read or loaded. Only the current cart is capped.');
+  else if (!hasHistoryLoader) console.log('CANNOT TELL: this build has no history loader. Upload the current artifact and run this again.');
+  else if (state() === 'unavailable') console.log('BROKEN: history could not be read or loaded. Only the current cart is capped.');
   else if (api.ruleFor(handle).purchased > 0) console.log('WORKING: past orders are counted for this product.');
   else console.log('NO PURCHASES COUNTED: either this customer has not bought it before, or the identifiers do not match. Compare "identifiers" and "payload lines" above with the configured handle.');
 })();
