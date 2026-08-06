@@ -22,6 +22,7 @@
   const VERIFICATION_COPY_PATTERN = /(?:enter|verification|security|one[- ]time|sms|text message).{0,40}(?:code|passcode|pin)|(?:code|passcode|pin).{0,40}(?:sent|sms|mobile|phone)/i;
   const EMAIL_FALLBACK_PATTERN = /(?:continue|use|verify|sign\s*in|log\s*in)\s+(?:with\s+)?email(?:\s+instead)?/i;
   const PHONE_FIELD_PATTERN = /(?:phone|mobile|telephone|country[-_ ]?code)/i;
+  const SUBMISSION_LOCK_MS = 10000;
 
   const text = (value) => String(value || '').replace(/\s+/g, ' ').trim();
   const digits = (value, limit = MAX_CELLS) => String(value || '').replace(/\D/g, '').slice(0, limit);
@@ -202,6 +203,42 @@
     }
   };
 
+  const schedule = (windowObject, callback, delay) => {
+    if (windowObject && typeof windowObject.setTimeout === 'function') {
+      return windowObject.setTimeout(callback, delay);
+    }
+    if (typeof setTimeout === 'function') return setTimeout(callback, delay);
+    return null;
+  };
+
+  const claimOtpOwnership = (form) => {
+    if (!form || !form.dataset) return;
+    form.dataset.webOtpRequested = 'true';
+    form.dataset.otpEnhancementOwner = 'otp-cell-autofill';
+  };
+
+  const guardOtpSubmission = (form, windowObject) => {
+    if (!form || !form.dataset || typeof form.addEventListener !== 'function') return;
+    claimOtpOwnership(form);
+    if (form.dataset.otpSubmissionGuardBound === 'true') return;
+
+    form.dataset.otpSubmissionGuardBound = 'true';
+    form.addEventListener('submit', (event) => {
+      if (form.dataset.otpSubmissionInFlight === 'true') {
+        if (event && typeof event.preventDefault === 'function') event.preventDefault();
+        if (event && typeof event.stopImmediatePropagation === 'function') {
+          event.stopImmediatePropagation();
+        }
+        return;
+      }
+
+      form.dataset.otpSubmissionInFlight = 'true';
+      schedule(windowObject, () => {
+        delete form.dataset.otpSubmissionInFlight;
+      }, SUBMISSION_LOCK_MS);
+    }, true);
+  };
+
   const createOtpProxy = (form, cells, documentObject, windowObject) => {
     if (form && form.__cardboardOtpAutofillProxy) {
       form.__cardboardOtpAutofillProxy.__otpCells = cells;
@@ -267,6 +304,8 @@
   };
 
   const configureOtpCells = (form, cells, windowObject, documentObject = null) => {
+    guardOtpSubmission(form, windowObject);
+
     cells.forEach((cell, index) => {
       setAttr(cell, 'maxlength', '1');
       setAttr(cell, 'inputmode', 'numeric');
@@ -354,10 +393,12 @@
 
   const api = {
     boot,
+    claimOtpOwnership,
     configureOtpCells,
     createOtpProxy,
     distributeOtpCode,
     findOtpCells,
+    guardOtpSubmission,
     inputCanReceiveOtp,
     inputHasOtpHint,
     inputLooksLikeOtpCell,
