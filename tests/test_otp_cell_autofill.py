@@ -22,10 +22,29 @@ class OtpCellAutofillTests(unittest.TestCase):
         cls.currencies = (
             THEME_ROOT / "snippets" / "currencies.liquid"
         ).read_text(encoding="utf-8")
+        cls.legacy_enhancements = (
+            THEME_ROOT / "assets" / "search-history.js"
+        ).read_text(encoding="utf-8")
 
-    def test_otp_fix_is_loaded_globally(self) -> None:
-        self.assertIn("otp-cell-autofill.js", self.currencies)
-        self.assertIn('defer="defer"', self.currencies)
+    def test_otp_owner_runs_before_the_deferred_legacy_helper(self) -> None:
+        loader = '<script src="{{ \'otp-cell-autofill.js\' | asset_url }}"></script>'
+        self.assertIn(loader, self.currencies)
+        self.assertNotIn(
+            "'otp-cell-autofill.js' | asset_url }}\" defer",
+            self.currencies,
+        )
+        self.assertIn(
+            "form.dataset.webOtpRequested === 'true'",
+            self.legacy_enhancements,
+        )
+        self.assertIn(
+            "form.dataset.webOtpRequested = 'true'",
+            self.storefront_script,
+        )
+        self.assertIn(
+            "form.dataset.otpEnhancementOwner = 'otp-cell-autofill'",
+            self.storefront_script,
+        )
 
     def test_storefront_and_editor_scripts_match(self) -> None:
         self.assertEqual(self.storefront_script, self.editor_script)
@@ -44,6 +63,22 @@ class OtpCellAutofillTests(unittest.TestCase):
         self.assertIn("setAttr(cell, 'maxlength', '1')", self.storefront_script)
         self.assertIn("syncCellsFromCode(proxy.__otpCells", self.storefront_script)
 
+    def test_duplicate_otp_submissions_are_blocked_without_blocking_retries(self) -> None:
+        self.assertIn("const SUBMISSION_LOCK_MS = 10000", self.storefront_script)
+        self.assertIn("const guardOtpSubmission", self.storefront_script)
+        self.assertIn("otpSubmissionGuardBound", self.storefront_script)
+        self.assertIn("otpSubmissionInFlight", self.storefront_script)
+        self.assertIn("event.preventDefault()", self.storefront_script)
+        self.assertIn("event.stopImmediatePropagation()", self.storefront_script)
+        self.assertIn("delete form.dataset.otpSubmissionInFlight", self.storefront_script)
+        configure = self.storefront_script[
+            self.storefront_script.index("const configureOtpCells") :
+        ]
+        self.assertLess(
+            configure.index("guardOtpSubmission(form, windowObject)"),
+            configure.index("cells.forEach((cell, index)"),
+        )
+
     def test_email_fallback_is_removed_independently_of_exact_form_names(self) -> None:
         self.assertIn("const removeEmailFallback", self.storefront_script)
         self.assertIn("EMAIL_FALLBACK_PATTERN", self.storefront_script)
@@ -56,7 +91,7 @@ class OtpCellAutofillTests(unittest.TestCase):
         self.assertIn("proxy.dataset.lastOtpValue", self.storefront_script)
         self.assertIn("if (current !== previous)", self.storefront_script)
 
-    def test_runtime_regression_for_platform_clipped_six_cell_shape(self) -> None:
+    def test_runtime_regression_for_autofill_and_duplicate_submission(self) -> None:
         completed = subprocess.run(
             ["node", str(RUNTIME_TEST)],
             cwd=REPOSITORY_ROOT,
@@ -64,7 +99,10 @@ class OtpCellAutofillTests(unittest.TestCase):
             capture_output=True,
             text=True,
         )
-        self.assertIn("OTP proxy runtime regression passed", completed.stdout)
+        self.assertIn(
+            "OTP proxy and submission guard runtime regression passed",
+            completed.stdout,
+        )
 
 
 if __name__ == "__main__":
