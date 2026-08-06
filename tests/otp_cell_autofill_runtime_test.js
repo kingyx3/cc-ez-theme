@@ -7,6 +7,16 @@ class MockEvent {
   constructor(type, options = {}) {
     this.type = type;
     this.bubbles = Boolean(options.bubbles);
+    this.defaultPrevented = false;
+    this.immediatePropagationStopped = false;
+  }
+
+  preventDefault() {
+    this.defaultPrevented = true;
+  }
+
+  stopImmediatePropagation() {
+    this.immediatePropagationStopped = true;
   }
 }
 
@@ -77,13 +87,17 @@ class MockInput {
     this.listeners.get(type).push(callback);
   }
 
-  emit(type, event = {}) {
-    for (const callback of this.listeners.get(type) || []) callback(event);
+  emit(type, event = new MockEvent(type)) {
+    for (const callback of this.listeners.get(type) || []) {
+      callback(event);
+      if (event.immediatePropagationStopped) break;
+    }
+    return event;
   }
 
   dispatchEvent(event) {
     this.emit(event.type, event);
-    return true;
+    return !event.defaultPrevented;
   }
 
   focus() {
@@ -123,6 +137,13 @@ const form = {
   addEventListener(type, callback) {
     if (!this.listeners.has(type)) this.listeners.set(type, []);
     this.listeners.get(type).push(callback);
+  },
+  emit(type, event = new MockEvent(type)) {
+    for (const callback of this.listeners.get(type) || []) {
+      callback(event);
+      if (event.immediatePropagationStopped) break;
+    }
+    return event;
   },
 };
 
@@ -170,11 +191,16 @@ const documentObject = {
   },
 };
 
+const scheduledTimeouts = [];
 const windowObject = {
   location: { pathname: '/account/request-verify' },
   Event: MockEvent,
   requestAnimationFrame(callback) {
     callback();
+  },
+  setTimeout(callback, delay) {
+    scheduledTimeouts.push({ callback, delay });
+    return scheduledTimeouts.length;
   },
 };
 
@@ -188,6 +214,14 @@ assert.equal(proxy.getAttribute('data-otp-autofill-proxy'), 'true');
 assert.equal(proxy.getAttribute('autocomplete'), 'one-time-code');
 assert.equal(proxy.getAttribute('maxlength'), '6');
 assert.equal(group.children.at(-1), proxy, 'proxy must be mounted over the OTP group');
+
+assert.equal(form.dataset.webOtpRequested, 'true', 'legacy WebOTP helper must be disabled');
+assert.equal(
+  form.dataset.otpEnhancementOwner,
+  'otp-cell-autofill',
+  'the dedicated OTP implementation must own the form',
+);
+assert.equal(form.dataset.otpSubmissionGuardBound, 'true');
 
 for (const cell of cells) {
   assert.equal(cell.getAttribute('autocomplete'), 'off');
@@ -204,6 +238,28 @@ proxy.value = '123456';
 proxy.emit('input');
 assert.deepEqual(cells.map((cell) => cell.value), ['1', '2', '3', '4', '5', '6']);
 
+// The first verification submission proceeds. A second overlapping submit is stopped
+// before the platform can create the same phone account twice.
+const firstSubmit = form.emit('submit');
+assert.equal(firstSubmit.defaultPrevented, false);
+assert.equal(firstSubmit.immediatePropagationStopped, false);
+assert.equal(form.dataset.otpSubmissionInFlight, 'true');
+assert.equal(scheduledTimeouts.length, 1);
+assert.equal(scheduledTimeouts[0].delay, 10000);
+
+const duplicateSubmit = form.emit('submit');
+assert.equal(duplicateSubmit.defaultPrevented, true);
+assert.equal(duplicateSubmit.immediatePropagationStopped, true);
+assert.equal(scheduledTimeouts.length, 1, 'a blocked duplicate must not create another timer');
+
+scheduledTimeouts[0].callback();
+assert.equal(form.dataset.otpSubmissionInFlight, undefined);
+
+const retrySubmit = form.emit('submit');
+assert.equal(retrySubmit.defaultPrevented, false, 'a later retry must be allowed');
+assert.equal(form.dataset.otpSubmissionInFlight, 'true');
+assert.equal(scheduledTimeouts.length, 2);
+
 // Mobile autofill may update the value without firing an input event. The periodic
 // scanner must still notice the proxy value and distribute it.
 cells.forEach((cell) => { cell.value = ''; });
@@ -213,5 +269,6 @@ const groups = otp.scanAndEnhance(documentObject, windowObject);
 assert.equal(groups.length, 1);
 assert.deepEqual(cells.map((cell) => cell.value), ['6', '5', '4', '3', '2', '1']);
 assert.equal(fallback.removed, true, 'email fallback must be removed while OTP is active');
+assert.equal(form.listeners.get('submit').length, 2, 'guards must not be rebound during rescans');
 
-console.log('OTP proxy runtime regression passed');
+console.log('OTP proxy and submission guard runtime regression passed');
