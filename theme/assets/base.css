@@ -1701,6 +1701,10 @@ textarea{
   opacity: 0;
 }
 
+.field__input.no-float-label::placeholder {
+  opacity: 1;
+}
+
 .field__button {
   align-items: center;
   background-color: transparent;
