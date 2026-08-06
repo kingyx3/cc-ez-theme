@@ -20,10 +20,29 @@ class OtpCellAutofillTests(unittest.TestCase):
         cls.currencies = (
             THEME_ROOT / "snippets" / "currencies.liquid"
         ).read_text(encoding="utf-8")
+        cls.legacy_enhancements = (
+            THEME_ROOT / "assets" / "search-history.js"
+        ).read_text(encoding="utf-8")
 
-    def test_otp_fix_is_loaded_after_the_existing_global_assets(self) -> None:
-        self.assertIn("otp-cell-autofill.js", self.currencies)
-        self.assertIn('defer="defer"', self.currencies)
+    def test_otp_owner_runs_before_the_deferred_legacy_helper(self) -> None:
+        loader = '<script src="{{ \'otp-cell-autofill.js\' | asset_url }}"></script>'
+        self.assertIn(loader, self.currencies)
+        self.assertNotIn(
+            "'otp-cell-autofill.js' | asset_url }}\" defer",
+            self.currencies,
+        )
+        self.assertIn(
+            "form.dataset.webOtpRequested === 'true'",
+            self.legacy_enhancements,
+        )
+        self.assertIn(
+            "form.dataset.webOtpRequested = 'true'",
+            self.storefront_script,
+        )
+        self.assertIn(
+            "form.dataset.otpEnhancementOwner = 'otp-cell-autofill'",
+            self.storefront_script,
+        )
 
     def test_storefront_and_editor_scripts_match(self) -> None:
         self.assertEqual(self.storefront_script, self.editor_script)
@@ -43,6 +62,18 @@ class OtpCellAutofillTests(unittest.TestCase):
         self.assertIn(
             "index === 0 ? String(cells.length) : '1'",
             self.storefront_script,
+        )
+
+    def test_duplicate_otp_submissions_are_blocked(self) -> None:
+        self.assertIn("const SUBMISSION_LOCK_MS = 10000", self.storefront_script)
+        self.assertIn("const guardOtpSubmission", self.storefront_script)
+        self.assertIn("otpSubmissionGuardBound", self.storefront_script)
+        self.assertIn("otpSubmissionInFlight", self.storefront_script)
+        self.assertIn("event.preventDefault()", self.storefront_script)
+        self.assertIn("event.stopImmediatePropagation()", self.storefront_script)
+        self.assertLess(
+            self.storefront_script.index("guardOtpSubmission(form)"),
+            self.storefront_script.index("enhanceOtpCells(form, cells)"),
         )
 
     def test_email_fallback_is_hidden_during_mobile_otp(self) -> None:
