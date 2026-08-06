@@ -9,7 +9,7 @@ This feature limits a signed-in customer to a configured number of units for an 
 | `MTG-HOB-BDL-EN` | 2 |
 | `MTG-HOB-CBB-EN` | 2 |
 | `MTG-HOB-CBB-EN-CASE6` | 1 |
-| `MTG-HOB-CBB-EN-PACK` | 1 |
+| `MTG-HOB-CBB-EN-PACK` | 2 |
 | `MTG-HOB-DNK-EN` | 3 |
 | `MTG-HOB-PBB-EN` | 12 |
 | `MTG-HOB-PRK-EN-SET4` | 1 |
