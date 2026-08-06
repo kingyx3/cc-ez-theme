@@ -11,11 +11,17 @@ This feature limits a signed-in customer to a configured number of units for an 
 | `MTG-HOB-CBB-EN-CASE6` | 1 |
 | `MTG-HOB-CBB-EN-PACK` | 1 |
 | `MTG-HOB-DNK-EN` | 3 |
-| `MTG-HOB-GFB-EN` | 1 |
 | `MTG-HOB-PBB-EN` | 12 |
 | `MTG-HOB-PRK-EN-SET4` | 1 |
 | `MTG-HOB-OBP-EN` | 1 |
 | `MTG-HOB-SCN-EN-SET2` | 1 |
+| `CC-BDL-SCENES3-EN` | 1 |
+| `CC-BDL-FRIENDS3-EN-SPM` | 1 |
+| `CC-BDL-FRIENDS3-EN-MSH` | 1 |
+| `CC-BDL-SPIDERVAULT-EN` | 1 |
+| `CC-BDL-UNEXPECTED-EN` | 2 |
+
+Rows supplied with a blank promo maximum are intentionally not configured and remain unlimited. This includes `MTG-HOB-GFB-EN`, the listed `MTG-MSH-*`, `MTG-SOS-*`, and `MTG-SPM-*` handles, plus `CC-BDL-HAPPYHAMPER-EN` and `CC-BDL-HAPPYHAMPER-EN-PBB`.
 
 The values remain explicit in `theme/snippets/customer-order-limit-config.liquid`. Every configured and storefront handle is normalized to lowercase before comparison because EasyStore product URLs use lowercase handles even when administrative values are capitalized.
 
@@ -65,14 +71,15 @@ The first deployed version compared uppercase configured handles with lowercase 
 Before merging or publishing, upload the exact workflow ZIP to an unpublished EasyStore theme and verify:
 
 1. each configured handle permits its maximum but blocks one additional unit;
-2. prior non-cancelled order quantities reduce the remaining allowance;
-3. multiple variants and cart lines for one handle are combined;
-4. Add to Cart, Buy Now, listing quick-add, cart increases, standard checkout, and express checkout are blocked when over limit;
-5. cart decreases and removals continue to work;
-6. rejected requests do not reduce the remaining allowance;
-7. signed out, Add to Cart, Buy Now, listing quick-add, and cart checkout on a limited product open the login page and return to the original page after signing in, with no limit message, disabled control, or clamped quantity shown first;
-8. signed in, every purchase path works normally on desktop and mobile and never reaches an account page — check a limited product, an unlimited product, and an unlimited product bought while a limited product sits in the cart;
-9. signed in, `window.customerOrderLimitsV2.customerAuthenticated` is `true` and each rule's `purchased` matches prior non-cancelled orders.
+2. every handle with a blank promo maximum behaves as unlimited;
+3. prior non-cancelled order quantities reduce the remaining allowance;
+4. multiple variants and cart lines for one handle are combined;
+5. Add to Cart, Buy Now, listing quick-add, cart increases, standard checkout, and express checkout are blocked when over limit;
+6. cart decreases and removals continue to work;
+7. rejected requests do not reduce the remaining allowance;
+8. signed out, Add to Cart, Buy Now, listing quick-add, and cart checkout on a limited product open the login page and return to the original page after signing in, with no limit message, disabled control, or clamped quantity shown first;
+9. signed in, every purchase path works normally on desktop and mobile and never reaches an account page — check a limited product, an unlimited product, and an unlimited product bought while a limited product sits in the cart;
+10. signed in, `window.customerOrderLimitsV2.customerAuthenticated` is `true` and each rule's `purchased` matches prior non-cancelled orders.
 
 ## Enforcement boundary
 
