@@ -52,7 +52,7 @@
           {% assign selectedTab = customer.paginate.filter.current_tab %}
           <li id="{{ tab.status }}" class="grid__item slider__slide {% if tab.status == selectedTab %}active{% endif %}" data-target="{{ tab.status }}">
             {% assign tab_name = 'customer.orders.tab.' | append: tab.status %}
-            <button type="button" class="full-unstyled-link" data-theme-action="switch-order-tab" data-order-status="{{ tab.status | escape }}"{% if tab.status == selectedTab %} aria-current="page"{% endif %}>{{ tab_name | t }} {% if tab.count > 0 %}<span class="order-count">{{ tab.count }}</span>{% endif %}</button>
+            <button type="button" class="full-unstyled-link" data-theme-action="switch-order-tab" data-order-status="{{ tab.status | escape }}"{% if tab.status == selectedTab %} aria-current="page"{% endif %}>{{ tab_name | t }}{% if tab.count > 0 %} <span class="order-count">({{ tab.count }})</span>{% endif %}</button>
             
             <span>|</span>
           </li>
