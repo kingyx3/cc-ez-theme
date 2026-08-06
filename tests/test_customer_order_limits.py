@@ -116,9 +116,10 @@ class CustomerOrderLimitTests(unittest.TestCase):
             'data-product-handle="{{ product.handle | downcase | escape }}"',
             quickview,
         )
-        self.assertIn('name="product_handles[]"', cart_item)
+        self.assertIn('data-product-handle=', cart_item)
         self.assertIn("item.product.handle", cart_item)
         self.assertIn("| downcase | escape", cart_item)
+        self.assertNotIn('name="product_handles[]"', cart_item)
 
     def test_loader_and_pr56_rollback_remain_intact(self) -> None:
         currencies = self.read("snippets/currencies.liquid")
