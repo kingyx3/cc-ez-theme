@@ -105,16 +105,28 @@
       return;
     }
 
+    const handle = productHandle(form);
     const requestedQuantity = Math.max(
       1,
       toQuantity(form.querySelector('[name="quantity"]')?.value, 1)
     );
-    const customerViolation = window.CustomerOrderLimits
-      ? window.CustomerOrderLimits.additionViolation(
-        productHandle(form),
-        requestedQuantity
-      )
+    const customerViolation = limits
+      ? limits.additionViolation(handle, requestedQuantity)
       : null;
+
+    // The cart already holds every unit this customer may buy, so Buy Now means
+    // "check out with what I have" — adding another unit would only fail.
+    if (
+      customerViolation
+      && customerViolation.remaining <= 0
+      && limits.cartQuantityForHandle(handle) > 0
+      && typeof productForm.goToCheckout === 'function'
+    ) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      productForm.goToCheckout();
+      return;
+    }
 
     let message = customerViolation ? customerViolation.message : '';
     if (!message && typeof productForm.getQuantityLimit === 'function') {
@@ -133,8 +145,8 @@
       return;
     }
 
-    if (window.CustomerOrderLimits) {
-      window.CustomerOrderLimits.showProductError(form, message);
+    if (limits) {
+      limits.showProductError(form, message);
     }
   }, true);
 

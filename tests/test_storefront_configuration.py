@@ -99,14 +99,17 @@ class StorefrontConfigurationTests(unittest.TestCase):
             "this.checkoutForm = this.querySelector('[data-buy-now-checkout-form]')",
             product_form,
         )
-        self.assertEqual(product_form.count("this.goToCheckout();"), 2)
+        # Buy Now and the limit modal both route through goToCheckout, and the
+        # Buy Now call reads its result so the buttons cannot stay disabled.
+        self.assertEqual(product_form.count("this.goToCheckout()"), 2)
+        self.assertIn("if (!this.goToCheckout()) {", product_form)
         self.assertIn("this.checkoutForm.requestSubmit()", product_form)
         self.assertIn("this.checkoutForm.submit()", product_form)
         self.assertIn("window.location.assign('/cart')", product_form)
         self.assertNotIn("window.location.assign('/checkout')", product_form)
         self.assertLess(
             product_form.index("if (buyNow && !cartConfirmed)"),
-            product_form.rindex("this.goToCheckout();"),
+            product_form.rindex("this.goToCheckout()"),
         )
 
         for asset_directory in ("assets", "editor_assets"):

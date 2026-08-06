@@ -19,6 +19,11 @@
 
   const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
 
+  const unitLabel = (value) => {
+    const count = quantity(value, 0);
+    return `${count} unit${count === 1 ? '' : 's'}`;
+  };
+
   const rules = {};
   Object.entries(source.rules).forEach(([handle, rule]) => {
     const normalized = normalizeHandle(handle);
@@ -150,14 +155,47 @@
     return Math.max(0, allowedCartQuantity(rule) - cartQuantity);
   };
 
+  // Built from live numbers rather than the server-rendered `rule.message`: once
+  // the shopper adds or removes a unit the rendered copy is stale, and saying
+  // "you can add up to 1 more" to someone who cannot add anything is worse than
+  // saying nothing.
   const messageFor = (rule, requestedQuantity, remaining) => {
+    const maximum = quantity(rule && rule.maximum, 0);
+    const purchased = quantity(rule && rule.purchased, 0);
+    const cartQuantity = quantity(rule && rule.cartQuantity, 0);
+    const limitSuffix = `The limit is ${unitLabel(maximum)} per customer across orders.`;
+
     if (remaining <= 0) {
-      return String(rule.message || 'Customer purchase limit reached.');
+      if (purchased > 0 && cartQuantity > 0) {
+        return `Maximum quantity reached. You have already purchased ${unitLabel(purchased)} and have ${unitLabel(cartQuantity)} in your cart. ${limitSuffix}`;
+      }
+      if (cartQuantity > 0) {
+        return `Maximum quantity reached. You already have ${unitLabel(cartQuantity)} in your cart. ${limitSuffix}`;
+      }
+      if (purchased > 0) {
+        return `Customer purchase limit reached. You have already purchased ${unitLabel(purchased)} of the ${unitLabel(maximum)} allowed per customer across orders.`;
+      }
+      return `Maximum quantity reached. ${limitSuffix}`;
     }
+
     if (requestedQuantity > remaining) {
-      return `Customer purchase limit exceeded. You can add up to ${remaining} more.`;
+      return `Customer purchase limit exceeded. You can add up to ${unitLabel(remaining)} more. ${limitSuffix}`;
     }
-    return String(rule.message || `You can add up to ${remaining} more.`);
+    return `You can add up to ${unitLabel(remaining)} more. ${limitSuffix}`;
+  };
+
+  const cartMessageFor = (rule, allowed) => {
+    const maximum = quantity(rule && rule.maximum, 0);
+    const purchased = quantity(rule && rule.purchased, 0);
+    const limitSuffix = `The limit is ${unitLabel(maximum)} per customer across orders.`;
+
+    if (allowed <= 0) {
+      if (purchased > 0) {
+        return `Customer purchase limit reached. You have already purchased ${unitLabel(purchased)} of the ${unitLabel(maximum)} allowed, so remove this product before checkout.`;
+      }
+      return `Customer purchase limit reached. Remove this product before checkout. ${limitSuffix}`;
+    }
+    return `Customer purchase limit exceeded. Reduce this product to ${unitLabel(allowed)} before checkout. ${limitSuffix}`;
   };
 
   const additionViolation = (handle, requestedQuantity) => {
@@ -174,6 +212,11 @@
       rule,
       message: messageFor(rule, requested, remaining),
     };
+  };
+
+  const cartQuantityForHandle = (handle) => {
+    const rule = ruleFor(handle);
+    return rule ? quantity(rule.cartQuantity, 0) : 0;
   };
 
   const quantityLimitForHandle = (handle) => {
@@ -206,10 +249,7 @@
         currentQuantity: current,
         allowedQuantity: allowed,
         rule,
-        message: String(
-          rule.message
-          || `Customer purchase limit exceeded. Reduce this product to ${allowed} before checkout.`
-        ),
+        message: cartMessageFor(rule, allowed),
       };
     }
 
@@ -339,7 +379,10 @@
       row.dataset.productHandle = handle;
       input.dataset.customerOrderLimitEnabled = 'true';
       input.dataset.customerOrderLimitMaximum = String(maximum);
-      input.dataset.customerOrderLimitMessage = String(rule.message || '');
+      input.dataset.customerOrderLimitMessage = cartMessageFor(
+        rule,
+        allowedCartQuantity(rule)
+      );
       input.max = String(maximum);
     });
 
@@ -378,6 +421,18 @@
     form?.dataset.productHandle || productHandle(form)
   );
 
+  // The hidden Buy Now checkout form lives inside <product-form> too, so an
+  // addition guard that matched every `product-form form` blocked checkout and
+  // stranded the shopper. Only forms that actually add to the cart qualify.
+  const isAddToCartForm = (form) => (
+    form.matches('product-form form')
+    && !form.matches('[data-buy-now-checkout-form]')
+    && Boolean(
+      form.querySelector('[name="add"]')
+      || /\/cart\/add/.test(String(form.getAttribute('action') || ''))
+    )
+  );
+
   // Only takes over the event when the shopper is actually being redirected, so
   // an unproven sign-in state leaves the native purchase path untouched.
   const sendToLogin = (event) => {
@@ -410,7 +465,8 @@
 
     const buyNowButton = event.target.closest('[data-buy-now]');
     if (buyNowButton) {
-      const form = buyNowButton.closest('product-form')?.querySelector('form');
+      const owner = buyNowButton.closest('product-form');
+      const form = owner?.querySelector('form');
       const handle = formHandle(form);
       if (loginRequiredForHandle(handle) && sendToLogin(event)) return;
       const violation = additionViolation(
@@ -420,6 +476,16 @@
       if (violation) {
         event.preventDefault();
         event.stopImmediatePropagation();
+        // Nothing more can be added but the cart already holds the allowance, so
+        // Buy Now means "check out with what I have" rather than a dead end.
+        if (
+          violation.remaining <= 0
+          && cartQuantityForHandle(handle) > 0
+          && typeof owner?.goToCheckout === 'function'
+        ) {
+          owner.goToCheckout();
+          return;
+        }
         showProductError(form, violation.message);
       }
       return;
@@ -443,7 +509,7 @@
     const form = event.target;
     if (!(form instanceof HTMLFormElement)) return;
 
-    if (form.matches('product-form form')) {
+    if (isAddToCartForm(form)) {
       const handle = formHandle(form);
       if (loginRequiredForHandle(handle) && sendToLogin(event)) return;
       const violation = additionViolation(
@@ -487,6 +553,7 @@
     redirectToLogin,
     cartTotalsFromForm,
     remainingForHandle,
+    cartQuantityForHandle,
     quantityLimitForHandle,
     additionViolation,
     cartViolation,

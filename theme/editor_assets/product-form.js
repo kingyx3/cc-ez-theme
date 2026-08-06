@@ -383,7 +383,13 @@ if (!customElements.get('product-form')) {
         }
 
         if (buyNow) {
-          this.goToCheckout();
+          if (!this.goToCheckout()) {
+            setSubmitting(false);
+            return;
+          }
+          // Checkout navigation replaces the page. If anything downstream stops
+          // it, release the buttons instead of spinning for the whole session.
+          window.setTimeout(() => setSubmitting(false), 8000);
           return;
         }
 
@@ -400,18 +406,20 @@ if (!customElements.get('product-form')) {
       });
     }
 
+    // Returns whether checkout was actually started, so callers can restore the
+    // purchase buttons instead of leaving them spinning.
     goToCheckout() {
       const customerOrderLimitViolation = window.CustomerOrderLimits
         ? window.CustomerOrderLimits.cartViolation()
         : null;
       if (customerOrderLimitViolation) {
         this.renderErrorMsg(customerOrderLimitViolation.message);
-        return;
+        return false;
       }
 
       if (!this.checkoutForm) {
         window.location.assign('/cart');
-        return;
+        return true;
       }
 
       if (typeof this.checkoutForm.requestSubmit === 'function') {
@@ -419,6 +427,7 @@ if (!customElements.get('product-form')) {
       } else {
         this.checkoutForm.submit();
       }
+      return true;
     }
 
     openBuyNowLimitModal(message) {

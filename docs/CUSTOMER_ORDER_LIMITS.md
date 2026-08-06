@@ -33,6 +33,21 @@ The shared validator integrates with the native theme paths:
 
 Successful additions and cart updates change the browser-side allowance only after EasyStore's native callback confirms success. Rejected requests do not consume allowance. Cart decreases and removals remain available so an over-limit cart can be corrected.
 
+Addition guards apply to add-to-cart forms only. The hidden Buy Now checkout form lives inside the same `<product-form>` element as the add form, so a guard matching every `product-form form` blocks checkout instead of an addition — that stranded Buy Now with a spinning button and a stale limit message. A form qualifies as an add-to-cart form only when it is not `[data-buy-now-checkout-form]` and it either contains a `[name="add"]` control or posts to `/cart/add`.
+
+## Buy Now at the limit
+
+Buy Now adds a unit and then goes to checkout, so on a product whose allowance is already in the cart there is nothing left to add. In that case — no allowance remaining and at least one unit of the product already in the cart — Buy Now skips the addition and goes straight to checkout with the current cart. It does not retry the add, and it does not open the limit modal.
+
+The modal is for the cases where checkout with the current cart is not what the shopper asked for:
+
+- the allowance is spent on previous orders and the product is not in the cart, so it cannot be bought at all;
+- more units were requested than may still be added, so the message states how many remain.
+
+`goToCheckout()` reports whether checkout actually started. Buy Now restores its buttons when it did not, and releases them after 8 seconds if navigation is blocked downstream, so a failed checkout can never leave a permanently spinning button.
+
+Limit copy is generated from live quantities, not from the message rendered into the page by Liquid. The rendered copy is correct only for the cart as it was on page load, which is how a maxed-out product ended up saying "you can add up to 1 more".
+
 ## Signed-out shoppers
 
 A limit counts units per customer across orders, so it can only be measured for a signed-in customer. Guests are therefore never measured against an allowance. Instead, a purchase attempt on a limited product sends the shopper to `/account/login?redirect_uri=<current page>`, where the login page also links to registration:
@@ -72,7 +87,8 @@ Before merging or publishing, upload the exact workflow ZIP to an unpublished Ea
 6. rejected requests do not reduce the remaining allowance;
 7. signed out, Add to Cart, Buy Now, listing quick-add, and cart checkout on a limited product open the login page and return to the original page after signing in, with no limit message, disabled control, or clamped quantity shown first;
 8. signed in, every purchase path works normally on desktop and mobile and never reaches an account page — check a limited product, an unlimited product, and an unlimited product bought while a limited product sits in the cart;
-9. signed in, `window.customerOrderLimitsV2.customerAuthenticated` is `true` and each rule's `purchased` matches prior non-cancelled orders.
+9. signed in, `window.customerOrderLimitsV2.customerAuthenticated` is `true` and each rule's `purchased` matches prior non-cancelled orders;
+10. on a product with a limit of 1: Buy Now from an empty cart adds one unit and reaches checkout; Buy Now again goes straight to checkout without adding; the buttons never stay disabled or spinning; and every message on the page reflects the current cart.
 
 ## Enforcement boundary
 

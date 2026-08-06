@@ -24,10 +24,23 @@ class BuyNowPurchaseLimitCheckoutTests(unittest.TestCase):
         self.assertIn("prototype.setPurchaseButtonsLimited", helper)
         self.assertIn("this.querySelectorAll('[name=\"add\"]')", helper)
         self.assertIn("restoreBuyNowButton(this)", helper)
-        self.assertIn("window.CustomerOrderLimits.additionViolation", helper)
+        self.assertIn("limits.additionViolation(handle, requestedQuantity)", helper)
         self.assertIn("productForm.getQuantityLimit()", helper)
         self.assertIn("productForm.openBuyNowLimitModal", helper)
         self.assertIn("event.stopImmediatePropagation()", helper)
+
+    def test_buy_now_checks_out_when_the_cart_already_holds_the_allowance(self) -> None:
+        helper = self.read("assets/buy-now-limit-checkout.js")
+
+        # Nothing more may be added, but the shopper already owns the allowance in
+        # their cart, so Buy Now must reach checkout instead of retrying the add.
+        self.assertIn("customerViolation.remaining <= 0", helper)
+        self.assertIn("limits.cartQuantityForHandle(handle) > 0", helper)
+        self.assertIn("productForm.goToCheckout();", helper)
+        self.assertLess(
+            helper.index("productForm.goToCheckout();"),
+            helper.index("productForm.openBuyNowLimitModal(String(message))"),
+        )
         self.assertNotIn(
             "this.querySelectorAll('[name=\"add\"], [data-buy-now]')",
             helper,

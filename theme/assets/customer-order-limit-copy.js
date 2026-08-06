@@ -22,12 +22,13 @@
     const rule = limits.ruleFor(handle);
     if (!rule) return null;
 
-    // remainingForHandle returns null when no customer limit applies, which
-    // includes guests: they are sent to sign in instead of reading limit copy.
-    const input = form.querySelector('[name="quantity"]');
-    const selectedQuantity = Math.max(1, quantity(input && input.value, 1));
+    // Only "maximum reached" copy is corrected here. remainingForHandle returns
+    // null when no customer limit applies, which includes guests: they are sent
+    // to sign in instead of reading limit copy. A shopper who selected more than
+    // they may add still has room left, so their message must keep saying how
+    // much room, not claim the maximum is reached.
     const remaining = limits.remainingForHandle(handle);
-    const customerLimitReached = remaining != null && selectedQuantity >= remaining;
+    const customerLimitReached = remaining != null && remaining <= 0;
 
     if (!customerLimitReached) return null;
 

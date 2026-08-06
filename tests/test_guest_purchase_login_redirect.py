@@ -178,7 +178,7 @@ class GuestPurchaseLoginRedirectTests(unittest.TestCase):
         self.assertNotIn("loginRequired", copy)
         self.assertNotIn("Sign in to purchase", copy)
         self.assertIn(
-            "const customerLimitReached = remaining != null && selectedQuantity >= remaining;",
+            "const customerLimitReached = remaining != null && remaining <= 0;",
             copy,
         )
 
