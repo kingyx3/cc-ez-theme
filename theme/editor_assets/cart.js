@@ -1,20 +1,6 @@
-document.addEventListener('submit', (event) => {
-  const cartForm = event.target;
-  if (!(cartForm instanceof HTMLFormElement) || cartForm.id !== 'cart-form') return;
-
-  const customerLimits = window.CustomerPurchaseLimits;
-  const violation = customerLimits
-    && typeof customerLimits.cartViolationFromForm === 'function'
-    ? customerLimits.cartViolationFromForm(cartForm)
-    : null;
-  if (violation) {
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    customerLimits.showCartError(violation.message);
-    return;
-  }
-  if (event.submitter) event.submitter.classList.add('loading');
-}, true)
+document.getElementById('cart-form')?.addEventListener('submit',(event)=>{
+  if(event.submitter) event.submitter.classList.add('loading');
+})
 
 document.body.addEventListener("click", function(event) {
     const trigger = event.target.closest(".product-bundle__toggle");
@@ -89,7 +75,7 @@ class DiscountInput extends HTMLElement {
         }else{
           if(document.querySelector('vouchers-modal')) document.querySelector('vouchers-modal').close()
         }
-        if(cart.cart_content) { document.querySelector('#cart-template').innerHTML = cart.cart_content; window.CustomerPurchaseLimits?.syncCartFromForm?.(); }
+        if(cart.cart_content) document.querySelector('#cart-template').innerHTML = cart.cart_content
       })
     }
   }
@@ -129,7 +115,7 @@ class DiscountRemoveButton extends HTMLElement {
     event.preventDefault();
     this.enableLoading()
     EasyStore.Action.updateVoucher("remove",this.button.dataset.discount_id,(cart)=>{
-      if(cart.cart_content) { document.querySelector('#cart-template').innerHTML = cart.cart_content; window.CustomerPurchaseLimits?.syncCartFromForm?.(); }
+      if(cart.cart_content) document.querySelector('#cart-template').innerHTML = cart.cart_content
     })
   }
 
@@ -156,10 +142,6 @@ class CartItems extends HTMLElement {
     this.currentItemCount = Array.from(this.querySelectorAll('[name="updates[]"]'))
       .reduce((total, quantityInput) => total + parseInt(quantityInput.value), 0);
 
-    this.querySelectorAll('[name="updates[]"]').forEach((quantityInput) => {
-      quantityInput.dataset.customerLimitPreviousValue = quantityInput.value;
-    });
-
     this.debouncedOnChange = debounce((event) => {
       this.onChange(event);
     }, 300);
@@ -168,36 +150,15 @@ class CartItems extends HTMLElement {
   }
 
   onChange(event) {
-    this.updateQuantity(event.target.dataset.index, event.target.value, document.activeElement?.getAttribute('name'), event.target);
+    this.updateQuantity(event.target.dataset.index, event.target.value, document.activeElement?.getAttribute('name'));
   }
 
   
-  updateQuantity(line, quantity, name, quantityInput) {
+  updateQuantity(line, quantity, name) {
+    this.enableLoading(line);
     this.hideErrorMsg();
 
-    const cartForm = document.getElementById('cart-form');
-    let body = JSON.parse(serializeForm(cartForm));
-    const customerLimits = window.CustomerPurchaseLimits;
-    const violation = customerLimits
-      && typeof customerLimits.cartViolationFromForm === 'function'
-      ? customerLimits.cartViolationFromForm(body, { allowDecreases: true })
-      : null;
-    if (violation) {
-      if (quantityInput) {
-        quantityInput.value = quantityInput.dataset.customerLimitPreviousValue
-          || quantityInput.defaultValue
-          || '0';
-      }
-      customerLimits.showCartError(violation.message);
-      return;
-    }
-
-    const previousQuantity = quantityInput
-      ? quantityInput.dataset.customerLimitPreviousValue
-        || quantityInput.defaultValue
-        || '0'
-      : '0';
-    this.enableLoading(line);
+    let body = JSON.parse(serializeForm(document.getElementById('cart-form')));
 
     EasyStore.Action.updateCart(body,(cart)=>{
 
@@ -208,18 +169,10 @@ class CartItems extends HTMLElement {
        
         this.disableLoading();
         if(cart.error && cart.error.message) { 
-          if (quantityInput) quantityInput.value = previousQuantity;
           this.renderErrorMsg(cart.error.message)
           this.disableLoading(line);
         }
-        if(cart.cart_content) {
-          document.querySelector('#cart-template').innerHTML = cart.cart_content
-          if (customerLimits && typeof customerLimits.syncCartFromForm === 'function') {
-            customerLimits.syncCartFromForm();
-          }
-        } else if (!(cart.error && cart.error.message) && customerLimits) {
-          customerLimits.commitCartState(customerLimits.cartStateFromForm(body));
-        }
+        if(cart.cart_content) document.querySelector('#cart-template').innerHTML = cart.cart_content
       
         if(this.cartNotification != undefined && this.cartNotification.updateCartCount != undefined) this.cartNotification.updateCartCount(cart);
         if(window.EasyStore != undefined && window.EasyStore.Promotion != undefined && window.EasyStore.Promotion.updateCartPromotion != undefined) window.EasyStore.Promotion.updateCartPromotion()
@@ -255,21 +208,7 @@ class CartItems extends HTMLElement {
           this.renderErrorMsg(cart.error.message)
           this.disableLoading(line);
         }
-        if(cart.cart_content) {
-          document.querySelector('#cart-template').innerHTML = cart.cart_content
-          const customerLimits = window.CustomerPurchaseLimits;
-          if (customerLimits && typeof customerLimits.syncCartFromForm === 'function') {
-            customerLimits.syncCartFromForm();
-          }
-        } else if (!(cart.error && cart.error.message)) {
-          const customerLimits = window.CustomerPurchaseLimits;
-          if (customerLimits && typeof customerLimits.recordRemovalForVariant === 'function') {
-            customerLimits.recordRemovalForVariant(
-              body.variant_id,
-              cartItemDeleteBtn.dataset.quantity
-            );
-          }
-        }
+        if(cart.cart_content) document.querySelector('#cart-template').innerHTML = cart.cart_content
       
         if(this.cartNotification != undefined && this.cartNotification.updateCartCount != undefined) this.cartNotification.updateCartCount(cart);
         if(window.EasyStore != undefined && window.EasyStore.Promotion != undefined && window.EasyStore.Promotion.updateCartPromotion != undefined) window.EasyStore.Promotion.updateCartPromotion();

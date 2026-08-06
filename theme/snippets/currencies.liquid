@@ -1,8 +1,6 @@
 {{ 'compact-spacing.css' | asset_url | stylesheet_tag }}
 {{ 'card-navigation-polish.css' | asset_url | stylesheet_tag }}
 
-{% include 'customer-purchase-limits' %}
-
 <script>
   window.purchaseCartQuantities = {};
   {% for item in cart.items %}
