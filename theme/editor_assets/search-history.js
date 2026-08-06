@@ -169,86 +169,143 @@
     'input[name="customer[birthdate]"]',
     'input[name="details[birthdate]"]',
   ].join(',');
-  const OTP_INPUT_SELECTOR = [
-    'input[autocomplete="one-time-code"]',
-    'input[name*="otp" i]',
-    'input[id*="otp" i]',
-    'input[name*="verification" i]',
-    'input[id*="verification" i]',
-    'input[name*="verify" i]',
-    'input[id*="verify" i]',
-    'input[name*="code" i]',
-    'input[id*="code" i]',
-    'input[name*="pin" i]',
-    'input[id*="pin" i]',
-  ].join(',');
-  const VERIFICATION_PATTERN = /(?:verify|verification|otp|one[-_ ]time|challenge|two[-_ ]factor|2fa)/i;
+  // Deliberately no verification-code handling here. The one-time-code step at
+  // /account/auth is EasyStore's, and the widget posts its own request; theme
+  // scripts that wrote into those cells made it post twice, which broke signup
+  // with "Customer already exists (phone)". This module stays on gender and
+  // birthdate. See tests/test_otp_cell_autofill.py.
 
   const injectStyles = () => {
     if (document.getElementById('customer-form-enhancements-styles')) return;
 
     const style = document.createElement('style');
     style.id = 'customer-form-enhancements-styles';
+    // Every rule is qualified by element + class. The account templates wrap
+    // their controls in `.customer .field`, whose `label` and `input` rules
+    // (specificity 0,2,1) would otherwise absolutely position these options on
+    // top of each other and set pointer-events: none, leaving the control
+    // invisible and untappable. The widget also replaces that wrapper outright
+    // (see enhanceGenderSelect), so these two defences are independent.
     style.textContent = `
-      .customer-gender-options {
+      fieldset.customer-gender-options {
         border: 0;
-        margin: 0 0 2rem;
+        margin: 0 0 1.6rem;
         min-inline-size: 0;
         padding: 0;
         width: 100%;
       }
 
-      .customer-gender-options__legend {
+      fieldset.customer-gender-options > legend.customer-gender-options__legend {
+        color: rgba(var(--color-foreground), 0.55);
         display: block;
-        margin-bottom: 0.8rem;
+        float: left;
+        font-size: 1.2rem;
+        letter-spacing: 0.04rem;
+        line-height: 1.5;
+        margin: 0 0 0.6rem;
         padding: 0;
+        pointer-events: auto;
+        position: static;
         width: 100%;
       }
 
-      .customer-gender-options__choices {
-        display: flex;
-        flex-wrap: wrap;
+      fieldset.customer-gender-options > div.customer-gender-options__choices {
+        clear: both;
+        display: grid;
         gap: 0.8rem;
+        /* auto-fit keeps every option on one row whenever they fit, and wraps
+           to a second row rather than shrinking them into unreadable slivers.
+           6rem is the narrowest column that still holds the longest label this
+           store uses without breaking it. */
+        grid-template-columns: repeat(auto-fit, minmax(6rem, 1fr));
       }
 
-      .customer-gender-options__choice {
+      /* Two options - the case every storefront here actually renders - are
+         pinned to one row at any width, so the choice always reads as a single
+         control rather than a stack of buttons. Three or more are left to
+         auto-fit: forcing them inline on a 320px screen crams the labels.
+         Specificity has to clear the rule above, hence the fieldset prefix. */
+      fieldset.customer-gender-options > div.customer-gender-options__choices[data-choice-count="2"] {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      div.customer-gender-options__choices > label.customer-gender-options__choice {
+        color: inherit;
+        container-type: inline-size;
         cursor: pointer;
-        flex: 1 1 12rem;
+        display: block;
+        font-size: inherit;
+        left: auto;
+        letter-spacing: inherit;
         margin: 0;
         min-width: 0;
+        pointer-events: auto;
         position: relative;
+        top: auto;
+        width: auto;
       }
 
-      .customer-gender-options__choice input {
+      label.customer-gender-options__choice > input {
         height: 1px;
         margin: -1px;
         opacity: 0;
         overflow: hidden;
+        padding: 0;
         position: absolute;
         width: 1px;
       }
 
-      .customer-gender-options__choice span {
+      /* Radius, ring, height and type are the theme's own text-input tokens, so
+         the control lines up with the fields above and below it rather than
+         introducing a second look. */
+      label.customer-gender-options__choice > span {
         align-items: center;
-        border: 0.1rem solid rgba(var(--color-base-text), 0.35);
-        border-radius: 0.4rem;
+        background-color: transparent;
+        border: 0;
+        border-radius: 3.5rem;
+        box-shadow: 0 0 0 0.1rem rgba(var(--color-foreground), 1), inset 0 2px 3px rgba(0, 0, 0, 0.05);
+        box-sizing: border-box;
+        color: rgb(var(--color-foreground));
         display: flex;
+        font-size: 1.5rem;
         justify-content: center;
-        min-height: 4.6rem;
-        padding: 0.8rem 1.2rem;
+        letter-spacing: 0.04rem;
+        line-height: 1.3;
+        /* Matches the 4rem text inputs, and clears the 44px touch minimum. */
+        min-height: 4rem;
+        /* Narrow columns get tighter side padding so the label keeps its room. */
+        padding: 0.6rem clamp(0.6rem, 2.5cqi, 1.2rem);
+        overflow-wrap: anywhere;
         text-align: center;
-        transition: border-color 120ms ease, box-shadow 120ms ease;
+        transition: background-color var(--duration-short) ease, color var(--duration-short) ease;
+        user-select: none;
       }
 
-      .customer-gender-options__choice input:checked + span {
-        border-color: rgb(var(--color-base-text));
-        box-shadow: inset 0 0 0 0.1rem rgb(var(--color-base-text));
-        font-weight: 600;
+      label.customer-gender-options__choice > input:checked + span {
+        background-color: rgb(var(--color-foreground));
+        color: rgb(var(--color-background));
       }
 
-      .customer-gender-options__choice input:focus-visible + span {
-        outline: 0.2rem solid currentColor;
+      label.customer-gender-options__choice > input:focus-visible + span {
+        outline: 0.2rem solid rgb(var(--color-foreground));
         outline-offset: 0.2rem;
+      }
+
+      label.customer-gender-options__choice > input:disabled + span {
+        cursor: not-allowed;
+        opacity: 0.5;
+      }
+
+      @media (hover: hover) {
+        label.customer-gender-options__choice > input:not(:checked):hover + span {
+          background-color: rgba(var(--color-foreground), 0.06);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        label.customer-gender-options__choice > span {
+          transition: none;
+        }
       }
     `;
     document.head.appendChild(style);
@@ -258,6 +315,21 @@
     if (!input.id) return null;
     return Array.from(document.querySelectorAll('label[for]'))
       .find((label) => label.htmlFor === input.id) || null;
+  };
+
+  // Swap out the whole `.field` wrapper where it is safe to do so. `.customer
+  // .field` styles its `label` and `input` children as a floating-label text
+  // input - absolutely positioned, pointer-events: none - which is wrong for a
+  // group of radio options and outranks anything this module can inject.
+  // Only the wrapper for this one control is taken, never one holding other
+  // fields.
+  const replaceGenderControl = (select, fieldset) => {
+    const field = select.closest('.field');
+    const ownsNothingElse = field
+      && field.querySelectorAll('input, select, textarea').length === 1;
+
+    const target = (ownsNothingElse && field) || select.closest('.select') || select;
+    target.replaceWith(fieldset);
   };
 
   const enhanceGenderSelect = (select) => {
@@ -285,6 +357,8 @@
     legend.className = 'customer-gender-options__legend';
     legend.textContent = legendText;
     choicesWrapper.className = 'customer-gender-options__choices';
+    // Drives the single-row layout for the two and three option cases.
+    choicesWrapper.dataset.choiceCount = String(choices.length);
 
     choices.forEach((option, index) => {
       const label = document.createElement('label');
@@ -310,18 +384,29 @@
 
     fieldset.append(legend, choicesWrapper);
 
-    const selectContainer = select.closest('.select');
-    if (selectContainer) selectContainer.replaceWith(fieldset);
-    else select.replaceWith(fieldset);
+    replaceGenderControl(select, fieldset);
 
-    if (associatedLabel && !fieldset.contains(associatedLabel)) associatedLabel.remove();
+    if (associatedLabel && associatedLabel.isConnected) associatedLabel.remove();
   };
+
+  // On a phone a typeable date field raises the keyboard straight over the
+  // calendar, so typing is offered only where there is a real pointer.
+  const pointerIsCoarse = () => typeof window.matchMedia === 'function'
+    && window.matchMedia('(pointer: coarse)').matches;
 
   const configureBirthdatePicker = (input) => {
     const picker = input && input._flatpickr;
     if (!picker || picker.__customerBirthdateEnhanced) return false;
 
-    picker.config.allowInput = true;
+    const allowTyping = !pointerIsCoarse();
+    picker.config.allowInput = allowTyping;
+    // flatpickr only reads allowInput while it builds, and sets readonly from
+    // it there, so the attribute has to be corrected by hand afterwards.
+    if (allowTyping) input.removeAttribute('readonly');
+    else input.setAttribute('readonly', 'readonly');
+
+    // A birthdate is decades back; opening on the current month means a long
+    // scroll. Empty fields start at January 2000 instead.
     picker.config.onOpen = [(_selectedDates, dateStr, instance) => {
       if (!dateStr && !instance.selectedDates.length) {
         instance.jumpToDate(DEFAULT_BIRTHDATE, false);
@@ -343,73 +428,6 @@
     window.setTimeout(() => configureBirthdatePicker(input), 250);
   };
 
-  const formLooksLikeVerification = (form) => {
-    const action = form.getAttribute('action') || '';
-    const context = [action, form.id, form.className].join(' ');
-    return VERIFICATION_PATTERN.test(context);
-  };
-
-  const inputCanReceiveOtp = (input) => {
-    const type = (input.getAttribute('type') || 'text').toLowerCase();
-    return !input.disabled
-      && !input.readOnly
-      && !['hidden', 'password', 'submit', 'button', 'checkbox', 'radio'].includes(type);
-  };
-
-  const requestWebOtp = (input) => {
-    const form = input.form;
-    if (!form || form.dataset.webOtpRequested === 'true') return;
-    if (!('OTPCredential' in window) || !navigator.credentials) return;
-
-    form.dataset.webOtpRequested = 'true';
-    const controller = new AbortController();
-    const timeoutId = window.setTimeout(() => controller.abort(), 60000);
-
-    form.addEventListener('submit', () => controller.abort(), { once: true });
-
-    navigator.credentials.get({
-      otp: { transport: ['sms'] },
-      signal: controller.signal,
-    }).then((credential) => {
-      if (!credential || !credential.code) return;
-      input.value = credential.code;
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-      input.dispatchEvent(new Event('change', { bubbles: true }));
-    }).catch(() => {
-      // Unsupported, timed-out, or cancelled WebOTP requests fall back to browser autofill.
-    }).finally(() => {
-      window.clearTimeout(timeoutId);
-    });
-  };
-
-  const enhanceOtpInput = (input) => {
-    if (!inputCanReceiveOtp(input)) return;
-
-    input.setAttribute('autocomplete', 'one-time-code');
-    input.setAttribute('autocapitalize', 'off');
-    input.setAttribute('spellcheck', 'false');
-    if (!input.hasAttribute('inputmode')) input.setAttribute('inputmode', 'numeric');
-    if (!input.hasAttribute('enterkeyhint')) input.setAttribute('enterkeyhint', 'done');
-    requestWebOtp(input);
-  };
-
-  const enhanceVerificationForm = (form) => {
-    const pageLooksLikeVerification = VERIFICATION_PATTERN.test(window.location.pathname);
-    if (!pageLooksLikeVerification && !formLooksLikeVerification(form)) return;
-
-    let candidates = Array.from(form.querySelectorAll(OTP_INPUT_SELECTOR))
-      .filter(inputCanReceiveOtp);
-
-    if (!candidates.length) {
-      const textInputs = Array.from(form.querySelectorAll('input'))
-        .filter(inputCanReceiveOtp)
-        .filter((input) => !['email', 'tel'].includes((input.type || '').toLowerCase()));
-      if (textInputs.length === 1) candidates = textInputs;
-    }
-
-    candidates.forEach(enhanceOtpInput);
-  };
-
   const enhanceWithin = (root) => {
     if (!root || !root.querySelectorAll) return;
 
@@ -418,9 +436,6 @@
 
     if (root.matches && root.matches(BIRTHDATE_SELECTOR)) enhanceBirthdateInput(root);
     root.querySelectorAll(BIRTHDATE_SELECTOR).forEach(enhanceBirthdateInput);
-
-    if (root.matches && root.matches('form')) enhanceVerificationForm(root);
-    root.querySelectorAll('form').forEach(enhanceVerificationForm);
   };
 
   enhanceWithin(document);
