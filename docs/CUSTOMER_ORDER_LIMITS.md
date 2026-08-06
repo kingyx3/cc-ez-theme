@@ -33,6 +33,15 @@ The shared validator integrates with the native theme paths:
 
 Successful additions and cart updates change the browser-side allowance only after EasyStore's native callback confirms success. Rejected requests do not consume allowance. Cart decreases and removals remain available so an over-limit cart can be corrected.
 
+## Signed-out shoppers
+
+A limit counts units per customer across orders, so it can only be measured for a signed-in customer. Guests are therefore never measured against an allowance. Instead, a purchase attempt on a limited product sends the shopper to `/account/login?redirect_uri=<current page>`, where the login page also links to registration:
+
+- Add to Cart, Buy Now, and listing quick-add on a limited product;
+- product-page checkout and cart checkout — standard, express, and additional controls — while a limited product is in the cart.
+
+For a guest, no limit rule contributes a quantity maximum, disables a purchase or checkout control, clamps a cart quantity input, or replaces native purchase-limit copy. Once the customer signs in, the same rules apply with their real order history.
+
 ## Root cause corrected
 
 The first deployed version compared uppercase configured handles with lowercase storefront handles, so no rule matched. It also relied mainly on document listeners and missed native Buy Now and cart paths. The corrected version normalizes both sides and validates inside the existing product, listing, and cart components, with delegated capture guards as defense in depth.
@@ -46,7 +55,8 @@ Before merging or publishing, upload the exact workflow ZIP to an unpublished Ea
 3. multiple variants and cart lines for one handle are combined;
 4. Add to Cart, Buy Now, listing quick-add, cart increases, standard checkout, and express checkout are blocked when over limit;
 5. cart decreases and removals continue to work;
-6. rejected requests do not reduce the remaining allowance.
+6. rejected requests do not reduce the remaining allowance;
+7. signed out, Add to Cart, Buy Now, listing quick-add, and checkout on a limited product open the login page and return to the original page after signing in, with no limit message, disabled control, or clamped quantity shown first.
 
 ## Enforcement boundary
 

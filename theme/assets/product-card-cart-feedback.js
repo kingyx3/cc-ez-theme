@@ -66,6 +66,13 @@
     );
 
     AddToCartButton.prototype.addToCart = function addToCartWithFeedback() {
+      const limits = window.CustomerOrderLimits;
+      if (limits && limits.loginRequiredForHandle(this.button.dataset.productHandle)) {
+        this.setLoading(false);
+        limits.redirectToLogin();
+        return;
+      }
+
       if (!this.cartNotification) {
         window.location.href = `/products/${this.button.dataset.productHandle}`;
         return;
