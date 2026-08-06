@@ -169,20 +169,10 @@
     'input[name="customer[birthdate]"]',
     'input[name="details[birthdate]"]',
   ].join(',');
-  const OTP_INPUT_SELECTOR = [
-    'input[autocomplete="one-time-code"]',
-    'input[name*="otp" i]',
-    'input[id*="otp" i]',
-    'input[name*="verification" i]',
-    'input[id*="verification" i]',
-    'input[name*="verify" i]',
-    'input[id*="verify" i]',
-    'input[name*="code" i]',
-    'input[id*="code" i]',
-    'input[name*="pin" i]',
-    'input[id*="pin" i]',
-  ].join(',');
-  const VERIFICATION_PATTERN = /(?:verify|verification|otp|one[-_ ]time|challenge|two[-_ ]factor|2fa)/i;
+  // One-time-code fields are owned by otp-cell-autofill.js. Two scripts
+  // rewriting the same autocomplete attributes, and both opening a WebOTP
+  // request, fought over the SMS code and left five of the six cells empty, so
+  // this module keeps to the gender and birthdate fields.
 
   const injectStyles = () => {
     if (document.getElementById('customer-form-enhancements-styles')) return;
@@ -343,73 +333,6 @@
     window.setTimeout(() => configureBirthdatePicker(input), 250);
   };
 
-  const formLooksLikeVerification = (form) => {
-    const action = form.getAttribute('action') || '';
-    const context = [action, form.id, form.className].join(' ');
-    return VERIFICATION_PATTERN.test(context);
-  };
-
-  const inputCanReceiveOtp = (input) => {
-    const type = (input.getAttribute('type') || 'text').toLowerCase();
-    return !input.disabled
-      && !input.readOnly
-      && !['hidden', 'password', 'submit', 'button', 'checkbox', 'radio'].includes(type);
-  };
-
-  const requestWebOtp = (input) => {
-    const form = input.form;
-    if (!form || form.dataset.webOtpRequested === 'true') return;
-    if (!('OTPCredential' in window) || !navigator.credentials) return;
-
-    form.dataset.webOtpRequested = 'true';
-    const controller = new AbortController();
-    const timeoutId = window.setTimeout(() => controller.abort(), 60000);
-
-    form.addEventListener('submit', () => controller.abort(), { once: true });
-
-    navigator.credentials.get({
-      otp: { transport: ['sms'] },
-      signal: controller.signal,
-    }).then((credential) => {
-      if (!credential || !credential.code) return;
-      input.value = credential.code;
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-      input.dispatchEvent(new Event('change', { bubbles: true }));
-    }).catch(() => {
-      // Unsupported, timed-out, or cancelled WebOTP requests fall back to browser autofill.
-    }).finally(() => {
-      window.clearTimeout(timeoutId);
-    });
-  };
-
-  const enhanceOtpInput = (input) => {
-    if (!inputCanReceiveOtp(input)) return;
-
-    input.setAttribute('autocomplete', 'one-time-code');
-    input.setAttribute('autocapitalize', 'off');
-    input.setAttribute('spellcheck', 'false');
-    if (!input.hasAttribute('inputmode')) input.setAttribute('inputmode', 'numeric');
-    if (!input.hasAttribute('enterkeyhint')) input.setAttribute('enterkeyhint', 'done');
-    requestWebOtp(input);
-  };
-
-  const enhanceVerificationForm = (form) => {
-    const pageLooksLikeVerification = VERIFICATION_PATTERN.test(window.location.pathname);
-    if (!pageLooksLikeVerification && !formLooksLikeVerification(form)) return;
-
-    let candidates = Array.from(form.querySelectorAll(OTP_INPUT_SELECTOR))
-      .filter(inputCanReceiveOtp);
-
-    if (!candidates.length) {
-      const textInputs = Array.from(form.querySelectorAll('input'))
-        .filter(inputCanReceiveOtp)
-        .filter((input) => !['email', 'tel'].includes((input.type || '').toLowerCase()));
-      if (textInputs.length === 1) candidates = textInputs;
-    }
-
-    candidates.forEach(enhanceOtpInput);
-  };
-
   const enhanceWithin = (root) => {
     if (!root || !root.querySelectorAll) return;
 
@@ -418,9 +341,6 @@
 
     if (root.matches && root.matches(BIRTHDATE_SELECTOR)) enhanceBirthdateInput(root);
     root.querySelectorAll(BIRTHDATE_SELECTOR).forEach(enhanceBirthdateInput);
-
-    if (root.matches && root.matches('form')) enhanceVerificationForm(root);
-    root.querySelectorAll('form').forEach(enhanceVerificationForm);
   };
 
   enhanceWithin(document);

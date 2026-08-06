@@ -13,11 +13,19 @@ class CustomerFormEnhancementTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.script = SCRIPT_PATH.read_text(encoding="utf-8")
 
-    def test_verification_codes_support_mobile_otp_autofill(self) -> None:
-        self.assertIn("autocomplete', 'one-time-code", self.script)
-        self.assertIn("'OTPCredential' in window", self.script)
-        self.assertIn("otp: { transport: ['sms'] }", self.script)
-        self.assertIn("input.dispatchEvent(new Event('input'", self.script)
+    def test_one_time_codes_are_left_to_the_dedicated_otp_module(self) -> None:
+        # Two scripts rewriting the same autocomplete attributes, and both
+        # calling navigator.credentials.get(), fought over the SMS code and left
+        # five of the six cells empty. otp-cell-autofill.js owns them now.
+        self.assertNotIn("one-time-code", self.script)
+        self.assertNotIn("OTPCredential", self.script)
+        self.assertNotIn("navigator.credentials", self.script)
+        self.assertNotIn("enhanceVerificationForm", self.script)
+
+    def test_no_form_on_a_verification_page_is_blindly_claimed(self) -> None:
+        # The old page-path heuristic turned the header search box into an OTP
+        # field on any URL containing "verify".
+        self.assertNotIn("window.location.pathname", self.script)
 
     def test_gender_dropdowns_become_clickable_radio_options(self) -> None:
         self.assertIn('select[name="customer[gender]"]', self.script)
@@ -32,10 +40,11 @@ class CustomerFormEnhancementTests(unittest.TestCase):
         self.assertIn("input.setAttribute('autocomplete', 'bday')", self.script)
         self.assertIn("if (!dateStr && !instance.selectedDates.length)", self.script)
 
-    def test_dynamic_verification_markup_is_also_enhanced(self) -> None:
+    def test_dynamic_profile_markup_is_also_enhanced(self) -> None:
         self.assertIn("new MutationObserver", self.script)
         self.assertIn("record.addedNodes.forEach", self.script)
-        self.assertIn("enhanceVerificationForm", self.script)
+        self.assertIn("enhanceGenderSelect", self.script)
+        self.assertIn("enhanceBirthdateInput", self.script)
 
 
 if __name__ == "__main__":

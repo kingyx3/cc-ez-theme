@@ -179,7 +179,7 @@
         </div>
 
         <div {% if order %}class="text-right"{% endif %}>
-          <button type="submit">
+          <button type="submit" class="btn">
             {{ 'customer.activate_account.submit' | t }}
           </button>
         </div>
@@ -215,8 +215,8 @@
 {{ 'flatpickr.min.js' | asset_url | script_tag }}
 
 <script>
-  document.querySelector('#form-activate').addEventListener('submit', (event)=>{
-    document.querySelector('#form-activate .btn').classList.add('btn--loading','loading');
+  document.addEventListener('DOMContentLoaded', () => {
+    guardSingleAccountSubmit('#form-activate');
   });
 
   flatpickr.localize({% include 'flatpickr-locale' %})

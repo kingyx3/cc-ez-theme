@@ -156,8 +156,8 @@
 {{ 'flatpickr.min.js' | asset_url | script_tag }}
 
 <script>
-  document.querySelector('#form-register').addEventListener('submit', (event)=>{
-    document.querySelector('#form-register .btn').classList.add('btn--loading','loading');
+  document.addEventListener('DOMContentLoaded', () => {
+    guardSingleAccountSubmit('#form-register');
   });
 
   flatpickr.localize({% include 'flatpickr-locale' %})

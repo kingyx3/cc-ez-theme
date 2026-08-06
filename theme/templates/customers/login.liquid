@@ -163,7 +163,7 @@
 {% app_snippet 'login/content_bottom' %}
 
 <script>
-  document.querySelector('#form-login').addEventListener('submit', (event)=>{
-    document.querySelector('#form-login .btn').classList.add('btn--loading','loading');
+  document.addEventListener('DOMContentLoaded', () => {
+    guardSingleAccountSubmit('#form-login');
   });
 </script>
