@@ -213,14 +213,25 @@
         clear: both;
         display: grid;
         gap: 0.8rem;
-        /* Equal-width options that sit side by side on a phone and only stack
-           when they genuinely cannot fit. 7rem keeps two options on one row
-           inside the narrow account column at 360px. */
-        grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+        /* auto-fit keeps every option on one row whenever they fit, and wraps
+           to a second row rather than shrinking them into unreadable slivers.
+           6rem is the narrowest column that still holds the longest label this
+           store uses without breaking it. */
+        grid-template-columns: repeat(auto-fit, minmax(6rem, 1fr));
+      }
+
+      /* Two options - the case every storefront here actually renders - are
+         pinned to one row at any width, so the choice always reads as a single
+         control rather than a stack of buttons. Three or more are left to
+         auto-fit: forcing them inline on a 320px screen crams the labels.
+         Specificity has to clear the rule above, hence the fieldset prefix. */
+      fieldset.customer-gender-options > div.customer-gender-options__choices[data-choice-count="2"] {
+        grid-template-columns: repeat(2, 1fr);
       }
 
       div.customer-gender-options__choices > label.customer-gender-options__choice {
         color: inherit;
+        container-type: inline-size;
         cursor: pointer;
         display: block;
         font-size: inherit;
@@ -262,7 +273,9 @@
         line-height: 1.3;
         /* Matches the 4rem text inputs, and clears the 44px touch minimum. */
         min-height: 4rem;
-        padding: 0.6rem 1.2rem;
+        /* Narrow columns get tighter side padding so the label keeps its room. */
+        padding: 0.6rem clamp(0.6rem, 2.5cqi, 1.2rem);
+        overflow-wrap: anywhere;
         text-align: center;
         transition: background-color var(--duration-short) ease, color var(--duration-short) ease;
         user-select: none;
@@ -344,6 +357,8 @@
     legend.className = 'customer-gender-options__legend';
     legend.textContent = legendText;
     choicesWrapper.className = 'customer-gender-options__choices';
+    // Drives the single-row layout for the two and three option cases.
+    choicesWrapper.dataset.choiceCount = String(choices.length);
 
     choices.forEach((option, index) => {
       const label = document.createElement('label');

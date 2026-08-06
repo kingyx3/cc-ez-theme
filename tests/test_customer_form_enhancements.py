@@ -102,7 +102,24 @@ class GenderControlLayoutTests(unittest.TestCase):
 
     def test_options_share_a_row_and_wrap_only_when_forced(self) -> None:
         self.assertIn("display: grid", self.script)
-        self.assertIn("grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr))", self.script)
+        self.assertIn("grid-template-columns: repeat(auto-fit, minmax(6rem, 1fr))", self.script)
+
+    def test_a_two_option_group_never_stacks(self) -> None:
+        # The only case these storefronts render. auto-fit alone left it stacked
+        # on a 320px screen even though both options fit.
+        self.assertIn("choicesWrapper.dataset.choiceCount", self.script)
+        # Must outrank the auto-fit rule, which is (0,2,2) - a bare
+        # class+attribute selector is (0,2,1) and silently loses.
+        self.assertIn(
+            'fieldset.customer-gender-options > '
+            'div.customer-gender-options__choices[data-choice-count="2"]',
+            self.script,
+        )
+
+    def test_long_labels_shrink_their_padding_instead_of_overflowing(self) -> None:
+        self.assertIn("container-type: inline-size", self.script)
+        self.assertIn("padding: 0.6rem clamp(0.6rem, 2.5cqi, 1.2rem)", self.script)
+        self.assertIn("overflow-wrap: anywhere", self.script)
 
     def test_options_reuse_the_themes_text_input_tokens(self) -> None:
         # Same pill radius, ring, height and type scale as the fields above and
