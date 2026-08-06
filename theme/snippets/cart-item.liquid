@@ -110,7 +110,6 @@
 
      <input type="hidden" name="ids[]" value="{{ item.variant_id }}">
      <input type="hidden" name="item_ids[]" value="{{item.id}}">
-     <input type="hidden" name="product_handles[]" value="{{ item.product.handle | default: item.handle | downcase | escape }}">
 
      {% if item.is_quantity_editable %}
       <quantity-input class="quantity">
