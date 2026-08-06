@@ -50,12 +50,43 @@
 
   const customerAuthenticated = source.customerAuthenticated === true;
 
-  // Limits count units per customer across orders, so they only exist for a
-  // signed-in customer. Guests are sent to sign in instead of being measured
-  // against a limit they cannot own yet.
-  const loginRequiredForRule = (rule) => (
-    Boolean(rule) && (!customerAuthenticated || rule.loginRequired === true)
+  // `body.customer-logged-in` comes from the layout and the markers come from
+  // the header, both rendered by the same `customer` check the rest of the theme
+  // uses for its account links, so together they are the reliable signal for
+  // sign-in state. The Liquid flag above reports only what the limit snippet
+  // itself could see, so it counts as a signed-in hint and never as proof that a
+  // shopper is signed out. Signing out is only ever concluded from the header's
+  // signed-out marker, never from missing markup.
+  const SIGNED_IN_MARKUP = 'body.customer-logged-in, [data-customer-authenticated="true"], a[href^="/account/logout"]';
+  const SIGNED_OUT_MARKUP = '[data-customer-authenticated="false"]';
+
+  const onAccountPage = () => (
+    /^\/account(\/|$)/.test(String(window.location.pathname || ''))
   );
+
+  // Cached once the page proves sign-in state either way. While the state is
+  // unproven the answer stays "not signed out" so no purchase is ever
+  // redirected on a guess: a wrong redirect breaks buying for real customers.
+  let signedOut = null;
+  const shopperSignedOut = () => {
+    if (signedOut !== null) return signedOut;
+    if (customerAuthenticated || onAccountPage()) {
+      signedOut = false;
+      return signedOut;
+    }
+    if (document.querySelector(SIGNED_IN_MARKUP)) {
+      signedOut = false;
+      return signedOut;
+    }
+    if (!document.querySelector(SIGNED_OUT_MARKUP)) return false;
+    signedOut = true;
+    return signedOut;
+  };
+
+  // Limits count units per customer across orders, so they only exist for a
+  // signed-in customer. A shopper proven to be signed out is sent to sign in
+  // instead of being measured against a limit they cannot own yet.
+  const loginRequiredForRule = (rule) => Boolean(rule) && shopperSignedOut();
 
   const loginRequiredForHandle = (handle) => loginRequiredForRule(ruleFor(handle));
 
@@ -65,7 +96,9 @@
   };
 
   const redirectToLogin = () => {
+    if (!shopperSignedOut()) return false;
     window.location.assign(loginRedirectUrl());
+    return true;
   };
 
   const currentCartTotals = () => {
@@ -345,10 +378,13 @@
     form?.dataset.productHandle || productHandle(form)
   );
 
+  // Only takes over the event when the shopper is actually being redirected, so
+  // an unproven sign-in state leaves the native purchase path untouched.
   const sendToLogin = (event) => {
+    if (!shopperSignedOut()) return false;
     event.preventDefault();
     event.stopImmediatePropagation();
-    redirectToLogin();
+    return redirectToLogin();
   };
 
   document.addEventListener('click', (event) => {
@@ -356,10 +392,10 @@
       'add-to-cart-button button[data-product-handle]'
     );
     if (listingButton) {
-      if (loginRequiredForHandle(listingButton.dataset.productHandle)) {
-        sendToLogin(event);
-        return;
-      }
+      if (
+        loginRequiredForHandle(listingButton.dataset.productHandle)
+        && sendToLogin(event)
+      ) return;
       const violation = additionViolation(
         listingButton.dataset.productHandle,
         listingButton.dataset.quantity
@@ -376,10 +412,7 @@
     if (buyNowButton) {
       const form = buyNowButton.closest('product-form')?.querySelector('form');
       const handle = formHandle(form);
-      if (loginRequiredForHandle(handle) || loginRequiredForCart()) {
-        sendToLogin(event);
-        return;
-      }
+      if (loginRequiredForHandle(handle) && sendToLogin(event)) return;
       const violation = additionViolation(
         handle,
         form?.querySelector('[name="quantity"]')?.value
@@ -394,10 +427,7 @@
 
     const cartForm = event.target.closest('#cart-form');
     if (cartForm && event.target.closest('.cart__ctas')) {
-      if (loginRequiredForCartForm(cartForm)) {
-        sendToLogin(event);
-        return;
-      }
+      if (loginRequiredForCartForm(cartForm) && sendToLogin(event)) return;
       if (cartForm.dataset.customerOrderLimitCheckoutBlocked === 'true') {
         const violation = cartViolationFromForm(cartForm);
         if (violation) {
@@ -415,10 +445,7 @@
 
     if (form.matches('product-form form')) {
       const handle = formHandle(form);
-      if (loginRequiredForHandle(handle)) {
-        sendToLogin(event);
-        return;
-      }
+      if (loginRequiredForHandle(handle) && sendToLogin(event)) return;
       const violation = additionViolation(
         handle,
         form.querySelector('[name="quantity"]')?.value
@@ -438,10 +465,7 @@
         || submitter.name === 'expresscheckout'
         || submitter.id === 'checkout';
       if (!isCheckout) return;
-      if (loginRequiredForCartForm(form)) {
-        sendToLogin(event);
-        return;
-      }
+      if (loginRequiredForCartForm(form) && sendToLogin(event)) return;
       const violation = cartViolationFromForm(form);
       if (violation) {
         event.preventDefault();

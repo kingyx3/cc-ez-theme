@@ -95,10 +95,13 @@
     if (!productForm || !form) return;
 
     const limits = window.CustomerOrderLimits;
-    if (limits && limits.loginRequiredForHandle(productHandle(form))) {
+    if (
+      limits
+      && limits.loginRequiredForHandle(productHandle(form))
+      && limits.redirectToLogin()
+    ) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      limits.redirectToLogin();
       return;
     }
 

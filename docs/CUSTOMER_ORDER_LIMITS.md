@@ -38,9 +38,23 @@ Successful additions and cart updates change the browser-side allowance only aft
 A limit counts units per customer across orders, so it can only be measured for a signed-in customer. Guests are therefore never measured against an allowance. Instead, a purchase attempt on a limited product sends the shopper to `/account/login?redirect_uri=<current page>`, where the login page also links to registration:
 
 - Add to Cart, Buy Now, and listing quick-add on a limited product;
-- product-page checkout and cart checkout — standard, express, and additional controls — while a limited product is in the cart.
+- cart checkout — standard, express, and additional controls — while a limited product is in the cart.
 
 For a guest, no limit rule contributes a quantity maximum, disables a purchase or checkout control, clamps a cart quantity input, or replaces native purchase-limit copy. Once the customer signs in, the same rules apply with their real order history.
+
+The redirect is scoped to the product being bought. A limited product sitting in the cart never diverts Add to Cart or Buy Now for a different product; only the cart's own checkout controls consider the whole cart.
+
+## How sign-in state is decided
+
+A wrong redirect breaks buying for real customers, so the storefront redirects only when the page proves the shopper is signed out. Three signals are read, in order:
+
+1. `body.customer-logged-in` from `layout/theme.liquid`, `[data-customer-authenticated="true"]` from `sections/header.liquid`, or any `/account/logout` link — signed in;
+2. `customerAuthenticated` from `snippets/customer-order-limits.liquid` — a signed-in hint only;
+3. `[data-customer-authenticated="false"]` from `sections/header.liquid` — signed out.
+
+Signals 1 and 2 are checked first and end the question. Being signed out is only ever concluded from the header's signed-out marker in signal 3, never from missing markup, and never on an `/account` path. If no signal resolves — for example when customer accounts are disabled and the header renders no account markup — the shopper is treated as not signed out: limits apply as usual and no purchase is redirected.
+
+Signals 1 and 3 come from the layout and header, which render from the `{% if customer %}` check the whole theme uses for its account links. The Liquid flag in signal 2 only reports what the limit snippet itself could see, which is why it cannot mark a shopper as a guest. That snippet also gates the `customer.orders` pass, so if it under-reports sign-in state the across-order `purchased` counts fall back to `0` and only the current cart is capped. To verify on a live theme, sign in and check `window.customerOrderLimitsV2` in the console: `customerAuthenticated` must be `true` and `purchased` must reflect prior orders.
 
 ## Root cause corrected
 
@@ -56,7 +70,9 @@ Before merging or publishing, upload the exact workflow ZIP to an unpublished Ea
 4. Add to Cart, Buy Now, listing quick-add, cart increases, standard checkout, and express checkout are blocked when over limit;
 5. cart decreases and removals continue to work;
 6. rejected requests do not reduce the remaining allowance;
-7. signed out, Add to Cart, Buy Now, listing quick-add, and checkout on a limited product open the login page and return to the original page after signing in, with no limit message, disabled control, or clamped quantity shown first.
+7. signed out, Add to Cart, Buy Now, listing quick-add, and cart checkout on a limited product open the login page and return to the original page after signing in, with no limit message, disabled control, or clamped quantity shown first;
+8. signed in, every purchase path works normally on desktop and mobile and never reaches an account page — check a limited product, an unlimited product, and an unlimited product bought while a limited product sits in the cart;
+9. signed in, `window.customerOrderLimitsV2.customerAuthenticated` is `true` and each rule's `purchased` matches prior non-cancelled orders.
 
 ## Enforcement boundary
 

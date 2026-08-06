@@ -401,12 +401,6 @@ if (!customElements.get('product-form')) {
     }
 
     goToCheckout() {
-      const limits = window.CustomerOrderLimits;
-      if (limits && limits.loginRequiredForCart()) {
-        limits.redirectToLogin();
-        return;
-      }
-
       const customerOrderLimitViolation = window.CustomerOrderLimits
         ? window.CustomerOrderLimits.cartViolation()
         : null;
