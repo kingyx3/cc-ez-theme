@@ -75,11 +75,13 @@
   }
 
   .member-card_title{
-    font-size: 30px;
+    /* Scales with the card so common tier names fit instead of being cut off,
+       and still caps at the original 30px on wide screens. */
+    font-size: clamp(18px, 5.5vw, 30px);
     white-space: nowrap;
     text-overflow: ellipsis;
     overflow: hidden;
-    max-width: 220px;
+    max-width: 100%;
     display: inline-block;
     line-height: 1;
   }
@@ -100,15 +102,29 @@
     background-image: url('{{ customer.membership.membership_tier.card_image_url }}');
   }
   
-  .card-type_customize .qr-modal-toggle{
-    background: #fff;
-    color: #000;
-    padding: 2px;
-    border-radius: 5px;
-    box-shadow: 0 0 5px 1px rgba(18, 18, 18, 0.1);
+  /* Sized as an icon button for every card type. `.customer button` is (0,1,1),
+     so the element qualifier here is what lets these win. */
+  .member-card button.qr-modal-toggle{
+    flex: 0 0 auto;
+    width: 44px;
+    height: 44px;
+    min-width: 0;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    border-radius: 8px;
+    background-color: rgba(255, 255, 255, 0.16);
+    box-shadow: none;
+    color: inherit;
     display: flex;
     align-items: center;
     justify-content: center;
+  }
+
+  .member-card.card-type_customize button.qr-modal-toggle{
+    background-color: #fff;
+    color: #000;
+    box-shadow: 0 0 5px 1px rgba(18, 18, 18, 0.1);
   }
   .member-card_detail{
     position: absolute;
@@ -118,12 +134,22 @@
     justify-content: space-between;
     align-items: flex-end;
   }
+  /* Flex items default to min-width:auto and refuse to shrink, which is what
+     pushed the QR button off the card once the title could use full width.
+     The text column takes a zero basis so it is sized from the space left over
+     after the QR button, rather than from the tier name's own width. */
+  .member-card_detail > div{
+    min-width: 0;
+  }
+  .member-card_detail > div:first-child{
+    flex: 1 1 0;
+  }
   .member-card_detail:first-child{
     top: 20px;
   }
   .member-card_detail:last-child{
     bottom: 20px;
-    column-gap: 5px;
+    column-gap: 10px;
   }
   .membership-upgrade-progress {
     border-radius: 5px; 
