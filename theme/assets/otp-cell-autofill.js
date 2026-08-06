@@ -14,6 +14,7 @@
   ].join(',');
   const VERIFICATION_PATTERN = /(?:verify|verification|otp|one[-_ ]time|challenge|two[-_ ]factor|2fa)/i;
   const EMAIL_FALLBACK_PATTERN = /continue\s+with\s+email\s+instead/i;
+  const SUBMISSION_LOCK_MS = 10000;
 
   const inputCanReceiveOtp = (input) => {
     const type = (input.getAttribute('type') || 'text').toLowerCase();
@@ -75,6 +76,24 @@
       });
   };
 
+  const guardOtpSubmission = (form) => {
+    if (form.dataset.otpSubmissionGuardBound === 'true') return;
+
+    form.dataset.otpSubmissionGuardBound = 'true';
+    form.addEventListener('submit', (event) => {
+      if (form.dataset.otpSubmissionInFlight === 'true') {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return;
+      }
+
+      form.dataset.otpSubmissionInFlight = 'true';
+      window.setTimeout(() => {
+        delete form.dataset.otpSubmissionInFlight;
+      }, SUBMISSION_LOCK_MS);
+    }, true);
+  };
+
   const enhanceOtpCells = (form, cells) => {
     cells.forEach((cell, index) => {
       cell.setAttribute('maxlength', index === 0 ? String(cells.length) : '1');
@@ -127,6 +146,11 @@
     const cells = getOtpCells(form);
     if (!cells.length) return;
 
+    // search-history.js contains the retired WebOTP helper. Claim ownership before
+    // its deferred callback runs so only this script can populate the OTP form.
+    form.dataset.webOtpRequested = 'true';
+    form.dataset.otpEnhancementOwner = 'otp-cell-autofill';
+    guardOtpSubmission(form);
     enhanceOtpCells(form, cells);
   };
 
