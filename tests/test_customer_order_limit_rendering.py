@@ -11,6 +11,7 @@ the platform. Verify field names on a real unpublished theme as well.
 from __future__ import annotations
 
 import json
+import os
 import re
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -21,6 +22,11 @@ try:  # pragma: no cover - exercised by the absence of the dependency
 except ImportError:  # pragma: no cover
     DictLoader = None
     Environment = None
+
+# Skipping is for a developer who has not installed requirements-dev yet. In CI
+# the dependency is pinned, so a missing engine is a broken build rather than a
+# reason to quietly drop every check in this module.
+REQUIRE_ENGINE = bool(os.environ.get("CI"))
 
 
 SNIPPETS = Path(__file__).resolve().parents[1] / "theme" / "snippets"
@@ -50,8 +56,19 @@ def config_liquid(handle: str, maximum: int, refresh: str, refresh_all: str) -> 
     return "\n".join(lines) + "\n"
 
 
-@unittest.skipIf(Environment is None, "python-liquid is not installed")
+@unittest.skipIf(
+    Environment is None and not REQUIRE_ENGINE,
+    "python-liquid is not installed; run pip install -r requirements-dev.txt",
+)
 class CustomerOrderLimitRenderingTests(unittest.TestCase):
+    def setUp(self) -> None:
+        if Environment is None:
+            self.fail(
+                "python-liquid is required in CI: these checks are the only ones "
+                "that execute the limit Liquid, so skipping them hides the logic "
+                "that has broken in production before."
+            )
+
     def render(
         self,
         *,
