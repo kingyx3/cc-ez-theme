@@ -28,7 +28,9 @@ The refresh-date field is optional:
 
 ## How refresh dates work
 
-For each product, the latest refresh date that has already passed becomes the start of the current entitlement period. Orders before that date no longer count. The next future refresh date is shown in purchase-limit feedback.
+For each product, the latest refresh date that has already passed becomes the start of the current entitlement period. Orders before that date no longer count.
+
+Refresh dates are used only while Liquid calculates the customer's current purchased quantity. They are not serialized into the storefront JavaScript configuration and are not shown in customer-facing purchase-limit messages.
 
 Example:
 
