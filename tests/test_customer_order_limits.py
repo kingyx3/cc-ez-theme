@@ -101,7 +101,7 @@ class CustomerOrderLimitTests(unittest.TestCase):
         self.assertEqual(
             listing,
             self.read("editor_assets/product-card-cart-feedback.js"),
-         )
+        )
         self.assertEqual(cart, self.read("editor_assets/cart.js"))
         self.assertIn("quantityLimitForHandle", product)
         self.assertIn("CustomerOrderLimits.productHandle(this.form)", product)
@@ -110,7 +110,7 @@ class CustomerOrderLimitTests(unittest.TestCase):
         self.assertIn("additionViolation", listing)
         self.assertIn("recordAddition", listing)
         self.assertIn("cartViolationFromForm", cart)
-        self.assertIn("allowDeclines: true", cart)
+        self.assertIn("allowDecreases: true", cart)
         self.assertIn("commitCartTotals", cart)
         self.assertIn("recordRemoval", cart)
 
