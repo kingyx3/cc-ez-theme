@@ -180,66 +180,119 @@
 
     const style = document.createElement('style');
     style.id = 'customer-form-enhancements-styles';
+    // Every rule is qualified by element + class. The account templates wrap
+    // their controls in `.customer .field`, whose `label` and `input` rules
+    // (specificity 0,2,1) would otherwise absolutely position these options on
+    // top of each other and set pointer-events: none, leaving the control
+    // invisible and untappable. The widget also replaces that wrapper outright
+    // (see enhanceGenderSelect), so these two defences are independent.
     style.textContent = `
-      .customer-gender-options {
+      fieldset.customer-gender-options {
         border: 0;
-        margin: 0 0 2rem;
+        margin: 0 0 1.6rem;
         min-inline-size: 0;
         padding: 0;
         width: 100%;
       }
 
-      .customer-gender-options__legend {
+      fieldset.customer-gender-options > legend.customer-gender-options__legend {
+        color: rgba(var(--color-foreground), 0.55);
         display: block;
-        margin-bottom: 0.8rem;
+        float: left;
+        font-size: 1.2rem;
+        letter-spacing: 0.04rem;
+        line-height: 1.5;
+        margin: 0 0 0.6rem;
         padding: 0;
+        pointer-events: auto;
+        position: static;
         width: 100%;
       }
 
-      .customer-gender-options__choices {
-        display: flex;
-        flex-wrap: wrap;
+      fieldset.customer-gender-options > div.customer-gender-options__choices {
+        clear: both;
+        display: grid;
         gap: 0.8rem;
+        /* Equal-width options that sit side by side on a phone and only stack
+           when they genuinely cannot fit. 7rem keeps two options on one row
+           inside the narrow account column at 360px. */
+        grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
       }
 
-      .customer-gender-options__choice {
+      div.customer-gender-options__choices > label.customer-gender-options__choice {
+        color: inherit;
         cursor: pointer;
-        flex: 1 1 12rem;
+        display: block;
+        font-size: inherit;
+        left: auto;
+        letter-spacing: inherit;
         margin: 0;
         min-width: 0;
+        pointer-events: auto;
         position: relative;
+        top: auto;
+        width: auto;
       }
 
-      .customer-gender-options__choice input {
+      label.customer-gender-options__choice > input {
         height: 1px;
         margin: -1px;
         opacity: 0;
         overflow: hidden;
+        padding: 0;
         position: absolute;
         width: 1px;
       }
 
-      .customer-gender-options__choice span {
+      /* Radius, ring, height and type are the theme's own text-input tokens, so
+         the control lines up with the fields above and below it rather than
+         introducing a second look. */
+      label.customer-gender-options__choice > span {
         align-items: center;
-        border: 0.1rem solid rgba(var(--color-base-text), 0.35);
-        border-radius: 0.4rem;
+        background-color: transparent;
+        border: 0;
+        border-radius: 3.5rem;
+        box-shadow: 0 0 0 0.1rem rgba(var(--color-foreground), 1), inset 0 2px 3px rgba(0, 0, 0, 0.05);
+        box-sizing: border-box;
+        color: rgb(var(--color-foreground));
         display: flex;
+        font-size: 1.5rem;
         justify-content: center;
-        min-height: 4.6rem;
-        padding: 0.8rem 1.2rem;
+        letter-spacing: 0.04rem;
+        line-height: 1.3;
+        /* Matches the 4rem text inputs, and clears the 44px touch minimum. */
+        min-height: 4rem;
+        padding: 0.6rem 1.2rem;
         text-align: center;
-        transition: border-color 120ms ease, box-shadow 120ms ease;
+        transition: background-color var(--duration-short) ease, color var(--duration-short) ease;
+        user-select: none;
       }
 
-      .customer-gender-options__choice input:checked + span {
-        border-color: rgb(var(--color-base-text));
-        box-shadow: inset 0 0 0 0.1rem rgb(var(--color-base-text));
-        font-weight: 600;
+      label.customer-gender-options__choice > input:checked + span {
+        background-color: rgb(var(--color-foreground));
+        color: rgb(var(--color-background));
       }
 
-      .customer-gender-options__choice input:focus-visible + span {
-        outline: 0.2rem solid currentColor;
+      label.customer-gender-options__choice > input:focus-visible + span {
+        outline: 0.2rem solid rgb(var(--color-foreground));
         outline-offset: 0.2rem;
+      }
+
+      label.customer-gender-options__choice > input:disabled + span {
+        cursor: not-allowed;
+        opacity: 0.5;
+      }
+
+      @media (hover: hover) {
+        label.customer-gender-options__choice > input:not(:checked):hover + span {
+          background-color: rgba(var(--color-foreground), 0.06);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        label.customer-gender-options__choice > span {
+          transition: none;
+        }
       }
     `;
     document.head.appendChild(style);
@@ -249,6 +302,21 @@
     if (!input.id) return null;
     return Array.from(document.querySelectorAll('label[for]'))
       .find((label) => label.htmlFor === input.id) || null;
+  };
+
+  // Swap out the whole `.field` wrapper where it is safe to do so. `.customer
+  // .field` styles its `label` and `input` children as a floating-label text
+  // input - absolutely positioned, pointer-events: none - which is wrong for a
+  // group of radio options and outranks anything this module can inject.
+  // Only the wrapper for this one control is taken, never one holding other
+  // fields.
+  const replaceGenderControl = (select, fieldset) => {
+    const field = select.closest('.field');
+    const ownsNothingElse = field
+      && field.querySelectorAll('input, select, textarea').length === 1;
+
+    const target = (ownsNothingElse && field) || select.closest('.select') || select;
+    target.replaceWith(fieldset);
   };
 
   const enhanceGenderSelect = (select) => {
@@ -301,18 +369,29 @@
 
     fieldset.append(legend, choicesWrapper);
 
-    const selectContainer = select.closest('.select');
-    if (selectContainer) selectContainer.replaceWith(fieldset);
-    else select.replaceWith(fieldset);
+    replaceGenderControl(select, fieldset);
 
-    if (associatedLabel && !fieldset.contains(associatedLabel)) associatedLabel.remove();
+    if (associatedLabel && associatedLabel.isConnected) associatedLabel.remove();
   };
+
+  // On a phone a typeable date field raises the keyboard straight over the
+  // calendar, so typing is offered only where there is a real pointer.
+  const pointerIsCoarse = () => typeof window.matchMedia === 'function'
+    && window.matchMedia('(pointer: coarse)').matches;
 
   const configureBirthdatePicker = (input) => {
     const picker = input && input._flatpickr;
     if (!picker || picker.__customerBirthdateEnhanced) return false;
 
-    picker.config.allowInput = true;
+    const allowTyping = !pointerIsCoarse();
+    picker.config.allowInput = allowTyping;
+    // flatpickr only reads allowInput while it builds, and sets readonly from
+    // it there, so the attribute has to be corrected by hand afterwards.
+    if (allowTyping) input.removeAttribute('readonly');
+    else input.setAttribute('readonly', 'readonly');
+
+    // A birthdate is decades back; opening on the current month means a long
+    // scroll. Empty fields start at January 2000 instead.
     picker.config.onOpen = [(_selectedDates, dateStr, instance) => {
       if (!dateStr && !instance.selectedDates.length) {
         instance.jumpToDate(DEFAULT_BIRTHDATE, false);
