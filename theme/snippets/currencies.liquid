@@ -1,8 +1,6 @@
 {{ 'compact-spacing.css' | asset_url | stylesheet_tag }}
 {{ 'card-navigation-polish.css' | asset_url | stylesheet_tag }}
 
-{% include 'customer-purchase-limits' %}
-
 <script>
   window.purchaseCartQuantities = {};
   {% for item in cart.items %}
@@ -12,7 +10,6 @@
   {% endfor %}
 </script>
 <script src="{{ 'purchase-limit-feedback.js' | asset_url }}"></script>
-<script src="{{ 'customer-purchase-limits.js' | asset_url }}"></script>
 
 <script>
   EasyStore.Currencies.init({{ shop.enabled_currencies |json }}, {{ settings.is_server_side_currency_conversion }})
