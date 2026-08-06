@@ -87,6 +87,18 @@
         currentQuantity,
         requestedQuantity,
       };
+      const customerLimits = window.CustomerPurchaseLimits;
+      const productHandle = String(this.button.dataset.productHandle || '');
+      const customerViolation = customerLimits
+        && typeof customerLimits.additionViolation === 'function'
+        ? customerLimits.additionViolation(productHandle, requestedQuantity)
+        : null;
+      if (customerViolation) {
+        showError(customerViolation.message, errorContext);
+        this.setLoading(false);
+        return;
+      }
+
       const cartCount = document.querySelector('.js-content-cart-count');
       const parsedItemCount = Number.parseInt(
         cartCount ? cartCount.textContent : '0',
@@ -124,6 +136,13 @@
           showError(fallbackError(), errorContext);
           this.setLoading(false);
           return;
+        }
+
+        if (
+          customerLimits
+          && typeof customerLimits.recordAddition === 'function'
+        ) {
+          customerLimits.recordAddition(productHandle, requestedQuantity);
         }
 
         if (window.location.pathname === '/cart') {

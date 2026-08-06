@@ -113,6 +113,18 @@ if (!customElements.get('product-form')) {
       const nativeMaximum = this.toPositiveLimit(this.nativeQuantityMaximum);
       if (nativeMaximum) candidates.push({ maximum: nativeMaximum, reason: window.purchaseStrings.configuredLimit });
 
+      const selectedVariant = this.form.querySelector('[name="id"]');
+      const customerLimits = window.CustomerPurchaseLimits;
+      if (
+        customerLimits
+        && typeof customerLimits.quantityLimitForVariant === 'function'
+      ) {
+        const customerLimit = customerLimits.quantityLimitForVariant(
+          selectedVariant && selectedVariant.value
+        );
+        if (customerLimit) candidates.push(customerLimit);
+      }
+
       if (this.rejectedQuantityLimit) {
         candidates.push(this.rejectedQuantityLimit);
       }
@@ -351,6 +363,19 @@ if (!customElements.get('product-form')) {
           );
           setSubmitting(false);
           return;
+        }
+
+        if (cartConfirmed) {
+          const customerLimits = window.CustomerPurchaseLimits;
+          if (
+            customerLimits
+            && typeof customerLimits.recordAdditionForVariant === 'function'
+          ) {
+            customerLimits.recordAdditionForVariant(
+              body.id,
+              requestedQuantity
+            );
+          }
         }
 
         if (buyNow) {

@@ -1,17 +1,18 @@
 # Customer purchase limits across orders
 
-The theme can provide customer-facing purchase-limit guidance for selected EasyStore products by reading a signed-in customer's order history. This is a storefront safeguard, not server-side authorization.
+The theme can provide customer-facing purchase-limit guidance for selected EasyStore products by reading a signed-in customer's order history. This remains a storefront safeguard, not server-side authorization.
 
 ## Production architecture
 
-The implementation follows four safety rules:
+The final implementation is deliberately narrow:
 
 1. **Disabled means no runtime change.** When `customer_purchase_limit_rules` is blank, the snippet emits no configuration and loads no purchase-limit JavaScript.
-2. **No global monkey patching.** The feature does not replace `EasyStore.Action` methods and does not modify custom-element prototypes.
-3. **Checks run at theme-owned interaction boundaries.** Capture-phase guards cover listing quick-add, product-form add-to-cart, Buy Now, cart quantity changes, and cart checkout.
-4. **Native responses remain native.** The guard never manufactures partial cart responses, so cart HTML, counts, promotions, loading states, and error handling remain under the existing theme components.
+2. **The runtime is a pure helper.** It does not replace `EasyStore.Action` methods, custom-element prototypes, or native callback responses.
+3. **Theme-owned components call the helper directly.** Existing product-form, listing quick-add, cart-update, removal, and checkout paths perform the checks before their native action.
+4. **State changes follow confirmed native outcomes.** Successful add callbacks record the confirmed request. Cart updates and removals resync from EasyStore's rendered cart HTML; rejected requests do not consume allowance.
+5. **Cart recovery is always possible.** Customers may reduce or remove quantities even when logged out or already above the current allowance.
 
-This architecture replaced the original PR #56 implementation, which loaded globally even with blank configuration and wrapped EasyStore/cart APIs on every storefront page.
+This replaces the original PR #56 architecture, which loaded globally with blank configuration, wrapped EasyStore APIs, modified the product-form prototype, and returned synthetic partial cart responses.
 
 ## Configure limits
 
@@ -33,7 +34,7 @@ The refresh-date field is optional:
 {% assign customer_purchase_limit_rules = 'one-time-box|1|' %}
 ```
 
-The parser intentionally processes at most 20 product rules and 20 refresh dates per rule. Keep the configuration small because signed-in storefront rendering reads the customer's relevant order history for each configured product.
+The parser processes at most 20 product rules and 20 refresh dates per rule. Keep the configuration small because signed-in storefront rendering reads relevant order history for each configured product.
 
 ## Refresh dates
 
@@ -43,36 +44,38 @@ Refresh dates are used only by Liquid. They are not serialized into browser conf
 
 ## Counting behavior
 
-- Quantities across all variants of the same product handle are combined.
+- Quantities across every variant and cart line of the same product handle are combined.
 - Non-cancelled customer orders count.
 - Cancelled orders do not count.
 - Refunded orders still count unless EasyStore also marks the order cancelled.
 - Current cart quantities consume the remaining allowance.
 - A configured limited product requires a signed-in customer.
-- Customers may always reduce or remove cart quantities, including when they are logged out or the cart is already above the current allowance.
+- Successful additions update the in-page allowance only after EasyStore confirms the add.
+- Cart updates resync from EasyStore's returned `cart_content` when available.
+- Rejected cart updates restore the edited line's previous quantity.
 
 ## Supported theme surfaces
 
-The guard covers the theme's shared product cards, main product form, featured product form, product quick view, cart quantity controls, and cart checkout form. Liquid renders a variant-to-product-handle map only for configured products, while listing buttons use their existing product-handle data. The browser does not fetch product records.
+The guard covers shared product cards, the main product form, featured product forms, product quick view, cart quantity controls, cart removal, and cart checkout. Liquid renders a variant-to-handle map only for configured products. Cart forms include the product handle for each line, so multi-variant and multi-line totals do not depend on a browser product lookup.
 
 ## Production rollout checklist
 
-1. Leave the configuration blank while deploying the code change and confirm the storefront behaves identically to the prior theme.
-2. Configure one staging/test product handle with a low limit.
-3. Test logged-out quick add, product add, and Buy Now.
-4. Test a signed-in customer with zero prior purchases, some prior purchases, and a fully consumed allowance.
-5. Test multiple variants of the same product and multiple cart lines for the same handle.
-6. Test cart increases, decreases, removals, and checkout.
-7. Test one sale product and one sold-out product to catch shared product-card regressions.
-8. Run the repository workflow, download the generated ZIP, and inspect the packaged files.
-9. Publish to a preview theme first and smoke-test desktop and mobile before promoting it to production.
+1. Deploy the code with the configuration blank and confirm all product and cart behavior is unchanged.
+2. Enable one staging product with a low limit.
+3. Test logged-out quick add, product add, Buy Now, cart increase, cart decrease, removal, and checkout.
+4. Test signed-in customers with zero prior purchases, partial usage, and a fully consumed allowance.
+5. Test multiple variants and multiple cart lines of the same product.
+6. Test an EasyStore-rejected add and update; confirm the allowance and displayed cart quantity do not drift.
+7. Test a sale product and sold-out product to cover the shared product card.
+8. Download the CI artifact, upload it as an EasyStore preview theme, and smoke-test desktop and mobile.
+9. Promote the preview only after the live account/order/app-snippet matrix passes.
 
 ## Monitoring and rollback
 
-If storefront errors appear, immediately blank `customer_purchase_limit_rules`. The next rendered page will emit no purchase-limit runtime code. This is the fastest feature-level rollback and does not require reverting unrelated theme changes.
+For immediate feature rollback, blank `customer_purchase_limit_rules`. The next rendered page emits no purchase-limit runtime code, without reverting unrelated theme changes.
 
-For a full rollback, revert the production-readiness PR. Do not restore the original global API/prototype wrappers.
+For a full rollback, revert the production-readiness PR. Do not restore the original API wrappers, prototype modifications, synthetic callback responses, or cart-count inference.
 
 ## Enforcement boundary
 
-A customer can bypass theme JavaScript with a direct API request, modified client, custom sales channel, or disabled browser scripting. Hard enforcement requires an EasyStore server-side feature or a custom backend/app validation at checkout.
+A direct API request, modified client, disabled JavaScript, custom sales channel, or other storefront can bypass theme code. Hard enforcement requires an EasyStore server-side purchase-limit capability or custom backend/app validation at checkout.

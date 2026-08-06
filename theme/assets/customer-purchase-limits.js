@@ -26,7 +26,6 @@
     && typeof source.variantHandles === 'object'
     ? source.variantHandles
     : {};
-
   const cart = source.cart && typeof source.cart === 'object'
     ? source.cart
     : { handles: {}, lines: [] };
@@ -35,30 +34,20 @@
     : {};
   cart.lines = Array.isArray(cart.lines) ? cart.lines : [];
 
-  const pendingAdds = [];
-  let lastVisibleCartCount = null;
-
   const units = (value) => `${value} unit${value === 1 ? '' : 's'}`;
   const ruleForHandle = (handle) => rules[String(handle || '')] || null;
+  const handleForVariant = (variantId) => String(
+    variantHandles[String(variantId || '')] || ''
+  );
   const cartQuantity = (handle) => quantity(cart.handles[String(handle || '')], 0);
-
   const availableForCart = (rule) => Math.max(0, rule.maximum - rule.purchased);
   const remainingForHandle = (handle) => {
     const rule = ruleForHandle(handle);
     if (!rule) return null;
-    return Math.max(
-      0,
-      availableForCart(rule) - cartQuantity(handle)
-    );
+    return Math.max(0, availableForCart(rule) - cartQuantity(handle));
   };
 
-  const messageFor = ({
-    rule,
-    handle,
-    requested = 1,
-    cartMode = false,
-    loginRequired = false,
-  }) => {
+  const messageFor = ({ rule, handle, cartMode = false, loginRequired = false }) => {
     if (loginRequired) {
       return 'Sign in to purchase this limited item. Purchase limits are tracked across customer orders.';
     }
@@ -82,19 +71,12 @@
   const additionViolation = (handle, requestedQuantity = 1) => {
     const rule = ruleForHandle(handle);
     if (!rule) return null;
-
     const requested = Math.max(1, quantity(requestedQuantity, 1));
+
     if (source.loggedIn !== true) {
       return {
         handle: rule.handle,
-        rule,
-        requested,
-        message: messageFor({
-          rule,
-          handle: rule.handle,
-          requested,
-          loginRequired: true,
-        }),
+        message: messageFor({ rule, handle: rule.handle, loginRequired: true }),
       };
     }
 
@@ -102,11 +84,82 @@
     if (requested <= remaining) return null;
     return {
       handle: rule.handle,
-      rule,
-      requested,
       remaining,
-      message: messageFor({ rule, handle: rule.handle, requested }),
+      message: messageFor({ rule, handle: rule.handle }),
     };
+  };
+
+  const additionViolationForVariant = (variantId, requestedQuantity = 1) => (
+    additionViolation(handleForVariant(variantId), requestedQuantity)
+  );
+
+  const quantityLimitForVariant = (variantId) => {
+    const handle = handleForVariant(variantId);
+    const rule = ruleForHandle(handle);
+    if (!rule) return null;
+    const loginRequired = source.loggedIn !== true;
+    return {
+      maximum: loginRequired ? 0 : remainingForHandle(handle),
+      reason: (window.purchaseStrings || {}).customerLimit || 'a customer limit',
+      message: messageFor({ rule, handle, loginRequired }),
+      customerPurchaseLimit: true,
+      handle,
+    };
+  };
+
+  const arrayValue = (sourceObject, key) => {
+    if (!sourceObject || typeof sourceObject !== 'object') return [];
+    const value = sourceObject[key] != null
+      ? sourceObject[key]
+      : sourceObject[`${key}[]`];
+    if (Array.isArray(value)) return value;
+    return value == null ? [] : [value];
+  };
+
+  const bodyFromForm = (formOrBody) => {
+    if (!formOrBody) return {};
+    if (typeof HTMLFormElement !== 'undefined' && formOrBody instanceof HTMLFormElement) {
+      try {
+        return JSON.parse(serializeForm(formOrBody));
+      } catch (error) {
+        return {};
+      }
+    }
+    return typeof formOrBody === 'object' ? formOrBody : {};
+  };
+
+  const cartStateFromForm = (formOrBody) => {
+    const body = bodyFromForm(formOrBody);
+    const updates = arrayValue(body, 'updates');
+    const variants = arrayValue(body, 'ids');
+    const itemIds = arrayValue(body, 'item_ids');
+    const handles = arrayValue(body, 'product_handles');
+    const lineCount = Math.max(updates.length, variants.length, handles.length);
+    const lines = [];
+    const handleQuantities = {};
+
+    for (let index = 0; index < lineCount; index += 1) {
+      const previous = cart.lines[index] || {};
+      const variantId = String(variants[index] || previous.variantId || '');
+      const handle = String(
+        handles[index] || previous.handle || handleForVariant(variantId) || ''
+      );
+      const lineQuantity = quantity(
+        updates[index],
+        quantity(previous.quantity, 0)
+      );
+      lines.push({
+        itemId: String(itemIds[index] || previous.itemId || ''),
+        variantId,
+        handle,
+        quantity: lineQuantity,
+      });
+      if (handle) {
+        handleQuantities[handle] = (handleQuantities[handle] || 0) + lineQuantity;
+      }
+    }
+
+    return { lines, handles: handleQuantities };
   };
 
   const cartViolation = (handleQuantities, options = {}) => {
@@ -121,15 +174,9 @@
       if (source.loggedIn !== true) {
         return {
           handle,
-          message: messageFor({
-            rule,
-            handle,
-            cartMode: true,
-            loginRequired: true,
-          }),
+          message: messageFor({ rule, handle, cartMode: true, loginRequired: true }),
         };
       }
-
       if (proposed > availableForCart(rule)) {
         return {
           handle,
@@ -138,6 +185,46 @@
       }
     }
     return null;
+  };
+
+  const cartViolationFromForm = (formOrBody, options = {}) => {
+    const state = cartStateFromForm(formOrBody);
+    const violation = cartViolation(state.handles, options);
+    return violation ? { ...violation, state } : null;
+  };
+
+  const commitCartState = (state) => {
+    if (!state) return;
+    cart.lines = Array.isArray(state.lines) ? state.lines : [];
+    Object.keys(cart.handles).forEach((handle) => { cart.handles[handle] = 0; });
+    Object.entries(state.handles || {}).forEach(([handle, value]) => {
+      cart.handles[handle] = quantity(value, 0);
+    });
+  };
+
+  const syncCartFromForm = (form = document.getElementById('cart-form')) => {
+    if (!form) return;
+    commitCartState(cartStateFromForm(form));
+  };
+
+  const recordAddition = (handle, requestedQuantity = 1) => {
+    const normalizedHandle = String(handle || '');
+    if (!ruleForHandle(normalizedHandle)) return;
+    cart.handles[normalizedHandle] = cartQuantity(normalizedHandle)
+      + Math.max(1, quantity(requestedQuantity, 1));
+  };
+
+  const recordAdditionForVariant = (variantId, requestedQuantity = 1) => {
+    recordAddition(handleForVariant(variantId), requestedQuantity);
+  };
+
+  const recordRemovalForVariant = (variantId, removedQuantity = 1) => {
+    const handle = handleForVariant(variantId);
+    if (!handle) return;
+    cart.handles[handle] = Math.max(
+      0,
+      cartQuantity(handle) - quantity(removedQuantity, 0)
+    );
   };
 
   const cleanMessage = (rawMessage) => {
@@ -151,14 +238,12 @@
   const getListingAlert = () => {
     let alert = document.querySelector('[data-product-listing-cart-alert]');
     if (alert) return alert;
-
     alert = document.createElement('div');
     alert.className = 'product-listing-cart-alert';
     alert.hidden = true;
     alert.setAttribute('role', 'alert');
     alert.setAttribute('aria-live', 'assertive');
     alert.setAttribute('data-product-listing-cart-alert', '');
-
     const message = document.createElement('span');
     message.setAttribute('data-product-listing-cart-alert-message', '');
     const close = document.createElement('button');
@@ -178,49 +263,7 @@
     if (content) content.textContent = cleanMessage(message);
     alert.hidden = false;
     window.clearTimeout(alert.customerLimitTimer);
-    alert.customerLimitTimer = window.setTimeout(() => {
-      alert.hidden = true;
-    }, 7000);
-  };
-
-  const showProductError = (form, message) => {
-    const productForm = form && form.closest('product-form');
-    const quantityMessage = productForm
-      && productForm.querySelector('[data-quantity-limit-message]');
-    const formMessage = form && form.querySelector('.form__message');
-    const formContent = form && form.querySelector('.js-error-content');
-    const cleaned = cleanMessage(message);
-
-    if (quantityMessage) {
-      quantityMessage.textContent = cleaned;
-      quantityMessage.classList.remove('hidden', 'quantity-limit-message--warning');
-      quantityMessage.classList.add('quantity-limit-message--error');
-    }
-    if (formMessage && formContent) {
-      form.dataset.customerLimitError = 'true';
-      formContent.textContent = cleaned;
-      formMessage.classList.remove('hidden');
-    }
-  };
-
-  const clearProductError = (form) => {
-    const productForm = form && form.closest('product-form');
-    const quantityMessage = productForm
-      && productForm.querySelector('[data-quantity-limit-message]');
-    if (quantityMessage && quantityMessage.dataset.customerLimitMessage === 'true') {
-      quantityMessage.textContent = '';
-      quantityMessage.classList.add('hidden');
-      quantityMessage.classList.remove('quantity-limit-message--error');
-      delete quantityMessage.dataset.customerLimitMessage;
-    }
-
-    if (form && form.dataset.customerLimitError === 'true') {
-      const formMessage = form.querySelector('.form__message');
-      const formContent = form.querySelector('.js-error-content');
-      if (formMessage) formMessage.classList.add('hidden');
-      if (formContent) formContent.textContent = '';
-      delete form.dataset.customerLimitError;
-    }
+    alert.customerLimitTimer = window.setTimeout(() => { alert.hidden = true; }, 7000);
   };
 
   const showCartError = (message) => {
@@ -235,281 +278,33 @@
     showListingError(message);
   };
 
-  const handleForVariant = (variantId) => String(
-    variantHandles[String(variantId || '')] || ''
-  );
-
-  const handleForProductForm = (form) => {
-    const selected = form && form.querySelector('[name="id"]');
-    return handleForVariant(selected && selected.value);
-  };
-
-  const requestedProductQuantity = (form) => {
-    const input = form && form.querySelector('[name="quantity"]');
-    return Math.max(1, quantity(input && input.value, 1));
-  };
-
-  const queueAdditionCandidate = (handle, amount) => {
-    const normalizedHandle = String(handle || '');
-    const normalizedAmount = Math.max(1, quantity(amount, 1));
-    if (!normalizedHandle) return;
-
-    const pending = {
-      handle: normalizedHandle,
-      remaining: normalizedAmount,
-      timer: null,
-    };
-    pending.timer = window.setTimeout(() => {
-      const index = pendingAdds.indexOf(pending);
-      if (index >= 0) pendingAdds.splice(index, 1);
-    }, 15000);
-    pendingAdds.push(pending);
-  };
-
-  const settlePendingAdditions = (increase) => {
-    let remainingIncrease = Math.max(0, quantity(increase, 0));
-    while (remainingIncrease > 0 && pendingAdds.length > 0) {
-      const pending = pendingAdds[0];
-      const settled = Math.min(remainingIncrease, pending.remaining);
-      pending.remaining -= settled;
-      remainingIncrease -= settled;
-      cart.handles[pending.handle] = cartQuantity(pending.handle) + settled;
-
-      if (pending.remaining === 0) {
-        window.clearTimeout(pending.timer);
-        pendingAdds.shift();
-      }
-    }
-  };
-
-  const visibleCartCount = () => {
-    const counter = document.querySelector('.js-content-cart-count');
-    if (!counter) return null;
-    const parsed = Number.parseInt(counter.textContent, 10);
-    return Number.isFinite(parsed) ? parsed : null;
-  };
-
-  const observeCartCount = () => {
-    const counter = document.querySelector('.js-content-cart-count');
-    if (!counter || typeof MutationObserver !== 'function') return;
-    lastVisibleCartCount = visibleCartCount();
-    const observer = new MutationObserver(() => {
-      const current = visibleCartCount();
-      if (current == null) return;
-      if (lastVisibleCartCount != null && current > lastVisibleCartCount) {
-        settlePendingAdditions(current - lastVisibleCartCount);
-      }
-      lastVisibleCartCount = current;
-    });
-    observer.observe(counter, { childList: true, characterData: true, subtree: true });
-  };
-
-  const readCartFromDom = () => {
-    const inputs = Array.from(
-      document.querySelectorAll('cart-items [name="updates[]"]')
-    );
-    if (inputs.length === 0) {
-      return { lines: cart.lines.slice(), handles: { ...cart.handles } };
-    }
-
-    const variantInputs = Array.from(
-      document.querySelectorAll('#cart-form [name="ids[]"]')
-    );
-    const itemInputs = Array.from(
-      document.querySelectorAll('#cart-form [name="item_ids[]"]')
-    );
-    const lines = [];
-    const handles = {};
-
-    inputs.forEach((input, index) => {
-      const previous = cart.lines[index] || {};
-      const variantId = String(
-        (variantInputs[index] && variantInputs[index].value)
-        || previous.variantId
-        || ''
-      );
-      const handle = String(previous.handle || handleForVariant(variantId) || '');
-      const lineQuantity = quantity(input.value, 0);
-      if (input.dataset.customerLimitPreviousValue == null) {
-        input.dataset.customerLimitPreviousValue = String(lineQuantity);
-      }
-
-      lines.push({
-        itemId: String(
-          (itemInputs[index] && itemInputs[index].value)
-          || previous.itemId
-          || ''
-        ),
-        variantId,
-        handle,
-        quantity: lineQuantity,
-      });
-      if (handle) handles[handle] = (handles[handle] || 0) + lineQuantity;
-    });
-
-    return { lines, handles };
-  };
-
-  const commitCartState = (state) => {
-    cart.lines = state.lines;
-    Object.keys(cart.handles).forEach((handle) => { cart.handles[handle] = 0; });
-    Object.entries(state.handles).forEach(([handle, value]) => {
-      cart.handles[handle] = quantity(value, 0);
-    });
-  };
-
-  const syncCartFromDom = () => {
-    const state = readCartFromDom();
-    commitCartState(state);
-    return state.handles;
-  };
-
-  const observeCartRows = () => {
-    const template = document.querySelector('#cart-template');
-    if (!template || typeof MutationObserver !== 'function') return;
-    const observer = new MutationObserver(syncCartFromDom);
-    observer.observe(template, { childList: true, subtree: true });
-  };
-
-  const block = (event) => {
-    event.preventDefault();
-    event.stopImmediatePropagation();
-  };
-
-  document.addEventListener('click', (event) => {
-    const target = event.target instanceof Element ? event.target : null;
-    if (!target) return;
-    const listingButton = target.closest(
-      '.addToClassList[data-product-handle]'
-    );
-    if (listingButton) {
-      const handle = String(listingButton.dataset.productHandle || '');
-      const requested = Math.max(1, quantity(listingButton.dataset.quantity, 1));
-      const violation = additionViolation(handle, requested);
-      if (violation) {
-        block(event);
-        showListingError(violation.message);
-        return;
-      }
-      if (ruleForHandle(handle)) queueAdditionCandidate(handle, requested);
-      return;
-    }
-
-    const buyNowButton = target.closest('product-form [data-buy-now]');
-    if (!buyNowButton) return;
-    const form = buyNowButton.closest('product-form')?.querySelector('form[action="/cart/add"]');
-    const handle = handleForProductForm(form);
-    const requested = requestedProductQuantity(form);
-    const violation = additionViolation(handle, requested);
-    if (violation) {
-      block(event);
-      showProductError(form, violation.message);
-      return;
-    }
-    if (ruleForHandle(handle)) queueAdditionCandidate(handle, requested);
-  }, true);
-
-  document.addEventListener('submit', (event) => {
-    const form = event.target;
-    if (!(form instanceof HTMLFormElement)) return;
-
-    if (form.matches('product-form form[action="/cart/add"]')) {
-      const handle = handleForProductForm(form);
-      const requested = requestedProductQuantity(form);
-      const violation = additionViolation(handle, requested);
-      if (violation) {
-        block(event);
-        showProductError(form, violation.message);
-        return;
-      }
-      if (ruleForHandle(handle)) queueAdditionCandidate(handle, requested);
-      return;
-    }
-
-    const isCheckout = form.id === 'cart-form'
-      && (form.querySelector('[name="checkout"]')
-        || (event.submitter && event.submitter.name === 'checkout'));
-    if (!isCheckout) return;
-
-    const proposed = readCartFromDom();
-    const violation = cartViolation(proposed.handles);
-    if (!violation) {
-      commitCartState(proposed);
-      return;
-    }
-    block(event);
-    showCartError(violation.message);
-  }, true);
-
-  const validateProductQuantity = (input) => {
-    const form = input.closest('form[action="/cart/add"]');
-    if (!form) return;
-    const handle = handleForProductForm(form);
-    const violation = additionViolation(handle, input.value);
-    const productForm = form.closest('product-form');
-    const quantityMessage = productForm
-      && productForm.querySelector('[data-quantity-limit-message]');
-
-    if (violation) {
-      if (quantityMessage) quantityMessage.dataset.customerLimitMessage = 'true';
-      showProductError(form, violation.message);
-    } else {
-      clearProductError(form);
-    }
-  };
-
-  document.addEventListener('input', (event) => {
-    const target = event.target instanceof Element ? event.target : null;
-    if (!target) return;
-    if (target.matches('product-form [name="quantity"]')) {
-      window.setTimeout(() => validateProductQuantity(target), 0);
-    }
-  }, true);
-
-  document.addEventListener('change', (event) => {
-    const target = event.target instanceof Element ? event.target : null;
-    if (!target) return;
-    if (target.matches('product-form [name="quantity"]')) {
-      window.setTimeout(() => validateProductQuantity(target), 0);
-      return;
-    }
-
-    if (!target.matches('cart-items [name="updates[]"]')) return;
-    const proposed = readCartFromDom();
-    const violation = cartViolation(proposed.handles, { allowDecreases: true });
-    if (!violation) {
-      commitCartState(proposed);
-      target.dataset.customerLimitPreviousValue = String(
-        quantity(target.value, 0)
-      );
-      return;
-    }
-
-    block(event);
-    const previousValue = quantity(
-      target.dataset.customerLimitPreviousValue,
-      quantity(target.defaultValue, 0)
-    );
-    target.value = String(previousValue);
-    showCartError(violation.message);
-  }, true);
-
   window.CustomerPurchaseLimits = Object.freeze({
     enabled: true,
     ruleForHandle,
+    handleForVariant,
     remainingForHandle,
+    quantityLimitForVariant,
     additionViolation,
+    additionViolationForVariant,
+    cartStateFromForm,
     cartViolation,
-    syncCartFromDom,
-    readCartFromDom,
+    cartViolationFromForm,
+    commitCartState,
+    syncCartFromForm,
+    recordAddition,
+    recordAdditionForVariant,
+    recordRemovalForVariant,
+    showListingError,
+    showCartError,
   });
 
   const initialize = () => {
-    observeCartCount();
-    observeCartRows();
-    document.querySelectorAll('product-form [name="quantity"]').forEach(
-      validateProductQuantity
-    );
+    syncCartFromForm();
+    document.querySelectorAll('product-form').forEach((productForm) => {
+      if (typeof productForm.validateQuantity === 'function') {
+        productForm.validateQuantity();
+      }
+    });
   };
 
   if (document.readyState === 'loading') {
