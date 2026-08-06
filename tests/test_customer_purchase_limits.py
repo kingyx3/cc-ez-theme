@@ -24,11 +24,13 @@ class CustomerPurchaseLimitsTests(unittest.TestCase):
         self.assertIn("line_item.product.handle", snippet)
         self.assertIn("order.is_cancelled", snippet)
         self.assertIn("active_refresh_epoch", snippet)
-        self.assertIn("next_refresh_date", snippet)
         self.assertIn("window.customerPurchaseLimits.rules", snippet)
         self.assertIn("window.customerPurchaseLimitVariantHandles", snippet)
         self.assertIn("window.purchaseCartHandleQuantities", snippet)
         self.assertIn("window.purchaseCartLines", snippet)
+        self.assertNotIn("activeRefreshDate", snippet)
+        self.assertNotIn("nextRefreshDate", snippet)
+        self.assertNotIn("next_refresh_date", snippet)
         self.assertIn(
             "{% include 'customer-purchase-limits' %}",
             currencies,
@@ -47,7 +49,6 @@ class CustomerPurchaseLimitsTests(unittest.TestCase):
         self.assertIn("const customerLimitForVariant", storefront)
         self.assertIn("const blockedAddition", storefront)
         self.assertIn("Purchase limits are tracked across customer orders", storefront)
-        self.assertIn("Entitlement refreshes on", storefront)
         self.assertIn("action.addToCart = enhancedAddToCart", storefront)
         self.assertIn("action.updateCart = enhancedUpdateCart", storefront)
         self.assertIn("action.removeCartItem = enhancedRemoveCartItem", storefront)
