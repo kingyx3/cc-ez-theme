@@ -82,60 +82,41 @@ class OtpFieldsAreLeftAloneTests(unittest.TestCase):
                 self.assertNotIn("otpCell", source)
 
 
-class AccountSubmitGuardTests(unittest.TestCase):
-    """The theme's own account forms are still guarded.
+class ActivateAccountButtonTests(unittest.TestCase):
+    """The activate template renders no ".btn", so its own inline handler threw
+    a TypeError on every submit and the loading state never applied."""
 
-    These are theme-rendered templates with native form submits, so a submit
-    lock does work here - unlike the platform's OTP widget.
+    def test_the_activate_form_renders_the_button_its_script_looks_for(self) -> None:
+        template = (
+            THEME_ROOT / "templates" / "customers" / "activate_account.liquid"
+        ).read_text(encoding="utf-8")
+        self.assertIn("#form-activate .btn", template)
+        self.assertIn('type="submit" class="btn"', template)
+
+
+class NoNewAuthFlowScriptsTests(unittest.TestCase):
+    """Auth-flow JavaScript is back to what shipped before PR #65 and PR #66.
+
+    Speculative theme scripts in the account flows caused the outage; the only
+    change kept there is the one-line button fix above.
     """
 
-    @classmethod
-    def setUpClass(cls) -> None:
-        cls.global_script = (THEME_ROOT / "assets" / "global.js").read_text(
-            encoding="utf-8"
-        )
-        cls.editor_global_script = (
-            THEME_ROOT / "editor_assets" / "global.js"
-        ).read_text(encoding="utf-8")
-        cls.templates = {
-            name: (THEME_ROOT / "templates" / "customers" / f"{name}.liquid").read_text(
-                encoding="utf-8"
-            )
-            for name in ("login", "register", "activate_account")
-        }
+    def test_global_js_adds_no_account_submit_handling(self) -> None:
+        for directory in ASSET_DIRECTORIES:
+            with self.subTest(directory=directory):
+                source = code_only(
+                    (THEME_ROOT / directory / "global.js").read_text(encoding="utf-8")
+                )
+                self.assertNotIn("guardSingleAccountSubmit", source)
 
-    def test_storefront_and_editor_globals_match(self) -> None:
-        self.assertEqual(self.global_script, self.editor_global_script)
-
-    def test_account_forms_drop_duplicate_submits(self) -> None:
-        self.assertIn("function guardSingleAccountSubmit", self.global_script)
-        self.assertIn("submitInFlight", self.global_script)
-        self.assertIn("event.stopImmediatePropagation()", self.global_script)
-        self.assertIn("}, true);", self.global_script)
-
-    def test_the_submit_button_is_never_disabled(self) -> None:
-        # A disabled submit control is dropped from the payload and some
-        # browsers cancel the in-flight submission along with it.
-        self.assertNotIn("button.disabled = true", self.global_script)
-        self.assertIn("btn--loading", self.global_script)
-
-    def test_the_lock_is_released_when_the_page_stays_put(self) -> None:
-        self.assertIn("window.setTimeout(release", self.global_script)
-        self.assertIn("'pageshow', release", self.global_script)
-
-    def test_customer_forms_use_the_shared_guard(self) -> None:
-        for name, template in self.templates.items():
+    def test_customer_templates_keep_their_original_submit_handlers(self) -> None:
+        for name in ("login", "register", "activate_account"):
             with self.subTest(template=name):
-                self.assertIn("guardSingleAccountSubmit", template)
-                # global.js is deferred, so the call has to wait for it.
-                self.assertIn("DOMContentLoaded", template)
-                # The old inline handler dereferenced a missing element.
-                self.assertNotIn(".btn').classList.add", template)
-
-    def test_every_guarded_form_actually_has_a_loading_button(self) -> None:
-        for name, template in self.templates.items():
-            with self.subTest(template=name):
-                self.assertIn('type="submit" class="btn"', template)
+                template = (
+                    THEME_ROOT / "templates" / "customers" / f"{name}.liquid"
+                ).read_text(encoding="utf-8")
+                self.assertNotIn("guardSingleAccountSubmit", template)
+                self.assertIn(".btn').classList.add('btn--loading','loading')", template)
 
 
 if __name__ == "__main__":

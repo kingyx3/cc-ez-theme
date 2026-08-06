@@ -689,42 +689,6 @@ function callThemeFunction(name, ...args) {
   if (typeof window[name] === 'function') window[name](...args);
 }
 
-// Account forms create records that are not idempotent: posting /account/register
-// or /account/activate twice fails the second time with "Customer already
-// exists". Browsers happily submit twice on a double tap, or when a script
-// re-submits after the user has already pressed the button, so the first submit
-// takes a lock and later ones are dropped. Registered in the capture phase so
-// the repeat is stopped before any other submit handler can act on it.
-function guardSingleAccountSubmit(selector) {
-  const form = document.querySelector(selector);
-  if (!form || form.dataset.singleSubmitGuard === 'true') return;
-  form.dataset.singleSubmitGuard = 'true';
-
-  form.addEventListener('submit', (event) => {
-    if (form.dataset.submitInFlight === 'true') {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      return;
-    }
-
-    form.dataset.submitInFlight = 'true';
-    const button = form.querySelector('.btn') || form.querySelector('[type="submit"]');
-    // Never disable the button: a disabled submit control is dropped from the
-    // payload and some browsers cancel the in-flight submission with it.
-    if (button) button.classList.add('btn--loading', 'loading');
-
-    // A native submit navigates away, so the release only matters when the
-    // platform answers in place (inline error, XHR handler) or the page comes
-    // back out of the browser cache. Without it the form would stay locked.
-    const release = () => {
-      delete form.dataset.submitInFlight;
-      if (button) button.classList.remove('btn--loading', 'loading');
-    };
-    window.setTimeout(release, 6000);
-    window.addEventListener('pageshow', release, { once: true });
-  }, true);
-}
-
 const themeActionHandlers = {
   'close-repurchase-modal': () => callThemeFunction('closeRepurchaseModal'),
   'reset-filter': () => callThemeFunction('resetFilter'),
