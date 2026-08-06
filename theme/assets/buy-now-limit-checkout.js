@@ -94,6 +94,17 @@
     const form = productForm?.form || productForm?.querySelector('form');
     if (!productForm || !form) return;
 
+    const limits = window.CustomerOrderLimits;
+    if (
+      limits
+      && limits.loginRequiredForHandle(productHandle(form))
+      && limits.redirectToLogin()
+    ) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return;
+    }
+
     const requestedQuantity = Math.max(
       1,
       toQuantity(form.querySelector('[name="quantity"]')?.value, 1)

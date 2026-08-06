@@ -1,6 +1,15 @@
 {% include 'customer-order-limit-config' %}
 
+{% comment %}
+  A truthy customer object is the sign-in check the rest of the theme uses for
+  its account links, so it is the primary signal here too. The identity fields
+  stay as extra positive signals: any one of them proving a signed-in customer
+  is enough, and none of them can mark a customer as a guest.
+{% endcomment %}
 {% assign customer_order_limit_customer_authenticated = false %}
+{% if customer %}
+  {% assign customer_order_limit_customer_authenticated = true %}
+{% endif %}
 {% if customer.id != blank or customer.email != blank %}
   {% assign customer_order_limit_customer_authenticated = true %}
 {% endif %}

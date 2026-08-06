@@ -22,16 +22,16 @@
     const rule = limits.ruleFor(handle);
     if (!rule) return null;
 
+    // remainingForHandle returns null when no customer limit applies, which
+    // includes guests: they are sent to sign in instead of reading limit copy.
     const input = form.querySelector('[name="quantity"]');
     const selectedQuantity = Math.max(1, quantity(input && input.value, 1));
     const remaining = limits.remainingForHandle(handle);
-    const customerLimitReached = rule.loginRequired === true
-      || (remaining != null && selectedQuantity >= remaining);
+    const customerLimitReached = remaining != null && selectedQuantity >= remaining;
 
     if (!customerLimitReached) return null;
 
     return {
-      rule,
       maximum: quantity(rule.maximum, 0),
       purchased: quantity(rule.purchased, 0),
       cartQuantity: quantity(rule.cartQuantity, 0),
@@ -42,10 +42,7 @@
     const context = contextFor(productForm);
     if (!context) return '';
 
-    const { rule, maximum, purchased, cartQuantity } = context;
-    if (rule.loginRequired === true) {
-      return String(rule.message || 'Sign in to purchase this limited item.');
-    }
+    const { maximum, purchased, cartQuantity } = context;
     if (maximum <= 0) return '';
 
     if (purchased > 0 && cartQuantity > 0) {

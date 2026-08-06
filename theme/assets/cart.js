@@ -23,7 +23,15 @@ document.addEventListener('submit', (event) => {
   if (!isCheckout) return;
 
   const api = customerOrderLimitApi();
-  const violation = api ? api.cartViolationFromForm(form) : null;
+  if (!api) return;
+
+  if (api.loginRequiredForCartForm(form) && api.redirectToLogin()) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    return;
+  }
+
+  const violation = api.cartViolationFromForm(form);
   if (!violation) return;
 
   event.preventDefault();
