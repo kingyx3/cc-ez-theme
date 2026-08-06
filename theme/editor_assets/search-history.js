@@ -158,3 +158,279 @@
   seedHistory();
   document.querySelectorAll('[data-search-history-form]').forEach(initialiseForm);
 })();
+
+(() => {
+  const DEFAULT_BIRTHDATE = new Date(2000, 0, 1);
+  const GENDER_SELECTOR = [
+    'select[name="customer[gender]"]',
+    'select[name="details[gender]"]',
+  ].join(',');
+  const BIRTHDATE_SELECTOR = [
+    'input[name="customer[birthdate]"]',
+    'input[name="details[birthdate]"]',
+  ].join(',');
+  const OTP_INPUT_SELECTOR = [
+    'input[autocomplete="one-time-code"]',
+    'input[name*="otp" i]',
+    'input[id*="otp" i]',
+    'input[name*="verification" i]',
+    'input[id*="verification" i]',
+    'input[name*="verify" i]',
+    'input[id*="verify" i]',
+    'input[name*="code" i]',
+    'input[id*="code" i]',
+    'input[name*="pin" i]',
+    'input[id*="pin" i]',
+  ].join(',');
+  const VERIFICATION_PATTERN = /(?:verify|verification|otp|one[-_ ]time|challenge|two[-_ ]factor|2fa)/i;
+
+  const injectStyles = () => {
+    if (document.getElementById('customer-form-enhancements-styles')) return;
+
+    const style = document.createElement('style');
+    style.id = 'customer-form-enhancements-styles';
+    style.textContent = `
+      .customer-gender-options {
+        border: 0;
+        margin: 0 0 2rem;
+        min-inline-size: 0;
+        padding: 0;
+        width: 100%;
+      }
+
+      .customer-gender-options__legend {
+        display: block;
+        margin-bottom: 0.8rem;
+        padding: 0;
+        width: 100%;
+      }
+
+      .customer-gender-options__choices {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.8rem;
+      }
+
+      .customer-gender-options__choice {
+        cursor: pointer;
+        flex: 1 1 12rem;
+        margin: 0;
+        min-width: 0;
+        position: relative;
+      }
+
+      .customer-gender-options__choice input {
+        height: 1px;
+        margin: -1px;
+        opacity: 0;
+        overflow: hidden;
+        position: absolute;
+        width: 1px;
+      }
+
+      .customer-gender-options__choice span {
+        align-items: center;
+        border: 0.1rem solid rgba(var(--color-base-text), 0.35);
+        border-radius: 0.4rem;
+        display: flex;
+        justify-content: center;
+        min-height: 4.6rem;
+        padding: 0.8rem 1.2rem;
+        text-align: center;
+        transition: border-color 120ms ease, box-shadow 120ms ease;
+      }
+
+      .customer-gender-options__choice input:checked + span {
+        border-color: rgb(var(--color-base-text));
+        box-shadow: inset 0 0 0 0.1rem rgb(var(--color-base-text));
+        font-weight: 600;
+      }
+
+      .customer-gender-options__choice input:focus-visible + span {
+        outline: 0.2rem solid currentColor;
+        outline-offset: 0.2rem;
+      }
+    `;
+    document.head.appendChild(style);
+  };
+
+  const findAssociatedLabel = (input) => {
+    if (!input.id) return null;
+    return Array.from(document.querySelectorAll('label[for]'))
+      .find((label) => label.htmlFor === input.id) || null;
+  };
+
+  const enhanceGenderSelect = (select) => {
+    if (!select || select.dataset.customerGenderEnhanced === 'true') return;
+
+    const choices = Array.from(select.options)
+      .filter((option) => option.value && !option.disabled);
+    if (!choices.length) return;
+
+    injectStyles();
+
+    const associatedLabel = findAssociatedLabel(select);
+    const placeholder = Array.from(select.options)
+      .find((option) => !option.value);
+    const legendText = (associatedLabel && associatedLabel.textContent.trim())
+      || (placeholder && placeholder.textContent.trim())
+      || 'Gender';
+    const baseId = select.id || `CustomerGender-${Math.random().toString(36).slice(2)}`;
+    const fieldset = document.createElement('fieldset');
+    const legend = document.createElement('legend');
+    const choicesWrapper = document.createElement('div');
+
+    fieldset.className = 'customer-gender-options';
+    fieldset.dataset.customerGenderEnhanced = 'true';
+    legend.className = 'customer-gender-options__legend';
+    legend.textContent = legendText;
+    choicesWrapper.className = 'customer-gender-options__choices';
+
+    choices.forEach((option, index) => {
+      const label = document.createElement('label');
+      const radio = document.createElement('input');
+      const text = document.createElement('span');
+
+      label.className = 'customer-gender-options__choice';
+      radio.type = 'radio';
+      radio.name = select.name;
+      radio.id = `${baseId}-${index + 1}`;
+      radio.value = option.value;
+      radio.checked = option.selected;
+      radio.required = select.required;
+      radio.disabled = select.disabled || option.disabled;
+      if (select.form && select.getAttribute('form')) {
+        radio.setAttribute('form', select.getAttribute('form'));
+      }
+      text.textContent = option.textContent;
+
+      label.append(radio, text);
+      choicesWrapper.appendChild(label);
+    });
+
+    fieldset.append(legend, choicesWrapper);
+
+    const selectContainer = select.closest('.select');
+    if (selectContainer) selectContainer.replaceWith(fieldset);
+    else select.replaceWith(fieldset);
+
+    if (associatedLabel && !fieldset.contains(associatedLabel)) associatedLabel.remove();
+  };
+
+  const configureBirthdatePicker = (input) => {
+    const picker = input && input._flatpickr;
+    if (!picker || picker.__customerBirthdateEnhanced) return false;
+
+    picker.config.allowInput = true;
+    picker.config.onOpen = [(_selectedDates, dateStr, instance) => {
+      if (!dateStr && !instance.selectedDates.length) {
+        instance.jumpToDate(DEFAULT_BIRTHDATE, false);
+      }
+    }];
+    picker.__customerBirthdateEnhanced = true;
+    return true;
+  };
+
+  const enhanceBirthdateInput = (input) => {
+    if (!input || input.dataset.customerBirthdateEnhanced === 'true') return;
+
+    input.dataset.customerBirthdateEnhanced = 'true';
+    input.setAttribute('autocomplete', 'bday');
+
+    if (configureBirthdatePicker(input)) return;
+
+    requestAnimationFrame(() => configureBirthdatePicker(input));
+    window.setTimeout(() => configureBirthdatePicker(input), 250);
+  };
+
+  const formLooksLikeVerification = (form) => {
+    const action = form.getAttribute('action') || '';
+    const context = [action, form.id, form.className].join(' ');
+    return VERIFICATION_PATTERN.test(context);
+  };
+
+  const inputCanReceiveOtp = (input) => {
+    const type = (input.getAttribute('type') || 'text').toLowerCase();
+    return !input.disabled
+      && !input.readOnly
+      && !['hidden', 'password', 'submit', 'button', 'checkbox', 'radio'].includes(type);
+  };
+
+  const requestWebOtp = (input) => {
+    const form = input.form;
+    if (!form || form.dataset.webOtpRequested === 'true') return;
+    if (!('OTPCredential' in window) || !navigator.credentials) return;
+
+    form.dataset.webOtpRequested = 'true';
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 60000);
+
+    form.addEventListener('submit', () => controller.abort(), { once: true });
+
+    navigator.credentials.get({
+      otp: { transport: ['sms'] },
+      signal: controller.signal,
+    }).then((credential) => {
+      if (!credential || !credential.code) return;
+      input.value = credential.code;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    }).catch(() => {
+      // Unsupported, timed-out, or cancelled WebOTP requests fall back to browser autofill.
+    }).finally(() => {
+      window.clearTimeout(timeoutId);
+    });
+  };
+
+  const enhanceOtpInput = (input) => {
+    if (!inputCanReceiveOtp(input)) return;
+
+    input.setAttribute('autocomplete', 'one-time-code');
+    input.setAttribute('autocapitalize', 'off');
+    input.setAttribute('spellcheck', 'false');
+    if (!input.hasAttribute('inputmode')) input.setAttribute('inputmode', 'numeric');
+    if (!input.hasAttribute('enterkeyhint')) input.setAttribute('enterkeyhint', 'done');
+    requestWebOtp(input);
+  };
+
+  const enhanceVerificationForm = (form) => {
+    const pageLooksLikeVerification = VERIFICATION_PATTERN.test(window.location.pathname);
+    if (!pageLooksLikeVerification && !formLooksLikeVerification(form)) return;
+
+    let candidates = Array.from(form.querySelectorAll(OTP_INPUT_SELECTOR))
+      .filter(inputCanReceiveOtp);
+
+    if (!candidates.length) {
+      const textInputs = Array.from(form.querySelectorAll('input'))
+        .filter(inputCanReceiveOtp)
+        .filter((input) => !['email', 'tel'].includes((input.type || '').toLowerCase()));
+      if (textInputs.length === 1) candidates = textInputs;
+    }
+
+    candidates.forEach(enhanceOtpInput);
+  };
+
+  const enhanceWithin = (root) => {
+    if (!root || !root.querySelectorAll) return;
+
+    if (root.matches && root.matches(GENDER_SELECTOR)) enhanceGenderSelect(root);
+    root.querySelectorAll(GENDER_SELECTOR).forEach(enhanceGenderSelect);
+
+    if (root.matches && root.matches(BIRTHDATE_SELECTOR)) enhanceBirthdateInput(root);
+    root.querySelectorAll(BIRTHDATE_SELECTOR).forEach(enhanceBirthdateInput);
+
+    if (root.matches && root.matches('form')) enhanceVerificationForm(root);
+    root.querySelectorAll('form').forEach(enhanceVerificationForm);
+  };
+
+  enhanceWithin(document);
+
+  const observer = new MutationObserver((records) => {
+    records.forEach((record) => {
+      record.addedNodes.forEach((node) => {
+        if (node.nodeType === Node.ELEMENT_NODE) enhanceWithin(node);
+      });
+    });
+  });
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+})();
