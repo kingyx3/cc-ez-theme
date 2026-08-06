@@ -27,7 +27,7 @@
     </div>
 
     <product-form class="product-form">
-      <form action="/cart/add" method="post" enctype="multipart/form-data" data-addtocart='{{prod_d}}' id="AddToCartForm-ProductModal">
+      <form action="/cart/add" method="post" enctype="multipart/form-data" data-addtocart='{{prod_d}}' data-product-handle="{{ product.handle | downcase | escape }}" id="AddToCartForm-ProductModal">
 
         <select name="id" id="productModal-productSelect" class="hide">
           {% for variant in product.variants %}

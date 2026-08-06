@@ -95,7 +95,7 @@
             </div>
             
             <product-form class="product-form">
-              <form action="/cart/add" method="post" enctype="multipart/form-data" data-addtocart='{{prod_d}}' id="AddToCartForm-{{ section.__key }}">
+              <form action="/cart/add" method="post" enctype="multipart/form-data" data-addtocart='{{prod_d}}' data-product-handle="{{ featured_product.handle | downcase | escape }}" id="AddToCartForm-{{ section.__key }}">
                 <div class="variants-selector-wrapper">
                   <select name="id" id="featured-product-select-{{ section.__key }}" class="hide">
                     {% for variant in featured_product.variants %}

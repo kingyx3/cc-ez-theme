@@ -30,6 +30,16 @@ if (!customElements.get('product-form')) {
         this.buyNowButton.addEventListener('click', this.onBuyNowClick.bind(this));
       }
 
+      this.customerOrderLimitsChanged = () => this.validateQuantity();
+      document.addEventListener(
+        'customer-order-limits:ready',
+        this.customerOrderLimitsChanged
+      );
+      document.addEventListener(
+        'customer-order-limits:cart-sync',
+        this.customerOrderLimitsChanged
+      );
+
       if (this.buyNowLimitModal) {
         this.buyNowLimitModal
           .querySelectorAll('[data-checkout-limit-cancel]')
@@ -113,6 +123,17 @@ if (!customElements.get('product-form')) {
       const nativeMaximum = this.toPositiveLimit(this.nativeQuantityMaximum);
       if (nativeMaximum) candidates.push({ maximum: nativeMaximum, reason: window.purchaseStrings.configuredLimit });
 
+      const customerOrderLimitHandle = window.CustomerOrderLimits
+        ? this.form.dataset.productHandle
+          || window.CustomerOrderLimits.productHandle(this.form)
+        : '';
+      const customerOrderLimit = window.CustomerOrderLimits
+        ? window.CustomerOrderLimits.quantityLimitForHandle(
+          customerOrderLimitHandle
+        )
+        : null;
+      if (customerOrderLimit) candidates.push(customerOrderLimit);
+
       if (this.rejectedQuantityLimit) {
         candidates.push(this.rejectedQuantityLimit);
       }
@@ -155,7 +176,7 @@ if (!customElements.get('product-form')) {
         ?.querySelector('[name="plus"]');
       if (!plusButton) return;
 
-      if (maximum && quantity >= maximum) {
+      if (maximum != null && quantity >= maximum) {
         plusButton.dataset.quantityLimitDisabled = 'true';
         plusButton.setAttribute('disabled', true);
         plusButton.setAttribute('aria-disabled', 'true');
@@ -345,6 +366,14 @@ if (!customElements.get('product-form')) {
           && itemCount >= minimumItemCount
           && latestItems.length > 0;
 
+        if (cartConfirmed && window.CustomerOrderLimits) {
+          window.CustomerOrderLimits.recordAddition(
+            this.form.dataset.productHandle
+              || window.CustomerOrderLimits.productHandle(this.form),
+            requestedQuantity
+          );
+        }
+
         if (buyNow && !cartConfirmed) {
           this.openBuyNowLimitModal(
             window.purchaseStrings.addLimitError
@@ -372,6 +401,14 @@ if (!customElements.get('product-form')) {
     }
 
     goToCheckout() {
+      const customerOrderLimitViolation = window.CustomerOrderLimits
+        ? window.CustomerOrderLimits.cartViolation()
+        : null;
+      if (customerOrderLimitViolation) {
+        this.renderErrorMsg(customerOrderLimitViolation.message);
+        return;
+      }
+
       if (!this.checkoutForm) {
         window.location.assign('/cart');
         return;
