@@ -1,6 +1,7 @@
 {{ 'compact-spacing.css' | asset_url | stylesheet_tag }}
 {{ 'card-navigation-polish.css' | asset_url | stylesheet_tag }}
 
+<script src="{{ 'buy-now-limit-checkout.js' | asset_url }}" defer="defer"></script>
 {% include 'customer-order-limits' %}
 
 <script>
@@ -12,6 +13,7 @@
   {% endfor %}
 </script>
 <script src="{{ 'purchase-limit-feedback.js' | asset_url }}"></script>
+<script src="{{ 'customer-order-limit-copy.js' | asset_url }}"></script>
 <script src="{{ 'otp-cell-autofill.js' | asset_url }}" defer="defer"></script>
 
 <script>
