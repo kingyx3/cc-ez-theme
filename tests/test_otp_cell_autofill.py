@@ -32,30 +32,31 @@ class OtpCellAutofillTests(unittest.TestCase):
 
     def test_generic_sibling_cells_are_grouped_from_one_otp_anchor(self) -> None:
         self.assertIn("const findGroupAroundAnchor", self.storefront_script)
-        self.assertIn("const isPlausibleOtpGroup", self.storefront_script)
-        self.assertIn("const cellLikeCount", self.storefront_script)
+        self.assertIn("const plausibleGroup", self.storefront_script)
         self.assertIn("const group = findGroupAroundAnchor(anchor, form)", self.storefront_script)
 
-    def test_autofill_is_caught_before_and_after_browser_insertion(self) -> None:
-        self.assertIn("cell.addEventListener('beforeinput'", self.storefront_script)
-        self.assertIn("cell.addEventListener('input'", self.storefront_script)
-        self.assertIn("documentObject.addEventListener('beforeinput'", self.storefront_script)
-        self.assertIn("documentObject.addEventListener('input'", self.storefront_script)
-        self.assertIn("setNativeInputValue", self.storefront_script)
-        self.assertIn("distributeOtpCode(cells, digits", self.storefront_script)
+    def test_browser_autofill_targets_a_dedicated_six_digit_receiver(self) -> None:
+        self.assertIn("const createOtpProxy", self.storefront_script)
+        self.assertIn("data-otp-autofill-proxy", self.storefront_script)
+        self.assertIn("setAttr(proxy, 'autocomplete', 'one-time-code')", self.storefront_script)
+        self.assertIn("setAttr(proxy, 'maxlength', String(cells.length))", self.storefront_script)
+        self.assertIn("setAttr(cell, 'autocomplete', 'off')", self.storefront_script)
+        self.assertIn("setAttr(cell, 'maxlength', '1')", self.storefront_script)
+        self.assertIn("syncCellsFromCode(proxy.__otpCells", self.storefront_script)
 
     def test_email_fallback_is_removed_independently_of_exact_form_names(self) -> None:
         self.assertIn("const removeEmailFallback", self.storefront_script)
         self.assertIn("EMAIL_FALLBACK_PATTERN", self.storefront_script)
         self.assertIn("element.remove()", self.storefront_script)
-        self.assertIn("if (pageLooksRelevant) removeEmailFallback(documentObject)", self.storefront_script)
+        self.assertIn("removeEmailFallback(documentObject)", self.storefront_script)
 
-    def test_dynamic_and_delayed_autofill_is_rechecked(self) -> None:
+    def test_dynamic_and_eventless_autofill_is_rechecked(self) -> None:
         self.assertIn("new windowObject.MutationObserver(run)", self.storefront_script)
         self.assertIn("windowObject.setInterval", self.storefront_script)
-        self.assertIn("if (digits.length > 1) distributeOtpCode", self.storefront_script)
+        self.assertIn("proxy.dataset.lastOtpValue", self.storefront_script)
+        self.assertIn("if (current !== previous)", self.storefront_script)
 
-    def test_runtime_regression_for_real_six_cell_shape(self) -> None:
+    def test_runtime_regression_for_platform_clipped_six_cell_shape(self) -> None:
         completed = subprocess.run(
             ["node", str(RUNTIME_TEST)],
             cwd=REPOSITORY_ROOT,
@@ -63,7 +64,7 @@ class OtpCellAutofillTests(unittest.TestCase):
             capture_output=True,
             text=True,
         )
-        self.assertIn("OTP runtime regression passed", completed.stdout)
+        self.assertIn("OTP proxy runtime regression passed", completed.stdout)
 
 
 if __name__ == "__main__":
