@@ -19,13 +19,17 @@ class CustomerOrderLimitTests(unittest.TestCase):
             (1, "MTG-HOB-BDL-EN", 2),
             (2, "MTG-HOB-CBB-EN", 2),
             (3, "MTG-HOB-CBB-EN-CASE6", 1),
-            (4, "MTG-HOB-CBB-EN-PACK", 1),
+            (4, "MTG-HOB-CBB-EN-PACK", 2),
             (5, "MTG-HOB-DNK-EN", 3),
-            (6, "MTG-HOB-GFB-EN", 1),
-            (7, "MTG-HOB-PBB-EN", 12),
-            (8, "MTG-HOB-PRK-EN-SET4", 1),
-            (9, "MTG-HOB-OBP-EN", 1),
-            (10, "MTG-HOB-SCN-EN-SET2", 1),
+            (6, "MTG-HOB-PBB-EN", 12),
+            (7, "MTG-HOB-PRK-EN-SET4", 1),
+            (8, "MTG-HOB-OBP-EN", 1),
+            (9, "MTG-HOB-SCN-EN-SET2", 1),
+            (10, "CC-BDL-SCENES3-EN", 1),
+            (11, "CC-BDL-FRIENDS3-EN-SPM", 1),
+            (12, "CC-BDL-FRIENDS3-EN-MSH", 1),
+            (13, "CC-BDL-SPIDERVAULT-EN", 1),
+            (14, "CC-BDL-UNEXPECTED-EN", 2),
         )
         for slot, handle, maximum in expected:
             self.assertIn(
@@ -36,7 +40,39 @@ class CustomerOrderLimitTests(unittest.TestCase):
                 f"customer_order_limit_maximum_{slot} = {maximum}",
                 config,
             )
+
+        unlimited = (
+            "MTG-HOB-GFB-EN",
+            "MTG-MSH-BGB-EN",
+            "MTG-MSH-CBB-EN",
+            "MTG-MSH-DNK-EN",
+            "MTG-MSH-GFB-EN",
+            "MTG-MSH-JBB-EN",
+            "MTG-MSH-PBB-EN",
+            "MTG-MSH-SCN-EN-SET2",
+            "MTG-MSH-PRK-EN-SET4",
+            "MTG-MSH-CMD-EN-CE-SET4",
+            "MTG-MSH-CMD-EN-SET4",
+            "MTG-MSH-CBB-JP",
+            "MTG-SOS-CDX-EN",
+            "MTG-SOS-CBB-EN",
+            "MTG-SOS-DNK-EN",
+            "MTG-SOS-PBB-EN",
+            "MTG-SPM-CBB-EN",
+            "MTG-SPM-GFB-EN",
+            "MTG-SPM-PBB-EN",
+            "MTG-SPM-SCN-EN",
+            "MTG-SPM-CBB-JP",
+            "CC-BDL-HAPPYHAMPER-EN",
+            "CC-BDL-HAPPYHAMPER-EN-PBB",
+        )
+        for handle in unlimited:
+            self.assertNotIn(handle, config)
+
+        self.assertEqual(config.count("customer_order_limit_handle_"), 14)
+        self.assertEqual(config.count("customer_order_limit_maximum_"), 14)
         self.assertIn("normalized to lowercase", config)
+        self.assertIn("blank promo maximum", config)
         self.assertNotIn("split:", config)
 
     def test_liquid_normalizes_handles_and_passes_authentication_explicitly(self) -> None:
@@ -51,21 +87,21 @@ class CustomerOrderLimitTests(unittest.TestCase):
         self.assertIn("order.line_items | default: order.items", liquid)
         self.assertEqual(
             liquid.count("{% include 'customer-order-limit-rule'"),
-            10,
+            14,
         )
         self.assertEqual(
             liquid.count(
                 "rule_customer_authenticated: customer_order_limit_customer_authenticated"
             ),
-            10,
+            14,
         )
         self.assertIn("customer_order_limit_customer_id != '' or customer_order_limit_customer_email != ''", liquid)
         self.assertIn("customer.id | default: '' | append: '' | strip", liquid)
         self.assertIn("customerAuthenticated:", liquid)
-        self.assertIn("customer_order_limit_handle_10_normalized", liquid)
+        self.assertIn("customer_order_limit_handle_14_normalized", liquid)
         self.assertIn("line_item.product.handle", liquid)
         self.assertIn("cart_item.product.handle", liquid)
-        self.assertGreaterEqual(liquid.count("| downcase"), 12)
+        self.assertGreaterEqual(liquid.count("| downcase"), 16)
         self.assertIn("rule_handle | default: '' | strip | downcase", rule)
         self.assertIn("{% if rule_customer_authenticated %}", rule)
         self.assertNotIn("{% unless customer %}", rule)

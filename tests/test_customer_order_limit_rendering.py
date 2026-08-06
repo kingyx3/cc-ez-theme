@@ -24,6 +24,10 @@ except ImportError:  # pragma: no cover
 
 
 SNIPPETS = Path(__file__).resolve().parents[1] / "theme" / "snippets"
+SLOT_COUNT = len(re.findall(
+    r"customer_order_limit_handle_(\d+) =",
+    (SNIPPETS / "customer-order-limit-config.liquid").read_text(encoding="utf-8"),
+))
 NOW = datetime.now(timezone.utc)
 STAMP = "%Y-%m-%d %H:%M:%S +0000"
 HANDLE = "MTG-HOB-SCN-EN-SET2"
@@ -37,7 +41,7 @@ def config_liquid(handle: str, maximum: int, refresh: str, refresh_all: str) -> 
         f"{{% assign customer_order_limit_maximum_1 = {maximum} %}}",
         f"{{% assign customer_order_limit_refresh_1 = '{refresh}' %}}",
     ]
-    for slot in range(2, 11):
+    for slot in range(2, SLOT_COUNT + 1):
         lines += [
             f"{{% assign customer_order_limit_handle_{slot} = '' %}}",
             f"{{% assign customer_order_limit_maximum_{slot} = 0 %}}",

@@ -8,7 +8,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 THEME = ROOT / "theme"
 
-SLOTS = range(1, 11)
+# Slot count follows the configuration file, which grows as products are added.
+CONFIG = (Path(__file__).resolve().parents[1] / "theme" / "snippets"
+          / "customer-order-limit-config.liquid").read_text(encoding="utf-8")
+SLOT_COUNT = len(re.findall(r"customer_order_limit_handle_(\d+) =", CONFIG))
+SLOTS = range(1, SLOT_COUNT + 1)
 
 
 class CustomerOrderLimitRefreshTests(unittest.TestCase):
@@ -30,7 +34,10 @@ class CustomerOrderLimitRefreshTests(unittest.TestCase):
                 )
         # Shipping with every refresh blank keeps today's behaviour: all past
         # orders keep counting until a timestamp is configured.
-        self.assertEqual(config.count("{% assign customer_order_limit_refresh_"), 11)
+        self.assertEqual(
+            config.count("{% assign customer_order_limit_refresh_"),
+            SLOT_COUNT + 1,
+        )
         self.assertNotIn("split:", config)
 
     def test_refresh_documentation_states_the_expected_format(self) -> None:
@@ -65,10 +72,10 @@ class CustomerOrderLimitRefreshTests(unittest.TestCase):
         liquid = self.read("snippets/customer-order-limits.liquid")
 
         self.assertIn("{% assign customer_order_limit_now_epoch = 'now' | date: '%s' | plus: 0 %}", liquid)
-        self.assertEqual(liquid.count("{% include 'customer-order-limit-window'"), 10)
+        self.assertEqual(liquid.count("{% include 'customer-order-limit-window'"), SLOT_COUNT)
         self.assertEqual(
             liquid.count("window_default: customer_order_limit_refresh_all"),
-            10,
+            SLOT_COUNT,
         )
         for slot in SLOTS:
             with self.subTest(slot=slot):
@@ -165,8 +172,8 @@ class CustomerOrderLimitRefreshTests(unittest.TestCase):
         liquid = self.read("snippets/customer-order-limits.liquid")
         rule = self.read("snippets/customer-order-limit-rule.liquid")
 
-        self.assertEqual(liquid.count("rule_refresh_at: customer_order_limit_refresh_value_"), 10)
-        self.assertEqual(liquid.count("rule_window_label: customer_order_limit_window_label_"), 10)
+        self.assertEqual(liquid.count("rule_refresh_at: customer_order_limit_refresh_value_"), SLOT_COUNT)
+        self.assertEqual(liquid.count("rule_window_label: customer_order_limit_window_label_"), SLOT_COUNT)
         self.assertIn("refreshAt: {{ customer_order_limit_rule_refresh_at | json }},", rule)
         self.assertIn("limitWindowLabel: {{ customer_order_limit_rule_window_label | json }},", rule)
         self.assertIn("across orders{{ customer_order_limit_rule_since }}", rule)
