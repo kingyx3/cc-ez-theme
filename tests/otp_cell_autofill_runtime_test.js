@@ -10,13 +10,26 @@ class MockEvent {
   }
 }
 
+class MockStyle {
+  constructor() {
+    this.values = {};
+    this.position = '';
+  }
+
+  setProperty(name, value) {
+    this.values[name] = String(value);
+    if (name === 'position') this.position = String(value);
+  }
+}
+
 class MockInput {
-  constructor(attributes = {}) {
+  constructor(attributes = {}, platformControlled = false) {
     this.attributes = { ...attributes };
     this.type = attributes.type || 'text';
     this.inputMode = attributes.inputmode || '';
-    this.maxLength = Number(attributes.maxlength || 1);
-    this.value = '';
+    this.maxLength = Number(attributes.maxlength || 524288);
+    this._value = '';
+    this.platformControlled = platformControlled;
     this.disabled = false;
     this.readOnly = false;
     this.dataset = {};
@@ -24,6 +37,18 @@ class MockInput {
     this.parentElement = null;
     this.form = null;
     this.focused = false;
+    this.style = new MockStyle();
+  }
+
+  get value() {
+    return this._value;
+  }
+
+  set value(value) {
+    const stringValue = String(value);
+    this._value = this.platformControlled
+      ? stringValue.slice(0, Math.max(this.maxLength, 0))
+      : stringValue;
   }
 
   getAttribute(name) {
@@ -64,6 +89,8 @@ class MockInput {
   focus() {
     this.focused = true;
   }
+
+  setSelectionRange() {}
 }
 
 const cells = Array.from({ length: 6 }, (_, index) => new MockInput({
@@ -71,7 +98,7 @@ const cells = Array.from({ length: 6 }, (_, index) => new MockInput({
   maxlength: '1',
   inputmode: 'numeric',
   ...(index === 0 ? { autocomplete: 'one-time-code' } : {}),
-}));
+}, true));
 
 const form = {
   id: 'sms-challenge',
@@ -79,20 +106,40 @@ const form = {
   textContent: 'Enter the verification code sent by SMS',
   dataset: {},
   parentElement: null,
+  children: [],
+  style: new MockStyle(),
+  listeners: new Map(),
   getAttribute(name) {
     return name === 'action' ? '/account/request-verify' : null;
   },
   querySelectorAll(selector) {
-    return selector === 'input' ? cells : [];
+    return selector === 'input' ? group.children : [];
+  },
+  appendChild(child) {
+    child.parentElement = this;
+    child.form = this;
+    this.children.push(child);
+  },
+  addEventListener(type, callback) {
+    if (!this.listeners.has(type)) this.listeners.set(type, []);
+    this.listeners.get(type).push(callback);
   },
 };
 
 const group = {
   parentElement: form,
+  children: [...cells],
+  style: new MockStyle(),
   querySelectorAll(selector) {
-    return selector === 'input' ? cells : [];
+    return selector === 'input' ? this.children : [];
+  },
+  appendChild(child) {
+    child.parentElement = this;
+    child.form = form;
+    this.children.push(child);
   },
 };
+form.children.push(group);
 
 cells.forEach((cell) => {
   cell.parentElement = group;
@@ -109,6 +156,10 @@ const fallback = {
 
 const documentObject = {
   body: { textContent: 'Enter the verification code sent by SMS' },
+  createElement(tagName) {
+    assert.equal(tagName, 'input');
+    return new MockInput();
+  },
   querySelectorAll(selector) {
     if (selector === 'form') return [form];
     if (selector.startsWith('a, button')) return [fallback];
@@ -131,33 +182,36 @@ const detected = otp.findOtpCells(form, documentObject, windowObject);
 assert.equal(detected.length, 6, 'all six generic sibling cells must be detected');
 assert.deepEqual(detected, cells);
 
-otp.configureOtpCells(form, detected, windowObject);
-assert.equal(cells[0].getAttribute('autocomplete'), 'one-time-code');
-assert.equal(cells[0].getAttribute('maxlength'), '6');
-for (const cell of cells.slice(1)) {
+const proxy = otp.configureOtpCells(form, detected, windowObject, documentObject);
+assert.ok(proxy, 'a dedicated OTP autofill receiver must be created');
+assert.equal(proxy.getAttribute('data-otp-autofill-proxy'), 'true');
+assert.equal(proxy.getAttribute('autocomplete'), 'one-time-code');
+assert.equal(proxy.getAttribute('maxlength'), '6');
+assert.equal(group.children.at(-1), proxy, 'proxy must be mounted over the OTP group');
+
+for (const cell of cells) {
   assert.equal(cell.getAttribute('autocomplete'), 'off');
   assert.equal(cell.getAttribute('maxlength'), '1');
 }
 
+// The real platform clips its controlled visible cell to one character. Autofill must
+// therefore land in the independent six-character proxy, not in the first cell.
 cells[0].value = '123456';
-cells[0].emit('input');
+assert.equal(cells[0].value, '1', 'controlled visible cell reproduces the live truncation');
+cells.forEach((cell) => { cell.value = ''; });
+
+proxy.value = '123456';
+proxy.emit('input');
 assert.deepEqual(cells.map((cell) => cell.value), ['1', '2', '3', '4', '5', '6']);
-assert.equal(cells[5].focused, true);
 
-cells.forEach((cell) => {
-  cell.value = '';
-  cell.focused = false;
-});
-let pastePrevented = false;
-cells[0].emit('paste', {
-  clipboardData: { getData: () => '654321' },
-  preventDefault() { pastePrevented = true; },
-});
-assert.equal(pastePrevented, true);
-assert.deepEqual(cells.map((cell) => cell.value), ['6', '5', '4', '3', '2', '1']);
-
+// Mobile autofill may update the value without firing an input event. The periodic
+// scanner must still notice the proxy value and distribute it.
+cells.forEach((cell) => { cell.value = ''; });
+proxy.value = '654321';
+proxy.dataset.lastOtpValue = '';
 const groups = otp.scanAndEnhance(documentObject, windowObject);
 assert.equal(groups.length, 1);
+assert.deepEqual(cells.map((cell) => cell.value), ['6', '5', '4', '3', '2', '1']);
 assert.equal(fallback.removed, true, 'email fallback must be removed while OTP is active');
 
-console.log('OTP runtime regression passed');
+console.log('OTP proxy runtime regression passed');
