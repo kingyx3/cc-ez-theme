@@ -14,6 +14,7 @@
 
   Refresh dates are optional. On each listed date, orders placed before that date
   stop counting toward the entitlement. The latest elapsed refresh date is used.
+  Refresh dates stay server-side and are not included in customer-facing data.
   Limited products require a signed-in customer so order history can be checked.
 
   Leave the value blank to disable configured cross-order purchase limits.
@@ -44,9 +45,6 @@
 
     {% if product_handle != blank and maximum_units > 0 %}
       {% assign active_refresh_epoch = 0 %}
-      {% assign active_refresh_date = '' %}
-      {% assign next_refresh_epoch = 0 %}
-      {% assign next_refresh_date = '' %}
 
       {% for raw_refresh_date in refresh_date_list %}
         {% assign refresh_date = raw_refresh_date | strip %}
@@ -54,13 +52,6 @@
           {% assign refresh_epoch = refresh_date | date: '%s' | plus: 0 %}
           {% if refresh_epoch <= customer_purchase_limit_now and refresh_epoch > active_refresh_epoch %}
             {% assign active_refresh_epoch = refresh_epoch %}
-            {% assign active_refresh_date = refresh_date %}
-          {% endif %}
-          {% if refresh_epoch > customer_purchase_limit_now %}
-            {% if next_refresh_epoch == 0 or refresh_epoch < next_refresh_epoch %}
-              {% assign next_refresh_epoch = refresh_epoch %}
-              {% assign next_refresh_date = refresh_date %}
-            {% endif %}
           {% endif %}
         {% endif %}
       {% endfor %}
@@ -89,9 +80,7 @@
         window.customerPurchaseLimits.rules[{{ product_handle | json }}] = {
           handle: {{ product_handle | json }},
           maximum: {{ maximum_units | json }},
-          purchased: {{ purchased_quantity | json }},
-          activeRefreshDate: {{ active_refresh_date | json }},
-          nextRefreshDate: {{ next_refresh_date | json }}
+          purchased: {{ purchased_quantity | json }}
         };
       </script>
 
