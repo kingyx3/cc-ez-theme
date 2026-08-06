@@ -1,5 +1,10 @@
 {% include 'customer-order-limit-config' %}
 
+{% assign customer_order_limit_customer_authenticated = false %}
+{% if customer.id != blank or customer.email != blank %}
+  {% assign customer_order_limit_customer_authenticated = true %}
+{% endif %}
+
 {% assign customer_order_limit_handle_1_normalized = customer_order_limit_handle_1 | default: '' | strip | downcase %}
 {% assign customer_order_limit_handle_2_normalized = customer_order_limit_handle_2 | default: '' | strip | downcase %}
 {% assign customer_order_limit_handle_3_normalized = customer_order_limit_handle_3 | default: '' | strip | downcase %}
@@ -32,7 +37,7 @@
 {% assign customer_order_limit_cart_9 = 0 %}
 {% assign customer_order_limit_cart_10 = 0 %}
 
-{% if customer %}
+{% if customer_order_limit_customer_authenticated %}
   {% for order in customer.orders %}
     {% unless order.is_cancelled %}
       {% for line_item in order.line_items %}
@@ -107,16 +112,19 @@
 {% endfor %}
 
 <script>
-  window.customerOrderLimitsV2 = { rules: {} };
+  window.customerOrderLimitsV2 = {
+    customerAuthenticated: {{ customer_order_limit_customer_authenticated | json }},
+    rules: {}
+  };
 </script>
-{% include 'customer-order-limit-rule', rule_handle: customer_order_limit_handle_1_normalized, rule_maximum: customer_order_limit_maximum_1, rule_purchased: customer_order_limit_purchased_1, rule_cart_quantity: customer_order_limit_cart_1 %}
-{% include 'customer-order-limit-rule', rule_handle: customer_order_limit_handle_2_normalized, rule_maximum: customer_order_limit_maximum_2, rule_purchased: customer_order_limit_purchased_2, rule_cart_quantity: customer_order_limit_cart_2 %}
-{% include 'customer-order-limit-rule', rule_handle: customer_order_limit_handle_3_normalized, rule_maximum: customer_order_limit_maximum_3, rule_purchased: customer_order_limit_purchased_3, rule_cart_quantity: customer_order_limit_cart_3 %}
-{% include 'customer-order-limit-rule', rule_handle: customer_order_limit_handle_4_normalized, rule_maximum: customer_order_limit_maximum_4, rule_purchased: customer_order_limit_purchased_4, rule_cart_quantity: customer_order_limit_cart_4 %}
-{% include 'customer-order-limit-rule', rule_handle: customer_order_limit_handle_5_normalized, rule_maximum: customer_order_limit_maximum_5, rule_purchased: customer_order_limit_purchased_5, rule_cart_quantity: customer_order_limit_cart_5 %}
-{% include 'customer-order-limit-rule', rule_handle: customer_order_limit_handle_6_normalized, rule_maximum: customer_order_limit_maximum_6, rule_purchased: customer_order_limit_purchased_6, rule_cart_quantity: customer_order_limit_cart_6 %}
-{% include 'customer-order-limit-rule', rule_handle: customer_order_limit_handle_7_normalized, rule_maximum: customer_order_limit_maximum_7, rule_purchased: customer_order_limit_purchased_7, rule_cart_quantity: customer_order_limit_cart_7 %}
-{% include 'customer-order-limit-rule', rule_handle: customer_order_limit_handle_8_normalized, rule_maximum: customer_order_limit_maximum_8, rule_purchased: customer_order_limit_purchased_8, rule_cart_quantity: customer_order_limit_cart_8 %}
-{% include 'customer-order-limit-rule', rule_handle: customer_order_limit_handle_9_normalized, rule_maximum: customer_order_limit_maximum_9, rule_purchased: customer_order_limit_purchased_9, rule_cart_quantity: customer_order_limit_cart_9 %}
-{% include 'customer-order-limit-rule', rule_handle: customer_order_limit_handle_10_normalized, rule_maximum: customer_order_limit_maximum_10, rule_purchased: customer_order_limit_purchased_10, rule_cart_quantity: customer_order_limit_cart_10 %}
+{% include 'customer-order-limit-rule', rule_handle: customer_order_limit_handle_1_normalized, rule_maximum: customer_order_limit_maximum_1, rule_purchased: customer_order_limit_purchased_1, rule_cart_quantity: customer_order_limit_cart_1, rule_customer_authenticated: customer_order_limit_customer_authenticated %}
+{% include 'customer-order-limit-rule', rule_handle: customer_order_limit_handle_2_normalized, rule_maximum: customer_order_limit_maximum_2, rule_purchased: customer_order_limit_purchased_2, rule_cart_quantity: customer_order_limit_cart_2, rule_customer_authenticated: customer_order_limit_customer_authenticated %}
+{% include 'customer-order-limit-rule', rule_handle: customer_order_limit_handle_3_normalized, rule_maximum: customer_order_limit_maximum_3, rule_purchased: customer_order_limit_purchased_3, rule_cart_quantity: customer_order_limit_cart_3, rule_customer_authenticated: customer_order_limit_customer_authenticated %}
+{% include 'customer-order-limit-rule', rule_handle: customer_order_limit_handle_4_normalized, rule_maximum: customer_order_limit_maximum_4, rule_purchased: customer_order_limit_purchased_4, rule_cart_quantity: customer_order_limit_cart_4, rule_customer_authenticated: customer_order_limit_customer_authenticated %}
+{% include 'customer-order-limit-rule', rule_handle: customer_order_limit_handle_5_normalized, rule_maximum: customer_order_limit_maximum_5, rule_purchased: customer_order_limit_purchased_5, rule_cart_quantity: customer_order_limit_cart_5, rule_customer_authenticated: customer_order_limit_customer_authenticated %}
+{% include 'customer-order-limit-rule', rule_handle: customer_order_limit_handle_6_normalized, rule_maximum: customer_order_limit_maximum_6, rule_purchased: customer_order_limit_purchased_6, rule_cart_quantity: customer_order_limit_cart_6, rule_customer_authenticated: customer_order_limit_customer_authenticated %}
+{% include 'customer-order-limit-rule', rule_handle: customer_order_limit_handle_7_normalized, rule_maximum: customer_order_limit_maximum_7, rule_purchased: customer_order_limit_purchased_7, rule_cart_quantity: customer_order_limit_cart_7, rule_customer_authenticated: customer_order_limit_customer_authenticated %}
+{% include 'customer-order-limit-rule', rule_handle: customer_order_limit_handle_8_normalized, rule_maximum: customer_order_limit_maximum_8, rule_purchased: customer_order_limit_purchased_8, rule_cart_quantity: customer_order_limit_cart_8, rule_customer_authenticated: customer_order_limit_customer_authenticated %}
+{% include 'customer-order-limit-rule', rule_handle: customer_order_limit_handle_9_normalized, rule_maximum: customer_order_limit_maximum_9, rule_purchased: customer_order_limit_purchased_9, rule_cart_quantity: customer_order_limit_cart_9, rule_customer_authenticated: customer_order_limit_customer_authenticated %}
+{% include 'customer-order-limit-rule', rule_handle: customer_order_limit_handle_10_normalized, rule_maximum: customer_order_limit_maximum_10, rule_purchased: customer_order_limit_purchased_10, rule_cart_quantity: customer_order_limit_cart_10, rule_customer_authenticated: customer_order_limit_customer_authenticated %}
 <script src="{{ 'customer-order-limits.js' | asset_url }}" defer="defer"></script>

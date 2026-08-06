@@ -39,7 +39,7 @@ class CustomerOrderLimitTests(unittest.TestCase):
         self.assertIn("normalized to lowercase", config)
         self.assertNotIn("split:", config)
 
-    def test_liquid_normalizes_both_configured_and_storefront_handles(self) -> None:
+    def test_liquid_normalizes_handles_and_passes_authentication_explicitly(self) -> None:
         liquid = self.read("snippets/customer-order-limits.liquid")
         rule = self.read("snippets/customer-order-limit-rule.liquid")
         self.assertEqual(liquid.count("{% for order in customer.orders %}"), 1)
@@ -49,11 +49,21 @@ class CustomerOrderLimitTests(unittest.TestCase):
             liquid.count("{% include 'customer-order-limit-rule'"),
             10,
         )
+        self.assertEqual(
+            liquid.count(
+                "rule_customer_authenticated: customer_order_limit_customer_authenticated"
+            ),
+            10,
+        )
+        self.assertIn("customer.id != blank or customer.email != blank", liquid)
+        self.assertIn("customerAuthenticated:", liquid)
         self.assertIn("customer_order_limit_handle_10_normalized", liquid)
         self.assertIn("line_item.product.handle", liquid)
         self.assertIn("cart_item.product.handle", liquid)
         self.assertGreaterEqual(liquid.count("| downcase"), 12)
         self.assertIn("rule_handle | default: '' | strip | downcase", rule)
+        self.assertIn("{% if rule_customer_authenticated %}", rule)
+        self.assertNotIn("{% unless customer %}", rule)
         self.assertNotIn("customer.orders | json", liquid)
         self.assertNotIn("EasyStore.Action", liquid)
 
@@ -91,7 +101,7 @@ class CustomerOrderLimitTests(unittest.TestCase):
         self.assertEqual(
             listing,
             self.read("editor_assets/product-card-cart-feedback.js"),
-        )
+         )
         self.assertEqual(cart, self.read("editor_assets/cart.js"))
         self.assertIn("quantityLimitForHandle", product)
         self.assertIn("CustomerOrderLimits.productHandle(this.form)", product)
@@ -100,7 +110,7 @@ class CustomerOrderLimitTests(unittest.TestCase):
         self.assertIn("additionViolation", listing)
         self.assertIn("recordAddition", listing)
         self.assertIn("cartViolationFromForm", cart)
-        self.assertIn("allowDecreases: true", cart)
+        self.assertIn("allowDeclines: true", cart)
         self.assertIn("commitCartTotals", cart)
         self.assertIn("recordRemoval", cart)
 

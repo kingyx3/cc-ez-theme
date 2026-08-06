@@ -3,10 +3,10 @@
 {% assign customer_order_limit_rule_purchased = rule_purchased | default: 0 | plus: 0 %}
 {% assign customer_order_limit_rule_cart_quantity = rule_cart_quantity | default: 0 | plus: 0 %}
 {% if customer_order_limit_rule_handle != blank and customer_order_limit_rule_maximum > 0 %}
-  {% assign customer_order_limit_rule_login_required = false %}
-  {% unless customer %}
-    {% assign customer_order_limit_rule_login_required = true %}
-  {% endunless %}
+  {% assign customer_order_limit_rule_login_required = true %}
+  {% if rule_customer_authenticated %}
+    {% assign customer_order_limit_rule_login_required = false %}
+  {% endif %}
 
   {% assign customer_order_limit_rule_allowed_cart_quantity = customer_order_limit_rule_maximum | minus: customer_order_limit_rule_purchased %}
   {% if customer_order_limit_rule_allowed_cart_quantity < 0 %}
