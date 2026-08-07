@@ -165,6 +165,56 @@ class EmailFieldRenderingTests(unittest.TestCase):
         self.assertIn('value="shopper@example.com"', self.render(""))
 
 
+class AuthFieldTitleTests(unittest.TestCase):
+    """The sign-in, register and activate templates read the same class of key.
+
+    `customer.login.email` comes back empty on this store, and it is the key
+    behind the sign-in field whenever phone accounts are switched off — the same
+    empty placeholder and empty label that left /account/details untitled.
+    """
+
+    TEMPLATES = ("login", "register", "activate_account")
+
+    def template(self, name: str) -> str:
+        return (THEME / "templates" / "customers" / f"{name}.liquid").read_text(
+            encoding="utf-8"
+        )
+
+    def test_the_account_field_title_has_a_literal_fallback(self) -> None:
+        for name in self.TEMPLATES:
+            source = self.template(name)
+            with self.subTest(template=name):
+                self.assertIn("{% assign account_fallback = 'Email' %}", source)
+                self.assertIn(
+                    "{% assign account_fallback = 'Email or mobile number' %}",
+                    source,
+                )
+                self.assertIn(
+                    "translation_key: account_placeholder, "
+                    "fallback: account_fallback",
+                    source,
+                )
+
+    def test_no_account_field_reads_a_bare_translation(self) -> None:
+        for name in self.TEMPLATES:
+            with self.subTest(template=name):
+                self.assertNotIn(
+                    "{{ account_placeholder | t }}", self.template(name)
+                )
+
+    def test_every_use_of_the_key_is_covered(self) -> None:
+        # A placeholder attribute and a label in each form; missing one of them
+        # is what produced a field with a title on only some pages.
+        for name, expected in (("login", 4), ("register", 2), ("activate_account", 2)):
+            with self.subTest(template=name):
+                self.assertEqual(
+                    expected,
+                    self.template(name).count(
+                        "translation_key: account_placeholder"
+                    ),
+                )
+
+
 class RecoveryCopyOverrideTests(unittest.TestCase):
     """The script that replaces the reset-email sentence wherever it renders.
 

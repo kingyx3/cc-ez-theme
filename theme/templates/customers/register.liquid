@@ -89,9 +89,17 @@
       </div>
     {% endfor %}
 
+    {% comment %}
+      The account field's title comes through translation-fallback, not a bare
+      `| t`: an empty store translation renders an empty placeholder and an
+      empty label, which is how the email field on /account/details ended up
+      showing an address with nothing naming it.
+    {% endcomment %}
     {% assign account_placeholder = 'customer.register.email' %}
+    {% assign account_fallback = 'Email' %}
     {% if shop.phone_account_enabled == true %}
       {% assign account_placeholder = 'customer.register.email_or_phone' %}
+      {% assign account_fallback = 'Email or mobile number' %}
     {% endif %}
     
     <div class="field">      
@@ -102,12 +110,12 @@
         spellcheck="false"
         autocapitalize="off"
         autocomplete="email"
-        placeholder="{{ account_placeholder | t }}"
+        placeholder="{% include 'translation-fallback', translation_key: account_placeholder, fallback: account_fallback, escape_output: true %}"
         required
         {% if form.errors contains "email_or_phone" %} class="error"{% elsif form.email_or_phone %} value="{{ form.email_or_phone }}"{% endif %}
       >
       <label for="RegisterForm-email">
-        {{ account_placeholder | t }}
+        {% include 'translation-fallback', translation_key: account_placeholder, fallback: account_fallback, escape_output: true %}
       </label>
     </div>
     <div class="field">     
