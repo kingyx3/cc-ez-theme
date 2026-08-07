@@ -5,6 +5,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 LAYOUT = ROOT / "theme" / "layout" / "theme.liquid"
 DETAILS = ROOT / "theme" / "templates" / "customers" / "details.liquid"
+FALLBACK = ROOT / "theme" / "snippets" / "translation-fallback.liquid"
 SCRIPT = ROOT / "theme" / "assets" / "email-field-label.js"
 EDITOR_SCRIPT = ROOT / "theme" / "editor_assets" / "email-field-label.js"
 
@@ -16,12 +17,26 @@ class EmailFieldLabelsTest(unittest.TestCase):
             LAYOUT.read_text(encoding="utf-8"),
         )
 
-    def test_account_details_keeps_original_server_rendered_field(self):
+    def test_account_details_renders_a_nonempty_email_title(self):
         details = DETAILS.read_text(encoding="utf-8")
-        self.assertIn('id="DetailEmail"', details)
-        self.assertIn('name="details[email]"', details)
-        self.assertIn("placeholder=\"{{ 'customer.login.email' | t }}\"", details)
-        self.assertIn("<label for=\"DetailEmail\">{{ 'customer.login.email' | t }}</label>", details)
+        email_lines = "\n".join(
+            line for line in details.splitlines() if "DetailEmail" in line
+        )
+
+        self.assertIn('id="DetailEmail"', email_lines)
+        self.assertIn('name="details[email]"', email_lines)
+        self.assertIn('<label for="DetailEmail">', email_lines)
+        self.assertEqual(2, email_lines.count("translation-fallback"))
+        self.assertEqual(2, email_lines.count("translation_key: 'customer.login.email'"))
+        self.assertEqual(2, email_lines.count("fallback: 'Email'"))
+        self.assertNotIn("'customer.login.email' | t", email_lines)
+
+    def test_translation_fallback_handles_empty_platform_values(self):
+        fallback = FALLBACK.read_text(encoding="utf-8")
+        self.assertIn("translation_fallback_probe == ''", fallback)
+        self.assertIn("| append: '' | strip", fallback)
+        self.assertIn("translation_fallback_probe == translation_key", fallback)
+        self.assertIn("contains 'translation missing'", fallback)
 
     def test_account_email_label_is_repaired_after_runtime_mutations(self):
         script = SCRIPT.read_text(encoding="utf-8")
