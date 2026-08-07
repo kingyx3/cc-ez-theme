@@ -1,9 +1,12 @@
 (() => {
   const CHECKOUT_PATH = /\/checkouts?(?:\/|$)/i;
+  const ACCOUNT_DETAILS_PATH = /\/account\/details(?:\/|$)/i;
   const FALLBACK_LABEL = 'Email';
   let generatedId = 0;
 
   const isCheckout = () => CHECKOUT_PATH.test(window.location.pathname);
+  const isAccountDetails = () => ACCOUNT_DETAILS_PATH.test(window.location.pathname);
+  const isTargetPage = () => isCheckout() || isAccountDetails();
 
   const isEmailInput = (input) => {
     const type = (input.getAttribute('type') || '').toLowerCase();
@@ -58,6 +61,9 @@
     if (label) {
       label.classList.remove('label--hidden', 'visually-hidden', 'hidden', 'hide');
       if (!label.textContent.trim()) label.textContent = text;
+
+      const field = input.closest('.field');
+      if (field) field.classList.add('on_focus');
     }
 
     if (!input.getAttribute('aria-label')) input.setAttribute('aria-label', text);
@@ -79,8 +85,9 @@
   };
 
   const start = () => {
+    if (!isTargetPage()) return;
+
     repairEmailFields();
-    if (!isCheckout()) return;
 
     const observer = new MutationObserver(() => {
       window.requestAnimationFrame(repairEmailFields);
