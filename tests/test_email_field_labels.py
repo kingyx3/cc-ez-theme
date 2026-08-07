@@ -23,10 +23,23 @@ class EmailFieldLabelsTest(unittest.TestCase):
         self.assertIn("placeholder=\"{{ 'customer.login.email' | t }}\"", details)
         self.assertIn("<label for=\"DetailEmail\">{{ 'customer.login.email' | t }}</label>", details)
 
-    def test_account_details_does_not_depend_on_checkout_repair_script(self):
+    def test_account_email_label_is_repaired_after_runtime_mutations(self):
         script = SCRIPT.read_text(encoding="utf-8")
-        self.assertNotIn("DetailEmail", script)
-        self.assertNotIn("ACCOUNT_DETAILS_PATH", script)
+        self.assertIn("document.getElementById('DetailEmail')", script)
+        self.assertIn("const FALLBACK_LABEL = 'Email'", script)
+        self.assertIn("field.classList.add('on_focus')", script)
+        self.assertIn("label.textContent = text", script)
+        self.assertIn("attributes: true", script)
+        self.assertIn("characterData: true", script)
+        self.assertIn("'hidden', 'aria-hidden'", script)
+
+    def test_hidden_account_label_is_forced_visible(self):
+        script = SCRIPT.read_text(encoding="utf-8")
+        self.assertIn("label.classList.remove('label--hidden', 'visually-hidden', 'hidden', 'hide')", script)
+        self.assertIn("label.style.removeProperty('display')", script)
+        self.assertIn("label.style.setProperty('display', 'block', 'important')", script)
+        self.assertIn("label.style.setProperty('visibility', 'visible', 'important')", script)
+        self.assertIn("label.style.setProperty('opacity', '1', 'important')", script)
 
     def test_checkout_email_fields_receive_floating_labels(self):
         script = SCRIPT.read_text(encoding="utf-8")
@@ -36,13 +49,12 @@ class EmailFieldLabelsTest(unittest.TestCase):
         self.assertIn("input.insertAdjacentElement('afterend', label)", script)
         self.assertIn("field.classList.add('on_focus')", script)
 
-    def test_dynamically_rendered_checkout_fields_are_supported(self):
+    def test_dynamically_rendered_fields_are_supported(self):
         script = SCRIPT.read_text(encoding="utf-8")
-        self.assertIn("new MutationObserver", script)
-        self.assertIn(
-            "observer.observe(document.body, { childList: true, subtree: true })",
-            script,
-        )
+        self.assertIn("new MutationObserver(queueRepair)", script)
+        self.assertIn("childList: true", script)
+        self.assertIn("subtree: true", script)
+        self.assertIn("window.requestAnimationFrame", script)
 
     def test_runtime_and_editor_scripts_stay_in_sync(self):
         self.assertEqual(
