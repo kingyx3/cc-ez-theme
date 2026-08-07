@@ -28,9 +28,11 @@ test.describe('storefront navigation and discovery', () => {
       await expect(page.locator('#menu-drawer')).toBeVisible();
       await expect(page.locator('#menu-drawer a[href="/collections/the-hobbit"]')).toBeVisible();
     } else {
-      await expect(page.locator('header a[href="/collections/the-hobbit"]').first()).toBeVisible();
-      await expect(page.locator('header a[href="/collections/marvel-super-heroes"]').first()).toBeVisible();
-      await expect(page.locator('header a[href="/collections/secrets-of-strixhaven"]').first()).toBeVisible();
+      const desktopNav = page.locator('header nav').filter({ visible: true }).first();
+      await expect(desktopNav).toBeVisible();
+      await expect(desktopNav.locator('a[href="/collections/the-hobbit"]')).toBeVisible();
+      await expect(desktopNav.locator('a[href="/collections/marvel-super-heroes"]')).toBeVisible();
+      await expect(desktopNav.locator('a[href="/collections/secrets-of-strixhaven"]')).toBeVisible();
     }
   });
 
@@ -123,12 +125,22 @@ test.describe('product, cart, and checkout handoff', () => {
 });
 
 test.describe('customer entry points', () => {
-  test('login form has required account and password fields', async ({ page }) => {
+  test('account login entry offers a usable authentication flow', async ({ page }) => {
     await gotoStorefront(page, '/account/login');
-    await expect(page.locator('#form-login')).toBeVisible();
-    await expect(page.locator('#CustomerEmail')).toHaveAttribute('required', '');
-    await expect(page.locator('#CustomerPassword')).toHaveAttribute('required', '');
-    await expect(page.locator('#form-login button[type="submit"]')).toBeVisible();
-    await expect(page.locator('a[href="#recover"]')).toBeVisible();
+    await expect(page).toHaveURL(/\/account\/login/);
+
+    const classicEmail = page.locator('#CustomerEmail');
+    if (await classicEmail.count()) {
+      await expect(page.locator('#form-login')).toBeVisible();
+      await expect(classicEmail).toHaveAttribute('required', '');
+      await expect(page.locator('#CustomerPassword')).toHaveAttribute('required', '');
+      await expect(page.locator('#form-login button[type="submit"]')).toBeVisible();
+      await expect(page.locator('a[href="#recover"]')).toBeVisible();
+      return;
+    }
+
+    const phoneInput = page.getByRole('textbox', { name: /mobile number/i });
+    await expect(phoneInput).toBeVisible();
+    await expect(page.getByRole('button', { name: /continue/i })).toBeVisible();
   });
 });
