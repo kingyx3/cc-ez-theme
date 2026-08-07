@@ -1,25 +1,51 @@
 name: EasyStore browser E2E
 
 on:
-  push:
-    branches:
-      - main
-      - "agent/**"
   pull_request:
   workflow_dispatch:
+    inputs:
+      base_url:
+        description: EasyStore storefront or preview URL to test
+        required: false
+        default: https://cardboard.sg
+        type: string
 
 permissions:
   contents: read
 
+concurrency:
+  group: easystore-e2e-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 env:
-  E2E_BASE_URL: ${{ vars.E2E_BASE_URL || 'https://cardboard.sg' }}
+  E2E_BASE_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.base_url || vars.E2E_PR_BASE_URL }}
   E2E_LIMITED_PRODUCT_PATH: ${{ vars.E2E_LIMITED_PRODUCT_PATH || '/collections/feature-on-homepage/products/mtg-hob-cbb-en-pack' }}
   E2E_UNLIMITED_PRODUCT_PATH: ${{ vars.E2E_UNLIMITED_PRODUCT_PATH }}
   E2E_SEARCH_TERM: ${{ vars.E2E_SEARCH_TERM || 'Hobbit' }}
 
 jobs:
+  validate:
+    name: Validate Playwright suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Install E2E dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Compile Playwright test matrix
+        run: npx playwright test --list
+
   preflight:
     name: Storefront preflight
+    if: ${{ github.event_name == 'workflow_dispatch' || vars.E2E_PR_BASE_URL != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -27,6 +53,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if [[ -z "$E2E_BASE_URL" ]]; then
+            echo "E2E_BASE_URL is empty. Configure E2E_PR_BASE_URL for PR runs or provide base_url when dispatching."
+            exit 1
+          fi
           status="$(curl --location --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 20 "$E2E_BASE_URL")"
           echo "Storefront HTTP status: $status"
           test "$status" -ge 200
