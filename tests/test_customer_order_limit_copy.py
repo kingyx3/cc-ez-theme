@@ -63,14 +63,14 @@ class CustomerOrderLimitCopyTests(unittest.TestCase):
         self.assertIn("window.CustomerOrderLimits.quantityLimitForHandle(", product)
         self.assertIn("const message = limit.message", product)
 
-    def test_hobbit_prerelease_kit_uses_a_customer_limit_of_one(self) -> None:
+    def test_hobbit_prerelease_kit_uses_the_configured_customer_limit(self) -> None:
         config = self.read("snippets/customer-order-limit-config.liquid")
 
         self.assertIn(
             "customer_order_limit_handle_7 = 'MTG-HOB-PRK-EN-SET4'",
             config,
         )
-        self.assertIn("customer_order_limit_maximum_7 = 1", config)
+        self.assertIn("customer_order_limit_maximum_7 = 3", config)
 
 
 if __name__ == "__main__":
