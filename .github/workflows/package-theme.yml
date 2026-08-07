@@ -9,6 +9,11 @@ on:
 permissions:
   contents: read
 
+env:
+  EASYSTORE_API_URL: https://api.easystore.co/admin/v2/store/themes/assets/import
+  EASYSTORE_POD_ID: ${{ vars.EASYSTORE_POD_ID || '1007' }}
+  EASYSTORE_STORE_DOMAIN: ${{ vars.EASYSTORE_STORE_DOMAIN || 'cardboardcollective.easy.co' }}
+
 jobs:
   test:
     name: Validate theme and enforce 100% coverage
@@ -39,7 +44,6 @@ jobs:
   package:
     name: Build downloadable theme ZIP
     needs: test
-    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
 
     steps:
@@ -66,7 +70,7 @@ jobs:
           {
             echo "### EasyStore theme package"
             echo
-            echo "Download the \`cc-ez-theme\` artifact and upload that ZIP directly to EasyStore."
+            echo "Download the \`cc-ez-theme\` artifact and upload that ZIP directly to EasyStore if a manual fallback is needed."
             echo
             echo "SHA-256: \`$(sha256sum cc-ez-theme.zip | cut -d ' ' -f 1)\`"
           } >> "${GITHUB_STEP_SUMMARY}"
@@ -78,3 +82,174 @@ jobs:
           path: easystore-artifact/
           if-no-files-found: error
           retention-days: 30
+
+  deploy:
+    name: Import packaged theme into EasyStore
+    needs: package
+    runs-on: ubuntu-latest
+    concurrency:
+      group: easystore-theme-import
+      cancel-in-progress: false
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Check EasyStore credential
+        id: credential
+        env:
+          EASYSTORE_ADMIN_TOKEN: ${{ secrets.EASYSTORE_ADMIN_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${EASYSTORE_ADMIN_TOKEN}" ]]; then
+            echo "configured=false" >> "${GITHUB_OUTPUT}"
+            echo "::warning::EASYSTORE_ADMIN_TOKEN is not configured; package succeeded but automatic EasyStore import is skipped."
+          else
+            echo "configured=true" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Derive deployment identity
+        if: steps.credential.outputs.configured == 'true'
+        id: identity
+        env:
+          SOURCE_BRANCH: ${{ github.ref_name }}
+          SOURCE_SHA: ${{ github.sha }}
+          RUN_NUMBER: ${{ github.run_number }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          branch = os.environ["SOURCE_BRANCH"]
+          short_sha = os.environ["SOURCE_SHA"][:7]
+          run_number = os.environ["RUN_NUMBER"]
+
+          slug = re.sub(r"[^A-Za-z0-9._-]+", "-", branch).strip("-._").lower()
+          slug = (slug[:40].rstrip("-._") or "detached")
+
+          schema = json.loads(Path("theme/config/settings_schema.json").read_text(encoding="utf-8"))
+          base_version = str(schema.get("theme_version", "0.0.0")).split("+", 1)[0]
+
+          release_match = re.fullmatch(
+              r"(?:release|releases)/v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)",
+              branch,
+          )
+          if release_match:
+              release_version = release_match.group(1)
+              display_name = f"CC v{release_version} {short_sha}"
+              version = f"{release_version}+gh.{run_number}.{short_sha}"
+          else:
+              display_name = f"CC {slug} r{run_number} {short_sha}"
+              version = f"{base_version}+gh.{run_number}.{short_sha}"
+
+          package_filename = f"cc-ez-theme--{slug}--r{run_number}--{short_sha}.zip"
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              print(f"display_name={display_name}", file=output)
+              print(f"version={version}", file=output)
+              print(f"package_filename={package_filename}", file=output)
+          PY
+
+      - name: Stamp deployment metadata and package
+        if: steps.credential.outputs.configured == 'true'
+        env:
+          THEME_DISPLAY_NAME: ${{ steps.identity.outputs.display_name }}
+          THEME_VERSION: ${{ steps.identity.outputs.version }}
+          PACKAGE_FILENAME: ${{ steps.identity.outputs.package_filename }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp -a theme deploy-theme
+
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          display_name = os.environ["THEME_DISPLAY_NAME"]
+          version = os.environ["THEME_VERSION"]
+
+          for relative in (
+              "config/settings_schema.json",
+              "editor_config/settings_schema.json",
+          ):
+              path = Path("deploy-theme") / relative
+              data = json.loads(path.read_text(encoding="utf-8"))
+              data["theme"] = display_name
+              if "theme_name" in data:
+                  data["theme_name"] = display_name
+              if "theme_version" in data:
+                  data["theme_version"] = version
+              path.write_text(
+                  json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+                  encoding="utf-8",
+              )
+          PY
+
+          python scripts/theme_ci.py check deploy-theme
+          python scripts/theme_ci.py package deploy-theme "${PACKAGE_FILENAME}"
+          test -s "${PACKAGE_FILENAME}"
+
+      - name: Import theme into EasyStore
+        if: steps.credential.outputs.configured == 'true'
+        env:
+          EASYSTORE_ADMIN_TOKEN: ${{ secrets.EASYSTORE_ADMIN_TOKEN }}
+          PACKAGE_FILENAME: ${{ steps.identity.outputs.package_filename }}
+          THEME_DISPLAY_NAME: ${{ steps.identity.outputs.display_name }}
+          THEME_VERSION: ${{ steps.identity.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          idempotency_key="phase1-dummy:web:$(python -c 'import uuid; print(uuid.uuid4())')"
+
+          http_code="$(
+            curl --silent --show-error \
+              --request POST "${EASYSTORE_API_URL}" \
+              --header "Accept: application/json" \
+              --header "Authorization: Bearer ${EASYSTORE_ADMIN_TOKEN}" \
+              --header "easystore-pod-id: ${EASYSTORE_POD_ID}" \
+              --header "easystore-source: admin" \
+              --header "x-easystore-infra-default-domain: ${EASYSTORE_STORE_DOMAIN}" \
+              --header "x-easystore-infra-pod-id: ${EASYSTORE_POD_ID}" \
+              --header "x-easystore-infra-source: admin" \
+              --header "idempotency-key: ${idempotency_key}" \
+              --form "file=@${PACKAGE_FILENAME};type=application/zip" \
+              --output easystore-response.json \
+              --write-out "%{http_code}"
+          )"
+
+          echo "EasyStore import HTTP status: ${http_code}"
+
+          if [[ ! "${http_code}" =~ ^2[0-9][0-9]$ ]]; then
+            echo "::error::EasyStore theme import failed."
+            if [[ -s easystore-response.json ]]; then
+              cat easystore-response.json
+            fi
+            exit 1
+          fi
+
+          {
+            echo "### EasyStore automatic theme import"
+            echo
+            echo "- Theme identity: \`${THEME_DISPLAY_NAME}\`"
+            echo "- Theme version: \`${THEME_VERSION}\`"
+            echo "- Source branch: \`${GITHUB_REF_NAME}\`"
+            echo "- Source commit: \`${GITHUB_SHA}\`"
+            echo "- Package: \`${PACKAGE_FILENAME}\`"
+            echo "- HTTP status: \`${http_code}\`"
+            echo "- Store domain: \`${EASYSTORE_STORE_DOMAIN}\`"
+            echo "- Package SHA-256: \`$(sha256sum "${PACKAGE_FILENAME}" | cut -d ' ' -f 1)\`"
+            echo
+            echo "The theme was imported after the package job succeeded. It was not intentionally published."
+          } >> "${GITHUB_STEP_SUMMARY}"

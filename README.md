@@ -10,12 +10,14 @@ shopping on desktop and mobile.
   product organization, and maintenance
 - [Packaging and deployment](docs/PACKAGING_AND_DEPLOYMENT.md) — validation,
   ZIP generation, GitHub artifacts, and EasyStore upload
+- [EasyStore API deployment](docs/EASYSTORE_API_DEPLOYMENT.md) — automatic
+  post-package imports, branch/version naming, token setup, and troubleshooting
 
 ## Repository layout
 
 ```text
 .
-├── .github/workflows/       GitHub Actions validation and packaging
+├── .github/workflows/       GitHub Actions validation, packaging, and deployment
 ├── docs/                    Maintainer documentation (never packaged)
 ├── scripts/                 Theme validation and deterministic ZIP builder
 ├── tests/                   Validator and package tests
@@ -49,4 +51,4 @@ cc-ez-theme/
 ```
 
 Do not zip the repository or the `theme/` folder manually. Use the packaging
-script or download the `cc-ez-theme` artifact produced after a merge to `main`.
+script or download the `cc-ez-theme` artifact produced by GitHub Actions.
