@@ -28,6 +28,8 @@ jobs:
     name: Validate Playwright suite
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    outputs:
+      tests_this_pr: ${{ steps.target.outputs.tests_this_pr }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -42,6 +44,26 @@ jobs:
 
       - name: Compile Playwright test matrix
         run: npx playwright test --list
+
+      # Whether the URL under test actually serves THIS pull request's theme.
+      # A packaged theme is imported unpublished, so unless someone points
+      # E2E_PR_BASE_URL at a preview hosting the branch build, these suites
+      # measure the published storefront and say nothing about the diff.
+      - name: Decide what the run is measuring
+        id: target
+        # Through env, never interpolated into the script: a repository variable
+        # is settable by anyone with repo access and must not reach the shell.
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_URL: ${{ vars.E2E_PR_BASE_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${EVENT_NAME}" == "workflow_dispatch" || -n "${PR_BASE_URL}" ]]; then
+            echo "tests_this_pr=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "tests_this_pr=false" >> "${GITHUB_OUTPUT}"
+          fi
 
   preflight:
     name: Storefront preflight
@@ -66,7 +88,7 @@ jobs:
 
   functional:
     name: Functional / ${{ matrix.project }}
-    needs: preflight
+    needs: [validate, preflight]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -100,7 +122,33 @@ jobs:
         run: npx playwright install --with-deps "${{ matrix.browser }}"
 
       - name: Run storefront E2E
+        id: e2e
+        continue-on-error: ${{ needs.validate.outputs.tests_this_pr != 'true' }}
         run: npx playwright test e2e/storefront.spec.js --project="${{ matrix.project }}"
+
+      - name: Report what the result means
+        if: always()
+        env:
+          TESTS_THIS_PR: ${{ needs.validate.outputs.tests_this_pr }}
+          OUTCOME: ${{ steps.e2e.outcome }}
+          PROJECT: ${{ matrix.project }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${TESTS_THIS_PR}" == "true" ]]; then
+            echo "Measured a URL serving this pull request's theme, so the result gates the diff."
+            exit 0
+          fi
+          echo "### Functional / ${PROJECT}: measured the published storefront" >> "${GITHUB_STEP_SUMMARY}"
+          echo >> "${GITHUB_STEP_SUMMARY}"
+          echo "\`E2E_PR_BASE_URL\` is not set, so this ran against \`${E2E_BASE_URL}\` - the live" >> "${GITHUB_STEP_SUMMARY}"
+          echo "store, not this branch. A packaged theme is imported unpublished, so nothing here" >> "${GITHUB_STEP_SUMMARY}"
+          echo "exercised the diff and the result cannot gate it." >> "${GITHUB_STEP_SUMMARY}"
+          if [[ "${OUTCOME}" == "failure" ]]; then
+            echo "::warning title=Published storefront is failing::Functional/${PROJECT} failed against ${E2E_BASE_URL}. This is production, not this pull request - investigate the store."
+            echo >> "${GITHUB_STEP_SUMMARY}"
+            echo "**The published storefront is failing these checks.** Investigate the store." >> "${GITHUB_STEP_SUMMARY}"
+          fi
 
       - name: Upload Playwright report
         if: always()
@@ -122,7 +170,7 @@ jobs:
 
   accessibility:
     name: Accessibility / chromium-desktop
-    needs: preflight
+    needs: [validate, preflight]
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -142,7 +190,31 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run Axe accessibility suite
+        id: e2e
+        continue-on-error: ${{ needs.validate.outputs.tests_this_pr != 'true' }}
         run: npx playwright test e2e/accessibility.spec.js --project=chromium-desktop
+
+      - name: Report what the result means
+        if: always()
+        env:
+          TESTS_THIS_PR: ${{ needs.validate.outputs.tests_this_pr }}
+          OUTCOME: ${{ steps.e2e.outcome }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${TESTS_THIS_PR}" == "true" ]]; then
+            echo "Measured a URL serving this pull request's theme, so the result gates the diff."
+            exit 0
+          fi
+          echo "### Accessibility: measured the published storefront" >> "${GITHUB_STEP_SUMMARY}"
+          echo >> "${GITHUB_STEP_SUMMARY}"
+          echo "\`E2E_PR_BASE_URL\` is not set, so this ran against \`${E2E_BASE_URL}\` - the live" >> "${GITHUB_STEP_SUMMARY}"
+          echo "store, not this branch, and the result cannot gate the diff." >> "${GITHUB_STEP_SUMMARY}"
+          if [[ "${OUTCOME}" == "failure" ]]; then
+            echo "::warning title=Published storefront is failing::Accessibility failed against ${E2E_BASE_URL}. This is production, not this pull request - investigate the store."
+            echo >> "${GITHUB_STEP_SUMMARY}"
+            echo "**The published storefront is failing these checks.** Investigate the store." >> "${GITHUB_STEP_SUMMARY}"
+          fi
 
       - name: Upload Playwright report
         if: always()
