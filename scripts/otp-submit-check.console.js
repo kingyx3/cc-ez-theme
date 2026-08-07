@@ -157,5 +157,12 @@
     console.log('Trail cleared.');
   };
 
-  console.log('Installed. Walk the flow, re-paste this on any new page, then call __otpCheck().');
+  // Printed on install, not only on demand: the flow changes screens and takes
+  // the console with it, so anyone re-pasting here has already lost the last
+  // page's output and should not have to remember a second call to get it back.
+  if (load().length) window.__otpCheck();
+
+  console.log('Installed. Re-paste on each new screen; the trail prints itself.');
+  console.log('Signup posts natively (POST /account/register -> 302 /account/auth),');
+  console.log('so open DevTools Network with "Preserve log" to see that response.');
 })();
