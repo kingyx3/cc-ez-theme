@@ -1,6 +1,7 @@
 const { defineConfig, devices } = require('@playwright/test');
 
-const baseURL = process.env.E2E_BASE_URL || 'https://cardboard.sg';
+const rawBaseURL = (process.env.E2E_BASE_URL || 'https://cardboard.sg').trim();
+const baseURL = /^https?:\/\//i.test(rawBaseURL) ? rawBaseURL : `https://${rawBaseURL}`;
 
 module.exports = defineConfig({
   testDir: './e2e',
