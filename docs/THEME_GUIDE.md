@@ -428,6 +428,14 @@ Before opening a pull request:
   placeholder visible for any `.field__input` with no sibling label — otherwise
   a platform-rendered field such as the checkout email input names itself
   nowhere.
+- `/account/auth` may be EasyStore's own flow rather than
+  `templates/customers/login.liquid`; the one-time-code step there certainly is.
+  No theme deploy can change copy on a page the theme does not render. Paste
+  `scripts/account-copy-check.console.js` into the browser console on the page
+  to tell the two apart: it reports whether the theme's own recovery markup is
+  present and which rules the published stylesheet contains, so a change that
+  does not appear points either at a stale published build or at the store's
+  translations.
 - A store translation can come back empty. A field whose placeholder and
   floating label both read one key then renders with no visible title at all,
   which is how the email field on `/account/details` shipped untitled while

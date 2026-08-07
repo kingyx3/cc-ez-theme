@@ -156,5 +156,49 @@ class EmailFieldRenderingTests(unittest.TestCase):
         self.assertIn('value="shopper@example.com"', self.render(""))
 
 
+class ConsoleCheckTests(unittest.TestCase):
+    """The console check that says why a copy change is not showing.
+
+    A deployed copy change that stays invisible has two very different causes —
+    a stale published build, or a page EasyStore renders itself — and they need
+    opposite fixes. The script has to separate them.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.script = (
+            Path(__file__).resolve().parents[1]
+            / "scripts"
+            / "account-copy-check.console.js"
+        ).read_text(encoding="utf-8")
+
+    def test_it_looks_for_markup_only_this_theme_emits(self) -> None:
+        self.assertIn('form[action="/account/recover"]', self.script)
+        self.assertIn("#RecoverEmail", self.script)
+        self.assertIn("#form-login", self.script)
+
+    def test_it_reads_the_published_stylesheet(self) -> None:
+        # "I deployed main" is checkable rather than assumed: the rules in the
+        # served CSS say which build is live.
+        self.assertIn('link[rel="stylesheet"]', self.script)
+        self.assertIn(".field__input.no-float-label::placeholder", self.script)
+        self.assertIn(":not(:has(~ label))::placeholder", self.script)
+
+    def test_it_separates_a_stale_build_from_a_platform_page(self) -> None:
+        self.assertIn("PLATFORM PAGE", self.script)
+        self.assertIn("THEME PAGE, OLD BUILD", self.script)
+        self.assertIn("THEME PAGE, CURRENT BUILD", self.script)
+        self.assertIn("customer.recover_password.subtext", self.script)
+
+    def test_it_reports_the_account_email_field(self) -> None:
+        self.assertIn('label[for="DetailEmail"]', self.script)
+        self.assertIn("UNTITLED", self.script)
+        self.assertIn(EMAIL_KEY, self.script)
+
+    def test_it_lists_platform_fields_that_carry_no_label(self) -> None:
+        self.assertIn(".field__input", self.script)
+        self.assertIn("fields with no label", self.script)
+
+
 if __name__ == "__main__":
     unittest.main()
