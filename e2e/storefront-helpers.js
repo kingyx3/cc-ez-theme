@@ -28,8 +28,16 @@ async function readCart(page) {
       headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
     });
     if (!response.ok) throw new Error(`cart.json returned ${response.status}`);
+
     const payload = await response.json();
-    return payload.cart || payload;
+    const cart = Object.prototype.hasOwnProperty.call(payload, 'cart') ? payload.cart : payload;
+    if (!cart) return { item_count: 0, items: [] };
+
+    return {
+      ...cart,
+      item_count: Number(cart.item_count || 0),
+      items: Array.isArray(cart.items) ? cart.items : [],
+    };
   });
 }
 
