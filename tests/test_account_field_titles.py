@@ -34,6 +34,15 @@ FALLBACK = THEME / "snippets" / "translation-fallback.liquid"
 EMAIL_KEY = "customer.login.email"
 
 
+def code_only(source: str) -> str:
+    """Strips JS comments so assertions read the code, not the prose."""
+    without_blocks = re.sub(r"/\*.*?\*/", "", source, flags=re.DOTALL)
+    return "\n".join(
+        line for line in without_blocks.splitlines()
+        if not line.strip().startswith("//")
+    )
+
+
 def strip_comments(source: str) -> str:
     """Drops Liquid comments so assertions read the markup, not the prose."""
     return re.sub(r"{%-?\s*comment.*?endcomment\s*-?%}", "", source, flags=re.DOTALL)
@@ -154,6 +163,62 @@ class EmailFieldRenderingTests(unittest.TestCase):
 
     def test_the_customer_email_is_still_the_value(self) -> None:
         self.assertIn('value="shopper@example.com"', self.render(""))
+
+
+class RecoveryCopyOverrideTests(unittest.TestCase):
+    """The script that replaces the reset-email sentence wherever it renders.
+
+    `/account/auth` may be EasyStore's own flow, and the copy there is the
+    platform's translation, so the template fix cannot reach it. This override
+    can - but it must stay text-only: theme scripts writing into that flow's
+    fields are what broke signup with "Customer already exists (phone)".
+    """
+
+    RUNTIME = THEME / "assets" / "account-recovery-copy.js"
+    EDITOR = THEME / "editor_assets" / "account-recovery-copy.js"
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.script = cls.RUNTIME.read_text(encoding="utf-8")
+
+    def test_the_layout_loads_it(self) -> None:
+        layout = (THEME / "layout" / "theme.liquid").read_text(encoding="utf-8")
+        self.assertIn("'account-recovery-copy.js' | asset_url", layout)
+
+    def test_runtime_and_editor_copies_stay_in_sync(self) -> None:
+        self.assertEqual(
+            self.RUNTIME.read_text(encoding="utf-8"),
+            self.EDITOR.read_text(encoding="utf-8"),
+        )
+
+    def test_it_replaces_the_email_promise_with_otp_copy(self) -> None:
+        self.assertIn("reset\\s+your\\s+password", self.script)
+        self.assertIn("Confirm your mobile OTP to proceed", self.script)
+        self.assertIn("one-time password", self.script)
+
+    def test_it_writes_text_and_nothing_else(self) -> None:
+        # The whole safety argument for touching the platform's auth flow.
+        code = code_only(self.script)
+        self.assertIn("element.textContent = OTP_COPY", code)
+        self.assertNotIn("dispatchEvent", code)
+        self.assertNotIn(".value =", code)
+        self.assertNotIn("innerHTML", code)
+        self.assertNotIn("submit()", code)
+        self.assertNotIn("one-time-code", code)
+
+    def test_it_leaves_the_rest_of_the_storefront_alone(self) -> None:
+        # No observer anywhere without a recovery step on the page, and no
+        # page-path heuristics - the trap that once turned the search box into
+        # an OTP field.
+        code = code_only(self.script)
+        self.assertIn("if (!hasRecoveryStep()) return;", code)
+        self.assertIn('form[action="/account/recover"]', code)
+        self.assertNotIn("location.pathname", code)
+
+    def test_it_only_rewrites_elements_that_hold_their_own_text(self) -> None:
+        code = code_only(self.script)
+        self.assertIn("element.children.length === 0", code)
+        self.assertIn("if (!isLeaf(element)) return;", code)
 
 
 class ConsoleCheckTests(unittest.TestCase):
