@@ -78,6 +78,7 @@ class CustomerOrderLimitRenderingTests(unittest.TestCase):
         orders: list | None = None,
         cart_items: list | None = None,
         authenticated: bool = True,
+        product: dict | None = None,
     ) -> str:
         loader = DictLoader({
             "customer-order-limit-config": config_liquid(HANDLE, maximum, refresh, refresh_all),
@@ -96,6 +97,7 @@ class CustomerOrderLimitRenderingTests(unittest.TestCase):
         return environment.get_template("customer-order-limits").render(
             customer=customer,
             cart={"items": cart_items or []},
+            product=product,
         )
 
     def rule(self, output: str, handle: str = LOWER) -> dict:
@@ -128,7 +130,7 @@ class CustomerOrderLimitRenderingTests(unittest.TestCase):
         handle: str | None = None,
         sku: str | None = None,
         quantity: int = 1,
-        cancelled: bool = False,
+        cancelled: object = 0,
     ) -> dict:
         line: dict = {"quantity": quantity}
         if handle is not None:
@@ -164,6 +166,50 @@ class CustomerOrderLimitRenderingTests(unittest.TestCase):
         self.assertEqual(rule["purchased"], 1)
         self.assertEqual(rule["remaining"], 0)
 
+    def test_an_order_counts_whatever_shape_the_cancelled_flag_takes(self) -> None:
+        # EasyStore sends is_cancelled as an integer — this theme's own order list
+        # compares it with `== 1` — and Liquid treats 0 as truthy, so an unless on
+        # the raw value skipped every order and counted zero units for everyone.
+        for flag in (0, "0", False, None, "", "false"):
+            with self.subTest(flag=flag):
+                order = self.order(days_ago=30, sku=HANDLE)
+                if flag is None:
+                    del order["is_cancelled"]
+                else:
+                    order["is_cancelled"] = flag
+                rule = self.rule(self.render(orders=[order]))
+                self.assertEqual(rule["purchased"], 1)
+                self.assertEqual(rule["remaining"], 0)
+
+        for flag in (1, "1", True, "true"):
+            with self.subTest(flag=flag):
+                order = self.order(days_ago=30, sku=HANDLE)
+                order["is_cancelled"] = flag
+                self.assertEqual(self.rule(self.render(orders=[order]))["purchased"], 0)
+
+    def test_the_page_publishes_its_product_identifiers(self) -> None:
+        # A line item is only guaranteed to expose the variant id, so the product's
+        # own ids are published for the storefront to match history against.
+        rendered = self.render(product={
+            "handle": LOWER,
+            "sku": "MTG-HOB-CBB-EN-PACK",
+            "id": 700,
+            "variants": [{"id": 9911}, {"id": 9912}],
+        })
+
+        self.assertIn(f'handle: "{LOWER}"', rendered)
+        self.assertIn('sku: "mtg-hob-cbb-en-pack"', rendered)
+        self.assertIn('productId: "700"', rendered)
+        self.assertIn('variantIds: ["9911","9912"]', rendered)
+
+    def test_a_page_without_a_product_publishes_empty_identifiers(self) -> None:
+        # The snippet runs on the cart and on listings too.
+        rendered = self.render()
+
+        self.assertIn('handle: ""', rendered)
+        self.assertIn('productId: ""', rendered)
+        self.assertIn("variantIds: []", rendered)
+
     def test_quantities_accumulate_across_orders(self) -> None:
         rule = self.rule(self.render(
             maximum=3,
@@ -178,7 +224,7 @@ class CustomerOrderLimitRenderingTests(unittest.TestCase):
 
     def test_cancelled_orders_never_count(self) -> None:
         rule = self.rule(self.render(
-            orders=[self.order(days_ago=5, handle=LOWER, cancelled=True)],
+            orders=[self.order(days_ago=5, handle=LOWER, cancelled=1)],
         ))
 
         self.assertEqual(rule["purchased"], 0)

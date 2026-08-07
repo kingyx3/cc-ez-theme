@@ -140,7 +140,14 @@
 {% if customer_order_limit_customer_authenticated %}
   {% assign customer_order_limit_orders = customer.orders | default: customer.recent_orders %}
   {% for order in customer_order_limit_orders %}
-    {% unless order.is_cancelled %}
+    {% comment %}
+      `order.is_cancelled` is an integer on EasyStore, not a boolean: this theme's
+      own order list compares it with `== 1`. Liquid treats 0 as truthy, so
+      an unless on the raw value skipped every order and counted zero units for
+      every customer. The value is forced to a string and compared by value.
+    {% endcomment %}
+    {% assign customer_order_limit_order_cancelled = order.is_cancelled | default: 0 | append: '' | strip | downcase %}
+    {% unless customer_order_limit_order_cancelled == '1' or customer_order_limit_order_cancelled == 'true' %}
       {% assign customer_order_limit_orders_seen = customer_order_limit_orders_seen | plus: 1 %}
       {% comment %}
         Orders placed before a slot's refresh window no longer count. An order
@@ -157,17 +164,17 @@
       {% assign customer_order_limit_lines = order.line_items | default: order.items %}
       {% for line_item in customer_order_limit_lines %}
         {% assign customer_order_limit_lines_seen = customer_order_limit_lines_seen | plus: 1 %}
-        {% assign customer_order_limit_line_handle = line_item.product.handle | default: line_item.handle | default: '' | strip | downcase %}
-        {% assign customer_order_limit_line_sku = line_item.sku | default: line_item.variant.sku | default: line_item.product.sku | default: '' | strip | downcase %}
+        {% assign customer_order_limit_line_handle = line_item.product.handle | default: line_item.handle | default: '' | append: '' | strip | downcase %}
+        {% assign customer_order_limit_line_sku = line_item.sku | default: line_item.variant.sku | default: line_item.product.sku | default: '' | append: '' | strip | downcase %}
         {% assign customer_order_limit_line_quantity = line_item.quantity | default: line_item.qty | default: 0 | plus: 0 %}
-        {% if customer_order_limit_line_handle == blank %}
+        {% if customer_order_limit_line_handle == '' %}
           {% assign customer_order_limit_line_handle = '-no-handle-' %}
         {% endif %}
-        {% if customer_order_limit_line_sku == blank %}
+        {% if customer_order_limit_line_sku == '' %}
           {% assign customer_order_limit_line_sku = '-no-sku-' %}
         {% endif %}
         {% if customer_order_limit_sample_count < 5 %}
-          {% capture customer_order_limit_sample %}{{ customer_order_limit_sample }}{% if customer_order_limit_sample != blank %} {% endif %}{{ customer_order_limit_line_handle }}/{{ customer_order_limit_line_sku }}x{{ customer_order_limit_line_quantity }}{% endcapture %}
+          {% capture customer_order_limit_sample %}{{ customer_order_limit_sample }}{% if customer_order_limit_sample != '' %} {% endif %}{{ customer_order_limit_line_handle }}/{{ customer_order_limit_line_sku }}x{{ customer_order_limit_line_quantity }}{% endcapture %}
           {% assign customer_order_limit_sample_count = customer_order_limit_sample_count | plus: 1 %}
         {% endif %}
         {% assign customer_order_limit_line_match = false %}
@@ -274,13 +281,13 @@
 {% endif %}
 
 {% for cart_item in cart.items %}
-  {% assign customer_order_limit_cart_handle = cart_item.product.handle | default: cart_item.handle | default: '' | strip | downcase %}
-  {% assign customer_order_limit_cart_sku = cart_item.sku | default: cart_item.variant.sku | default: cart_item.product.sku | default: '' | strip | downcase %}
+  {% assign customer_order_limit_cart_handle = cart_item.product.handle | default: cart_item.handle | default: '' | append: '' | strip | downcase %}
+  {% assign customer_order_limit_cart_sku = cart_item.sku | default: cart_item.variant.sku | default: cart_item.product.sku | default: '' | append: '' | strip | downcase %}
   {% assign customer_order_limit_cart_quantity = cart_item.quantity | default: cart_item.qty | default: 0 | plus: 0 %}
-  {% if customer_order_limit_cart_handle == blank %}
+  {% if customer_order_limit_cart_handle == '' %}
     {% assign customer_order_limit_cart_handle = '-no-handle-' %}
   {% endif %}
-  {% if customer_order_limit_cart_sku == blank %}
+  {% if customer_order_limit_cart_sku == '' %}
     {% assign customer_order_limit_cart_sku = '-no-sku-' %}
   {% endif %}
   {% assign customer_order_limit_cart_match = false %}
@@ -383,10 +390,37 @@
   {% endif %}
 {% endfor %}
 
+{% comment %}
+  Order line items expose `variant_id` on every EasyStore store — this theme's own
+  order pages read it — while a handle or SKU is not guaranteed. The current
+  product's identifiers are published so purchase history can be matched by id
+  when neither string matches, which keeps the limit enforced on products whose
+  order lines carry no handle.
+{% endcomment %}
+{% assign customer_order_limit_page_handle = product.handle | default: '' | append: '' | strip | downcase %}
+{% assign customer_order_limit_page_sku = product.sku | default: '' | append: '' | strip | downcase %}
+{% assign customer_order_limit_page_product_id = product.id | default: '' | append: '' | strip %}
+{% capture customer_order_limit_page_variant_ids %}
+  {%- assign customer_order_limit_variant_count = 0 -%}
+  {%- for variant in product.variants -%}
+    {%- assign customer_order_limit_variant_id = variant.id | default: '' | append: '' | strip -%}
+    {%- if customer_order_limit_variant_id != '' -%}
+      {%- if customer_order_limit_variant_count > 0 -%},{%- endif -%}
+      {{ customer_order_limit_variant_id | json }}
+      {%- assign customer_order_limit_variant_count = customer_order_limit_variant_count | plus: 1 -%}
+    {%- endif -%}
+  {%- endfor -%}
+{% endcapture %}
 <script>
   window.customerOrderLimitsV2 = {
     customerAuthenticated: {{ customer_order_limit_customer_authenticated | json }},
     customerId: {{ customer_order_limit_customer_id | json }},
+    pageProduct: {
+      handle: {{ customer_order_limit_page_handle | json }},
+      sku: {{ customer_order_limit_page_sku | json }},
+      productId: {{ customer_order_limit_page_product_id | json }},
+      variantIds: [{{ customer_order_limit_page_variant_ids | strip }}]
+    },
     rules: {},
     /* Read window.customerOrderLimitsV2.diagnostics in the console to see what
        the order pass could actually read: zero orders means the storefront

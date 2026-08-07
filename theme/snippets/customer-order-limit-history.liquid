@@ -25,7 +25,14 @@
   {%- if customer -%}
     {%- assign customer_order_limit_history_orders = customer.orders | default: customer.recent_orders -%}
     {%- for order in customer_order_limit_history_orders -%}
-      {%- unless order.is_cancelled -%}
+      {%- comment -%}
+        `order.is_cancelled` is an integer here, not a boolean: this theme's own
+        order list compares it with `== 1`. Liquid treats 0 as truthy, so
+        an unless on the raw value skipped every order and published an empty
+        payload while the page itself listed the customer's orders.
+      {%- endcomment -%}
+      {%- assign customer_order_limit_history_cancelled = order.is_cancelled | default: 0 | append: '' | strip | downcase -%}
+      {%- unless customer_order_limit_history_cancelled == '1' or customer_order_limit_history_cancelled == 'true' -%}
         {%- assign customer_order_limit_history_epoch = order.created_at | date: '%s' | plus: 0 -%}
         {%- if customer_order_limit_history_epoch == 0 -%}
           {%- assign customer_order_limit_history_epoch = order.processed_at | date: '%s' | plus: 0 -%}
@@ -39,11 +46,18 @@
           {%- if customer_order_limit_history_count >= 500 -%}
             {%- assign customer_order_limit_history_truncated = true -%}
           {%- else -%}
-            {%- assign customer_order_limit_history_handle = line_item.product.handle | default: line_item.handle | default: '' | strip | downcase -%}
-            {%- assign customer_order_limit_history_sku = line_item.sku | default: line_item.variant.sku | default: line_item.product.sku | default: '' | strip | downcase -%}
+            {%- assign customer_order_limit_history_handle = line_item.product.handle | default: line_item.handle | default: '' | append: '' | strip | downcase -%}
+            {%- assign customer_order_limit_history_sku = line_item.sku | default: line_item.variant.sku | default: line_item.product.sku | default: '' | append: '' | strip | downcase -%}
             {%- assign customer_order_limit_history_quantity = line_item.quantity | default: line_item.qty | default: 0 | plus: 0 -%}
+            {%- comment -%}
+              The variant id is the one identifier every EasyStore order line item
+              carries, so it is published alongside the handle and SKU. A reading
+              page matches it against the product's own variant ids.
+            {%- endcomment -%}
+            {%- assign customer_order_limit_history_product_id = line_item.product_id | default: line_item.product.id | default: '' | append: '' | strip -%}
+            {%- assign customer_order_limit_history_variant_id = line_item.variant_id | default: line_item.variant.id | default: '' | append: '' | strip -%}
             {%- if customer_order_limit_history_count > 0 -%},{%- endif -%}
-            [{{ customer_order_limit_history_handle | json }},{{ customer_order_limit_history_sku | json }},{{ customer_order_limit_history_epoch | json }},{{ customer_order_limit_history_quantity | json }},{{ customer_order_limit_history_token | json }}]
+            [{{ customer_order_limit_history_handle | json }},{{ customer_order_limit_history_sku | json }},{{ customer_order_limit_history_epoch | json }},{{ customer_order_limit_history_quantity | json }},{{ customer_order_limit_history_token | json }},{{ customer_order_limit_history_product_id | json }},{{ customer_order_limit_history_variant_id | json }}]
             {%- assign customer_order_limit_history_count = customer_order_limit_history_count | plus: 1 -%}
           {%- endif -%}
         {%- endfor -%}

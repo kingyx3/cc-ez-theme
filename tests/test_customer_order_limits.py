@@ -102,7 +102,9 @@ class CustomerOrderLimitTests(unittest.TestCase):
         self.assertIn("line_item.product.handle", liquid)
         self.assertIn("cart_item.product.handle", liquid)
         self.assertGreaterEqual(liquid.count("| downcase"), 16)
-        self.assertIn("rule_handle | default: '' | strip | downcase", rule)
+        self.assertIn("rule_handle | default: '' | append: '' | strip | downcase", rule)
+        # `blank` comparisons are not portable across Liquid engines.
+        self.assertNotIn("blank", rule)
         self.assertIn("{% if rule_customer_authenticated %}", rule)
         self.assertNotIn("{% unless customer %}", rule)
         self.assertNotIn("customer.orders | json", liquid)

@@ -48,7 +48,20 @@ class HistoryPayloadStructureTests(unittest.TestCase):
         self.assertIn('"truncated":', history)
         # Cancelled orders and unreadable dates follow the same rules as the
         # inline pass, and the line cap keeps the payload bounded.
-        self.assertIn("{%- unless order.is_cancelled -%}", history)
+        # `order.is_cancelled` is an integer on EasyStore, and Liquid treats 0 as
+        # truthy: an unless on the raw value skipped every order and published an
+        # empty payload on a live store whose account page listed the orders.
+        self.assertNotIn("{%- unless order.is_cancelled -%}", history)
+        self.assertIn(
+            "{%- assign customer_order_limit_history_cancelled = order.is_cancelled"
+            " | default: 0 | append: '' | strip | downcase -%}",
+            history,
+        )
+        self.assertIn(
+            "{%- unless customer_order_limit_history_cancelled == '1'"
+            " or customer_order_limit_history_cancelled == 'true' -%}",
+            history,
+        )
         self.assertIn("order.created_at | date: '%s' | plus: 0", history)
         self.assertIn("order.line_items | default: order.items", history)
         self.assertIn("customer_order_limit_history_count >= 500", history)
@@ -66,6 +79,16 @@ class HistoryPayloadStructureTests(unittest.TestCase):
         # Each line carries its order token so the same line seen under two tabs
         # is counted once.
         self.assertIn("customer_order_limit_history_token", history)
+        # The variant id is the only identifier every store's order line items
+        # carry, so it travels with each line for id matching.
+        self.assertIn("line_item.product_id | default: line_item.product.id", history)
+        self.assertIn("line_item.variant_id | default: line_item.variant.id", history)
+        self.assertIn(
+            "{{ customer_order_limit_history_token | json }},"
+            "{{ customer_order_limit_history_product_id | json }},"
+            "{{ customer_order_limit_history_variant_id | json }}]",
+            history,
+        )
 
     def test_liquid_booleans_are_read_by_value_not_by_identity(self) -> None:
         limits = self.read("assets/customer-order-limits.js")
@@ -88,6 +111,15 @@ class HistoryPayloadStructureTests(unittest.TestCase):
         self.assertIn("CANNOT TELL", snippet)
         # The load is only attempted when the build can do it.
         self.assertIn("if (hasHistoryLoader && (state() === 'unknown'", snippet)
+        # "no purchases counted" had two very different causes — nothing was read,
+        # or things were read and did not match — so it now reports which, and
+        # prints the identifiers needed to tell why a line did not match.
+        self.assertIn("NO ORDERS READ", snippet)
+        self.assertIn("typeof api.historyLines === 'function'", snippet)
+        self.assertIn("typeof api.pageIdentifiers === 'function'", snippet)
+        self.assertIn("first line read", snippet)
+        self.assertIn("out('current tab'", snippet)
+        self.assertIn("out('tabs'", snippet)
 
     def test_rules_publish_the_window_start_for_client_filtering(self) -> None:
         rule = self.read("snippets/customer-order-limit-rule.liquid")
@@ -124,9 +156,24 @@ class HistoryPayloadStructureTests(unittest.TestCase):
         # request cap and de-duplication by order token.
         self.assertIn("const HISTORY_MAX_REQUESTS = 12;", limits)
         self.assertIn("const historyUrlsFrom = (payload, fetched) => {", limits)
-        self.assertIn("if (/cancel/i.test(status)) return;", limits)
-        self.assertIn("if (quantity(tab.count, 0) === 0) return;", limits)
-        self.assertIn("const key = line.slice(0, 5).join('|');", limits)
+        self.assertIn("!/cancel/i.test(tab.status)", limits)
+        # A tab's reported count must not gate the walk: the live store rendered
+        # a count for the tab being viewed and nothing for the others, so
+        # skipping zero-count tabs skipped the ones holding the orders. Counted
+        # tabs are only visited first.
+        self.assertNotIn("if (quantity(tab.count, 0) === 0) return;", limits)
+        self.assertIn(".sort((left, right) => right.count - left.count)", limits)
+        self.assertIn("const key = line.slice(0, 7).join('|');", limits)
+        # History can be matched by product or variant id when a line carries
+        # neither a handle nor a SKU.
+        self.assertIn("const pageVariantIds = new Set(", limits)
+        self.assertIn("pageVariantIds.has(idText(line[6]))", limits)
+        self.assertIn("idText(line[5]) === pageProductId", limits)
+        self.assertIn(
+            "const idsIdentifyRule = Boolean(normalized)\n"
+            "      && (normalized === pageProductHandle || normalized === pageProductSku);",
+            limits,
+        )
         self.assertIn("const historySupported = () => (", limits)
         self.assertIn("typeof fetch === 'function'", limits)
         self.assertIn("typeof DOMParser === 'function'", limits)
@@ -170,7 +217,7 @@ class HistoryPayloadRenderingTests(unittest.TestCase):
         sku: str | None = None,
         handle: str | None = None,
         quantity: int = 1,
-        cancelled: bool = False,
+        cancelled: object = 0,
         with_lines: bool = True,
     ) -> dict:
         line: dict = {"quantity": quantity}
@@ -210,10 +257,44 @@ class HistoryPayloadRenderingTests(unittest.TestCase):
 
     def test_payload_excludes_cancelled_orders(self) -> None:
         payload = self.payload([
-            self.order(days_ago=3, sku=HANDLE, quantity=9, cancelled=True),
+            self.order(days_ago=3, sku=HANDLE, quantity=9, cancelled=1),
         ])
 
         self.assertEqual(payload["lines"], [])
+
+    def test_a_live_order_counts_whatever_shape_the_cancelled_flag_takes(self) -> None:
+        # The reported failure: the account page listed the customer's orders while
+        # this payload published none. EasyStore sends is_cancelled as an integer,
+        # and Liquid treats 0 as truthy, so an unless on the raw value dropped
+        # every order. Both spellings of "not cancelled" must publish the line.
+        for flag in (0, "0", False, None, "", "false"):
+            with self.subTest(flag=flag):
+                order = self.order(days_ago=3, sku=HANDLE, quantity=2)
+                if flag is None:
+                    del order["is_cancelled"]
+                else:
+                    order["is_cancelled"] = flag
+                self.assertEqual(len(self.payload([order])["lines"]), 1)
+
+        for flag in (1, "1", True, "true"):
+            with self.subTest(flag=flag):
+                order = self.order(days_ago=3, sku=HANDLE, quantity=2)
+                order["is_cancelled"] = flag
+                self.assertEqual(self.payload([order])["lines"], [])
+
+    def test_each_line_carries_the_ids_a_store_always_exposes(self) -> None:
+        # Order line items are only guaranteed to expose the variant id — the
+        # theme's own order pages read it — so history travels with the ids and a
+        # reading page can match a line that carries no handle and no SKU.
+        order = self.order(days_ago=4, quantity=3)
+        order["line_items"] = [{"quantity": 3, "variant_id": 9911, "product_id": 55}]
+        line = self.payload([order])["lines"][0]
+
+        self.assertEqual(line[0], "")
+        self.assertEqual(line[1], "")
+        self.assertEqual(line[3], 3)
+        self.assertEqual(line[5], "55")
+        self.assertEqual(line[6], "9911")
 
     def test_payload_is_valid_json_when_there_is_nothing_to_report(self) -> None:
         self.assertEqual(self.payload([])["lines"], [])

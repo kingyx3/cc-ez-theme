@@ -260,15 +260,23 @@
       if (url && !fetched.has(url) && !urls.includes(url)) urls.push(url);
     };
 
+    // A tab's count is not a reason to skip it: the live store rendered a count
+    // for the tab being viewed and nothing for the rest, so trusting the count
+    // would skip every tab that actually held the orders. Tabs reporting orders
+    // are simply visited first, and the request cap bounds the rest.
     const tabs = Array.isArray(payload && payload.tabs) ? payload.tabs : [];
-    tabs.forEach((tab) => {
-      const status = String((tab && tab.status) || '').trim();
-      if (!status || status === String(payload.currentTab || '')) return;
-      if (quantity(tab.count, 0) === 0) return;
+    const visitable = tabs
+      .map((tab) => ({
+        status: String((tab && tab.status) || '').trim(),
+        count: quantity(tab && tab.count, 0),
+      }))
       // Cancelled orders are excluded from the tally anyway.
-      if (/cancel/i.test(status)) return;
-      push(`${HISTORY_URL}?filter=${encodeURIComponent(status)}`);
-    });
+      .filter((tab) => tab.status && !/cancel/i.test(tab.status))
+      .filter((tab) => tab.status !== String((payload && payload.currentTab) || ''));
+    visitable
+      .slice()
+      .sort((left, right) => right.count - left.count)
+      .forEach((tab) => push(`${HISTORY_URL}?filter=${encodeURIComponent(tab.status)}`));
 
     push(String((payload && payload.nextUrl) || '').trim());
     return urls;
@@ -280,7 +288,9 @@
     payloads.forEach((payload) => {
       historyLines(payload).forEach((line) => {
         if (!Array.isArray(line)) return;
-        const key = line.slice(0, 5).join('|');
+        // The same order shows up under more than one tab; its lines are
+        // identical, so an identical line is the same purchase, counted once.
+        const key = line.slice(0, 7).join('|');
         if (seen.has(key)) return;
         seen.add(key);
         lines.push(line);
@@ -289,21 +299,48 @@
     return { lines, truncated: payloads.some((payload) => payload && payload.truncated) };
   };
 
+  // Order line items always carry a variant id — this theme's own order pages
+  // read it — while a handle or SKU is not guaranteed on every store. The current
+  // product publishes its ids, so history still matches when the strings do not.
+  const idText = (value) => String(value === null || value === undefined ? '' : value).trim();
+  const pageProduct = source.pageProduct || {};
+  const pageProductHandle = normalizeHandle(pageProduct.handle);
+  const pageProductSku = normalizeHandle(pageProduct.sku);
+  const pageProductId = idText(pageProduct.productId);
+  const pageVariantIds = new Set(
+    (Array.isArray(pageProduct.variantIds) ? pageProduct.variantIds : [])
+      .map(idText)
+      .filter(Boolean),
+  );
+
   const purchasedFromLines = (handle, rule, lines) => {
     const normalized = normalizeHandle(handle);
     const windowStart = quantity(rule && rule.windowStart, 0);
+    // The published ids describe one product, so they only identify the rule
+    // configured for that product — never another slot's handle.
+    const idsIdentifyRule = Boolean(normalized)
+      && (normalized === pageProductHandle || normalized === pageProductSku);
     return lines.reduce((total, line) => {
       if (!Array.isArray(line)) return total;
       const lineHandle = normalizeHandle(line[0]);
       const lineSku = normalizeHandle(line[1]);
-      if (lineHandle !== normalized && lineSku !== normalized) return total;
+      const matchedById = idsIdentifyRule && (
+        (Boolean(pageProductId) && idText(line[5]) === pageProductId)
+        || pageVariantIds.has(idText(line[6]))
+      );
+      if (lineHandle !== normalized && lineSku !== normalized && !matchedById) return total;
       if (quantity(line[2], 0) < windowStart) return total;
       return total + quantity(line[3], 0);
     }, 0);
   };
 
+  // Kept so a console check can show exactly which lines were read and compare
+  // them with the configured handle, instead of guessing why a count is zero.
+  let appliedHistoryLines = [];
+
   const applyHistory = (payload) => {
     const lines = historyLines(payload);
+    appliedHistoryLines = lines;
     Object.entries(rules).forEach(([handle, rule]) => {
       const purchased = purchasedFromLines(handle, rule, lines);
       const maximum = quantity(rule.maximum, 0);
@@ -840,6 +877,13 @@
     redirectToLogin,
     cartTotalsFromForm,
     historyState: () => historyState,
+    historyLines: () => appliedHistoryLines.slice(),
+    pageIdentifiers: () => ({
+      handle: pageProductHandle,
+      sku: pageProductSku,
+      productId: pageProductId,
+      variantIds: Array.from(pageVariantIds),
+    }),
     loadHistory,
     remainingForHandle,
     cartQuantityForHandle,

@@ -122,7 +122,19 @@ class CustomerOrderLimitRefreshTests(unittest.TestCase):
                     liquid,
                 )
         # Cancelled orders stay excluded, and the single-pass loops are intact.
-        self.assertIn("{% unless order.is_cancelled %}", liquid)
+        # The flag is an integer on EasyStore, so it is compared by value: Liquid
+        # treats 0 as truthy and an unless on the raw value skipped every order.
+        self.assertNotIn("{% unless order.is_cancelled %}", liquid)
+        self.assertIn(
+            "{% assign customer_order_limit_order_cancelled = order.is_cancelled"
+            " | default: 0 | append: '' | strip | downcase %}",
+            liquid,
+        )
+        self.assertIn(
+            "{% unless customer_order_limit_order_cancelled == '1'"
+            " or customer_order_limit_order_cancelled == 'true' %}",
+            liquid,
+        )
         self.assertEqual(liquid.count("{% for order in customer_order_limit_orders %}"), 1)
         self.assertEqual(liquid.count("{% for line_item in customer_order_limit_lines %}"), 1)
 
@@ -135,13 +147,13 @@ class CustomerOrderLimitRefreshTests(unittest.TestCase):
         self.assertIn(
             "{% assign customer_order_limit_line_sku = line_item.sku"
             " | default: line_item.variant.sku | default: line_item.product.sku"
-            " | default: '' | strip | downcase %}",
+            " | default: '' | append: '' | strip | downcase %}",
             liquid,
         )
         self.assertIn(
             "{% assign customer_order_limit_cart_sku = cart_item.sku"
             " | default: cart_item.variant.sku | default: cart_item.product.sku"
-            " | default: '' | strip | downcase %}",
+            " | default: '' | append: '' | strip | downcase %}",
             liquid,
         )
         for slot in SLOTS:
@@ -156,7 +168,10 @@ class CustomerOrderLimitRefreshTests(unittest.TestCase):
                     f" or customer_order_limit_cart_sku == customer_order_limit_handle_{slot}_normalized",
                     liquid,
                 )
-        # A blank identifier must never match an unconfigured slot.
+        # A blank identifier must never match an unconfigured slot. The
+        # comparison is against '' on string-forced values, never `blank`.
+        self.assertNotIn("== blank", liquid)
+        self.assertNotIn("!= blank", liquid)
         self.assertIn("{% assign customer_order_limit_line_handle = '-no-handle-' %}", liquid)
         self.assertIn("{% assign customer_order_limit_line_sku = '-no-sku-' %}", liquid)
         self.assertIn("{% assign customer_order_limit_cart_handle = '-no-handle-' %}", liquid)

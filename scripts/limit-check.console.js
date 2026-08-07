@@ -39,6 +39,12 @@
 
   console.log('--- this product ---');
   out('handle', handle);
+  if (typeof api.pageIdentifiers === 'function') {
+    const ids = api.pageIdentifiers();
+    out('page sku', ids.sku || '(none)');
+    out('page product id', ids.productId || '(none)');
+    out('page variant ids', ids.variantIds.join(',') || '(none)');
+  }
   if (!rule) {
     console.log('LIMITS: no limit configured for this handle. Check it matches customer-order-limit-config.liquid exactly.');
   } else {
@@ -48,6 +54,20 @@
     out('in cart', fresh.cartQuantity);
     out('can still add', api.remainingForHandle(handle));
     out('counted since', fresh.limitWindowLabel || 'all orders');
+  }
+
+  console.log('--- history the loader walked ---');
+  if (typeof api.historyLines === 'function') {
+    const lines = api.historyLines();
+    const ids = typeof api.pageIdentifiers === 'function' ? api.pageIdentifiers() : { productId: '', variantIds: [] };
+    const byString = lines.filter((l) => l[0] === handle || l[1] === handle);
+    const byId = lines.filter((l) => (ids.productId && String(l[5]) === ids.productId) || ids.variantIds.includes(String(l[6])));
+    out('lines loaded', lines.length);
+    out('matched by handle or sku', byString.length);
+    out('matched by product/variant id', byId.length);
+    if (lines.length && !byString.length && !byId.length) {
+      console.log('first line read:', JSON.stringify(lines[0]), '(compare with the values above)');
+    }
   }
 
   console.log('--- account payload ---');
@@ -60,6 +80,9 @@
       const payload = JSON.parse(el.textContent);
       out('payload lines', payload.lines.length);
       out('matching this handle', payload.lines.filter((l) => l[0] === handle || l[1] === handle).length);
+      out('current tab', payload.currentTab || '(none)');
+      out('tabs', (payload.tabs || []).map((t) => t.status + ':' + t.count).join(' ') || '(none)');
+      out('pages', payload.page + '/' + payload.pages);
     }
   } catch (error) {
     console.log('payload fetch failed:', error.message);
@@ -72,5 +95,6 @@
   else if (!hasHistoryLoader) console.log('CANNOT TELL: this build has no history loader. Upload the current artifact and run this again.');
   else if (state() === 'unavailable') console.log('BROKEN: history could not be read or loaded. Only the current cart is capped.');
   else if (api.ruleFor(handle).purchased > 0) console.log('WORKING: past orders are counted for this product.');
-  else console.log('NO PURCHASES COUNTED: either this customer has not bought it before, or the identifiers do not match. Compare "identifiers" and "payload lines" above with the configured handle.');
+  else if (typeof api.historyLines === 'function' && api.historyLines().length === 0) console.log('NO ORDERS READ: the loader walked the account order pages and found no line items. If your order history page lists orders, send the "tabs" and "current tab" lines above.');
+  else console.log('NO PURCHASES COUNTED: orders were read but none matched this product. Compare "first line read" with the page handle, sku and variant ids above.');
 })();

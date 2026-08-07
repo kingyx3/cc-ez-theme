@@ -1,17 +1,17 @@
-{% assign customer_order_limit_rule_handle = rule_handle | default: '' | strip | downcase %}
+{% assign customer_order_limit_rule_handle = rule_handle | default: '' | append: '' | strip | downcase %}
 {% assign customer_order_limit_rule_maximum = rule_maximum | default: 0 | plus: 0 %}
 {% assign customer_order_limit_rule_purchased = rule_purchased | default: 0 | plus: 0 %}
 {% assign customer_order_limit_rule_cart_quantity = rule_cart_quantity | default: 0 | plus: 0 %}
 {% assign customer_order_limit_rule_refresh_at = rule_refresh_at | default: '' | strip %}
-{% assign customer_order_limit_rule_window_label = rule_window_label | default: '' | strip %}
+{% assign customer_order_limit_rule_window_label = rule_window_label | default: '' | append: '' | strip %}
 {% assign customer_order_limit_rule_window_start = rule_window_start | default: 0 | plus: 0 %}
-{% if customer_order_limit_rule_handle != blank and customer_order_limit_rule_maximum > 0 %}
+{% if customer_order_limit_rule_handle != '' and customer_order_limit_rule_maximum > 0 %}
   {% comment %}
     When a refresh timestamp has passed, purchased counts only cover orders from
     that date onwards, so the copy says which date the limit is counted from.
   {% endcomment %}
   {% assign customer_order_limit_rule_since = '' %}
-  {% if customer_order_limit_rule_window_label != blank %}
+  {% if customer_order_limit_rule_window_label != '' %}
     {% capture customer_order_limit_rule_since %} since {{ customer_order_limit_rule_window_label }}{% endcapture %}
   {% endif %}
   {% comment %}
