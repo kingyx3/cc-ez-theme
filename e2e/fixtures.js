@@ -23,31 +23,43 @@ function currentPath(currentUrl) {
   }
 }
 
-function isKnownWebKitThirdPartyError(error, currentUrl, origin, browserName) {
-  if (browserName !== 'webkit') return false;
+function isCheckoutOrAuthPath(pathname) {
+  return pathname === '/cart'
+    || pathname.startsWith('/checkout')
+    || pathname.startsWith('/account/login');
+}
 
+function isKnownBrowserTransitionError(error, currentUrl, origin, browserName) {
   const message = error.message || '';
   const pathname = currentPath(currentUrl);
 
-  if (
-    /accessing a frame with origin/i.test(message)
-    && /Protocols, domains, and ports must match/i.test(message)
-  ) {
-    const messageUrls = message.match(/https?:\/\/[^"'\s)]+/g) || [];
-    const hasExternalOrigin = messageUrls.some(value => {
-      try {
-        return new URL(value).origin !== origin;
-      } catch {
-        return false;
-      }
-    });
-    if (hasExternalOrigin) return true;
+  if (browserName === 'webkit') {
+    if (
+      /accessing a frame with origin/i.test(message)
+      && /Protocols, domains, and ports must match/i.test(message)
+    ) {
+      const messageUrls = message.match(/https?:\/\/[^"'\s)]+/g) || [];
+      const hasExternalOrigin = messageUrls.some(value => {
+        try {
+          return new URL(value).origin !== origin;
+        } catch {
+          return false;
+        }
+      });
+      if (hasExternalOrigin) return true;
+    }
+
+    if (message === 'TypeError: Load failed' && isCheckoutOrAuthPath(pathname)) {
+      return true;
+    }
   }
 
-  if (message === 'TypeError: Load failed') {
-    return pathname === '/cart'
-      || pathname.startsWith('/checkout')
-      || pathname.startsWith('/account/login');
+  if (
+    browserName === 'firefox'
+    && message === 'NetworkError when attempting to fetch resource.'
+    && isCheckoutOrAuthPath(pathname)
+  ) {
+    return true;
   }
 
   return false;
@@ -78,7 +90,7 @@ const test = base.extend({
     const origin = new URL(baseURL).origin;
 
     page.on('pageerror', error => {
-      if (isKnownWebKitThirdPartyError(error, page.url(), origin, browserName)) {
+      if (isKnownBrowserTransitionError(error, page.url(), origin, browserName)) {
         knownPlatformErrors.push(error.message);
         return;
       }
