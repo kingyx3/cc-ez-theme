@@ -444,6 +444,13 @@ Before opening a pull request:
   in the template when the platform text is wrong for this store — the password
   recovery paragraph does that because the platform copy promises a reset email
   while this store confirms a mobile OTP.
+- With `shop.phone_account_enabled`, one field on login, register and
+  activate-account carries either an email address or the mobile number that
+  receives the OTP. Its `autocomplete` switches to `username` in the same branch
+  that switches its title: `autocomplete="email"` makes browsers and password
+  managers offer a saved address, and a shopper who accepts it submits a value
+  the store cannot text, so no SMS arrives. Anything added to that field belongs
+  in the same branch. `tests/test_account_identifier_field.py` holds this.
 - Theme validation reduces known packaging and static-reference failures but
   cannot guarantee that third-party apps or future EasyStore platform changes
   will never affect runtime behavior.

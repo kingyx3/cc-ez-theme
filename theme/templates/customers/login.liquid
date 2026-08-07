@@ -8,12 +8,21 @@
   `| t`: an empty store translation renders an empty placeholder and an
   empty label, which is how the email field on /account/details ended up
   showing an address with nothing naming it.
+
+  `autocomplete` follows the same switch. With phone accounts on, this one field
+  is the account identifier and a mobile number is the value that gets an OTP,
+  so it must not be advertised as an email field: browsers and password managers
+  offer a saved address, and a shopper who accepts that suggestion submits an
+  email the store cannot text. `username` is the token for an identifier that
+  may be either.
 {% endcomment %}
 {% assign account_placeholder = 'customer.login.email' %}
 {% assign account_fallback = 'Email' %}
+{% assign account_autocomplete = 'email' %}
 {%if shop.phone_account_enabled == true %}
   {% assign account_placeholder = 'customer.login.email_or_phone' %}
   {% assign account_fallback = 'Email or mobile number' %}
+  {% assign account_autocomplete = 'username' %}
 {% endif %}
 
 <div class="customer login">
@@ -45,7 +54,7 @@
           id="RecoverEmail"
           autocorrect="off"
           autocapitalize="off"
-          autocomplete="email"
+          autocomplete="{{ account_autocomplete }}"
           placeholder="{% include 'translation-fallback', translation_key: account_placeholder, fallback: account_fallback, escape_output: true %}"
           required
         >
@@ -114,7 +123,7 @@
           type="text"
           name="customer[email_or_phone]"
           id="CustomerEmail"
-          autocomplete="email"
+          autocomplete="{{ account_autocomplete }}"
           autocorrect="off"
           autocapitalize="off"
           placeholder="{% include 'translation-fallback', translation_key: account_placeholder, fallback: account_fallback, escape_output: true %}"

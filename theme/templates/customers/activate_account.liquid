@@ -145,28 +145,42 @@
           `| t`: an empty store translation renders an empty placeholder and an
           empty label, which is how the email field on /account/details ended up
           showing an address with nothing naming it.
+
+          `autocomplete` follows the same switch. With phone accounts on, this
+          one field is the account identifier and a mobile number is the value
+          that gets an OTP, so it must not be advertised as an email field:
+          browsers and password managers offer a saved address, and a shopper who
+          accepts that suggestion submits an email the store cannot text.
+          `username` is the token for an identifier that may be either.
         {% endcomment %}
         {% assign account_placeholder = 'customer.register.email' %}
         {% assign account_fallback = 'Email' %}
+        {% assign account_autocomplete = 'email' %}
         {% if shop.phone_account_enabled == true %}
           {% assign account_placeholder = 'customer.register.email_or_phone' %}
           {% assign account_fallback = 'Email or mobile number' %}
+          {% assign account_autocomplete = 'username' %}
         {% endif %}
-        
+
         {% if form.email_or_phone  == "" or form.email_or_phone == false %}
-          <div class="field">      
+          <div class="field">
             <input
               type="text"
               name="customer[email_or_phone]"
               id="RegisterForm-EmailOrPhone"
               spellcheck="false"
               autocapitalize="off"
-              autocomplete="email"
+              autocomplete="{{ account_autocomplete }}"
               placeholder="{% include 'translation-fallback', translation_key: account_placeholder, fallback: account_fallback, escape_output: true %}"
               required
               {% if form.errors contains "email_or_phone" %} class="error"{% elsif form.email_or_phone %} value="{{ form.email_or_phone }}"{% endif %}
             >
-            <label for="RegisterForm-email">
+            {% comment %}
+              `for` names the input's real id. It read `RegisterForm-email`, an
+              id no element on the page has, so the account field's title pointed
+              at nothing.
+            {% endcomment %}
+            <label for="RegisterForm-EmailOrPhone">
               {% include 'translation-fallback', translation_key: account_placeholder, fallback: account_fallback, escape_output: true %}
             </label>
           </div>
