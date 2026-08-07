@@ -459,6 +459,15 @@ Before opening a pull request:
   in the theme may fetch, redirect, or write from those pages —
   `onAuthEntryPage()` gates it, and `tests/test_auth_page_history_requests.py`
   executes the real asset to prove no request leaves them.
+- The theme cannot send an SMS; EasyStore does. When an OTP never arrives, find
+  out which side failed before changing the theme — paste
+  `scripts/otp-submit-check.console.js` into the console on `/account/login` and
+  submit. It reports whether the fixed build is even the one serving the page
+  (the packaging workflow imports each branch UNPUBLISHED, so the storefront
+  keeps serving the published theme), whether the POST fired and with what value,
+  and whether anything blocked it. A POST that succeeds and still sends no text
+  is an EasyStore-side failure — SMS credits, gateway, provider or a rate limit —
+  and no theme deploy will fix it.
 - Theme validation reduces known packaging and static-reference failures but
   cannot guarantee that third-party apps or future EasyStore platform changes
   will never affect runtime behavior.
