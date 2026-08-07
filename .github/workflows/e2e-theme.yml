@@ -1,0 +1,163 @@
+name: EasyStore browser E2E
+
+on:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: EasyStore storefront or preview URL to test
+        required: false
+        default: https://cardboard.sg
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: easystore-e2e-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  E2E_BASE_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.base_url || vars.E2E_PR_BASE_URL || vars.E2E_BASE_URL || 'https://cardboard.sg' }}
+  E2E_LIMITED_PRODUCT_PATH: ${{ vars.E2E_LIMITED_PRODUCT_PATH || '/collections/feature-on-homepage/products/mtg-hob-cbb-en-pack' }}
+  E2E_UNLIMITED_PRODUCT_PATH: ${{ vars.E2E_UNLIMITED_PRODUCT_PATH }}
+  E2E_SEARCH_TERM: ${{ vars.E2E_SEARCH_TERM || 'Hobbit' }}
+
+jobs:
+  validate:
+    name: Validate Playwright suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Install E2E dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Compile Playwright test matrix
+        run: npx playwright test --list
+
+  preflight:
+    name: Storefront preflight
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify storefront is reachable
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="$E2E_BASE_URL"
+          case "$target" in
+            http://*|https://*) ;;
+            *) target="https://$target" ;;
+          esac
+          status="$(curl --location --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 20 "$target")"
+          echo "Storefront target: $target"
+          echo "Storefront HTTP status: $status"
+          test "$status" -ge 200
+          test "$status" -lt 500
+
+  functional:
+    name: Functional / ${{ matrix.project }}
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - project: chromium-desktop
+            browser: chromium
+          - project: firefox-desktop
+            browser: firefox
+          - project: webkit-desktop
+            browser: webkit
+          - project: mobile-chrome
+            browser: chromium
+          - project: mobile-safari
+            browser: webkit
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Install E2E dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps "${{ matrix.browser }}"
+
+      - name: Run storefront E2E
+        run: npx playwright test e2e/storefront.spec.js --project="${{ matrix.project }}"
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report-${{ matrix.project }}
+          path: playwright-report/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-test-results-${{ matrix.project }}
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  accessibility:
+    name: Accessibility / chromium-desktop
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Install E2E dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Axe accessibility suite
+        run: npx playwright test e2e/accessibility.spec.js --project=chromium-desktop
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report-accessibility
+          path: playwright-report/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload accessibility failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-test-results-accessibility
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 14

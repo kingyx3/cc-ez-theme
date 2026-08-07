@@ -1,0 +1,13 @@
+{
+  "name": "cc-ez-theme-e2e",
+  "private": true,
+  "scripts": {
+    "test:e2e": "playwright test",
+    "test:e2e:smoke": "playwright test e2e/storefront.spec.js",
+    "test:e2e:a11y": "playwright test e2e/accessibility.spec.js"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.10.2",
+    "@playwright/test": "^1.54.2"
+  }
+}
