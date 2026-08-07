@@ -67,10 +67,10 @@ class RecoveryCopyTests(unittest.TestCase):
         self.source = LOGIN.read_text(encoding="utf-8")
 
     def test_the_recovery_form_asks_for_a_mobile_otp(self) -> None:
-        subtext = recovery_subtext(self.source).lower()
-        self.assertIn("otp", subtext)
-        self.assertIn("mobile", subtext)
-        self.assertIn("one-time password", subtext)
+        self.assertEqual(
+            "confirm your mobile otp to proceed",
+            recovery_subtext(self.source).lower(),
+        )
 
     def test_the_recovery_form_no_longer_promises_an_email(self) -> None:
         # The store recovers an account by OTP. Copy that mentions email sends
