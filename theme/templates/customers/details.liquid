@@ -113,8 +113,16 @@
     
                 <div class="grid__item sm-mt-1">
                   <div class="field">
-                    <input type="text" id="DetailEmail" class="address_form" name="details[email]" value="{{customer.cust_email}}" placeholder="{{ 'customer.login.email' | t }}">
-                    <label for="DetailEmail">{{ 'customer.login.email' | t }}</label>
+                    {% comment %}
+                      Both the placeholder and the floating label used the bare
+                      `customer.login.email` translation. This store returns it
+                      empty, so the field showed an email address with nothing
+                      naming it while every neighbouring field kept its title.
+                      The fallback keeps a title on screen whatever the store's
+                      translations hold.
+                    {% endcomment %}
+                    <input type="text" id="DetailEmail" class="address_form" name="details[email]" value="{{customer.cust_email}}" placeholder="{% include 'translation-fallback', translation_key: 'customer.login.email', fallback: 'Email', escape_output: true %}">
+                    <label for="DetailEmail">{% include 'translation-fallback', translation_key: 'customer.login.email', fallback: 'Email', escape_output: true %}</label>
                   </div>
                 </div>
     

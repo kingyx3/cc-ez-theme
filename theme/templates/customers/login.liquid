@@ -13,8 +13,16 @@
     {{ 'customer.recover_password.title' | t }}
   </h1>
   <div>
+    {% comment %}
+      Written out here rather than read from `customer.recover_password.subtext`:
+      the platform copy for that key promises a reset email, and this store
+      recovers an account by confirming a one-time password sent to the mobile
+      number instead. A shopper who was told to expect an email waits for one
+      that never arrives.
+    {% endcomment %}
     <p>
-      Confirm your mobile to proceed
+      Confirm your mobile OTP to proceed — enter your mobile number and we will
+      send you a one-time password.
     </p>
     
     <form action="/account/recover" method="post">
