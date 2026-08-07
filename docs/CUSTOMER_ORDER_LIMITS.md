@@ -6,22 +6,25 @@ This feature limits a signed-in customer to a configured number of units for an 
 
 | EasyStore product handle | Per-customer maximum |
 | --- | ---: |
-| `MTG-HOB-BDL-EN` | 2 |
-| `MTG-HOB-CBB-EN` | 2 |
+| `MTG-HOB-BDL-EN` | 6 |
+| `MTG-HOB-CBB-EN` | 1 |
 | `MTG-HOB-CBB-EN-CASE6` | 1 |
 | `MTG-HOB-CBB-EN-PACK` | 2 |
 | `MTG-HOB-DNK-EN` | 3 |
+| `MTG-HOB-GFB-EN` | 1 |
 | `MTG-HOB-PBB-EN` | 12 |
-| `MTG-HOB-PRK-EN-SET4` | 1 |
+| `MTG-HOB-PRK-EN-SET4` | 3 |
 | `MTG-HOB-OBP-EN` | 1 |
-| `MTG-HOB-SCN-EN-SET2` | 1 |
+| `MTG-HOB-SCN-EN-SET2` | 2 |
+| `MTG-MSH-JBB-EN` | 6 |
+| `MTG-MSH-CMD-EN-CE-SET4` | 1 |
 | `CC-BDL-SCENES3-EN` | 1 |
 | `CC-BDL-FRIENDS3-EN-SPM` | 1 |
 | `CC-BDL-FRIENDS3-EN-MSH` | 1 |
 | `CC-BDL-SPIDERVAULT-EN` | 1 |
 | `CC-BDL-UNEXPECTED-EN` | 2 |
 
-Rows supplied with a blank promo maximum are intentionally not configured and remain unlimited. This includes `MTG-HOB-GFB-EN`, the listed `MTG-MSH-*`, `MTG-SOS-*`, and `MTG-SPM-*` handles, plus `CC-BDL-HAPPYHAMPER-EN` and `CC-BDL-HAPPYHAMPER-EN-PBB`.
+Rows supplied with a blank promo maximum are intentionally not configured and remain unlimited. This includes the remaining `MTG-MSH-*`, `MTG-SOS-*`, and `MTG-SPM-*` handles not listed above, plus `CC-BDL-HAPPYHAMPER-EN` and `CC-BDL-HAPPYHAMPER-EN-PBB`.
 
 The values remain explicit in `theme/snippets/customer-order-limit-config.liquid`. Every configured and storefront handle is normalized to lowercase before comparison because EasyStore product URLs use lowercase handles even when administrative values are capitalized.
 
