@@ -28,7 +28,7 @@ test.describe('storefront navigation and discovery', () => {
       await expect(menu).toBeVisible();
       await menu.click();
       await expect(page.locator('#menu-drawer')).toBeVisible();
-      await expect(page.locator('#menu-drawer a[href="/collections/the-hobbit"]')).toBeVisible();
+      await expect(page.locator('#menu-drawer a[href="/collections/the-hobbit"]:visible').first()).toBeVisible();
     } else {
       const desktopNav = page.locator('header nav:visible').first();
       await expect(desktopNav).toBeVisible();
