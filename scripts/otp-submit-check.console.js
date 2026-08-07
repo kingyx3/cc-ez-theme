@@ -105,20 +105,67 @@
       };
     }
 
+    // Capture phase: runs before every other handler, so it sees the form as it
+    // was BEFORE anything else could touch it. On its own this proves nothing
+    // about what was sent - see the formdata hook below.
     document.addEventListener('submit', (event) => {
       const form = event.target;
       if (!(form instanceof HTMLFormElement)) return;
-      const field = form.querySelector('[name="customer[email_or_phone]"], [name="email_or_phone"]');
-      const value = String((field && field.value) || '').trim();
       record({
-        kind: 'submit',
+        kind: 'submit(before)',
         method: String(form.getAttribute('method') || 'GET').toUpperCase(),
         url: String(form.getAttribute('action') || location.pathname),
         prevented: event.defaultPrevented,
-        identifier: field ? (/@/.test(value) ? 'EMAIL (cannot be texted)' : `phone ${value.replace(/\D/g, '').length} digits`) : null,
-        csrf: Boolean(form.querySelector('[name="_token"]')?.value),
+        fields: fieldsOf(form),
       });
+
+      // Bubble phase on the form itself: last thing to run, so a handler that
+      // rewrites the action or a value between the two shows up as a difference.
+      form.addEventListener('submit', (late) => {
+        record({
+          kind: 'submit(after)',
+          method: String(form.getAttribute('method') || 'GET').toUpperCase(),
+          url: String(form.getAttribute('action') || location.pathname),
+          prevented: late.defaultPrevented,
+          fields: fieldsOf(form),
+        });
+      }, { once: true });
+
+      // The authoritative payload. `formdata` fires as the browser builds the
+      // entry list for the request, after every handler has had its turn, so
+      // this is what EasyStore actually receives - including fields no selector
+      // guessed at, such as a country or dial code.
+      form.addEventListener('formdata', (fd) => {
+        const entries = [];
+        fd.formData.forEach((value, key) => {
+          const shown = key === '_token' ? '(present)' : String(value).slice(0, 60);
+          entries.push(`${key}=${shown}`);
+        });
+        record({ kind: 'PAYLOAD', method: 'POST', url: String(form.getAttribute('action') || location.pathname), body: entries.join('&').slice(0, 600) });
+      }, { once: true });
     }, true);
+  }
+
+  // Every control in the form, not a guessed subset. A field the theme's CSS has
+  // made invisible or untappable - which is how this theme once broke a
+  // platform-rendered control - shows up here as empty or hidden rather than
+  // being missed entirely.
+  function fieldsOf(form) {
+    try {
+      return Array.from(form.elements)
+        .filter((element) => element.name)
+        .map((element) => {
+          const value = element.type === 'password' ? '(hidden)'
+            : element.name === '_token' ? '(present)'
+              : String(element.value || '').slice(0, 40);
+          const visible = element.offsetParent !== null || element.type === 'hidden';
+          return `${element.name}=${JSON.stringify(value)}${visible ? '' : ' [NOT VISIBLE]'}`;
+        })
+        .join(' ')
+        .slice(0, 600);
+    } catch (_error) {
+      return '[unreadable]';
+    }
   }
 
   function summarize(body) {
