@@ -1267,3 +1267,21 @@ details[open] > .confirmation-modal .modal-overlay {
   }
 }
 
+
+/* The account email field's own title.
+
+   Measured on the live store: `label[for="DetailEmail"]` computes
+   `display: none` while the phone label beside it - identical markup, identical
+   theme rules - computes `block`. The label is visible for a moment and then
+   hidden as the email input initialises, so something outside this theme sets it
+   after load. No rule in base.css, customer.css, conversion-theme.css or
+   compact-spacing.css hides a label, so this is not the theme's doing and this
+   is the only lever it has over it.
+
+   `!important` is deliberate: an author declaration with it outranks the inline
+   style a script would set, which is how the title survives being hidden again.
+   Scoped to this one field so nothing else that legitimately hides a label - the
+   gender control replaces its whole wrapper - is affected. */
+.customer .field label[for="DetailEmail"] {
+  display: block !important;
+}

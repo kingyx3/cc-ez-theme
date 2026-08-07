@@ -165,6 +165,42 @@ class EmailFieldRenderingTests(unittest.TestCase):
         self.assertIn('value="shopper@example.com"', self.render(""))
 
 
+class HiddenEmailLabelTests(unittest.TestCase):
+    """The account email label is hidden after load by something off-theme.
+
+    Measured on the live store: `label[for="DetailEmail"]` computes
+    `display: none` while the phone label beside it computes `block` from
+    identical markup and identical theme rules. `!important` is what survives the
+    inline style a script sets.
+    """
+
+    RUNTIME = THEME / "assets" / "customer.css"
+    EDITOR = THEME / "editor_assets" / "customer.css"
+
+    def test_the_email_label_is_restored(self) -> None:
+        rule = (
+            '.customer .field label[for="DetailEmail"] {\n'
+            "  display: block !important;\n"
+            "}"
+        )
+        for path in (self.RUNTIME, self.EDITOR):
+            with self.subTest(path=path.parent.name):
+                self.assertIn(rule, path.read_text(encoding="utf-8"))
+
+    def test_it_stays_scoped_to_that_one_field(self) -> None:
+        # The gender control legitimately replaces its wrapper, and other
+        # widgets may hide their own labels; a blanket rule would fight them.
+        css = self.RUNTIME.read_text(encoding="utf-8")
+        self.assertNotIn(".customer .field label {\n  display: block !important", css)
+        self.assertEqual(1, css.count("display: block !important"))
+
+    def test_runtime_and_editor_copies_stay_in_sync(self) -> None:
+        self.assertEqual(
+            self.RUNTIME.read_text(encoding="utf-8"),
+            self.EDITOR.read_text(encoding="utf-8"),
+        )
+
+
 class AuthFieldTitleTests(unittest.TestCase):
     """The sign-in, register and activate templates read the same class of key.
 
