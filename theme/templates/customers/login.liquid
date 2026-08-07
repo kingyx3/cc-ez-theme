@@ -14,7 +14,7 @@
   </h1>
   <div>
     <p>
-      Confirm your mobile to proceed
+      {{ 'customer.recover_password.subtext' | t }}
     </p>
     
     <form action="/account/recover" method="post">
@@ -166,4 +166,77 @@
   document.querySelector('#form-login').addEventListener('submit', (event)=>{
     document.querySelector('#form-login .btn').classList.add('btn--loading','loading');
   });
+</script>
+
+
+{% comment %}
+  EasyStore can re-render the password recovery copy after the template loads.
+  Keep the translated server-rendered text and narrowly replace only the known
+  English copy on the recovery view.
+{% endcomment %}
+<script>
+  (function () {
+    const recoveryPath = /\/account\/auth\/?$/;
+    const originalCopy = 'We will send you an email to reset your password.';
+    const replacementCopy = 'Confirm your mobile to proceed';
+    let copyObserver;
+
+    function normaliseCopy(value) {
+      return value.replace(/\s+/g, ' ').trim();
+    }
+
+    function isRecoveryView() {
+      return recoveryPath.test(window.location.pathname) && window.location.hash === '#recover';
+    }
+
+    function replaceRecoveryCopy() {
+      if (!isRecoveryView()) return;
+
+      const recoverHeading = document.getElementById('recover');
+      const recoverPanel = recoverHeading && recoverHeading.nextElementSibling;
+      if (!recoverPanel) return;
+
+      const copy = Array.from(recoverPanel.querySelectorAll('p')).find((element) => {
+        return normaliseCopy(element.textContent || '') === originalCopy;
+      });
+
+      if (copy) {
+        copy.textContent = replacementCopy;
+      }
+    }
+
+    function watchRecoveryCopy() {
+      if (copyObserver) {
+        copyObserver.disconnect();
+        copyObserver = null;
+      }
+
+      if (!isRecoveryView()) return;
+
+      replaceRecoveryCopy();
+
+      const observer = new MutationObserver(replaceRecoveryCopy);
+      copyObserver = observer;
+      observer.observe(document.body, {
+        childList: true,
+        characterData: true,
+        subtree: true,
+      });
+
+      window.setTimeout(() => {
+        if (copyObserver === observer) {
+          observer.disconnect();
+          copyObserver = null;
+        }
+      }, 5000);
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', watchRecoveryCopy, { once: true });
+    } else {
+      watchRecoveryCopy();
+    }
+
+    window.addEventListener('hashchange', watchRecoveryCopy);
+  })();
 </script>
