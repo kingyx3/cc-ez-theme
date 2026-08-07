@@ -18,7 +18,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  E2E_BASE_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.base_url || vars.E2E_PR_BASE_URL }}
+  E2E_BASE_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.base_url || vars.E2E_PR_BASE_URL || vars.E2E_BASE_URL || 'https://cardboard.sg' }}
   E2E_LIMITED_PRODUCT_PATH: ${{ vars.E2E_LIMITED_PRODUCT_PATH || '/collections/feature-on-homepage/products/mtg-hob-cbb-en-pack' }}
   E2E_UNLIMITED_PRODUCT_PATH: ${{ vars.E2E_UNLIMITED_PRODUCT_PATH }}
   E2E_SEARCH_TERM: ${{ vars.E2E_SEARCH_TERM || 'Hobbit' }}
@@ -45,7 +45,7 @@ jobs:
 
   preflight:
     name: Storefront preflight
-    if: ${{ github.event_name == 'workflow_dispatch' || vars.E2E_PR_BASE_URL != '' }}
+    needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -53,11 +53,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ -z "$E2E_BASE_URL" ]]; then
-            echo "E2E_BASE_URL is empty. Configure E2E_PR_BASE_URL for PR runs or provide base_url when dispatching."
-            exit 1
-          fi
           status="$(curl --location --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 20 "$E2E_BASE_URL")"
+          echo "Storefront target: $E2E_BASE_URL"
           echo "Storefront HTTP status: $status"
           test "$status" -ge 200
           test "$status" -lt 500
