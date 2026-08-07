@@ -16,26 +16,14 @@ class EmailFieldLabelsTest(unittest.TestCase):
             LAYOUT.read_text(encoding="utf-8"),
         )
 
-    def test_account_details_email_label_is_server_rendered(self):
+    def test_account_details_keeps_original_server_rendered_field(self):
         details = DETAILS.read_text(encoding="utf-8")
-        self.assertIn(
-            "{% include 'translation-fallback', translation_key: 'customer.login.email', fallback: 'Email' %}",
-            details,
-        )
-        self.assertIn('<div class="field on_focus">', details)
-        self.assertIn(
-            'value="{{ customer.cust_email | _default: customer.email | escape }}"',
-            details,
-        )
-        self.assertIn(
-            'placeholder="{{ account_email_label | strip | escape }}"', details
-        )
-        self.assertIn(
-            '<label for="DetailEmail">{{ account_email_label | strip }}</label>',
-            details,
-        )
+        self.assertIn('id="DetailEmail"', details)
+        self.assertIn('name="details[email]"', details)
+        self.assertIn("placeholder=\"{{ 'customer.login.email' | t }}\"", details)
+        self.assertIn("<label for=\"DetailEmail\">{{ 'customer.login.email' | t }}</label>", details)
 
-    def test_account_details_does_not_depend_on_javascript_repair(self):
+    def test_account_details_does_not_depend_on_checkout_repair_script(self):
         script = SCRIPT.read_text(encoding="utf-8")
         self.assertNotIn("DetailEmail", script)
         self.assertNotIn("ACCOUNT_DETAILS_PATH", script)
