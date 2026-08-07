@@ -10,6 +10,8 @@ shopping on desktop and mobile.
   product organization, and maintenance
 - [Packaging and deployment](docs/PACKAGING_AND_DEPLOYMENT.md) — validation,
   ZIP generation, GitHub artifacts, and EasyStore upload
+- [EasyStore API deployment](docs/EASYSTORE_API_DEPLOYMENT.md) — manual GitHub
+  Actions import, bearer-token setup, and API troubleshooting
 
 ## Repository layout
 
