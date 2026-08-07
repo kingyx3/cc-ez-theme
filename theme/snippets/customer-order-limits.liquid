@@ -35,6 +35,9 @@
 {% assign customer_order_limit_handle_12_normalized = customer_order_limit_handle_12 | default: '' | strip | downcase %}
 {% assign customer_order_limit_handle_13_normalized = customer_order_limit_handle_13 | default: '' | strip | downcase %}
 {% assign customer_order_limit_handle_14_normalized = customer_order_limit_handle_14 | default: '' | strip | downcase %}
+{% assign customer_order_limit_handle_15_normalized = customer_order_limit_handle_15 | default: '' | strip | downcase %}
+{% assign customer_order_limit_handle_16_normalized = customer_order_limit_handle_16 | default: '' | strip | downcase %}
+{% assign customer_order_limit_handle_17_normalized = customer_order_limit_handle_17 | default: '' | strip | downcase %}
 
 {% assign customer_order_limit_now_epoch = 'now' | date: '%s' | plus: 0 %}
 {% include 'customer-order-limit-window', window_refresh: customer_order_limit_refresh_1, window_default: customer_order_limit_refresh_all, window_now: customer_order_limit_now_epoch %}
@@ -93,6 +96,18 @@
 {% assign customer_order_limit_window_14 = customer_order_limit_window %}
 {% assign customer_order_limit_window_label_14 = customer_order_limit_window_label %}
 {% assign customer_order_limit_refresh_value_14 = customer_order_limit_window_refresh %}
+{% include 'customer-order-limit-window', window_refresh: customer_order_limit_refresh_15, window_default: customer_order_limit_refresh_all, window_now: customer_order_limit_now_epoch %}
+{% assign customer_order_limit_window_15 = customer_order_limit_window %}
+{% assign customer_order_limit_window_label_15 = customer_order_limit_window_label %}
+{% assign customer_order_limit_refresh_value_15 = customer_order_limit_window_refresh %}
+{% include 'customer-order-limit-window', window_refresh: customer_order_limit_refresh_16, window_default: customer_order_limit_refresh_all, window_now: customer_order_limit_now_epoch %}
+{% assign customer_order_limit_window_16 = customer_order_limit_window %}
+{% assign customer_order_limit_window_label_16 = customer_order_limit_window_label %}
+{% assign customer_order_limit_refresh_value_16 = customer_order_limit_window_refresh %}
+{% include 'customer-order-limit-window', window_refresh: customer_order_limit_refresh_17, window_default: customer_order_limit_refresh_all, window_now: customer_order_limit_now_epoch %}
+{% assign customer_order_limit_window_17 = customer_order_limit_window %}
+{% assign customer_order_limit_window_label_17 = customer_order_limit_window_label %}
+{% assign customer_order_limit_refresh_value_17 = customer_order_limit_window_refresh %}
 
 {% assign customer_order_limit_purchased_1 = 0 %}
 {% assign customer_order_limit_purchased_2 = 0 %}
@@ -108,6 +123,9 @@
 {% assign customer_order_limit_purchased_12 = 0 %}
 {% assign customer_order_limit_purchased_13 = 0 %}
 {% assign customer_order_limit_purchased_14 = 0 %}
+{% assign customer_order_limit_purchased_15 = 0 %}
+{% assign customer_order_limit_purchased_16 = 0 %}
+{% assign customer_order_limit_purchased_17 = 0 %}
 {% assign customer_order_limit_cart_1 = 0 %}
 {% assign customer_order_limit_cart_2 = 0 %}
 {% assign customer_order_limit_cart_3 = 0 %}
@@ -122,6 +140,9 @@
 {% assign customer_order_limit_cart_12 = 0 %}
 {% assign customer_order_limit_cart_13 = 0 %}
 {% assign customer_order_limit_cart_14 = 0 %}
+{% assign customer_order_limit_cart_15 = 0 %}
+{% assign customer_order_limit_cart_16 = 0 %}
+{% assign customer_order_limit_cart_17 = 0 %}
 
 {% comment %}
   Purchase history pass. A line item is matched on either its product handle or
@@ -275,6 +296,27 @@
         {% if customer_order_limit_line_match and customer_order_limit_order_epoch >= customer_order_limit_window_14 %}
           {% assign customer_order_limit_purchased_14 = customer_order_limit_purchased_14 | plus: customer_order_limit_line_quantity %}
         {% endif %}
+        {% assign customer_order_limit_line_match = false %}
+        {% if customer_order_limit_line_handle == customer_order_limit_handle_15_normalized or customer_order_limit_line_sku == customer_order_limit_handle_15_normalized %}
+          {% assign customer_order_limit_line_match = true %}
+        {% endif %}
+        {% if customer_order_limit_line_match and customer_order_limit_order_epoch >= customer_order_limit_window_15 %}
+          {% assign customer_order_limit_purchased_15 = customer_order_limit_purchased_15 | plus: customer_order_limit_line_quantity %}
+        {% endif %}
+        {% assign customer_order_limit_line_match = false %}
+        {% if customer_order_limit_line_handle == customer_order_limit_handle_16_normalized or customer_order_limit_line_sku == customer_order_limit_handle_16_normalized %}
+          {% assign customer_order_limit_line_match = true %}
+        {% endif %}
+        {% if customer_order_limit_line_match and customer_order_limit_order_epoch >= customer_order_limit_window_16 %}
+          {% assign customer_order_limit_purchased_16 = customer_order_limit_purchased_16 | plus: customer_order_limit_line_quantity %}
+        {% endif %}
+        {% assign customer_order_limit_line_match = false %}
+        {% if customer_order_limit_line_handle == customer_order_limit_handle_17_normalized or customer_order_limit_line_sku == customer_order_limit_handle_17_normalized %}
+          {% assign customer_order_limit_line_match = true %}
+        {% endif %}
+        {% if customer_order_limit_line_match and customer_order_limit_order_epoch >= customer_order_limit_window_17 %}
+          {% assign customer_order_limit_purchased_17 = customer_order_limit_purchased_17 | plus: customer_order_limit_line_quantity %}
+        {% endif %}
       {% endfor %}
     {% endunless %}
   {% endfor %}
@@ -388,6 +430,27 @@
   {% if customer_order_limit_cart_match %}
     {% assign customer_order_limit_cart_14 = customer_order_limit_cart_14 | plus: customer_order_limit_cart_quantity %}
   {% endif %}
+  {% assign customer_order_limit_cart_match = false %}
+  {% if customer_order_limit_cart_handle == customer_order_limit_handle_15_normalized or customer_order_limit_cart_sku == customer_order_limit_handle_15_normalized %}
+    {% assign customer_order_limit_cart_match = true %}
+  {% endif %}
+  {% if customer_order_limit_cart_match %}
+    {% assign customer_order_limit_cart_15 = customer_order_limit_cart_15 | plus: customer_order_limit_cart_quantity %}
+  {% endif %}
+  {% assign customer_order_limit_cart_match = false %}
+  {% if customer_order_limit_cart_handle == customer_order_limit_handle_16_normalized or customer_order_limit_cart_sku == customer_order_limit_handle_16_normalized %}
+    {% assign customer_order_limit_cart_match = true %}
+  {% endif %}
+  {% if customer_order_limit_cart_match %}
+    {% assign customer_order_limit_cart_16 = customer_order_limit_cart_16 | plus: customer_order_limit_cart_quantity %}
+  {% endif %}
+  {% assign customer_order_limit_cart_match = false %}
+  {% if customer_order_limit_cart_handle == customer_order_limit_handle_17_normalized or customer_order_limit_cart_sku == customer_order_limit_handle_17_normalized %}
+    {% assign customer_order_limit_cart_match = true %}
+  {% endif %}
+  {% if customer_order_limit_cart_match %}
+    {% assign customer_order_limit_cart_17 = customer_order_limit_cart_17 | plus: customer_order_limit_cart_quantity %}
+  {% endif %}
 {% endfor %}
 
 {% comment %}
@@ -448,4 +511,7 @@
 {% include 'customer-order-limit-rule', rule_handle: customer_order_limit_handle_12_normalized, rule_maximum: customer_order_limit_maximum_12, rule_purchased: customer_order_limit_purchased_12, rule_cart_quantity: customer_order_limit_cart_12, rule_customer_authenticated: customer_order_limit_customer_authenticated, rule_refresh_at: customer_order_limit_refresh_value_12, rule_window_label: customer_order_limit_window_label_12, rule_window_start: customer_order_limit_window_12 %}
 {% include 'customer-order-limit-rule', rule_handle: customer_order_limit_handle_13_normalized, rule_maximum: customer_order_limit_maximum_13, rule_purchased: customer_order_limit_purchased_13, rule_cart_quantity: customer_order_limit_cart_13, rule_customer_authenticated: customer_order_limit_customer_authenticated, rule_refresh_at: customer_order_limit_refresh_value_13, rule_window_label: customer_order_limit_window_label_13, rule_window_start: customer_order_limit_window_13 %}
 {% include 'customer-order-limit-rule', rule_handle: customer_order_limit_handle_14_normalized, rule_maximum: customer_order_limit_maximum_14, rule_purchased: customer_order_limit_purchased_14, rule_cart_quantity: customer_order_limit_cart_14, rule_customer_authenticated: customer_order_limit_customer_authenticated, rule_refresh_at: customer_order_limit_refresh_value_14, rule_window_label: customer_order_limit_window_label_14, rule_window_start: customer_order_limit_window_14 %}
+{% include 'customer-order-limit-rule', rule_handle: customer_order_limit_handle_15_normalized, rule_maximum: customer_order_limit_maximum_15, rule_purchased: customer_order_limit_purchased_15, rule_cart_quantity: customer_order_limit_cart_15, rule_customer_authenticated: customer_order_limit_customer_authenticated, rule_refresh_at: customer_order_limit_refresh_value_15, rule_window_label: customer_order_limit_window_label_15, rule_window_start: customer_order_limit_window_15 %}
+{% include 'customer-order-limit-rule', rule_handle: customer_order_limit_handle_16_normalized, rule_maximum: customer_order_limit_maximum_16, rule_purchased: customer_order_limit_purchased_16, rule_cart_quantity: customer_order_limit_cart_16, rule_customer_authenticated: customer_order_limit_customer_authenticated, rule_refresh_at: customer_order_limit_refresh_value_16, rule_window_label: customer_order_limit_window_label_16, rule_window_start: customer_order_limit_window_16 %}
+{% include 'customer-order-limit-rule', rule_handle: customer_order_limit_handle_17_normalized, rule_maximum: customer_order_limit_maximum_17, rule_purchased: customer_order_limit_purchased_17, rule_cart_quantity: customer_order_limit_cart_17, rule_customer_authenticated: customer_order_limit_customer_authenticated, rule_refresh_at: customer_order_limit_refresh_value_17, rule_window_label: customer_order_limit_window_label_17, rule_window_start: customer_order_limit_window_17 %}
 <script src="{{ 'customer-order-limits.js' | asset_url }}" defer="defer"></script>
