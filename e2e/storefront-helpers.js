@@ -20,6 +20,19 @@ async function expectBasicPageHealth(page) {
   expect(overflow, 'page should not horizontally overflow the viewport').toBeLessThanOrEqual(2);
 }
 
+async function readCart(page) {
+  return page.evaluate(async () => {
+    const response = await fetch('/cart.json', {
+      method: 'GET',
+      credentials: 'same-origin',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    });
+    if (!response.ok) throw new Error(`cart.json returned ${response.status}`);
+    const payload = await response.json();
+    return payload.cart || payload;
+  });
+}
+
 async function productLinksFromCollection(page, collectionPath) {
   await gotoStorefront(page, collectionPath);
   const hrefs = await page.locator('a[href*="/products/"]').evaluateAll(nodes =>
@@ -61,13 +74,56 @@ async function openConfiguredUnlimitedProduct(page) {
 }
 
 async function addCurrentProductToCart(page) {
+  const before = await readCart(page);
+  const beforeCount = Number(before?.item_count || 0);
   const add = page.locator('#AddToCart').first();
   await expect(add).toBeVisible();
   await expect(add).toBeEnabled();
   await add.click();
-  await page.waitForTimeout(750);
+
+  await expect.poll(async () => Number((await readCart(page))?.item_count || 0), {
+    message: 'cart.json should reflect the added product',
+  }).toBeGreaterThan(beforeCount);
+
+  return readCart(page);
+}
+
+async function setFirstCartItemQuantity(page, quantity) {
   await gotoStorefront(page, '/cart');
-  await expect(page.locator('.cart-item').first()).toBeVisible();
+  const cart = await readCart(page);
+  expect(cart?.items?.length || 0, 'cart should contain an item before it is updated').toBeGreaterThan(0);
+
+  const item = cart.items[0];
+  const tokenInput = page.locator('#cart-form input[name="_token"]').first();
+  await expect(tokenInput).toHaveCount(1);
+  const token = await tokenInput.inputValue();
+  const body = {
+    _token: token,
+    ids: [String(item.variant_id)],
+    item_ids: [String(item.id)],
+    updates: [String(quantity)],
+    current_currency: cart.currency?.code || 'SGD',
+  };
+
+  await page.evaluate(payload => new Promise((resolve, reject) => {
+    const updateCart = window.EasyStore?.Action?.updateCart;
+    if (typeof updateCart !== 'function') {
+      reject(new Error('EasyStore.Action.updateCart is unavailable'));
+      return;
+    }
+
+    const timer = setTimeout(() => reject(new Error('EasyStore.Action.updateCart timed out')), 10000);
+    updateCart(payload, result => {
+      clearTimeout(timer);
+      resolve(result || {});
+    });
+  }), body);
+
+  await expect.poll(async () => Number((await readCart(page))?.item_count || 0), {
+    message: `cart item count should become ${quantity}`,
+  }).toBe(quantity);
+
+  return readCart(page);
 }
 
 module.exports = {
@@ -76,5 +132,7 @@ module.exports = {
   gotoStorefront,
   limitedProductPath,
   openConfiguredUnlimitedProduct,
+  readCart,
   searchTerm,
+  setFirstCartItemQuantity,
 };
