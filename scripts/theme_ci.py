@@ -37,11 +37,30 @@ SCHEMA_BLOCK = re.compile(
     r"{%\s*schema\s*%}(?P<body>.*?){%\s*endschema\s*%}",
     re.DOTALL,
 )
+# Whitespace control is part of the tag: without the optional dashes a
+# `{%- comment -%}` block was never stripped, so its prose was scanned for tags
+# and references as though it were markup.
 LIQUID_COMMENT = re.compile(
-    r"{%\s*comment\s*%}.*?{%\s*endcomment\s*%}",
+    r"{%-?\s*comment\s*-?%}.*?{%-?\s*endcomment\s*-?%}",
     re.DOTALL,
 )
 LIQUID_TAG = re.compile(r"{%-?\s*(?P<name>[A-Za-z_][\w-]*)\b")
+LIQUID_TAG_SPAN = re.compile(r"{%-?.*?-?%}", re.DOTALL)
+# Tags that open a block and need a matching end tag. An unbalanced block is
+# invisible to every other check here and to the Python tests, and only surfaces
+# when EasyStore compiles the theme - by which point the upload has failed or the
+# storefront is serving the platform's unavailable page.
+LIQUID_BLOCK_TAGS = {
+    "capture",
+    "case",
+    # A balanced comment is stripped before the balance pass, so `comment` only
+    # reaches it when the block was never closed.
+    "comment",
+    "for",
+    "if",
+    "schema",
+    "unless",
+}
 EASYSTORE_LIQUID_TAGS = {
     "app_snippet",
     "assign",
@@ -97,7 +116,14 @@ def _validate_liquid(
     path: Path, text: str, theme_dir: Path, issues: list[str]
 ) -> None:
     relative = path.relative_to(theme_dir).as_posix()
-    references = LIQUID_COMMENT.sub("", text)
+    # Comment bodies are removed but their line breaks are kept, so reported
+    # line numbers still match the file a developer opens.
+    references = LIQUID_COMMENT.sub(
+        lambda match: "\n" * match.group(0).count("\n"), text
+    )
+
+    def line_of(offset: int) -> int:
+        return references.count("\n", 0, offset) + 1
 
     for match in LIQUID_TAG.finditer(references):
         tag_name = match.group("name")
@@ -105,6 +131,35 @@ def _validate_liquid(
             issues.append(
                 f"{relative}: unsupported EasyStore Liquid tag {tag_name!r}"
             )
+
+    # A tag written across several lines parses on some Liquid engines and not
+    # others. No template here needs one, so the portable form is required.
+    for match in LIQUID_TAG_SPAN.finditer(references):
+        if "\n" in match.group(0):
+            issues.append(
+                f"{relative}: Liquid tag spans lines at line "
+                f"{line_of(match.start())}; keep a tag on one line"
+            )
+
+    open_blocks: list[tuple[str, int]] = []
+    for match in LIQUID_TAG.finditer(references):
+        tag_name = match.group("name")
+        if tag_name in LIQUID_BLOCK_TAGS:
+            open_blocks.append((tag_name, line_of(match.start())))
+        elif tag_name.startswith("end"):
+            opened = tag_name[3:]
+            if open_blocks and open_blocks[-1][0] == opened:
+                open_blocks.pop()
+            else:
+                inside = open_blocks[-1][0] if open_blocks else "no block"
+                issues.append(
+                    f"{relative}: {tag_name!r} at line {line_of(match.start())} "
+                    f"closes {opened!r}, but {inside!r} is open"
+                )
+    for tag_name, line in open_blocks:
+        issues.append(
+            f"{relative}: {tag_name!r} block opened at line {line} is never closed"
+        )
 
     for match in ASSET_REFERENCE.finditer(references):
         asset_name = match.group("name").partition("?")[0]

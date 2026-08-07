@@ -182,6 +182,72 @@ class ThemeCITests(unittest.TestCase):
             issues,
         )
 
+    def test_a_liquid_tag_may_not_span_lines(self) -> None:
+        # Multi-line tags parse on some Liquid engines and not others, and the
+        # platform's parser is the one that matters at upload time.
+        theme = self.make_theme()
+        (theme / "snippets" / "wrapped.liquid").write_text(
+            "{% comment %}\nprose\nover\nlines\n{% endcomment %}\n"
+            "{% if a == 'x'\n  or a == 'y' %}ok{% endif %}\n",
+            encoding="utf-8",
+        )
+
+        issues = theme_ci.validate_theme(theme)
+        self.assertIn(
+            "snippets/wrapped.liquid: Liquid tag spans lines at line 6; "
+            "keep a tag on one line",
+            issues,
+        )
+
+    def test_unbalanced_liquid_blocks_are_reported(self) -> None:
+        # An unbalanced block is invisible to every other check and breaks the
+        # theme only once EasyStore compiles it.
+        theme = self.make_theme()
+        cases = {
+            "wrong-ender.liquid": "{% if a %}x{% endfor %}\n",
+            "nothing-open.liquid": "x{% endif %}\n",
+            "never-closed.liquid": "{% for item in list %}x\n",
+            "open-comment.liquid": "{% comment %}unfinished\n",
+        }
+        for filename, content in cases.items():
+            (theme / "snippets" / filename).write_text(content, encoding="utf-8")
+
+        issues = theme_ci.validate_theme(theme)
+        self.assertIn(
+            "snippets/wrong-ender.liquid: 'endfor' at line 1 closes 'for', "
+            "but 'if' is open",
+            issues,
+        )
+        self.assertIn(
+            "snippets/nothing-open.liquid: 'endif' at line 1 closes 'if', "
+            "but 'no block' is open",
+            issues,
+        )
+        self.assertIn(
+            "snippets/never-closed.liquid: 'for' block opened at line 1 is "
+            "never closed",
+            issues,
+        )
+        self.assertIn(
+            "snippets/open-comment.liquid: 'comment' block opened at line 1 is "
+            "never closed",
+            issues,
+        )
+
+    def test_a_whitespace_controlled_comment_is_still_a_comment(self) -> None:
+        # `{%- comment -%}` went unstripped, so prose inside it was scanned as
+        # markup and its own end tag looked like a stray one.
+        theme = self.make_theme()
+        (theme / "snippets" / "commented.liquid").write_text(
+            "{%- comment -%}\n"
+            "{% include 'not-a-real-snippet' %}\n"
+            "{%- endcomment -%}\n"
+            "<p>Body</p>\n",
+            encoding="utf-8",
+        )
+
+        self.assertEqual(theme_ci.validate_theme(theme), [])
+
     def test_section_schema_errors(self) -> None:
         theme = self.make_theme()
         cases = {
