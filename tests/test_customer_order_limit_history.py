@@ -126,7 +126,7 @@ class HistoryPayloadStructureTests(unittest.TestCase):
         limits = self.read("snippets/customer-order-limits.liquid")
 
         self.assertIn("windowStart: {{ customer_order_limit_rule_window_start | json }},", rule)
-        self.assertEqual(limits.count("rule_window_start: customer_order_limit_window_"), 14)
+        self.assertEqual(limits.count("rule_window_start: customer_order_limit_window_"), 17)
         self.assertIn("customerId: {{ customer_order_limit_customer_id | json }},", limits)
 
     def test_validator_loads_history_and_holds_purchases_until_it_knows(self) -> None:
