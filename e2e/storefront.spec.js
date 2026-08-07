@@ -28,11 +28,11 @@ test.describe('storefront navigation and discovery', () => {
       await expect(page.locator('#menu-drawer')).toBeVisible();
       await expect(page.locator('#menu-drawer a[href="/collections/the-hobbit"]')).toBeVisible();
     } else {
-      const desktopNav = page.locator('header nav').filter({ visible: true }).first();
+      const desktopNav = page.locator('header nav:visible').first();
       await expect(desktopNav).toBeVisible();
-      await expect(desktopNav.locator('a[href="/collections/the-hobbit"]')).toBeVisible();
-      await expect(desktopNav.locator('a[href="/collections/marvel-super-heroes"]')).toBeVisible();
-      await expect(desktopNav.locator('a[href="/collections/secrets-of-strixhaven"]')).toBeVisible();
+      await expect(desktopNav.locator('a[href="/collections/the-hobbit"]:visible').first()).toBeVisible();
+      await expect(desktopNav.locator('a[href="/collections/marvel-super-heroes"]:visible').first()).toBeVisible();
+      await expect(desktopNav.locator('a[href="/collections/secrets-of-strixhaven"]:visible').first()).toBeVisible();
     }
   });
 
