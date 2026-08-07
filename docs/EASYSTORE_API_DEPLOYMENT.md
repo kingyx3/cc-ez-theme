@@ -22,6 +22,8 @@ The deploy job does not replace the normal package artifact. The artifact remain
 
 If `EASYSTORE_ADMIN_TOKEN` is not configured, validation and packaging still succeed. The deploy job prints a warning and skips the EasyStore request. Once the secret is configured, subsequent successful workflow runs import automatically.
 
+The chained path has been verified against EasyStore with a successful HTTP 200 import from the PR branch.
+
 ## Deployment naming
 
 The source theme remains unchanged in Git. Before deployment, the workflow copies `theme/` to a temporary staging directory and stamps deployment metadata into both:
