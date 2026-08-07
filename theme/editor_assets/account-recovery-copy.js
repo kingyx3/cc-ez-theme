@@ -19,8 +19,7 @@
  */
 (() => {
   const EMAIL_PROMISE = /send\s+you\s+an\s+e-?mail\s+to\s+reset\s+your\s+password/i;
-  const OTP_COPY = 'Confirm your mobile OTP to proceed — enter your mobile '
-    + 'number and we will send you a one-time password.';
+  const OTP_COPY = 'Confirm your mobile OTP to proceed';
   // Markers of a page that has a recovery step, so the rest of the storefront
   // neither scans nor observes anything.
   const RECOVERY_MARKERS = [
