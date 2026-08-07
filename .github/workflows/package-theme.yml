@@ -158,7 +158,6 @@ jobs:
               print(f"display_name={display_name}", file=output)
               print(f"version={version}", file=output)
               print(f"package_filename={package_filename}", file=output)
-              print(f"branch_slug={slug}", file=output)
           PY
 
       - name: Stamp deployment metadata and package
