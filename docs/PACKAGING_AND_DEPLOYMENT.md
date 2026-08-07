@@ -138,16 +138,15 @@ The archive must not contain:
 
 ## 8. GitHub Actions behavior
 
-The `Package EasyStore theme` workflow runs:
+The `Package EasyStore theme` workflow runs on pushes to every branch and through manual workflow dispatch.
 
-- on pull requests targeting `main`;
-- on pushes to `main`;
-- through manual workflow dispatch.
+Its jobs are chained in this order:
 
-The test job always validates the real theme and enforces coverage.
+1. `test` validates the real theme and enforces coverage;
+2. `package` builds the normal downloadable `cc-ez-theme` artifact;
+3. `deploy` starts only after `package` succeeds and imports an unpublished deployment candidate into EasyStore when `EASYSTORE_ADMIN_TOKEN` is configured.
 
-The package job runs after successful tests for pushes to `main` and manual
-runs. It:
+The normal package job:
 
 1. builds `cc-ez-theme.zip`;
 2. extracts it into an artifact staging directory;
@@ -157,28 +156,39 @@ runs. It:
 GitHub itself creates the downloaded artifact ZIP. Uploading the extracted
 wrapper prevents an incorrect ZIP-inside-ZIP structure.
 
-## 9. Download and upload
+The deploy job creates a separate temporary staging copy. It stamps branch/run/commit identity into the theme metadata, validates that staging copy, creates a deployment ZIP whose internal root remains `cc-ez-theme/`, and sends it to the EasyStore admin theme import endpoint.
 
-After merging to `main`:
+See [EasyStore API deployment](EASYSTORE_API_DEPLOYMENT.md) for the credential and naming rules.
+
+## 9. Automatic import and manual fallback
+
+When `EASYSTORE_ADMIN_TOKEN` exists, every successful workflow run automatically attempts an EasyStore import after packaging. The workflow does not intentionally publish the imported theme.
+
+In EasyStore:
+
+1. Open **Channels → Online Store → Themes**.
+2. Find the imported theme using the branch/run/SHA identity shown in the GitHub job summary.
+3. Open **Edit source** and confirm files were imported.
+4. Preview homepage, collection, product, search, cart, account, and mobile navigation behavior.
+5. Publish only after preview acceptance.
+
+If automatic import is unavailable, use the package artifact as a fallback:
 
 1. Open the successful `Package EasyStore theme` workflow run.
 2. Download the `cc-ez-theme` artifact.
 3. Do not extract and recompress it.
-4. In EasyStore, open **Channels → Online Store → Themes**.
-5. Choose **More actions → Upload theme**.
-6. Upload the downloaded artifact ZIP.
-7. Keep the imported theme unpublished initially.
-8. Open **Edit source** and confirm files were imported.
-9. Preview homepage, collection, product, search, cart, account, and mobile
-   navigation behavior.
-10. Publish only after preview acceptance.
+4. In EasyStore, choose **More actions → Upload theme**.
+5. Upload the downloaded artifact ZIP.
+
+If `EASYSTORE_ADMIN_TOKEN` is missing, packaging still succeeds and the deploy job records a warning instead of attempting an unauthenticated request.
 
 ## 10. Release acceptance checklist
 
-- [ ] Pull-request CI succeeded.
-- [ ] The merge-to-main workflow succeeded.
+- [ ] The workflow test job succeeded.
+- [ ] The package job succeeded.
 - [ ] The artifact has one `cc-ez-theme/` root.
 - [ ] There is no nested ZIP.
+- [ ] The deploy job imported the expected branch/run/SHA candidate, or manual fallback was used intentionally.
 - [ ] EasyStore Edit source shows populated runtime directories.
 - [ ] The unpublished preview renders.
 - [ ] Best Sellers, The Hobbit, Marvel, and Strixhaven each show two rows of three products on desktop.
@@ -195,6 +205,14 @@ After merging to `main`:
 - [ ] Add to cart, cart update, and checkout handoff work.
 
 ## 11. Troubleshooting
+
+### Automatic import was skipped
+
+The `EASYSTORE_ADMIN_TOKEN` repository secret is not configured. Add it under **Settings → Secrets and variables → Actions**. The next successful workflow run will attempt the import.
+
+### Automatic import returns 401 or 403
+
+The EasyStore admin bearer token has likely expired or been revoked. Capture a fresh token from your authenticated EasyStore admin session and replace the repository secret.
 
 ### EasyStore creates a theme with no source files
 
