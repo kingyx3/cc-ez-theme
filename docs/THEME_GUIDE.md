@@ -444,6 +444,30 @@ Before opening a pull request:
   in the template when the platform text is wrong for this store — the password
   recovery paragraph does that because the platform copy promises a reset email
   while this store confirms a mobile OTP.
+- With `shop.phone_account_enabled`, one field on login, register and
+  activate-account carries either an email address or the mobile number that
+  receives the OTP. Its `autocomplete` switches to `username` in the same branch
+  that switches its title: `autocomplete="email"` makes browsers and password
+  managers offer a saved address, and a shopper who accepts it submits a value
+  the store cannot text, so no SMS arrives. Anything added to that field belongs
+  in the same branch. `tests/test_account_identifier_field.py` holds this.
+- `/account/login`, `/account/register`, `/account/auth` and the other auth
+  entry points are pages a shopper is on *because* they are not signed in, so a
+  path under `/account/` is never evidence of a session. `customer-order-limits.js`
+  read it as evidence and crawled `/account/orders` from the OTP step with the
+  session cookie attached, which stopped the verification SMS being sent. Nothing
+  in the theme may fetch, redirect, or write from those pages —
+  `onAuthEntryPage()` gates it, and `tests/test_auth_page_history_requests.py`
+  executes the real asset to prove no request leaves them.
+- The theme cannot send an SMS; EasyStore does. When an OTP never arrives, find
+  out which side failed before changing the theme — paste
+  `scripts/otp-submit-check.console.js` into the console on `/account/login` and
+  submit. It reports whether the fixed build is even the one serving the page
+  (the packaging workflow imports each branch UNPUBLISHED, so the storefront
+  keeps serving the published theme), whether the POST fired and with what value,
+  and whether anything blocked it. A POST that succeeds and still sends no text
+  is an EasyStore-side failure — SMS credits, gateway, provider or a rate limit —
+  and no theme deploy will fix it.
 - Theme validation reduces known packaging and static-reference failures but
   cannot guarantee that third-party apps or future EasyStore platform changes
   will never affect runtime behavior.
