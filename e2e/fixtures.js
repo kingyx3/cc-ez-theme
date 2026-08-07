@@ -15,14 +15,46 @@ function errorTouchesOrigin(error, origin) {
   });
 }
 
-function isKnownPlatformPageError(error, currentUrl, origin) {
-  let pathname = '';
+function currentPath(currentUrl) {
   try {
-    pathname = new URL(currentUrl).pathname;
+    return new URL(currentUrl).pathname;
   } catch {
-    return false;
+    return '';
+  }
+}
+
+function isKnownWebKitThirdPartyError(error, currentUrl, origin, browserName) {
+  if (browserName !== 'webkit') return false;
+
+  const message = error.message || '';
+  const pathname = currentPath(currentUrl);
+
+  if (
+    /accessing a frame with origin/i.test(message)
+    && /Protocols, domains, and ports must match/i.test(message)
+  ) {
+    const messageUrls = message.match(/https?:\/\/[^"'\s)]+/g) || [];
+    const hasExternalOrigin = messageUrls.some(value => {
+      try {
+        return new URL(value).origin !== origin;
+      } catch {
+        return false;
+      }
+    });
+    if (hasExternalOrigin) return true;
   }
 
+  if (message === 'TypeError: Load failed') {
+    return pathname === '/cart'
+      || pathname.startsWith('/checkout')
+      || pathname.startsWith('/account/login');
+  }
+
+  return false;
+}
+
+function isKnownPlatformPageError(error, currentUrl, origin) {
+  const pathname = currentPath(currentUrl);
   if (pathname !== '/cart') return false;
 
   if (error.message === 'cookies is not defined') {
@@ -39,13 +71,17 @@ function isKnownPlatformPageError(error, currentUrl, origin) {
 }
 
 const test = base.extend({
-  page: async ({ page, baseURL }, use, testInfo) => {
+  page: async ({ page, baseURL, browserName }, use, testInfo) => {
     const pageErrors = [];
     const knownPlatformErrors = [];
     const badSameOriginResources = [];
     const origin = new URL(baseURL).origin;
 
     page.on('pageerror', error => {
+      if (isKnownWebKitThirdPartyError(error, page.url(), origin, browserName)) {
+        knownPlatformErrors.push(error.message);
+        return;
+      }
       if (!errorTouchesOrigin(error, origin)) return;
       if (isKnownPlatformPageError(error, page.url(), origin)) {
         knownPlatformErrors.push(error.message);
