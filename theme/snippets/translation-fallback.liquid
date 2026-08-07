@@ -1,5 +1,20 @@
+{%- comment -%}
+  Prints a platform translation, or `fallback` when the store has none.
+
+  A missing key shows up in more than one shape: an empty string, the key echoed
+  back, or a "translation missing" marker. `blank` alone is not enough — the
+  comparison is unreliable across Liquid engines, which is how an empty
+  `customer.login.email` reached production as a field with no visible title. The
+  value is forced to a string and compared with '' as well.
+{%- endcomment -%}
 {%- assign translated_value = translation_key | t -%}
-{%- if translated_value == blank or translated_value == translation_key -%}
+{%- assign translation_fallback_probe = translated_value | default: '' | append: '' | strip -%}
+{%- assign translation_fallback_marker = translation_fallback_probe | downcase -%}
+{%- if translated_value == blank
+  or translation_fallback_probe == ''
+  or translated_value == translation_key
+  or translation_fallback_probe == translation_key
+  or translation_fallback_marker contains 'translation missing' -%}
   {%- assign translated_value = fallback -%}
 {%- endif -%}
 {%- if escape_output -%}
