@@ -6,8 +6,8 @@ const {
   limitedProductPath,
   openConfiguredUnlimitedProduct,
   readCart,
+  removeFirstCartItem,
   searchTerm,
-  setFirstCartItemQuantity,
 } = require('./storefront-helpers');
 
 test.describe('storefront navigation and discovery', () => {
@@ -113,7 +113,7 @@ test.describe('product, cart, and checkout handoff', () => {
     expect(addedCart.item_count).toBe(1);
     expect(addedCart.items?.length || 0).toBe(1);
 
-    await setFirstCartItemQuantity(page, 0);
+    await removeFirstCartItem(page);
     const emptyCart = await readCart(page);
     expect(emptyCart.item_count).toBe(0);
     expect(emptyCart.items || []).toHaveLength(0);
