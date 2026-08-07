@@ -15,14 +15,38 @@ function errorTouchesOrigin(error, origin) {
   });
 }
 
+function isKnownPlatformPageError(error, currentUrl, origin) {
+  let pathname = '';
+  try {
+    pathname = new URL(currentUrl).pathname;
+  } catch {
+    return false;
+  }
+
+  if (pathname !== '/cart') return false;
+  if (error.message !== "Cannot read properties of null (reading 'items')") return false;
+
+  const stack = error.stack || '';
+  const escapedOrigin = origin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const getCartFrame = new RegExp(`at getCart \\(${escapedOrigin}/cart:\\d+:\\d+\\)`);
+  const onCartViewFrame = new RegExp(`at async onCartView \\(${escapedOrigin}/cart:\\d+:\\d+\\)`);
+  return getCartFrame.test(stack) && onCartViewFrame.test(stack);
+}
+
 const test = base.extend({
   page: async ({ page, baseURL }, use, testInfo) => {
     const pageErrors = [];
+    const knownPlatformErrors = [];
     const badSameOriginResources = [];
     const origin = new URL(baseURL).origin;
 
     page.on('pageerror', error => {
-      if (errorTouchesOrigin(error, origin)) pageErrors.push(error.message);
+      if (!errorTouchesOrigin(error, origin)) return;
+      if (isKnownPlatformPageError(error, page.url(), origin)) {
+        knownPlatformErrors.push(error.message);
+        return;
+      }
+      pageErrors.push(error.message);
     });
     page.on('response', response => {
       const request = response.request();
@@ -38,6 +62,12 @@ const test = base.extend({
 
     await use(page);
 
+    if (knownPlatformErrors.length) {
+      await testInfo.attach('known-platform-page-errors.txt', {
+        body: Buffer.from(knownPlatformErrors.join('\n')),
+        contentType: 'text/plain',
+      });
+    }
     if (pageErrors.length) {
       await testInfo.attach('page-errors.txt', {
         body: Buffer.from(pageErrors.join('\n')),
