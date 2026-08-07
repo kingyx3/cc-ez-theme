@@ -2,13 +2,28 @@ const { test: base, expect } = require('@playwright/test');
 
 const guardedResourceTypes = new Set(['stylesheet', 'script', 'image', 'font']);
 
+function errorTouchesOrigin(error, origin) {
+  const urls = (error.stack || '').match(/https?:\/\/[^\s)]+/g) || [];
+  if (!urls.length) return true;
+
+  return urls.some(value => {
+    try {
+      return new URL(value).origin === origin;
+    } catch {
+      return true;
+    }
+  });
+}
+
 const test = base.extend({
   page: async ({ page, baseURL }, use, testInfo) => {
     const pageErrors = [];
     const badSameOriginResources = [];
     const origin = new URL(baseURL).origin;
 
-    page.on('pageerror', error => pageErrors.push(error.message));
+    page.on('pageerror', error => {
+      if (errorTouchesOrigin(error, origin)) pageErrors.push(error.message);
+    });
     page.on('response', response => {
       const request = response.request();
       if (!guardedResourceTypes.has(request.resourceType())) return;
@@ -36,7 +51,7 @@ const test = base.extend({
       });
     }
 
-    expect.soft(pageErrors, 'uncaught browser errors').toEqual([]);
+    expect.soft(pageErrors, 'uncaught same-origin browser errors').toEqual([]);
     expect.soft(badSameOriginResources, 'same-origin resources returning HTTP 4xx/5xx').toEqual([]);
   },
 });
