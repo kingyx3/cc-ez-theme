@@ -24,6 +24,11 @@ function isKnownPlatformPageError(error, currentUrl, origin) {
   }
 
   if (pathname !== '/cart') return false;
+
+  if (error.message === 'cookies is not defined') {
+    return true;
+  }
+
   if (error.message !== "Cannot read properties of null (reading 'items')") return false;
 
   const stack = error.stack || '';
