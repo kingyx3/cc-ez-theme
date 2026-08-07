@@ -88,40 +88,24 @@ async function addCurrentProductToCart(page) {
   return readCart(page);
 }
 
-async function setFirstCartItemQuantity(page, quantity) {
+async function removeFirstCartItem(page) {
   await gotoStorefront(page, '/cart');
   const cart = await readCart(page);
-  expect(cart?.items?.length || 0, 'cart should contain an item before it is updated').toBeGreaterThan(0);
+  expect(cart?.items?.length || 0, 'cart should contain an item before it is removed').toBeGreaterThan(0);
 
-  const item = cart.items[0];
-  const tokenInput = page.locator('#cart-form input[name="_token"]').first();
-  await expect(tokenInput).toHaveCount(1);
-  const token = await tokenInput.inputValue();
-  const body = {
-    _token: token,
-    ids: [String(item.variant_id)],
-    item_ids: [String(item.id)],
-    updates: [String(quantity)],
-    current_currency: cart.currency?.code || 'SGD',
-  };
-
-  await page.evaluate(payload => new Promise((resolve, reject) => {
-    const updateCart = window.EasyStore?.Action?.updateCart;
-    if (typeof updateCart !== 'function') {
-      reject(new Error('EasyStore.Action.updateCart is unavailable'));
-      return;
-    }
-
-    const timer = setTimeout(() => reject(new Error('EasyStore.Action.updateCart timed out')), 10000);
-    updateCart(payload, result => {
-      clearTimeout(timer);
-      resolve(result || {});
-    });
-  }), body);
+  const accessibleRemove = page.getByRole('button', { name: /^remove\b/i }).first();
+  if (await accessibleRemove.count()) {
+    await accessibleRemove.click();
+  } else {
+    const legacyRemove = page.getByText('Remove', { exact: true }).first();
+    await expect(legacyRemove).toBeVisible();
+    await legacyRemove.click();
+  }
 
   await expect.poll(async () => Number((await readCart(page))?.item_count || 0), {
-    message: `cart item count should become ${quantity}`,
-  }).toBe(quantity);
+    message: 'cart item count should become zero after Remove',
+    timeout: 15_000,
+  }).toBe(0);
 
   return readCart(page);
 }
@@ -133,6 +117,6 @@ module.exports = {
   limitedProductPath,
   openConfiguredUnlimitedProduct,
   readCart,
+  removeFirstCartItem,
   searchTerm,
-  setFirstCartItemQuantity,
 };
