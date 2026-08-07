@@ -108,12 +108,61 @@
     out('placeholder', JSON.stringify(input.getAttribute('placeholder') || ''));
     out('value present', Boolean(input.value));
 
+    // A label carrying the right text can still be invisible: unfloated behind
+    // the value, painted over, clipped, or styled away by something the theme
+    // does not ship. Measuring beats guessing, so the geometry of the field that
+    // works is printed beside the one that does not.
+    console.log('--- why a title is or is not on screen ---');
+    const measure = (id) => {
+      const field = document.getElementById(id);
+      const title = document.querySelector('label[for="' + id + '"]');
+      if (!field || !title) return out(id, field ? 'no label element' : 'not on this page');
+      const style = getComputedStyle(title);
+      const box = title.getBoundingClientRect();
+      const around = field.getBoundingClientRect();
+      const centre = typeof document.elementFromPoint === 'function'
+        ? document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)
+        : null;
+      const inside = box.height > 0 && box.width > 0 && box.top >= around.top - 1
+        && box.bottom <= around.bottom + 1;
+      const painted = Number(style.opacity) > 0 && style.visibility !== 'hidden'
+        && style.display !== 'none';
+      out(id + ' text', JSON.stringify(text(title)));
+      out(id + ' floated up', style.fontSize + ' at top ' + style.top
+        + (field.matches(':placeholder-shown') ? ' (placeholder showing)' : ' (has a value)'));
+      out(id + ' painted', painted + ' opacity ' + style.opacity + ' ' + style.color
+        + ' visibility ' + style.visibility + ' display ' + style.display);
+      out(id + ' box', 'label ' + Math.round(box.top) + 'x' + Math.round(box.height)
+        + ' input ' + Math.round(around.top) + 'x' + Math.round(around.height)
+        + ' inside=' + inside);
+      // Labels here are pointer-transparent, so the input winning this hit test
+      // is normal. Anything else on top is what to look at.
+      const expected = centre === field || centre === title;
+      out(id + ' topmost at label', centre ? (centre.tagName.toLowerCase()
+        + (centre.id ? '#' + centre.id : '')
+        + (expected ? ' (expected — the label is pointer-transparent)' : ' (SOMETHING ELSE COVERS IT)')) : 'nothing');
+      out(id + ' label follows input', field.nextElementSibling === title
+        ? 'yes' : 'no — ' + (field.nextElementSibling ? field.nextElementSibling.tagName.toLowerCase() : 'nothing') + ' sits between them');
+      return undefined;
+    };
+    measure('DetailEmail');
+    measure('DetailPhone');
+
+    // Anything not served from this theme's assets can restyle these fields.
+    const foreign = Array.from(document.styleSheets)
+      .map((sheet) => sheet.href || '(inline)')
+      .filter((href) => !/\/assets\/(base|customer|conversion-theme|compact-spacing|flatpickr)/.test(href));
+    out('other stylesheets', foreign.length ? foreign.join(' ') : '(none)');
+
     console.log('--- verdict ---');
     if (!label) console.log('NO LABEL: the field has no label element at all.');
-    else if (text(label)) console.log('TITLED: the field names itself as "' + text(label) + '".');
-    else console.log(
+    else if (!text(label)) console.log(
       'UNTITLED: the label is empty, so this store returns nothing for '
       + 'customer.login.email and the published build has no fallback yet.'
+    );
+    else console.log(
+      'TITLED IN THE DOM as "' + text(label) + '". If it is not on screen, the '
+      + 'lines above say why: compare DetailEmail with DetailPhone, which works.'
     );
   }
 

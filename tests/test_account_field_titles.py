@@ -310,6 +310,19 @@ class ConsoleCheckTests(unittest.TestCase):
         self.assertIn("UNTITLED", self.script)
         self.assertIn(EMAIL_KEY, self.script)
 
+    def test_it_measures_why_a_title_is_not_on_screen(self) -> None:
+        # A label can hold the right text and still not be visible. The store
+        # reported exactly that, so the script measures the field that works
+        # beside the one that does not instead of guessing.
+        self.assertIn("getComputedStyle(title)", self.script)
+        self.assertIn("getBoundingClientRect()", self.script)
+        self.assertIn("document.elementFromPoint(", self.script)
+        self.assertIn("measure('DetailEmail')", self.script)
+        self.assertIn("measure('DetailPhone')", self.script)
+        self.assertIn("label follows input", self.script)
+        self.assertIn("other stylesheets", self.script)
+        self.assertIn("TITLED IN THE DOM", self.script)
+
     def test_it_lists_platform_fields_that_carry_no_label(self) -> None:
         self.assertIn(".field__input", self.script)
         self.assertIn("fields with no label", self.script)
