@@ -252,4 +252,39 @@ jobs:
             echo "- Package SHA-256: \`$(sha256sum "${PACKAGE_FILENAME}" | cut -d ' ' -f 1)\`"
             echo
             echo "The theme was imported after the package job succeeded. It was not intentionally published."
+            echo
+            echo "#### Publishing this theme replaces store settings"
+            echo
+            echo "\`config/settings_data.json\` ships inside the package, and EasyStore applies it"
+            echo "when the theme is published. Anything a merchant has since changed in the EasyStore"
+            echo "editor and not mirrored back into this repository is reverted at that moment - the"
+            echo "announcement bar, the header menu and product section settings among them."
+            echo
+            echo "Check these against the live store BEFORE publishing:"
+            echo
+            python - <<'PY'
+          import json, pathlib, sys
+
+          # Read from the packaged tree, so the summary describes what was actually sent.
+          path = pathlib.Path("deploy-theme/config/settings_data.json")
+          if not path.exists():
+              print("| (settings_data.json not readable) | |")
+              sys.exit(0)
+
+          data = json.loads(path.read_text(encoding="utf-8"))
+          preset = data.get("presets", {}).get(data.get("current", ""), {})
+          header = preset.get("sections", {}).get("header", {}).get("settings", {})
+
+          rows = [
+              ("announcement shown", header.get("message")),
+              ("announcement text", header.get("message_text")),
+              ("header menu", header.get("main_linklist")),
+              ("active preset", data.get("current")),
+          ]
+          print("| Setting | Value this package applies |")
+          print("| --- | --- |")
+          for name, value in rows:
+              rendered = "(unset)" if value in (None, "") else f"`{value}`"
+              print(f"| {name} | {rendered} |")
+          PY
           } >> "${GITHUB_STEP_SUMMARY}"

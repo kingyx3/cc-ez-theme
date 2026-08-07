@@ -157,6 +157,31 @@ idempotency-key: phase1-dummy:web:<fresh UUID>
 
 Browser-only headers such as `sec-ch-ua`, `user-agent`, `referer`, and the multipart boundary are intentionally not hard-coded.
 
+## Publishing replaces store settings
+
+`config/settings_data.json` is a required theme file, so it ships inside every
+package and EasyStore applies it when the theme is **published**. Importing is
+safe — the imported theme sits unpublished and changes nothing. Publishing is
+the destructive step.
+
+Whatever a merchant has changed in the EasyStore editor since this repository
+last mirrored those values is reverted at that moment. On 7 Aug this took the
+announcement bar, the header menu and the product buy-now button off the live
+storefront, and switched purchase-limit enforcement off, until the previous
+theme was restored.
+
+Before publishing a build:
+
+1. Read the **"Publishing this theme replaces store settings"** table in the
+   deploy job summary. It prints the announcement flag and text, the header menu
+   handle, and the active preset that the package will apply.
+2. Compare those against the live store.
+3. If they differ, mirror the live values into `theme/config/settings_data.json`
+   (and `theme/editor_config/settings_data.json`) and re-run the build first.
+
+Restoring is the same operation in reverse: publish the previously published
+theme from the EasyStore theme list.
+
 ## Troubleshooting
 
 ### Import was skipped
