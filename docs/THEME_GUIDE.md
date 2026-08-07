@@ -451,6 +451,14 @@ Before opening a pull request:
   managers offer a saved address, and a shopper who accepts it submits a value
   the store cannot text, so no SMS arrives. Anything added to that field belongs
   in the same branch. `tests/test_account_identifier_field.py` holds this.
+- `/account/login`, `/account/register`, `/account/auth` and the other auth
+  entry points are pages a shopper is on *because* they are not signed in, so a
+  path under `/account/` is never evidence of a session. `customer-order-limits.js`
+  read it as evidence and crawled `/account/orders` from the OTP step with the
+  session cookie attached, which stopped the verification SMS being sent. Nothing
+  in the theme may fetch, redirect, or write from those pages —
+  `onAuthEntryPage()` gates it, and `tests/test_auth_page_history_requests.py`
+  executes the real asset to prove no request leaves them.
 - Theme validation reduces known packaging and static-reference failures but
   cannot guarantee that third-party apps or future EasyStore platform changes
   will never affect runtime behavior.

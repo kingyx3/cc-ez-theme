@@ -82,8 +82,22 @@
   const SIGNED_IN_MARKUP = 'body.customer-logged-in, [data-customer-authenticated="true"], a[href^="/account/logout"]';
   const SIGNED_OUT_MARKUP = '[data-customer-authenticated="false"]';
 
+  // The account pages a shopper reaches *because* they are not signed in. Being
+  // on one is the opposite of proof of sign-in, and `/account/auth` is where
+  // EasyStore runs the phone OTP step: a request fired from here carries the
+  // session cookie into the middle of a verification the theme knows nothing
+  // about. Nothing is ever loaded or redirected from these pages.
+  const AUTH_ENTRY_PATH = /^\/account\/(login|register|auth|recover|activate|reset|guest)(\/|$)/;
+
+  const onAuthEntryPage = () => (
+    AUTH_ENTRY_PATH.test(String(window.location.pathname || ''))
+  );
+
+  // A signed-in account page: /account, /account/orders, /account/details. The
+  // auth entry points above are excluded, so this stays a signed-in hint.
   const onAccountPage = () => (
     /^\/account(\/|$)/.test(String(window.location.pathname || ''))
+    && !onAuthEntryPage()
   );
 
   // Cached once the page proves sign-in state either way. While the state is
@@ -119,6 +133,8 @@
 
   const redirectToLogin = () => {
     if (!shopperSignedOut()) return false;
+    // Already on the page we would send them to; navigating again would loop.
+    if (onAuthEntryPage()) return false;
     window.location.assign(loginRedirectUrl());
     return true;
   };
@@ -396,6 +412,14 @@
 
   const loadHistory = () => {
     if (historyKnown() || historyState === 'unavailable') return Promise.resolve();
+    // Never crawl the order pages from an auth entry point. There is no purchase
+    // to measure on /account/login or /account/auth, and the crawl below sends up
+    // to HISTORY_MAX_REQUESTS cookie-bearing requests at a protected endpoint -
+    // on /account/auth, straight through EasyStore's phone OTP step.
+    if (onAuthEntryPage()) {
+      historyState = 'unavailable';
+      return Promise.resolve();
+    }
     if (shopperSignedOut() || !historySupported()) {
       historyState = 'unavailable';
       return Promise.resolve();
@@ -867,6 +891,7 @@
 
   window.CustomerOrderLimits = {
     customerAuthenticated,
+    onAuthEntryPage,
     normalizeHandle,
     ruleFor,
     productHandle,
