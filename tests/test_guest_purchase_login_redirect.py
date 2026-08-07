@@ -10,7 +10,6 @@ THEME = ROOT / "theme"
 MIRRORED_ASSETS = (
     "buy-now-limit-checkout.js",
     "cart.js",
-    "customer-order-limit-copy.js",
     "customer-order-limits.js",
     "product-card-cart-feedback.js",
     "product-form.js",
@@ -50,7 +49,7 @@ class GuestPurchaseLoginRedirectTests(unittest.TestCase):
         liquid = self.read("snippets/customer-order-limits.liquid")
 
         self.assertIn("{% if customer %}", liquid)
-        self.assertIn("customer.id != blank or customer.email != blank", liquid)
+        self.assertIn("customer_order_limit_customer_id != '' or customer_order_limit_customer_email != ''", liquid)
         self.assertIn("customerAuthenticated:", liquid)
         # The flag is only ever raised to true, so a missing identity field can
         # never mark a signed-in customer as a guest.
@@ -172,15 +171,12 @@ class GuestPurchaseLoginRedirectTests(unittest.TestCase):
             cart,
         )
 
-    def test_limit_copy_no_longer_targets_guests(self) -> None:
-        copy = self.read("assets/customer-order-limit-copy.js")
+    def test_guest_copy_is_gone_from_the_validator(self) -> None:
+        limits = self.read("assets/customer-order-limits.js")
 
-        self.assertNotIn("loginRequired", copy)
-        self.assertNotIn("Sign in to purchase", copy)
-        self.assertIn(
-            "const customerLimitReached = remaining != null && selectedQuantity >= remaining;",
-            copy,
-        )
+        # Guests are redirected, so no surface builds sign-in limit copy for them.
+        self.assertNotIn("Sign in to purchase", limits)
+        self.assertNotIn("rule.loginRequired === true", limits)
 
     def test_liquid_keeps_the_login_flag_without_zeroing_the_allowance(self) -> None:
         rule = self.read("snippets/customer-order-limit-rule.liquid")

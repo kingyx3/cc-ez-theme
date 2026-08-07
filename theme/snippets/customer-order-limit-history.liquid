@@ -1,0 +1,78 @@
+{% comment %}
+  Publishes the signed-in customer's purchased line items as JSON so other pages
+  can read purchase history they cannot see themselves.
+
+  `customer.orders` carries line items on the account order pages — this theme's
+  own order list renders them — but a product or cart page may receive the orders
+  list without them. When that happens the inline pass on those pages counts zero
+  units and a limit never applies across orders. Those pages fetch this payload
+  instead.
+
+  The order list is tab filtered and paginated, so `customer.orders` here is only
+  the current tab's current page. The tab list, counts and pagination are
+  published alongside the lines so the reading page can walk the rest. A live
+  store returned zero lines because the default tab held none of the customer's
+  completed orders.
+
+  Deliberately unfiltered by handle: the reading page applies its own configured
+  handles and refresh windows, which keeps one matching implementation, in
+  customer-order-limits.js.
+{% endcomment %}
+{% assign customer_order_limit_history_now = 'now' | date: '%s' | plus: 0 %}
+{% assign customer_order_limit_history_count = 0 %}
+{% assign customer_order_limit_history_truncated = false %}
+{% capture customer_order_limit_history_lines %}
+  {%- if customer -%}
+    {%- assign customer_order_limit_history_orders = customer.orders | default: customer.recent_orders -%}
+    {%- for order in customer_order_limit_history_orders -%}
+      {%- comment -%}
+        `order.is_cancelled` is an integer here, not a boolean: this theme's own
+        order list compares it with `== 1`. Liquid treats 0 as truthy, so
+        an unless on the raw value skipped every order and published an empty
+        payload while the page itself listed the customer's orders.
+      {%- endcomment -%}
+      {%- assign customer_order_limit_history_cancelled = order.is_cancelled | default: 0 | append: '' | strip | downcase -%}
+      {%- unless customer_order_limit_history_cancelled == '1' or customer_order_limit_history_cancelled == 'true' -%}
+        {%- assign customer_order_limit_history_epoch = order.created_at | date: '%s' | plus: 0 -%}
+        {%- if customer_order_limit_history_epoch == 0 -%}
+          {%- assign customer_order_limit_history_epoch = order.processed_at | date: '%s' | plus: 0 -%}
+        {%- endif -%}
+        {%- if customer_order_limit_history_epoch == 0 -%}
+          {%- assign customer_order_limit_history_epoch = customer_order_limit_history_now -%}
+        {%- endif -%}
+        {%- assign customer_order_limit_history_token = order.token | default: order.order_number | default: order.name | default: '' | append: '' | strip -%}
+        {%- assign customer_order_limit_history_items = order.line_items | default: order.items -%}
+        {%- for line_item in customer_order_limit_history_items -%}
+          {%- if customer_order_limit_history_count >= 500 -%}
+            {%- assign customer_order_limit_history_truncated = true -%}
+          {%- else -%}
+            {%- assign customer_order_limit_history_handle = line_item.product.handle | default: line_item.handle | default: '' | append: '' | strip | downcase -%}
+            {%- assign customer_order_limit_history_sku = line_item.sku | default: line_item.variant.sku | default: line_item.product.sku | default: '' | append: '' | strip | downcase -%}
+            {%- assign customer_order_limit_history_quantity = line_item.quantity | default: line_item.qty | default: 0 | plus: 0 -%}
+            {%- comment -%}
+              The variant id is the one identifier every EasyStore order line item
+              carries, so it is published alongside the handle and SKU. A reading
+              page matches it against the product's own variant ids.
+            {%- endcomment -%}
+            {%- assign customer_order_limit_history_product_id = line_item.product_id | default: line_item.product.id | default: '' | append: '' | strip -%}
+            {%- assign customer_order_limit_history_variant_id = line_item.variant_id | default: line_item.variant.id | default: '' | append: '' | strip -%}
+            {%- if customer_order_limit_history_count > 0 -%},{%- endif -%}
+            [{{ customer_order_limit_history_handle | json }},{{ customer_order_limit_history_sku | json }},{{ customer_order_limit_history_epoch | json }},{{ customer_order_limit_history_quantity | json }},{{ customer_order_limit_history_token | json }},{{ customer_order_limit_history_product_id | json }},{{ customer_order_limit_history_variant_id | json }}]
+            {%- assign customer_order_limit_history_count = customer_order_limit_history_count | plus: 1 -%}
+          {%- endif -%}
+        {%- endfor -%}
+      {%- endunless -%}
+    {%- endfor -%}
+  {%- endif -%}
+{% endcapture %}
+{% capture customer_order_limit_history_tabs %}
+  {%- assign customer_order_limit_history_tab_count = 0 -%}
+  {%- for tab in customer.paginate.filter.tabs -%}
+    {%- if customer_order_limit_history_tab_count > 0 -%},{%- endif -%}
+    {"status":{{ tab.status | default: '' | append: '' | json }},"count":{{ tab.count | default: 0 | plus: 0 | json }}}
+    {%- assign customer_order_limit_history_tab_count = customer_order_limit_history_tab_count | plus: 1 -%}
+  {%- endfor -%}
+{% endcapture %}
+<script type="application/json" id="customer-order-limit-history">
+{"customer":{{ customer.id | default: '' | append: '' | json }},"renderedAt":{{ customer_order_limit_history_now | json }},"truncated":{{ customer_order_limit_history_truncated | json }},"currentTab":{{ customer.paginate.filter.current_tab | default: '' | append: '' | json }},"tabs":[{{ customer_order_limit_history_tabs | strip }}],"page":{{ paginate.current_page | default: 1 | plus: 0 | json }},"pages":{{ paginate.pages | default: 1 | plus: 0 | json }},"nextUrl":{{ paginate.next.url | default: '' | append: '' | json }},"lines":[{{ customer_order_limit_history_lines | strip }}]}
+</script>
