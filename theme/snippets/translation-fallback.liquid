@@ -10,11 +10,11 @@
 {%- assign translated_value = translation_key | t -%}
 {%- assign translation_fallback_probe = translated_value | default: '' | append: '' | strip -%}
 {%- assign translation_fallback_marker = translation_fallback_probe | downcase -%}
-{%- if translated_value == blank
-  or translation_fallback_probe == ''
-  or translated_value == translation_key
-  or translation_fallback_probe == translation_key
-  or translation_fallback_marker contains 'translation missing' -%}
+{%- assign translation_fallback_missing = false -%}
+{%- if translated_value == blank or translation_fallback_probe == '' -%}{%- assign translation_fallback_missing = true -%}{%- endif -%}
+{%- if translated_value == translation_key or translation_fallback_probe == translation_key -%}{%- assign translation_fallback_missing = true -%}{%- endif -%}
+{%- if translation_fallback_marker contains 'translation missing' -%}{%- assign translation_fallback_missing = true -%}{%- endif -%}
+{%- if translation_fallback_missing -%}
   {%- assign translated_value = fallback -%}
 {%- endif -%}
 {%- if escape_output -%}

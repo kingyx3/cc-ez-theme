@@ -65,7 +65,14 @@ Validation checks include:
 - UTF-8 readability of JSON and Liquid;
 - JSON syntax;
 - section schema syntax and shape;
-- literal local asset, section, and snippet references.
+- literal local asset, section, and snippet references;
+- balanced Liquid blocks — an unclosed or wrongly closed `if`, `unless`, `for`,
+  `case`, `capture`, `comment` or `schema` is invisible to every other check
+  here and only surfaces when EasyStore compiles the theme, by which point the
+  upload has failed or the storefront is serving the platform's unavailable
+  page;
+- one line per Liquid tag, since a tag written across several lines parses on
+  some Liquid engines and not others.
 
 ## 5. Run tests
 
