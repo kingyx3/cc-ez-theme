@@ -3,9 +3,17 @@
 {{ 'customer.css' | asset_url | stylesheet_tag }}
 <style>input::-webkit-calendar-picker-indicator{display: none;}</style>
 
+{% comment %}
+  The account field's title comes through translation-fallback, not a bare
+  `| t`: an empty store translation renders an empty placeholder and an
+  empty label, which is how the email field on /account/details ended up
+  showing an address with nothing naming it.
+{% endcomment %}
 {% assign account_placeholder = 'customer.login.email' %}
+{% assign account_fallback = 'Email' %}
 {%if shop.phone_account_enabled == true %}
   {% assign account_placeholder = 'customer.login.email_or_phone' %}
+  {% assign account_fallback = 'Email or mobile number' %}
 {% endif %}
 
 <div class="customer login">
@@ -13,8 +21,16 @@
     {{ 'customer.recover_password.title' | t }}
   </h1>
   <div>
+    {% comment %}
+      Written out here rather than read from `customer.recover_password.subtext`:
+      the platform copy for that key promises a reset email, and this store
+      recovers an account by confirming a one-time password sent to the mobile
+      number instead. A shopper who was told to expect an email waits for one
+      that never arrives.
+    {% endcomment %}
     <p>
-      Confirm your mobile to proceed
+      Confirm your mobile OTP to proceed — enter your mobile number and we will
+      send you a one-time password.
     </p>
     
     <form action="/account/recover" method="post">
@@ -31,11 +47,11 @@
           autocorrect="off"
           autocapitalize="off"
           autocomplete="email"
-          placeholder="{{ account_placeholder | t }}"
+          placeholder="{% include 'translation-fallback', translation_key: account_placeholder, fallback: account_fallback, escape_output: true %}"
           required
         >
         <label for="RecoverEmail">
-          {{ account_placeholder | t }}
+          {% include 'translation-fallback', translation_key: account_placeholder, fallback: account_fallback, escape_output: true %}
         </label>
       </div>
 
@@ -102,11 +118,11 @@
           autocomplete="email"
           autocorrect="off"
           autocapitalize="off"
-          placeholder="{{ account_placeholder | t }}"
+          placeholder="{% include 'translation-fallback', translation_key: account_placeholder, fallback: account_fallback, escape_output: true %}"
           required
         >
         <label for="CustomerEmail">
-          {{ account_placeholder | t }}
+          {% include 'translation-fallback', translation_key: account_placeholder, fallback: account_fallback, escape_output: true %}
         </label>
       </div>
 

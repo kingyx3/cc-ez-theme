@@ -1705,6 +1705,15 @@ textarea{
   opacity: 1;
 }
 
+/* Platform-rendered forms — the checkout is one — ship inputs without the
+   floating label this theme's hidden placeholder assumes. With no label the
+   placeholder is the only text naming the field, so keep it visible. Kept as a
+   separate rule on purpose: a browser without :has() drops this one whole and
+   still honours the rule above. */
+.field__input:not(:has(~ label))::placeholder {
+  opacity: 1;
+}
+
 .field__button {
   align-items: center;
   background-color: transparent;
