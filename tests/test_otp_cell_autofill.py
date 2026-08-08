@@ -119,5 +119,78 @@ class NoNewAuthFlowScriptsTests(unittest.TestCase):
                 self.assertIn(".btn').classList.add('btn--loading','loading')", template)
 
 
+class OtpWidgetProbeTests(unittest.TestCase):
+    """The probe is how the split-autofill complaint gets unblocked.
+
+    The verification widget is EasyStore's, so its markup cannot be read from
+    this repository and a fix cannot be designed without it. The probe captures
+    that markup and the widget's own request behaviour from a live page. It has
+    to stay strictly passive: the outage above came from theme code writing into
+    those cells, and a diagnostic that did the same would reproduce it.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.path = REPOSITORY_ROOT / "scripts" / "otp-widget-probe.console.js"
+        cls.script = cls.path.read_text(encoding="utf-8")
+        cls.code = code_only(cls.script)
+
+    def test_the_probe_is_available(self) -> None:
+        self.assertTrue(self.path.exists())
+
+    def test_the_probe_never_ships_with_the_theme(self) -> None:
+        # scripts/ is excluded from the ZIP (docs/PACKAGING_AND_DEPLOYMENT.md),
+        # so the probe only ever runs when it is pasted into a console by hand.
+        for directory in ASSET_DIRECTORIES:
+            with self.subTest(directory=directory):
+                self.assertFalse(
+                    (THEME_ROOT / directory / "otp-widget-probe.console.js").exists()
+                )
+        for liquid in THEME_ROOT.rglob("*.liquid"):
+            with self.subTest(template=liquid.name):
+                self.assertNotIn(
+                    "otp-widget-probe", liquid.read_text(encoding="utf-8")
+                )
+
+    def test_the_probe_writes_nothing_into_the_cells(self) -> None:
+        # Exactly the operations that broke signup. A read-only diagnostic needs
+        # none of them.
+        self.assertNotIn("dispatchEvent", self.code)
+        self.assertNotIn("preventDefault", self.code)
+        self.assertNotIn("stopPropagation", self.code)
+        self.assertNotIn("cell.value =", self.code)
+        self.assertNotIn(".focus()", self.code)
+        self.assertNotIn("OTPCredential", self.code)
+
+    def test_the_probe_leaves_the_page_as_it_found_it(self) -> None:
+        # fetch and XHR are wrapped so requests can be counted; the originals
+        # are always called and always restorable.
+        self.assertIn("return originalFetch.apply(this, arguments)", self.code)
+        self.assertIn("return originalOpen.apply(this, arguments)", self.code)
+        self.assertIn("return originalSend.apply(this, arguments)", self.code)
+        self.assertIn("window.fetch = originalFetch", self.code)
+        self.assertIn("XMLHttpRequest.prototype.open = originalOpen", self.code)
+        self.assertIn("XMLHttpRequest.prototype.send = originalSend", self.code)
+
+    def test_the_probe_reports_what_a_fix_actually_needs(self) -> None:
+        # Attributes that decide whether autofill can be fixed without writing
+        # values, plus the count of requests the widget makes by itself.
+        for attribute in ("maxlength", "autocomplete", "inputmode", "pattern"):
+            with self.subTest(attribute=attribute):
+                self.assertIn(attribute, self.code)
+        self.assertIn("POSTs while recording", self.code)
+        self.assertIn("cell lengths", self.code)
+
+    def test_the_probe_masks_secrets_but_not_structure(self) -> None:
+        # A shared report must not carry a live code or the phone number it was
+        # sent to. maxlength must survive masking - "maxlength=1" against
+        # "maxlength=6" is the finding.
+        self.assertIn("SENSITIVE_ATTRIBUTES", self.code)
+        self.assertIn("SHOW_TEXT", self.code)
+        for structural in ("maxlength", "size", "pattern"):
+            with self.subTest(attribute=structural):
+                self.assertNotIn(f"'{structural}'", self.code.split("SENSITIVE_ATTRIBUTES = [")[1].split("]")[0])
+
+
 if __name__ == "__main__":
     unittest.main()

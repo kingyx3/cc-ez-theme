@@ -436,6 +436,25 @@ Before opening a pull request:
   present and which rules the published stylesheet contains, so a change that
   does not appear points either at a stale published build or at the store's
   translations.
+- The one-time-code cells on that step cannot be fixed from the theme without
+  the widget's real markup, and guessing at them has already cost an outage. On
+  Android the keyboard's autofill drops the whole code into one cell instead of
+  one digit per cell. Two attempts to spread it across the cells shipped and
+  were reverted the same day: the widget posts its verification over `fetch`,
+  every synthetic `input` or `change` event drove that path again, and the
+  second POST came back "Customer already exists (phone)", which broke signup
+  for every new phone number. A submit-event lock cannot deduplicate a `fetch`.
+  Switching the step to a single wide input is not available either — the theme
+  does not render it, so there is no template to change.
+  `tests/test_otp_cell_autofill.py` holds that line: no shipped script may claim
+  one-time-code fields or dispatch events into them.
+  Paste `scripts/otp-widget-probe.console.js` into the console on the live step
+  (Android over `chrome://inspect`) to capture what a safe fix needs: the cells'
+  real count and attributes, whether a `<form>` or a framework owns them, and
+  how many verification requests the widget already fires by itself. It is
+  read-only — it never writes a cell or dispatches an event — and it masks
+  digits, so the report can be shared without leaking a live code or a phone
+  number. Design the fix against that report, not against assumed markup.
 - A store translation can come back empty. A field whose placeholder and
   floating label both read one key then renders with no visible title at all,
   which is how the email field on `/account/details` shipped untitled while
