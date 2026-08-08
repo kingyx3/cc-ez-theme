@@ -519,7 +519,15 @@
     if (!rule || loginRequiredForRule(rule)) return null;
     const remaining = remainingForHandle(normalized);
     return {
+      // Already net of what the cart holds and what past orders used, so a
+      // reader must not subtract the cart from it a second time. `contextual`
+      // says so, and `totalMaximum` carries the ceiling worth quoting to the
+      // shopper — `maximum` alone would quote 0 as if it were the limit.
+      contextual: true,
       maximum: remaining,
+      totalMaximum: quantity(rule.maximum, 0),
+      currentQuantity: quantity(rule.cartQuantity, 0),
+      purchasedQuantity: quantity(rule.purchased, 0),
       reason: 'a customer purchase limit across orders',
       message: messageFor(rule, Math.max(1, remaining + 1), remaining),
     };

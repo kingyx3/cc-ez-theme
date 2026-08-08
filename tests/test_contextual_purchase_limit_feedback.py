@@ -43,6 +43,58 @@ class ContextualPurchaseLimitFeedbackTests(unittest.TestCase):
         self.assertNotIn("would bring your cart to", storefront)
         self.assertNotIn("Remove an item before adding more.", storefront)
 
+    def test_limit_copy_states_the_ceiling_instead_of_an_equation(self) -> None:
+        # "2 units in cart + 2 units selected = 0 units maximum" read as broken
+        # arithmetic and quoted the remaining allowance as though it were the
+        # limit. Copy now names the ceiling in a sentence.
+        storefront = (
+            THEME_ROOT / "assets" / "purchase-limit-feedback.js"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("const limitClause = (reason, maximum) => {", storefront)
+        self.assertIn("the limit is ${unitLabel(maximum)} per customer", storefront)
+        self.assertIn(
+            "only ${unitLabel(maximum)} ${maximum === 1 ? 'is' : 'are'} available",
+            storefront,
+        )
+        self.assertIn(
+            "Maximum quantity reached. You already have ${unitLabel(current)}"
+            " in your cart, and ${clause}.",
+            storefront,
+        )
+        self.assertIn("cannot add more of this item.", storefront)
+        self.assertNotIn("in cart +", storefront)
+        self.assertNotIn("selected = ${", storefront)
+        self.assertNotIn("units maximum", storefront)
+        self.assertNotIn("(maximum ${maximumCopy})", storefront)
+
+    def test_a_limit_that_measured_the_cart_is_not_discounted_twice(self) -> None:
+        # The customer order limit reports what is still addable, so subtracting
+        # the cart from it again both double counted the cart and left the copy
+        # quoting nothing-left as the maximum.
+        storefront = (
+            THEME_ROOT / "assets" / "purchase-limit-feedback.js"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("if (limit.contextual === true) {", storefront)
+        self.assertIn("const limitMessage = (limit, context) => (", storefront)
+        self.assertIn("limit && limit.contextual === true && limit.message", storefront)
+        self.assertIn("limitMessage(limit, { ...context, mode: 'error' })", storefront)
+
+    def test_reason_detection_reads_the_supplied_limit_label(self) -> None:
+        # The plus button raises a limit from live numbers with no message, so
+        # judging the reason on the message alone always fell through to the
+        # generic wording.
+        storefront = (
+            THEME_ROOT / "assets" / "purchase-limit-feedback.js"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn(
+            "const text = `${stripMarkup(value)} ${stripMarkup(fallbackLabel)}`",
+            storefront,
+        )
+        self.assertIn("\\d+\\s+unit(?:s|\\(s\\))?\\s+left", storefront)
+
     def test_product_forms_only_show_feedback_after_a_blocked_action(self) -> None:
         helper = (
             THEME_ROOT / "assets" / "purchase-limit-feedback.js"

@@ -43,11 +43,17 @@
       || extractMaximum(text, null) != null;
   };
 
+  // The supplied label is read alongside the message because the surfaces that
+  // raise a limit from live numbers pass no message at all. Judging those on the
+  // message alone always landed on the generic branch, so a customer limit was
+  // described as a bare maximum instead of a per-customer one.
   const inferReason = (value, fallbackLabel = '') => {
-    const text = stripMarkup(value).toLowerCase();
+    const text = `${stripMarkup(value)} ${stripMarkup(fallbackLabel)}`
+      .trim()
+      .toLowerCase();
     const strings = window.purchaseStrings || {};
 
-    if (/(inventory|stock|available|only left|left\s+\d+\s+unit)/i.test(text)) {
+    if (/(inventory|stock|available|only left|left\s+\d+\s+unit|\d+\s+unit(?:s|\(s\))?\s+left)/i.test(text)) {
       return { key: 'inventory', label: strings.inventoryLimit || 'inventory' };
     }
     if (/(customer|member|per customer)/i.test(text)) {
@@ -89,22 +95,26 @@
     );
   };
 
-  const maximumDescription = (reason, maximum) => {
+  // A whole clause rather than a noun phrase: the copy states what the ceiling
+  // is, so it never has to be glued into an equation to make sense.
+  const limitClause = (reason, maximum) => {
     switch (reason.key) {
       case 'inventory':
-        return `${unitLabel(maximum)} available`;
+        return `only ${unitLabel(maximum)} ${maximum === 1 ? 'is' : 'are'} available`;
       case 'customer':
-        return `${unitLabel(maximum)} per customer`;
+        return `the limit is ${unitLabel(maximum)} per customer`;
       case 'promotion':
-        return `${unitLabel(maximum)} for this promotion`;
+        return `the limit is ${unitLabel(maximum)} for this promotion`;
       case 'store':
-        return `${unitLabel(maximum)} under the store limit`;
+        return `the limit is ${unitLabel(maximum)} for this store`;
       case 'order':
-        return `${unitLabel(maximum)} per order`;
+        return `the limit is ${unitLabel(maximum)} per order`;
       default:
-        return `${unitLabel(maximum)} maximum`;
+        return `the limit is ${unitLabel(maximum)}`;
     }
   };
+
+  const sentence = (clause) => `${clause.charAt(0).toUpperCase()}${clause.slice(1)}`;
 
   const format = ({
     rawMessage = '',
@@ -121,31 +131,40 @@
     const inferredReason = inferReason(cleanMessage, reason);
 
     if (parsedMaximum != null) {
+      // A ceiling of zero is never worth quoting: "the limit is 0 units" is the
+      // kind of sentence that sent shoppers looking for a number that means
+      // something. Say plainly that nothing more can be added.
+      if (parsedMaximum <= 0) {
+        return current > 0
+          ? `Maximum quantity reached. You already have ${unitLabel(current)} in your cart and cannot add more of this item.`
+          : 'Maximum quantity reached. This item cannot be added right now.';
+      }
+
       const remaining = Math.max(0, parsedMaximum - current);
-      const maximumCopy = maximumDescription(inferredReason, parsedMaximum);
+      const clause = limitClause(inferredReason, parsedMaximum);
 
       if (mode === 'reached') {
         if (current > 0) {
-          return `Maximum quantity reached. ${unitLabel(current)} in cart + ${unitLabel(requested)} selected = ${maximumCopy}.`;
+          return `Maximum quantity reached. You already have ${unitLabel(current)} in your cart, and ${clause}.`;
         }
-        return `Maximum quantity reached. ${maximumCopy}.`;
+        return `Maximum quantity reached. ${sentence(clause)}.`;
       }
 
       if (current > 0 && remaining === 0) {
         if (inferredReason.key === 'inventory') {
-          return `Stock limit reached. You already have ${unitLabel(current)} in your cart; only ${unitLabel(parsedMaximum)} ${parsedMaximum === 1 ? 'is' : 'are'} available.`;
+          return `Stock limit reached. You already have ${unitLabel(current)} in your cart, and ${clause}.`;
         }
-        return `Purchase limit reached. You already have ${unitLabel(current)} in your cart (maximum ${maximumCopy}).`;
+        return `Purchase limit reached. You already have ${unitLabel(current)} in your cart, and ${clause}.`;
       }
 
       if (requested > remaining) {
         if (remaining > 0) {
-          return `Quantity limit exceeded. You can add up to ${unitLabel(remaining)} more (maximum ${maximumCopy}).`;
+          return `Quantity limit exceeded. You can add up to ${unitLabel(remaining)} more because ${clause}.`;
         }
-        return `Quantity limit exceeded. Maximum ${maximumCopy}.`;
+        return `Quantity limit exceeded. ${sentence(clause)}.`;
       }
 
-      return `Unable to add this item. Maximum ${maximumCopy}.`;
+      return `Unable to add this item. ${sentence(clause)}.`;
     }
 
     if (cleanMessage) return cleanMessage;
@@ -154,6 +173,17 @@
       ? stripMarkup(window.purchaseStrings.addLimitError)
       : 'Unable to add this item because a quantity limit was reached.';
   };
+
+  // A limit that phrased its own copy already knows what the cart holds and what
+  // earlier orders used. Rebuilding a sentence from its numbers here would drop
+  // the part about past orders and disagree with the cart and listing wording,
+  // so its message is quoted as written. Only rejections carrying a raw store
+  // message get rewritten.
+  const limitMessage = (limit, context) => (
+    limit && limit.contextual === true && limit.message
+      ? stripMarkup(limit.message)
+      : format(context)
+  );
 
   const getVariantId = (productForm) => {
     if (!productForm || !productForm.form) return '';
@@ -196,6 +226,22 @@
       if (!limit) return null;
 
       const currentQuantity = this.getCurrentCartQuantity();
+
+      // A source that measured the cart itself reports what is still addable,
+      // so subtracting the cart again would count it twice — and its own total
+      // is the ceiling to quote, not the nothing that is left of it.
+      if (limit.contextual === true) {
+        return {
+          ...limit,
+          maximum: Math.max(0, toQuantity(limit.maximum, 0)),
+          totalMaximum: toQuantity(
+            limit.totalMaximum != null ? limit.totalMaximum : limit.maximum,
+            0
+          ),
+          currentQuantity: toQuantity(limit.currentQuantity, currentQuantity),
+        };
+      }
+
       const totalMaximum = toQuantity(
         limit.totalMaximum != null ? limit.totalMaximum : limit.maximum,
         0
@@ -243,7 +289,7 @@
 
         this.purchaseLimitInteracted = true;
         this.showQuantityLimit(
-          format({
+          limitMessage(limit, {
             currentQuantity: limit.currentQuantity,
             requestedQuantity: selectedQuantity,
             maximum: limit.totalMaximum,
@@ -286,7 +332,7 @@
       if (quantity > limit.maximum) {
         const shouldShow = focusInvalid || this.purchaseLimitInteracted === true;
         if (shouldShow) {
-          this.showQuantityLimit(format({ ...context, mode: 'error' }), 'error');
+          this.showQuantityLimit(limitMessage(limit, { ...context, mode: 'error' }), 'error');
           this.setPurchaseButtonsLimited(true);
           if (focusInvalid) this.quantityInput.focus();
         } else {

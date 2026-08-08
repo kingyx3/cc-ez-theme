@@ -55,6 +55,23 @@ class CustomerOrderLimitCopyTests(unittest.TestCase):
         self.assertNotIn("0 units maximum", limits)
         self.assertNotIn("in cart +", limits)
 
+        # The equation copy this guard was written for lived in the shared
+        # formatter, not here, so it survived. Guard the file it came from.
+        feedback = self.read("assets/purchase-limit-feedback.js")
+        self.assertNotIn("units maximum", feedback)
+        self.assertNotIn("in cart +", feedback)
+
+    def test_the_limit_publishes_the_ceiling_it_measured_against(self) -> None:
+        # `maximum` is what is still addable. Quoting it as the limit is how the
+        # product page came to say "= 0 units maximum" for a 2 per customer rule,
+        # so the rule's own maximum travels with it.
+        limits = self.read("assets/customer-order-limits.js")
+
+        self.assertIn("contextual: true,", limits)
+        self.assertIn("totalMaximum: quantity(rule.maximum, 0),", limits)
+        self.assertIn("currentQuantity: quantity(rule.cartQuantity, 0),", limits)
+        self.assertIn("purchasedQuantity: quantity(rule.purchased, 0),", limits)
+
     def test_product_form_uses_the_validator_message(self) -> None:
         product = self.read("assets/product-form.js")
 
