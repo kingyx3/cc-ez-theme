@@ -439,14 +439,13 @@ Before opening a pull request:
 - Copy the platform renders in that flow can still be overridden at runtime, and
   two overrides ship for it: `account-recovery-copy.js` replaces the promise of
   a reset email, and `account-otp-copy.js` hides the "continue with email
-  instead" link while a signup is waiting on its mobile OTP — this store
-  verifies a phone number, so that link leads out of a step the shopper has
-  already started. Both stay text-only: they read `textContent` and, at most,
-  hide the element holding it. Neither writes into a field, dispatches an event,
-  or removes a node, because theme scripts writing into the platform's
-  verification cells are what broke signup with "Customer already exists
-  (phone)". Setting the matching store translations makes each override a no-op,
-  and it can be deleted at that point.
+  instead" link — this store signs customers up by mobile number only, so no
+  email path is offered anywhere. Both stay text-only: they read `textContent`
+  and, at most, hide the control holding it. Neither writes into a field,
+  dispatches an event, or removes a node, because theme scripts writing into the
+  platform's verification cells are what broke signup with "Customer already
+  exists (phone)". Setting the matching store translations makes each override a
+  no-op, and it can be deleted at that point.
 - A store translation can come back empty. A field whose placeholder and
   floating label both read one key then renders with no visible title at all,
   which is how the email field on `/account/details` shipped untitled while

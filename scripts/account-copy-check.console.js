@@ -100,24 +100,18 @@
     }
   }
 
-  // While a code is outstanding the platform offers a way out to email, which
-  // this store does not want mid-verification. The override hides it, so this
-  // says whether it is on the page and whether it is still on screen.
-  const outstandingCode = /verification\s+code|one-time\s+password|\botp\b|resend\s+(?:the\s+)?code/i.test(
-    document.body ? document.body.textContent || '' : ''
-  );
-  if (outstandingCode) {
-    console.log('--- email fallback on the verification step ---');
-    const fallback = Array.from(document.querySelectorAll('a, button'))
-      .filter((node) => /\be-?mail\b[^.!?]{0,32}\binstead\b/i.test(text(node)));
-    out('links found', fallback.length);
-    fallback.forEach((node) => out(
+  // This store signs customers up by phone only, so the platform's email link
+  // is hidden at runtime. Report whether it is here and whether it is on screen.
+  const emailSignup = Array.from(document.querySelectorAll('a, button'))
+    .filter((node) => /\be-?mail\b[^.!?]{0,32}\binstead\b/i.test(text(node)));
+  if (emailSignup.length) {
+    console.log('--- email signup link ---');
+    emailSignup.forEach((node) => out(
       JSON.stringify(text(node)),
-      node.offsetParent === null || getComputedStyle(node).display === 'none'
-        ? 'hidden' : 'ON SCREEN'
+      node.offsetParent === null ? 'hidden' : 'ON SCREEN'
     ));
     out('override published', /account-otp-copy\.js/.test(html));
-    if (fallback.length && !/account-otp-copy\.js/.test(html)) {
+    if (!/account-otp-copy\.js/.test(html)) {
       console.log(
         'OLD BUILD: the link is here and the override is not loaded, so the '
         + 'published theme predates it.'
