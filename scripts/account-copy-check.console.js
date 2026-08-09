@@ -100,6 +100,25 @@
     }
   }
 
+  // This store signs customers up by phone only, so the platform's email link
+  // is hidden at runtime. Report whether it is here and whether it is on screen.
+  const emailSignup = Array.from(document.querySelectorAll('a, button'))
+    .filter((node) => /\be-?mail\b[^.!?]{0,32}\binstead\b/i.test(text(node)));
+  if (emailSignup.length) {
+    console.log('--- email signup link ---');
+    emailSignup.forEach((node) => out(
+      JSON.stringify(text(node)),
+      node.offsetParent === null ? 'hidden' : 'ON SCREEN'
+    ));
+    out('override published', /account-otp-copy\.js/.test(html));
+    if (!/account-otp-copy\.js/.test(html)) {
+      console.log(
+        'OLD BUILD: the link is here and the override is not loaded, so the '
+        + 'published theme predates it.'
+      );
+    }
+  }
+
   if (document.querySelector('#DetailEmail')) {
     console.log('--- account email field ---');
     const input = document.querySelector('#DetailEmail');
