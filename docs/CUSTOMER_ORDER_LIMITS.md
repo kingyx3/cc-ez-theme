@@ -95,6 +95,8 @@ The modal is for the cases where checkout with the current cart is not what the 
 
 Limit copy is generated from live quantities, not from the message rendered into the page by Liquid. The rendered copy is correct only for the cart as it was on page load, which is how a maxed-out product ended up saying "you can add up to 1 more".
 
+The rule reports two different numbers and they must not be confused. `maximum` is what may still be added — net of the cart and of past orders — while `totalMaximum` is the configured ceiling. `contextual: true` marks the pair, and any reader that measures the cart itself must skip its own subtraction for such a limit. Quoting `maximum` as the ceiling is what produced "2 units in cart + 2 units selected = 0 units maximum" on a product limited to 2 per person: nothing was left to add, and that nothing was printed as the limit. The shared formatter now states a ceiling as a clause — "the limit is 2 units per customer", "only 3 units are available" — and the product page repeats the validator's own sentence verbatim rather than rebuilding one, so it agrees with the cart and listing and keeps what it says about earlier orders.
+
 ## Signed-out shoppers
 
 A limit counts units per customer across orders, so it can only be measured for a signed-in customer. Guests are therefore never measured against an allowance. Instead, a purchase attempt on a limited product sends the shopper to `/account/login?redirect_uri=<current page>`, where the login page also links to registration:
