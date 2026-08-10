@@ -69,6 +69,7 @@ if (!customElements.get('product-form')) {
     onVariantChange(evt) {
       this.currentVariant = evt.detail ? evt.detail.variant : null;
       this.rejectedQuantityLimit = null;
+      this.updateLowInventoryNotice();
       this.validateQuantity();
     }
 
@@ -82,16 +83,49 @@ if (!customElements.get('product-form')) {
       return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : null;
     }
 
-    getQuantityLimit() {
-      if (!this.quantityInput) return null;
-
+    // Remaining stock for the selected variant, or null when the platform does
+    // not report it. Untracked stock is indistinguishable from none here, so it
+    // must never be treated as a count.
+    getVariantInventory() {
       const selectedOption = this.form.querySelector('[name="id"] option:checked');
       const variant = this.currentVariant || {};
-      const inventory = this.toPositiveLimit(
+
+      return this.toPositiveLimit(
         variant.inventory_quantity != null
           ? variant.inventory_quantity
           : selectedOption && selectedOption.dataset.inventoryQuantity
       );
+    }
+
+    // The notice is rendered by snippets/low-inventory-notice.liquid for the
+    // variant selected on load; this only keeps it in step with later variant
+    // changes, and is a no-op on surfaces that do not render it.
+    updateLowInventoryNotice() {
+      const notice = this.querySelector('[data-low-inventory-notice]');
+      if (!notice) return;
+
+      const variant = this.currentVariant || {};
+      const threshold = this.toPositiveLimit(notice.dataset.lowInventoryThreshold);
+      const remaining = this.getVariantInventory();
+      const template = window.purchaseStrings && window.purchaseStrings.lowInventory;
+
+      if (!template || !remaining || !threshold || remaining > threshold || variant.available === false) {
+        notice.textContent = '';
+        notice.classList.add('hidden');
+        notice.setAttribute('hidden', 'hidden');
+        return;
+      }
+
+      notice.textContent = String(template).replace('__COUNT__', remaining);
+      notice.classList.remove('hidden');
+      notice.removeAttribute('hidden');
+    }
+
+    getQuantityLimit() {
+      if (!this.quantityInput) return null;
+
+      const variant = this.currentVariant || {};
+      const inventory = this.getVariantInventory();
       const candidates = [];
 
       if (inventory && variant.available !== false) {
