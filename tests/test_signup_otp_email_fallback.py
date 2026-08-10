@@ -38,6 +38,9 @@ class EmailSignupOverrideTests(unittest.TestCase):
         pattern = re.search(r"const EMAIL_SIGNUP = /(.*)/i;", cls.code)
         assert pattern, "the link wording is no longer matched"
         cls.wording = re.compile(pattern.group(1), re.IGNORECASE)
+        step = re.search(r"const OTP_STEP = /(.*)/i;", cls.code)
+        assert step, "the step waiting on a code is no longer recognised"
+        cls.step_wording = re.compile(step.group(1), re.IGNORECASE)
 
     def test_the_layout_loads_it(self) -> None:
         layout = (THEME / "layout" / "theme.liquid").read_text(encoding="utf-8")
@@ -91,10 +94,34 @@ class EmailSignupOverrideTests(unittest.TestCase):
                 self.assertNotIn(forbidden, self.code)
 
     def test_it_observes_account_pages_only(self) -> None:
-        self.assertIn(
-            "if (!document.querySelector('form[action*=\"/account\"]')) return;",
-            self.code,
-        )
+        # Still no observer on the rest of the storefront, and still no
+        # page-path heuristic - the trap that once turned the search box into
+        # an OTP field, and why "location.pathname" is forbidden above.
+        self.assertIn("if (!hasAccountStep()) return;", self.code)
+        self.assertIn('form[action*="/account"]', self.code)
+
+    def test_it_observes_the_step_that_renders_no_form(self) -> None:
+        # The OTP step has no form for the form lookup to find, so keying the
+        # observer off one left that step with the load-time pass alone: the
+        # link went unhidden if the platform re-rendered it.
+        self.assertIn("OTP_STEP.test(pageText())", self.code)
+        self.assertIn("EMAIL_SIGNUP.test(pageText())", self.code)
+        for wording in (
+            "Enter the verification code we just sent to your mobile number.",
+            "We sent a code to +65 9123 4567",
+            "Resend code",
+        ):
+            with self.subTest(wording=wording):
+                self.assertTrue(self.step_wording.search(wording))
+
+    def test_the_rest_of_the_storefront_is_not_mistaken_for_a_step(self) -> None:
+        for wording in (
+            "Free shipping on orders over $80.",
+            "Enter a discount code at checkout.",
+            "We sent your order confirmation by email.",
+        ):
+            with self.subTest(wording=wording):
+                self.assertIsNone(self.step_wording.search(wording))
 
 
 if __name__ == "__main__":

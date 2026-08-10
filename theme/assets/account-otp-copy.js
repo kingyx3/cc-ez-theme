@@ -27,11 +27,26 @@
     });
   };
 
+  // Wording the platform shows on a step that is waiting on a code.
+  const OTP_STEP = /verification\s+code|one-time\s+password|\botp\b|verify\s+your\s+(?:mobile|phone)|(?:code\s+(?:we\s+)?(?:just\s+)?sent|sent\s+(?:you\s+)?(?:an?|the)\s+code)|resend\s+(?:the\s+)?code/i;
+
+  const pageText = () => (document.body && document.body.textContent) || '';
+
+  // What the page shows, never where the URL says it is: a page-path heuristic
+  // is the trap that once turned the header search box into an OTP field. A
+  // form alone is not the signal either - the OTP step renders none, which is
+  // what left that step watched by nothing. Any of the three is an account
+  // step: the platform's own form, the wording it shows while a code is
+  // outstanding, or the link itself.
+  const hasAccountStep = () => document.querySelector('form[action*="/account"]') !== null
+    || OTP_STEP.test(pageText())
+    || EMAIL_SIGNUP.test(pageText());
+
   const start = () => {
     hideEmailSignup();
     // The platform renders its next step after a submit, so the page is watched
     // - but only on a page that has an account step at all.
-    if (!document.querySelector('form[action*="/account"]')) return;
+    if (!hasAccountStep()) return;
 
     let queued = false;
     new MutationObserver(() => {
