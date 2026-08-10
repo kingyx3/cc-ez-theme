@@ -643,3 +643,28 @@ button.remove_voucher_btn {
     transition: none;
   }
 }
+
+/* Remaining-stock notice on product cards and the product page. */
+.low-inventory-notice {
+  display: block;
+  margin: 0;
+  color: rgb(153, 27, 27);
+  font-size: 1.3rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.product-form .low-inventory-notice {
+  margin: 0 0 1.2rem;
+  padding: 0.8rem 1.2rem;
+  border: 0.1rem solid rgba(185, 28, 28, 0.35);
+  border-radius: 1rem;
+  background: rgba(254, 226, 226, 0.72);
+  font-size: 1.4rem;
+}
+
+@media (prefers-contrast: more) {
+  .product-form .low-inventory-notice {
+    border-width: 0.2rem;
+  }
+}

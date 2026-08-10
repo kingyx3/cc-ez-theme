@@ -124,6 +124,8 @@
 
               {% app_snippet 'product/field_middle' %}
 
+              {% include 'low-inventory-notice', low_inventory_variant: product.selected_or_first_available_variant, low_inventory_persist: true %}
+
               <!-- quantity_selector -->
               <div class="product-form__input product-form__quantity">
                 <label class="form__label" for="Quantity-{{ section.__key }}">

@@ -1,0 +1,55 @@
+{%- comment -%}
+  Renders "Only N left" for products that are nearly out of stock.
+
+  Parameters:
+    low_inventory_variant  optional variant. When set, the notice reports that
+                           variant's remaining stock instead of the product
+                           total. Product cards link to a whole product, so they
+                           omit it; the product page passes the selected variant.
+    low_inventory_persist  when true the element is always rendered, hidden
+                           while stock is not low, so product-form.js can
+                           refresh it after a variant change without having to
+                           build markup of its own.
+
+  Remaining stock is only claimed when the platform reports a positive quantity.
+  A product whose stock is not tracked reports nothing or zero, which is
+  indistinguishable here from sold out, so no count is shown for it. Sold-out
+  products keep their existing badge and add nothing.
+
+  `include` shares one scope in EasyStore Liquid, so the parameters are reset at
+  the end: without that, the product page's selected variant would still be set
+  when the related-product cards below it render. `escape_output` belongs to
+  translation-fallback and is reset for the same reason - the copy that follows
+  this notice asked for the unescaped form.
+{%- endcomment -%}
+{% comment %} `| plus: 0` keeps every count a number: a product or variant that reports no quantity at all compares as nil, and comparing nil with a number is an error rather than a false on Liquid. {% endcomment %}
+{% assign low_inventory_threshold = 5 %}
+{% assign low_inventory_remaining = 0 %}
+{% if low_inventory_variant %}
+  {% assign low_inventory_count = low_inventory_variant.inventory_quantity | plus: 0 %}
+  {% if low_inventory_variant.available and low_inventory_count > 0 %}
+    {% assign low_inventory_remaining = low_inventory_count %}
+  {% endif %}
+{% elsif product.available %}
+  {% for variant in product.variants %}
+    {% assign low_inventory_count = variant.inventory_quantity | plus: 0 %}
+    {% if variant.available and low_inventory_count > 0 %}
+      {% assign low_inventory_remaining = low_inventory_remaining | plus: low_inventory_count %}
+    {% endif %}
+  {% endfor %}
+  {% comment %} Products that report stock on the product itself rather than per variant. {% endcomment %}
+  {% assign low_inventory_count = product.inventory_quantity | plus: 0 %}
+  {% if low_inventory_remaining == 0 and low_inventory_count > 0 %}
+    {% assign low_inventory_remaining = low_inventory_count %}
+  {% endif %}
+{% endif %}
+{% assign low_inventory_is_low = false %}
+{% if low_inventory_remaining > 0 and low_inventory_remaining <= low_inventory_threshold %}
+  {% assign low_inventory_is_low = true %}
+{% endif %}
+{% capture low_inventory_text %}{% include 'translation-fallback', translation_key: 'products.product.low_inventory', fallback: 'Only __COUNT__ left', escape_output: true %}{% endcapture %}
+{% assign low_inventory_text = low_inventory_text | strip | replace: '__COUNT__', low_inventory_remaining %}
+{% if low_inventory_is_low or low_inventory_persist %}<span class="low-inventory-notice{% unless low_inventory_is_low %} hidden{% endunless %}" data-low-inventory-notice data-low-inventory-threshold="{{ low_inventory_threshold }}"{% unless low_inventory_is_low %} hidden="hidden"{% endunless %}{% if low_inventory_persist %} role="status" aria-live="polite"{% endif %}>{% if low_inventory_is_low %}{{ low_inventory_text }}{% endif %}</span>{% endif %}
+{% assign low_inventory_variant = null %}
+{% assign low_inventory_persist = null %}
+{% assign escape_output = null %}

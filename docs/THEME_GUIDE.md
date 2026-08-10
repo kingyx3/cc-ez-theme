@@ -127,6 +127,8 @@ Snippets are shared partials. Examples:
 - `svg-definitions.liquid` centralizes interface icons.
 - `translation-fallback.liquid` prints a platform translation, or a literal
   fallback when the store has none.
+- `low-inventory-notice.liquid` prints the remaining stock when only a few units
+  are left.
 
 Use a snippet when the same rendering is needed in several sections or
 templates. Use a section when merchants need editor-facing settings or blocks.
@@ -225,6 +227,7 @@ ordering remain collection responsibilities in EasyStore.
 - title and price;
 - optional quick add outside homepage featured collections;
 - variant thumbnails;
+- a remaining-stock notice when five or fewer units are left;
 - a view-details call to action.
 
 Product titles are allowed to use the full card width and wrap safely. Variant
@@ -244,6 +247,7 @@ When changing card layout, test:
 - sale pricing;
 - sold-out products;
 - products with and without variant thumbnails;
+- products with one, five, and six units left, and with untracked stock;
 - two-column mobile grids;
 - three-, four-, and five-column desktop grids.
 
@@ -315,7 +319,19 @@ Keep product-type collections for the few categories customers actively browse,
 such as Collector Booster Boxes, Play Booster Boxes, Bundles, and Booster
 Packs. Use tags for narrower operational detail.
 
-## 9. Out-of-stock interest
+## 9. Remaining stock and out-of-stock interest
+
+`snippets/low-inventory-notice.liquid` prints "Only N left" once a product is
+down to five or fewer units. Cards report the total across the variants a
+shopper can buy; the product page reports the selected variant, and
+`assets/product-form.js` refreshes it when the shopper picks another variant.
+
+The count is only printed when the platform reports a positive quantity. A
+product whose stock is not tracked reports zero or nothing, which is
+indistinguishable here from sold out, so no count is claimed for it. Sold-out
+products keep their existing badge. The threshold lives in one place, the
+`low_inventory_threshold` assignment in the snippet, and reaches the script
+through `data-low-inventory-threshold`.
 
 For out-of-stock products, a free manual alternative is a theme-rendered
 WhatsApp interest link containing the product title, selected variant, and
