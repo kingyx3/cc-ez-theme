@@ -446,6 +446,24 @@ Before opening a pull request:
   platform's verification cells are what broke signup with "Customer already
   exists (phone)". Setting the matching store translations makes each override a
   no-op, and it can be deleted at that point.
+- Autofill on that one-time-code step drops the whole code into a single cell
+  instead of spreading it across the six. That is platform behaviour, not a
+  theme regression, and it is still open. The theme cannot fix it blind: PR #65
+  and PR #66 tried, wrote the digits into the cells and dispatched `input` and
+  `change` on each one, and every synthetic event drove the widget's own submit.
+  Verification posted twice, the second call returned "Customer already exists
+  (phone)", and signup broke for every new customer until `b228492` reverted it.
+  A submit lock does not help, because the widget posts over `fetch` and there
+  is no submit event to intercept. `tests/test_otp_cell_autofill.py` now fails
+  if any shipped script claims those fields again.
+  Before anything is attempted here, capture the widget with
+  `scripts/otp-widget-capture.console.js` on the live step — it only reads, so
+  it is safe to run during a real signup. Run it once before tapping the
+  autofill suggestion and once after. The answer that decides the fix is whether
+  the cells carry framework state: plain DOM cells read `input.value` at submit
+  time and could be filled by assignment with no events at all, while
+  React-controlled cells ignore a written value and need the events that caused
+  the outage — in which case the fix belongs with EasyStore support, not here.
 - A store translation can come back empty. A field whose placeholder and
   floating label both read one key then renders with no visible title at all,
   which is how the email field on `/account/details` shipped untitled while
