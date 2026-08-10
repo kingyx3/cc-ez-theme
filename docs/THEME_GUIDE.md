@@ -464,6 +464,20 @@ Before opening a pull request:
   time and could be filled by assignment with no events at all, while
   React-controlled cells ignore a written value and need the events that caused
   the outage — in which case the fix belongs with EasyStore support, not here.
+  Captured on 2026-08-10 at `/account/auth/send`: six `type="number"` cells,
+  `maxlength="1"`, `pattern="[0-9]"`, class `otp-input`, no `name` and no `id`,
+  in `div#otp-form > div.d-flex`, with **no `form` element** — which is why the
+  reverted module never even ran here, since it gated on a form action matching a
+  verification keyword. The cells carry no framework state, and **not one of them
+  sets `autocomplete`**, which is why Android has no `one-time-code` target and
+  drops the whole code into whichever cell has focus. The widget renders no
+  Verify button of its own, so it appears to post once the last cell fills.
+  That last point is what still has to be confirmed before any fix, because a
+  fix may dispatch at most the single event a human's final keystroke produces —
+  firing more is what posted the verification twice. Read the widget's handlers
+  with `scripts/otp-handler-probe.console.js`, which prints them as source out of
+  jQuery's registry and sweeps the whole page for a submit control rather than
+  just the widget container.
 - A store translation can come back empty. A field whose placeholder and
   floating label both read one key then renders with no visible title at all,
   which is how the email field on `/account/details` shipped untitled while
