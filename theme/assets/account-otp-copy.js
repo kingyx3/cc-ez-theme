@@ -27,23 +27,26 @@
     });
   };
 
-  // /account, /account/auth, /en/account/login - an account step under any
-  // locale prefix the platform serves the flow under.
-  const ACCOUNT_PATH = /(^|\/)account(\/|$)/i;
+  // Wording the platform shows on a step that is waiting on a code.
+  const OTP_STEP = /verification\s+code|one-time\s+password|\botp\b|verify\s+your\s+(?:mobile|phone)|(?:code\s+(?:we\s+)?(?:just\s+)?sent|sent\s+(?:you\s+)?(?:an?|the)\s+code)|resend\s+(?:the\s+)?code/i;
 
-  const onAccountFlow = () =>
-    ACCOUNT_PATH.test(window.location.pathname) ||
-    document.querySelector('form[action*="/account"]') !== null;
+  const pageText = () => (document.body && document.body.textContent) || '';
+
+  // What the page shows, never where the URL says it is: a page-path heuristic
+  // is the trap that once turned the header search box into an OTP field. A
+  // form alone is not the signal either - the OTP step renders none, which is
+  // what left that step watched by nothing. Any of the three is an account
+  // step: the platform's own form, the wording it shows while a code is
+  // outstanding, or the link itself.
+  const hasAccountStep = () => document.querySelector('form[action*="/account"]') !== null
+    || OTP_STEP.test(pageText())
+    || EMAIL_SIGNUP.test(pageText());
 
   const start = () => {
     hideEmailSignup();
     // The platform renders its next step after a submit, so the page is watched
-    // - but only on a page that has an account step at all. The form is not
-    // that signal: the OTP step renders no form[action*="/account"], so keying
-    // the observer off one left that step with the load-time pass alone, and a
-    // re-render of the link after load would have gone unhidden. The path is
-    // the signal; the form stays as a fallback for a step served off /account.
-    if (!onAccountFlow()) return;
+    // - but only on a page that has an account step at all.
+    if (!hasAccountStep()) return;
 
     let queued = false;
     new MutationObserver(() => {
