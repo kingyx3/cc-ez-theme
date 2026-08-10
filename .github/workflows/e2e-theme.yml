@@ -120,6 +120,43 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  otp-autofill:
+    # Runs a replica of the platform's one-time-code widget against the theme
+    # module, so it needs no storefront and depends on validate rather than
+    # preflight - the double-submit that broke signup must stay caught even when
+    # the live store is unreachable.
+    name: OTP autofill regression
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Install E2E dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run OTP autofill regression suite
+        run: npx playwright test e2e/otp-autofill.spec.js --project=chromium-desktop
+
+      - name: Upload OTP autofill failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-test-results-otp-autofill
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
   accessibility:
     name: Accessibility / chromium-desktop
     needs: preflight
