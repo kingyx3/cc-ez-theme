@@ -27,11 +27,23 @@
     });
   };
 
+  // /account, /account/auth, /en/account/login - an account step under any
+  // locale prefix the platform serves the flow under.
+  const ACCOUNT_PATH = /(^|\/)account(\/|$)/i;
+
+  const onAccountFlow = () =>
+    ACCOUNT_PATH.test(window.location.pathname) ||
+    document.querySelector('form[action*="/account"]') !== null;
+
   const start = () => {
     hideEmailSignup();
     // The platform renders its next step after a submit, so the page is watched
-    // - but only on a page that has an account step at all.
-    if (!document.querySelector('form[action*="/account"]')) return;
+    // - but only on a page that has an account step at all. The form is not
+    // that signal: the OTP step renders no form[action*="/account"], so keying
+    // the observer off one left that step with the load-time pass alone, and a
+    // re-render of the link after load would have gone unhidden. The path is
+    // the signal; the form stays as a fallback for a step served off /account.
+    if (!onAccountFlow()) return;
 
     let queued = false;
     new MutationObserver(() => {
