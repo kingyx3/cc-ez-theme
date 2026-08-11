@@ -199,16 +199,19 @@ class CustomerOrderLimitRefreshTests(unittest.TestCase):
         self.assertIn("rule_window_start: customer_order_limit_row_window", row)
         self.assertIn("refreshAt: {{ customer_order_limit_rule_refresh_at | json }},", rule)
         self.assertIn("limitWindowLabel: {{ customer_order_limit_rule_window_label | json }},", rule)
-        self.assertIn("across orders{{ customer_order_limit_rule_since }}", rule)
 
-    def test_storefront_copy_names_the_date_the_limit_counts_from(self) -> None:
+    def test_storefront_copy_never_names_the_refresh_date(self) -> None:
+        # The date an allowance is counted from is store configuration. It stays
+        # on the rule for console verification and drives which orders count, but
+        # no shopper-facing message mentions it.
+        rule = self.read("snippets/customer-order-limit-rule.liquid")
         limits = self.read("assets/customer-order-limits.js")
 
-        self.assertIn("const sinceLabel = (rule) => {", limits)
-        self.assertIn("rule.limitWindowLabel", limits)
-        self.assertIn("return label ? ` since ${label}` : '';", limits)
-        # Both the addition copy and the cart copy name the window.
-        self.assertEqual(limits.count("${sinceLabel(rule)}"), 4)
+        self.assertNotIn("customer_order_limit_rule_since", rule)
+        self.assertNotIn("sinceLabel", limits)
+        self.assertNotIn(" since ", limits)
+        self.assertIn("across orders.", rule)
+        self.assertIn("across orders.`", limits)
         self.assertEqual(limits, self.read("editor_assets/customer-order-limits.js"))
 
     def test_window_and_row_snippets_are_packaged_liquid_only(self) -> None:

@@ -293,7 +293,9 @@ class CustomerOrderLimitRenderingTests(unittest.TestCase):
         self.assertEqual(rule["purchased"], 0)
         self.assertEqual(rule["remaining"], 1)
         self.assertTrue(rule["limitWindowLabel"])
-        self.assertIn("since", rule["message"])
+        # The window drives which orders count; it is never quoted to a shopper.
+        self.assertNotIn("since", rule["message"])
+        self.assertNotIn(rule["limitWindowLabel"], rule["message"])
 
     def test_orders_after_the_refresh_still_count(self) -> None:
         rule = self.rule(self.render(
@@ -469,7 +471,9 @@ class CustomerOrderLimitRenderingTests(unittest.TestCase):
                 self.assertEqual(rule["refreshAt"], "2026-08-09 00:00:00 +0800")
                 self.assertEqual(rule["limitWindowLabel"], "Aug 09, 2026")
                 self.assertGreater(rule["windowStart"], 0)
-                self.assertIn("since Aug 09, 2026", rule["message"])
+                # Configuration, not copy: no message names the date.
+                self.assertNotIn("Aug 09", rule["message"])
+                self.assertNotIn("since", rule["message"])
         # Orders on either side of the date, on limits configured at 2 and 6.
         self.assertEqual(rules[LOWER]["purchased"], 0)
         self.assertEqual(rules[LOWER]["remaining"], 2)

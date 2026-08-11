@@ -60,7 +60,9 @@ A row with no refresh configured must leave the window inert. Comparisons in `cu
 
 `include` shares the caller's scope on EasyStore, so `customer-order-limit-row.liquid` clears its three inputs on the way out. Without that, a row written without `limit_refresh` would inherit the previous row's timestamp and renew a limit that never asked for it.
 
-Renewal is evaluated when the page renders, so it takes effect on the next page load after the timestamp passes. Storefront copy names the date once a window is active — "The limit is 1 unit per customer across orders since Sep 01, 2026" — and each rule publishes `refreshAt` and `limitWindowLabel` so the configuration can be verified in the browser console.
+Renewal is evaluated when the page renders, so it takes effect on the next page load after the timestamp passes.
+
+The date is never shown to shoppers. It is store configuration, not something a customer needs to reason about, so storefront copy states the ceiling only — "The limit is 1 unit per customer across orders." Each rule still publishes `refreshAt`, `limitWindowLabel` and `windowStart`, so the configuration can be verified in the browser console and the client-side history filter knows which orders to count.
 
 To renew a limit, set the timestamp rather than clearing the maximum: clearing the maximum disables the limit entirely, while a refresh keeps the limit enforced for purchases made from that date onwards.
 
@@ -174,7 +176,7 @@ Before merging or publishing, upload the exact workflow ZIP to an unpublished Ea
 7. signed out, Add to Cart, Buy Now, listing quick-add, and cart checkout on a limited product open the login page and return to the original page after signing in, with no limit message, disabled control, or clamped quantity shown first;
 8. signed in, every purchase path works normally on desktop and mobile and never reaches an account page — check a limited product, an unlimited product, and an unlimited product bought while a limited product sits in the cart;
 9. signed in, `window.customerOrderLimitsV2.customerAuthenticated` is `true` and each rule's `purchased` matches prior orders — buy one unit, complete the order, then reload the product page and confirm `purchased` increased. If `diagnostics.lineItemsSeen` is `0`, the page could not read history itself: confirm `window.CustomerOrderLimits.historyState()` reports `loaded` and that `/account/orders` contains `#customer-order-limit-history` with the expected lines;
-10. with a refresh timestamp set in the past, `purchased` drops to zero for orders placed before it, `limitWindowLabel` is set, and the copy names that date; with one set in the future, nothing changes and `refreshAt` still reports the configured value;
+10. with a refresh timestamp set in the past, `purchased` drops to zero for orders placed before it and `limitWindowLabel` is set, while no message on the page names the date; with one set in the future, nothing changes and `refreshAt` still reports the configured value;
 11. on a product with a limit of 1: Buy Now from an empty cart adds one unit and reaches checkout; Buy Now again goes straight to checkout without adding; the buttons never stay disabled or spinning; and every message on the page reflects the current cart.
 
 ## Enforcement boundary
