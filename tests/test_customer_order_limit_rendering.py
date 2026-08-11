@@ -13,9 +13,14 @@ from __future__ import annotations
 import json
 import os
 import re
+import sys
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from limit_config import row_liquid  # noqa: E402
 
 try:  # pragma: no cover - exercised by the absence of the dependency
     from liquid import DictLoader, Environment
@@ -30,30 +35,17 @@ REQUIRE_ENGINE = bool(os.environ.get("CI"))
 
 
 SNIPPETS = Path(__file__).resolve().parents[1] / "theme" / "snippets"
-SLOT_COUNT = len(re.findall(
-    r"customer_order_limit_handle_(\d+) =",
-    (SNIPPETS / "customer-order-limit-config.liquid").read_text(encoding="utf-8"),
-))
 NOW = datetime.now(timezone.utc)
 STAMP = "%Y-%m-%d %H:%M:%S +0000"
 HANDLE = "MTG-HOB-SCN-EN-SET2"
 LOWER = HANDLE.lower()
 
 
-def config_liquid(handle: str, maximum: int, refresh: str, refresh_all: str) -> str:
-    lines = [
-        f"{{% assign customer_order_limit_refresh_all = '{refresh_all}' %}}",
-        f"{{% assign customer_order_limit_handle_1 = '{handle}' %}}",
-        f"{{% assign customer_order_limit_maximum_1 = {maximum} %}}",
-        f"{{% assign customer_order_limit_refresh_1 = '{refresh}' %}}",
-    ]
-    for slot in range(2, SLOT_COUNT + 1):
-        lines += [
-            f"{{% assign customer_order_limit_handle_{slot} = '' %}}",
-            f"{{% assign customer_order_limit_maximum_{slot} = 0 %}}",
-            f"{{% assign customer_order_limit_refresh_{slot} = '' %}}",
-        ]
-    return "\n".join(lines) + "\n"
+def config_liquid(rows: str, refresh_all: str) -> str:
+    return (
+        f"{{% assign customer_order_limit_refresh_all = '{refresh_all}' %}}\n"
+        f"{rows}\n"
+    )
 
 
 @unittest.skipIf(
@@ -75,17 +67,25 @@ class CustomerOrderLimitRenderingTests(unittest.TestCase):
         maximum: int = 1,
         refresh: str = "",
         refresh_all: str = "",
+        rows: str | None = None,
         orders: list | None = None,
         cart_items: list | None = None,
         authenticated: bool = True,
         product: dict | None = None,
     ) -> str:
-        loader = DictLoader({
-            "customer-order-limit-config": config_liquid(HANDLE, maximum, refresh, refresh_all),
-            "customer-order-limit-window": (SNIPPETS / "customer-order-limit-window.liquid").read_text(encoding="utf-8"),
-            "customer-order-limit-rule": (SNIPPETS / "customer-order-limit-rule.liquid").read_text(encoding="utf-8"),
-            "customer-order-limits": (SNIPPETS / "customer-order-limits.liquid").read_text(encoding="utf-8"),
-        })
+        if rows is None:
+            rows = row_liquid(HANDLE, maximum, refresh)
+        files = {
+            name: (SNIPPETS / f"{name}.liquid").read_text(encoding="utf-8")
+            for name in (
+                "customer-order-limit-window",
+                "customer-order-limit-rule",
+                "customer-order-limit-row",
+                "customer-order-limits",
+            )
+        }
+        files["customer-order-limit-config"] = config_liquid(rows, refresh_all)
+        loader = DictLoader(files)
         environment = Environment(loader=loader)
         environment.filters["json"] = json.dumps
         environment.filters["asset_url"] = lambda value: f"/assets/{value}"
@@ -363,6 +363,72 @@ class CustomerOrderLimitRenderingTests(unittest.TestCase):
 
         self.assertEqual(rule["purchased"], 1)
         self.assertEqual(rule["limitWindowLabel"], "")
+
+    # --- one row per limit --------------------------------------------------
+
+    def test_one_row_adds_a_limit(self) -> None:
+        # The whole point of the row: a product is added by writing this line and
+        # nothing else.
+        rules = self.rules(self.render(
+            rows=row_liquid("MTG-HOB-SCN-EN-SET2", 2) + "\n" + row_liquid("CC-BDL-UNEXPECTED-EN", 1),
+            orders=[self.order(days_ago=10, sku="CC-BDL-UNEXPECTED-EN")],
+            cart_items=[{"product": {"handle": LOWER}, "quantity": 1}],
+        ))
+
+        self.assertEqual(sorted(rules), ["cc-bdl-unexpected-en", "mtg-hob-scn-en-set2"])
+        self.assertEqual(rules["cc-bdl-unexpected-en"]["purchased"], 1)
+        self.assertEqual(rules["cc-bdl-unexpected-en"]["remaining"], 0)
+        self.assertEqual(rules["mtg-hob-scn-en-set2"]["cartQuantity"], 1)
+        self.assertEqual(rules["mtg-hob-scn-en-set2"]["remaining"], 1)
+
+    def test_each_row_keeps_its_own_refresh_date(self) -> None:
+        # `include` shares the caller's scope on EasyStore, so a row's timestamp
+        # must not leak into the next row and renew a limit that never asked for
+        # it — including a row that omits limit_refresh entirely.
+        rows = "\n".join((
+            row_liquid("RENEWED-HANDLE", 2, self.passed_refresh()),
+            row_liquid("KEPT-HANDLE", 2),
+            "{% include 'customer-order-limit-row', limit_handle: 'OMITTED-HANDLE',"
+            " limit_maximum: 2 %}",
+        ))
+        rules = self.rules(self.render(
+            rows=rows,
+            orders=[
+                self.order(days_ago=30, handle="renewed-handle"),
+                self.order(days_ago=30, handle="kept-handle"),
+                self.order(days_ago=30, handle="omitted-handle"),
+            ],
+        ))
+
+        self.assertEqual(rules["renewed-handle"]["purchased"], 0)
+        self.assertTrue(rules["renewed-handle"]["limitWindowLabel"])
+        for handle in ("kept-handle", "omitted-handle"):
+            with self.subTest(handle=handle):
+                self.assertEqual(rules[handle]["purchased"], 1)
+                self.assertEqual(rules[handle]["refreshAt"], "")
+                self.assertEqual(rules[handle]["windowStart"], 0)
+
+    def test_a_row_without_a_handle_or_a_maximum_publishes_nothing(self) -> None:
+        rows = "\n".join((
+            row_liquid("", 5),
+            row_liquid("ZERO-HANDLE", 0),
+            row_liquid(HANDLE, 1),
+        ))
+        rules = self.rules(self.render(rows=rows, cart_items=[{"sku": "", "quantity": 2}]))
+
+        self.assertEqual(list(rules), [LOWER])
+        self.assertEqual(rules[LOWER]["cartQuantity"], 0)
+
+    def test_a_row_counts_only_its_own_product(self) -> None:
+        rows = "\n".join((row_liquid(HANDLE, 3), row_liquid("OTHER-HANDLE", 3)))
+        rules = self.rules(self.render(
+            rows=rows,
+            orders=[self.order(days_ago=6, handle=LOWER, quantity=2)],
+            cart_items=[{"sku": "OTHER-HANDLE", "quantity": 1}],
+        ))
+
+        self.assertEqual((rules[LOWER]["purchased"], rules[LOWER]["cartQuantity"]), (2, 0))
+        self.assertEqual((rules["other-handle"]["purchased"], rules["other-handle"]["cartQuantity"]), (0, 1))
 
     # --- diagnostics --------------------------------------------------------
 

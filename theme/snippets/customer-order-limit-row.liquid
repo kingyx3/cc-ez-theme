@@ -1,0 +1,95 @@
+{% comment %}
+  One customer purchase limit, start to finish.
+
+  A row resolves its own refresh window, counts what the customer already bought
+  and what is in the cart, and publishes its rule. Adding or updating a limit is
+  therefore one row in customer-order-limit-config.liquid and nothing else: the
+  previous design spread every product across seven numbered places in two files,
+  and a slot that was added to some of them but not all enforced nothing.
+
+  Input:  limit_handle   EasyStore product handle or SKU. Blank disables the row.
+          limit_maximum  units per customer. 0 disables the row.
+          limit_refresh  timestamp the allowance is counted from. Blank falls
+                         back to customer_order_limit_refresh_all.
+
+  From customer-order-limits.liquid: customer_order_limit_customer_authenticated,
+  customer_order_limit_now_epoch, customer_order_limit_refresh_all.
+
+  The inputs are cleared again at the end. `include` shares the caller's scope on
+  EasyStore, so a row that omits limit_refresh would otherwise inherit the
+  previous row's timestamp and count from the wrong date.
+{% endcomment %}
+{% assign customer_order_limit_row_handle = limit_handle | default: '' | append: '' | strip | downcase %}
+{% assign customer_order_limit_row_maximum = limit_maximum | default: 0 | plus: 0 %}
+{% if customer_order_limit_row_handle != '' and customer_order_limit_row_maximum > 0 %}
+  {% comment %}
+    Orders placed before the refresh window no longer count, so the allowance
+    renews on that date instead of counting every order since the store opened.
+  {% endcomment %}
+  {% include 'customer-order-limit-window', window_refresh: limit_refresh, window_default: customer_order_limit_refresh_all, window_now: customer_order_limit_now_epoch %}
+  {% assign customer_order_limit_row_window = customer_order_limit_window %}
+
+  {% comment %}
+    Purchase history pass. A line item is matched on either its product handle or
+    its SKU, because a configured value such as 'MTG-HOB-SCN-EN-SET2' is both the
+    storefront handle and the SKU, and order line items do not expose the same
+    identifier on every EasyStore store. Matching only one of them counted zero
+    units and let a customer reorder the same product forever.
+
+    A line item with no handle and no SKU reads as '', which can never equal the
+    configured handle this row already proved to be non-blank, so it matches
+    nothing without needing a sentinel value.
+  {% endcomment %}
+  {% assign customer_order_limit_row_purchased = 0 %}
+  {% if customer_order_limit_customer_authenticated %}
+    {% assign customer_order_limit_row_orders = customer.orders | default: customer.recent_orders %}
+    {% for order in customer_order_limit_row_orders %}
+      {% comment %}
+        `order.is_cancelled` is an integer on EasyStore, not a boolean: this
+        theme's own order list compares it with `== 1`. Liquid treats 0 as
+        truthy, so an unless on the raw value skipped every order and counted
+        zero units for every customer. The value is compared as a string.
+      {% endcomment %}
+      {% assign customer_order_limit_row_cancelled = order.is_cancelled | default: 0 | append: '' | strip | downcase %}
+      {% unless customer_order_limit_row_cancelled == '1' or customer_order_limit_row_cancelled == 'true' %}
+        {% comment %}
+          An order with no readable date counts as current, so an unexpected date
+          format keeps the limit enforced instead of silently clearing it.
+        {% endcomment %}
+        {% assign customer_order_limit_row_order_epoch = order.created_at | date: '%s' | plus: 0 %}
+        {% if customer_order_limit_row_order_epoch == 0 %}
+          {% assign customer_order_limit_row_order_epoch = order.processed_at | date: '%s' | plus: 0 %}
+        {% endif %}
+        {% if customer_order_limit_row_order_epoch == 0 %}
+          {% assign customer_order_limit_row_order_epoch = customer_order_limit_now_epoch %}
+        {% endif %}
+        {% if customer_order_limit_row_order_epoch >= customer_order_limit_row_window %}
+          {% assign customer_order_limit_row_lines = order.line_items | default: order.items %}
+          {% for line_item in customer_order_limit_row_lines %}
+            {% assign customer_order_limit_row_line_handle = line_item.product.handle | default: line_item.handle | default: '' | append: '' | strip | downcase %}
+            {% assign customer_order_limit_row_line_sku = line_item.sku | default: line_item.variant.sku | default: line_item.product.sku | default: '' | append: '' | strip | downcase %}
+            {% if customer_order_limit_row_line_handle == customer_order_limit_row_handle or customer_order_limit_row_line_sku == customer_order_limit_row_handle %}
+              {% assign customer_order_limit_row_line_quantity = line_item.quantity | default: line_item.qty | default: 0 | plus: 0 %}
+              {% assign customer_order_limit_row_purchased = customer_order_limit_row_purchased | plus: customer_order_limit_row_line_quantity %}
+            {% endif %}
+          {% endfor %}
+        {% endif %}
+      {% endunless %}
+    {% endfor %}
+  {% endif %}
+
+  {% assign customer_order_limit_row_cart = 0 %}
+  {% for cart_item in cart.items %}
+    {% assign customer_order_limit_row_cart_handle = cart_item.product.handle | default: cart_item.handle | default: '' | append: '' | strip | downcase %}
+    {% assign customer_order_limit_row_cart_sku = cart_item.sku | default: cart_item.variant.sku | default: cart_item.product.sku | default: '' | append: '' | strip | downcase %}
+    {% if customer_order_limit_row_cart_handle == customer_order_limit_row_handle or customer_order_limit_row_cart_sku == customer_order_limit_row_handle %}
+      {% assign customer_order_limit_row_cart_quantity = cart_item.quantity | default: cart_item.qty | default: 0 | plus: 0 %}
+      {% assign customer_order_limit_row_cart = customer_order_limit_row_cart | plus: customer_order_limit_row_cart_quantity %}
+    {% endif %}
+  {% endfor %}
+
+  {% include 'customer-order-limit-rule', rule_handle: customer_order_limit_row_handle, rule_maximum: customer_order_limit_row_maximum, rule_purchased: customer_order_limit_row_purchased, rule_cart_quantity: customer_order_limit_row_cart, rule_customer_authenticated: customer_order_limit_customer_authenticated, rule_refresh_at: customer_order_limit_window_refresh, rule_window_label: customer_order_limit_window_label, rule_window_start: customer_order_limit_row_window %}
+{% endif %}
+{% assign limit_handle = '' %}
+{% assign limit_maximum = 0 %}
+{% assign limit_refresh = '' %}
