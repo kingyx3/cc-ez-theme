@@ -26,7 +26,7 @@ This feature limits a signed-in customer to a configured number of units for an 
 
 Rows supplied with a blank promo maximum are intentionally not configured and remain unlimited. This includes the remaining `MTG-MSH-*`, `MTG-SOS-*`, and `MTG-SPM-*` handles not listed above, plus `CC-BDL-HAPPYHAMPER-EN` and `CC-BDL-HAPPYHAMPER-EN-PBB`.
 
-No limit currently sets a refresh date, so each one counts every order the customer has ever placed. Setting `limit_refresh` on a row — or `customer_order_limit_refresh_all` for the whole store — counts from that date instead. See [Renewing an allowance](#renewing-an-allowance).
+Every limit counts from **9 Aug 2026 00:00 store time (GMT+8)**, set once as `customer_order_limit_refresh_all`. Orders placed before that date do not consume an allowance, so a customer who bought a limited product earlier may buy it again up to its maximum. No row overrides the shared date; setting `limit_refresh` on a row counts that one limit from a different date. See [Renewing an allowance](#renewing-an-allowance).
 
 ## Adding or updating a limit
 
@@ -50,7 +50,7 @@ This replaces the earlier numbered slots, where one limit was spread over seven 
 
 `limit_refresh` is the date a limit is counted from, so an allowance is measured over a window instead of over every order since the store opened. Once the timestamp has passed, orders placed before it stop counting and every customer starts that limit again from zero. A timestamp in the future changes nothing until it arrives, and a blank one keeps counting every past order forever.
 
-`customer_order_limit_refresh_all` at the top of the configuration covers every row that leaves its own blank, so one line renews the whole store. Write timestamps with the store's timezone offset:
+`customer_order_limit_refresh_all` at the top of the configuration covers every row that leaves its own blank, so one line renews the whole store. It is currently `'2026-08-09 00:00:00 +0800'`, which every row inherits. Write timestamps with the store's timezone offset:
 
 ```liquid
 {% include 'customer-order-limit-row', limit_handle: 'CC-BDL-SCENES3-EN', limit_maximum: 1, limit_refresh: '2026-09-01 00:00:00 +0800' %}

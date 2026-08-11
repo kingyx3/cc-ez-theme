@@ -18,15 +18,20 @@
                    '2026-09-01 00:00:00 +0800'.
 
   A blank limit_refresh falls back to customer_order_limit_refresh_all below,
-  which renews every limit that does not name its own date. When both are blank
-  the limit counts every past order, which is the behaviour this store ships
-  with today — set a date here to switch a limit onto a refresh window.
+  which renews every limit that does not name its own date. Every row leaves its
+  own blank today, so all of them count from that shared date. When both are
+  blank a limit counts every past order instead.
 
   To renew one limit, set its limit_refresh rather than clearing its maximum:
   clearing the maximum disables the limit entirely, while a refresh keeps it
   enforced for purchases made from that date onwards.
 {% endcomment %}
-{% assign customer_order_limit_refresh_all = '' %}
+{% comment %}
+  Every limit counts from 9 Aug 2026, store time: orders placed before it no
+  longer consume an allowance. A row that needs a different date sets its own
+  limit_refresh, which overrides this.
+{% endcomment %}
+{% assign customer_order_limit_refresh_all = '2026-08-09 00:00:00 +0800' %}
 {% include 'customer-order-limit-row', limit_handle: 'MTG-HOB-BDL-EN', limit_maximum: 6, limit_refresh: '' %}
 {% include 'customer-order-limit-row', limit_handle: 'MTG-HOB-CBB-EN', limit_maximum: 1, limit_refresh: '' %}
 {% include 'customer-order-limit-row', limit_handle: 'MTG-HOB-CBB-EN-CASE6', limit_maximum: 1, limit_refresh: '' %}

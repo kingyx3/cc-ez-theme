@@ -430,6 +430,52 @@ class CustomerOrderLimitRenderingTests(unittest.TestCase):
         self.assertEqual((rules[LOWER]["purchased"], rules[LOWER]["cartQuantity"]), (2, 0))
         self.assertEqual((rules["other-handle"]["purchased"], rules["other-handle"]["cartQuantity"]), (0, 1))
 
+    # --- the shipped configuration ------------------------------------------
+
+    def test_the_shipped_configuration_counts_from_its_store_date(self) -> None:
+        # The real config, rendered: every limit counts from 9 Aug 2026 store
+        # time, so an order placed before it no longer consumes an allowance.
+        files = {
+            name: (SNIPPETS / f"{name}.liquid").read_text(encoding="utf-8")
+            for name in (
+                "customer-order-limit-window",
+                "customer-order-limit-rule",
+                "customer-order-limit-row",
+                "customer-order-limit-config",
+                "customer-order-limits",
+            )
+        }
+        environment = Environment(loader=DictLoader(files))
+        environment.filters["json"] = json.dumps
+        environment.filters["asset_url"] = lambda value: f"/assets/{value}"
+        before = datetime(2026, 8, 1, tzinfo=timezone.utc)
+        after = datetime(2026, 8, 10, 12, tzinfo=timezone.utc)
+        orders = [
+            {"created_at": before, "is_cancelled": 0,
+             "line_items": [{"product": {"handle": LOWER}, "quantity": 2}]},
+            {"created_at": after, "is_cancelled": 0,
+             "line_items": [{"sku": "MTG-HOB-BDL-EN", "quantity": 1}]},
+        ]
+        rendered = environment.get_template("customer-order-limits").render(
+            customer={"id": 42, "email": "buyer@example.com", "orders": orders},
+            cart={"items": []},
+            product=None,
+        )
+        rules = self.rules(rendered)
+
+        self.assertEqual(len(rules), 17)
+        for handle, rule in rules.items():
+            with self.subTest(handle=handle):
+                self.assertEqual(rule["refreshAt"], "2026-08-09 00:00:00 +0800")
+                self.assertEqual(rule["limitWindowLabel"], "Aug 09, 2026")
+                self.assertGreater(rule["windowStart"], 0)
+                self.assertIn("since Aug 09, 2026", rule["message"])
+        # Orders on either side of the date, on limits configured at 2 and 6.
+        self.assertEqual(rules[LOWER]["purchased"], 0)
+        self.assertEqual(rules[LOWER]["remaining"], 2)
+        self.assertEqual(rules["mtg-hob-bdl-en"]["purchased"], 1)
+        self.assertEqual(rules["mtg-hob-bdl-en"]["remaining"], 5)
+
     # --- diagnostics --------------------------------------------------------
 
     def test_diagnostics_report_what_the_pass_could_read(self) -> None:

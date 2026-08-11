@@ -26,18 +26,27 @@ class CustomerOrderLimitRefreshTests(unittest.TestCase):
     def test_every_row_carries_its_own_refresh_date(self) -> None:
         config = self.read("snippets/customer-order-limit-config.liquid")
 
-        self.assertIn("{% assign customer_order_limit_refresh_all = '' %}", config)
         self.assertTrue(ROWS)
         for handle, _, refresh in ROWS:
             with self.subTest(handle=handle):
                 # The date the allowance counts from is part of the row that
                 # configures the limit, not a separate list to keep in step.
                 self.assertIn(f"limit_handle: '{handle}'", config)
+                # Every row inherits the shared date today; a row that needs a
+                # different one writes it here rather than anywhere else.
                 self.assertEqual(refresh, "")
-        # Shipping with every refresh blank keeps today's behaviour: all past
-        # orders keep counting until a timestamp is configured.
-        self.assertEqual(config.count("customer_order_limit_refresh_all"), 2)
         self.assertNotIn("split:", config)
+
+    def test_every_limit_counts_from_the_configured_store_date(self) -> None:
+        config = self.read("snippets/customer-order-limit-config.liquid")
+
+        # Configured 9 Aug 2026 00:00 store time (GMT+8). A blank row falls back
+        # to this, so one line moves every limit onto the same window.
+        self.assertIn(
+            "{% assign customer_order_limit_refresh_all = '2026-08-09 00:00:00 +0800' %}",
+            config,
+        )
+        self.assertEqual(config.count("customer_order_limit_refresh_all"), 2)
 
     def test_refresh_documentation_states_the_expected_format(self) -> None:
         config = self.read("snippets/customer-order-limit-config.liquid")
