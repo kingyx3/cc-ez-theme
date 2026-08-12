@@ -26,35 +26,57 @@ This feature limits a signed-in customer to a configured number of units for an 
 
 Rows supplied with a blank promo maximum are intentionally not configured and remain unlimited. This includes the remaining `MTG-MSH-*`, `MTG-SOS-*`, and `MTG-SPM-*` handles not listed above, plus `CC-BDL-HAPPYHAMPER-EN` and `CC-BDL-HAPPYHAMPER-EN-PBB`.
 
-The values remain explicit in `theme/snippets/customer-order-limit-config.liquid`. Every configured and storefront handle is normalized to lowercase before comparison because EasyStore product URLs use lowercase handles even when administrative values are capitalized.
+Every limit counts from **9 Aug 2026 00:00 store time (GMT+8)**, set once as `customer_order_limit_refresh_all`. Orders placed before that date do not consume an allowance, so a customer who bought a limited product earlier may buy it again up to its maximum. No row overrides the shared date; setting `limit_refresh` on a row counts that one limit from a different date. See [Renewing an allowance](#renewing-an-allowance).
+
+## Adding or updating a limit
+
+One limit is one row in `theme/snippets/customer-order-limit-config.liquid`, and that row is the whole change:
+
+```liquid
+{% include 'customer-order-limit-row', limit_handle: 'MTG-HOB-BDL-EN', limit_maximum: 6, limit_refresh: '2026-09-01 00:00:00 +0800' %}
+```
+
+| Value | Meaning |
+| --- | --- |
+| `limit_handle` | EasyStore product handle or SKU. Delete the row to make a product unlimited; handles that are not listed are unlimited. |
+| `limit_maximum` | units one customer may buy. |
+| `limit_refresh` | the date the allowance is counted from. Blank falls back to `customer_order_limit_refresh_all`. |
+
+The row resolves its own refresh window, counts the customer's orders and cart for that handle, and publishes its rule, so nothing else in the theme changes when a product is added, updated, or removed. Handles are normalized to lowercase on both sides of every comparison because EasyStore product URLs use lowercase handles even when administrative values are capitalized.
+
+This replaces the earlier numbered slots, where one limit was spread over seven places in two files — `customer_order_limit_handle_N`, `_maximum_N`, `_refresh_N`, a normalization line, a window block, a history-matching block, a cart-matching block and a rule include. A product added to some of them but not all enforced nothing, and the omission was invisible.
 
 ## Renewing an allowance
 
-Each slot has a `customer_order_limit_refresh_N` timestamp, and `customer_order_limit_refresh_all` covers every slot that leaves its own blank. Once a refresh timestamp has passed, orders placed before it stop counting, so every customer starts that limit again from zero. A timestamp in the future changes nothing until it arrives, and a blank one keeps counting every past order forever.
+`limit_refresh` is the date a limit is counted from, so an allowance is measured over a window instead of over every order since the store opened. Once the timestamp has passed, orders placed before it stop counting and every customer starts that limit again from zero. A timestamp in the future changes nothing until it arrives, and a blank one keeps counting every past order forever.
 
-Write timestamps with the store's timezone offset:
+`customer_order_limit_refresh_all` at the top of the configuration covers every row that leaves its own blank, so one line renews the whole store. It is currently `'2026-08-09 00:00:00 +0800'`, which every row inherits. Write timestamps with the store's timezone offset:
 
 ```liquid
-{% assign customer_order_limit_refresh_10 = '2026-09-01 00:00:00 +0800' %}
+{% include 'customer-order-limit-row', limit_handle: 'CC-BDL-SCENES3-EN', limit_maximum: 1, limit_refresh: '2026-09-01 00:00:00 +0800' %}
 ```
 
-A slot with no refresh configured must leave the window inert. Comparisons in `customer-order-limit-window.liquid` are against `''` on values forced to strings rather than against `blank`, and the resolved epoch has to land past 1970, because a live store activated a window at epoch 0 from an unconfigured slot and told shoppers their limit counted "since Jan 01, 1970".
+A row with no refresh configured must leave the window inert. Comparisons in `customer-order-limit-window.liquid` are against `''` on values forced to strings rather than against `blank`, and the resolved epoch has to land past 1970, because a live store activated a window at epoch 0 from an unconfigured slot and told shoppers their limit counted "since Jan 01, 1970".
 
-Renewal is evaluated when the page renders, so it takes effect on the next page load after the timestamp passes. Storefront copy names the date once a window is active — "The limit is 1 unit per customer across orders since Sep 01, 2026" — and each rule publishes `refreshAt` and `limitWindowLabel` so the configuration can be verified in the browser console.
+`include` shares the caller's scope on EasyStore, so `customer-order-limit-row.liquid` clears its three inputs on the way out. Without that, a row written without `limit_refresh` would inherit the previous row's timestamp and renew a limit that never asked for it.
 
-To renew a limit, set the timestamp rather than clearing the maximum: clearing the maximum disables the slot entirely, while a refresh keeps the limit enforced for purchases made from that date onwards.
+Renewal is evaluated when the page renders, so it takes effect on the next page load after the timestamp passes.
+
+The date is never shown to shoppers. It is store configuration, not something a customer needs to reason about, so storefront copy states the ceiling only — "The limit is 1 unit per customer across orders." Each rule still publishes `refreshAt`, `limitWindowLabel` and `windowStart`, so the configuration can be verified in the browser console and the client-side history filter knows which orders to count.
+
+To renew a limit, set the timestamp rather than clearing the maximum: clearing the maximum disables the limit entirely, while a refresh keeps the limit enforced for purchases made from that date onwards.
 
 ## Enforcement
 
-Liquid makes one pass through the customer's orders and one pass through `cart.items`, combining quantities for every line with the same normalized identifier. Cancelled orders are ignored, and orders older than the slot's refresh window are skipped.
+Each row makes one pass through the customer's orders and one pass through `cart.items`, combining quantities for every line with the same normalized identifier. Cancelled orders are ignored, and orders older than the row's refresh window are skipped before its line items are read.
 
-A line is matched on **either** its product handle **or** its SKU. A configured value such as `MTG-HOB-SCN-EN-SET2` is both the storefront handle and the SKU, and order line items do not expose the same identifier on every store — matching only `product.handle` counted zero units, which let a customer reorder the same product in order after order. Blank identifiers are replaced with sentinels so an unconfigured slot can never match a line that simply has no handle or no SKU. Quantities and the order and line collections each read a fallback field name for the same reason.
+A line is matched on **either** its product handle **or** its SKU. A configured value such as `MTG-HOB-SCN-EN-SET2` is both the storefront handle and the SKU, and order line items do not expose the same identifier on every store — matching only `product.handle` counted zero units, which let a customer reorder the same product in order after order. A row only runs for a non-blank handle, so a line item carrying neither identifier reads as `''` and matches nothing. Quantities and the order and line collections each read a fallback field name for the same reason.
 
 Booleans published by these snippets are read by value, not by identity: EasyStore's `json` filter renders a Liquid boolean as `1` or `0`, so a strict `=== true` check is false for every signed-in customer.
 
 The same applies inside Liquid. `order.is_cancelled` is an **integer** on EasyStore — `templates/customers/orders.liquid` compares it with `== 1` — and Liquid treats `0` as truthy, so `{%- raw -%}{% unless order.is_cancelled %}{%- endraw -%}` skipped *every* order and counted zero units for every customer, while the account page visibly listed their orders. Order flags are forced to strings and compared by value. Tests fixture these flags as integers for the same reason: Python booleans in the fixtures made the bug invisible.
 
-`window.customerOrderLimitsV2.diagnostics` reports what the history pass could actually read: `ordersSeen`, `lineItemsSeen`, and an `identifiers` sample in `handle/sku×quantity` form. `ordersSeen: 0` for a signed-in customer with orders means the storefront cannot see order history at all; a populated sample whose values never match a configured slot means the identifiers differ from what is configured.
+`window.customerOrderLimitsV2.diagnostics` reports what the history pass could actually read: `ordersSeen`, `lineItemsSeen`, and an `identifiers` sample in `handle/sku×quantity` form. It is produced by `customer-order-limits.liquid` before any row runs, so it describes the order history itself rather than any one limit. `ordersSeen: 0` for a signed-in customer with orders means the storefront cannot see order history at all; a populated sample whose values never match a configured row means the identifiers differ from what is configured.
 
 ## When a page cannot see order history
 
@@ -154,7 +176,7 @@ Before merging or publishing, upload the exact workflow ZIP to an unpublished Ea
 7. signed out, Add to Cart, Buy Now, listing quick-add, and cart checkout on a limited product open the login page and return to the original page after signing in, with no limit message, disabled control, or clamped quantity shown first;
 8. signed in, every purchase path works normally on desktop and mobile and never reaches an account page — check a limited product, an unlimited product, and an unlimited product bought while a limited product sits in the cart;
 9. signed in, `window.customerOrderLimitsV2.customerAuthenticated` is `true` and each rule's `purchased` matches prior orders — buy one unit, complete the order, then reload the product page and confirm `purchased` increased. If `diagnostics.lineItemsSeen` is `0`, the page could not read history itself: confirm `window.CustomerOrderLimits.historyState()` reports `loaded` and that `/account/orders` contains `#customer-order-limit-history` with the expected lines;
-10. with a refresh timestamp set in the past, `purchased` drops to zero for orders placed before it, `limitWindowLabel` is set, and the copy names that date; with one set in the future, nothing changes and `refreshAt` still reports the configured value;
+10. with a refresh timestamp set in the past, `purchased` drops to zero for orders placed before it and `limitWindowLabel` is set, while no message on the page names the date; with one set in the future, nothing changes and `refreshAt` still reports the configured value;
 11. on a product with a limit of 1: Buy Now from an empty cart adds one unit and reaches checkout; Buy Now again goes straight to checkout without adding; the buttons never stay disabled or spinning; and every message on the page reflects the current cart.
 
 ## Enforcement boundary
@@ -163,4 +185,4 @@ This is a theme-level storefront safeguard, not server-side authorization. Disab
 
 ## Rollback
 
-Set every `customer_order_limit_handle_N` to `''` and every maximum to `0`, or deploy the known-good PR #61 artifact.
+Delete the rows from `customer-order-limit-config.liquid` — a configuration with no rows publishes no rules and leaves every purchase path native — or deploy the known-good PR #61 artifact.

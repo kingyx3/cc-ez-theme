@@ -33,13 +33,9 @@
     return `${count} unit${count === 1 ? '' : 's'}`;
   };
 
-  // A rule whose refresh timestamp has passed only counts orders from that date
-  // onwards, so the copy says so instead of implying the customer's whole order
-  // history was measured. Liquid formats the date with the store's settings.
-  const sinceLabel = (rule) => {
-    const label = String((rule && rule.limitWindowLabel) || '').trim();
-    return label ? ` since ${label}` : '';
-  };
+  // A refresh date is store configuration, not something a shopper needs to
+  // reason about, so no message names it. The resolved window still travels on
+  // the rule as `refreshAt` and `limitWindowLabel` for console verification.
 
   const rules = {};
   Object.entries(source.rules).forEach(([handle, rule]) => {
@@ -180,7 +176,7 @@
     const maximum = quantity(rule && rule.maximum, 0);
     const purchased = quantity(rule && rule.purchased, 0);
     const cartQuantity = quantity(rule && rule.cartQuantity, 0);
-    const limitSuffix = `The limit is ${unitLabel(maximum)} per customer across orders${sinceLabel(rule)}.`;
+    const limitSuffix = `The limit is ${unitLabel(maximum)} per customer across orders.`;
 
     if (remaining <= 0) {
       if (purchased > 0 && cartQuantity > 0) {
@@ -190,7 +186,7 @@
         return `Maximum quantity reached. You already have ${unitLabel(cartQuantity)} in your cart. ${limitSuffix}`;
       }
       if (purchased > 0) {
-        return `Customer purchase limit reached. You have already purchased ${unitLabel(purchased)} of the ${unitLabel(maximum)} allowed per customer across orders${sinceLabel(rule)}.`;
+        return `Customer purchase limit reached. You have already purchased ${unitLabel(purchased)} of the ${unitLabel(maximum)} allowed per customer across orders.`;
       }
       return `Maximum quantity reached. ${limitSuffix}`;
     }
@@ -204,11 +200,11 @@
   const cartMessageFor = (rule, allowed) => {
     const maximum = quantity(rule && rule.maximum, 0);
     const purchased = quantity(rule && rule.purchased, 0);
-    const limitSuffix = `The limit is ${unitLabel(maximum)} per customer across orders${sinceLabel(rule)}.`;
+    const limitSuffix = `The limit is ${unitLabel(maximum)} per customer across orders.`;
 
     if (allowed <= 0) {
       if (purchased > 0) {
-        return `Customer purchase limit reached. You have already purchased ${unitLabel(purchased)} of the ${unitLabel(maximum)} allowed${sinceLabel(rule)}, so remove this product before checkout.`;
+        return `Customer purchase limit reached. You have already purchased ${unitLabel(purchased)} of the ${unitLabel(maximum)} allowed, so remove this product before checkout.`;
       }
       return `Customer purchase limit reached. Remove this product before checkout. ${limitSuffix}`;
     }

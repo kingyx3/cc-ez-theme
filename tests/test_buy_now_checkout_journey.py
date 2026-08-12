@@ -63,7 +63,7 @@ class BuyNowCheckoutJourneyTests(unittest.TestCase):
         self.assertIn("Reduce this product to ${unitLabel(allowed)} before checkout.", limits)
         self.assertIn("Remove this product before checkout.", limits)
         self.assertIn(
-            "The limit is ${unitLabel(maximum)} per customer across orders${sinceLabel(rule)}.",
+            "The limit is ${unitLabel(maximum)} per customer across orders.",
             limits,
         )
 

@@ -123,10 +123,11 @@ class HistoryPayloadStructureTests(unittest.TestCase):
 
     def test_rules_publish_the_window_start_for_client_filtering(self) -> None:
         rule = self.read("snippets/customer-order-limit-rule.liquid")
+        row = self.read("snippets/customer-order-limit-row.liquid")
         limits = self.read("snippets/customer-order-limits.liquid")
 
         self.assertIn("windowStart: {{ customer_order_limit_rule_window_start | json }},", rule)
-        self.assertEqual(limits.count("rule_window_start: customer_order_limit_window_"), 17)
+        self.assertIn("rule_window_start: customer_order_limit_row_window", row)
         self.assertIn("customerId: {{ customer_order_limit_customer_id | json }},", limits)
 
     def test_validator_loads_history_and_holds_purchases_until_it_knows(self) -> None:
@@ -201,6 +202,7 @@ class HistoryPayloadRenderingTests(unittest.TestCase):
                 "customer-order-limit-config",
                 "customer-order-limit-window",
                 "customer-order-limit-rule",
+                "customer-order-limit-row",
                 "customer-order-limits",
                 "customer-order-limit-history",
             )

@@ -1,66 +1,51 @@
 {% comment %}
-Configure EasyStore product-handle limits.
-Leave a handle blank to disable that slot. Handles are normalized to lowercase at runtime.
-Handles omitted from this file, including rows with a blank promo maximum, remain unlimited.
+  Customer purchase limits: one row per product, and one row is the whole change.
 
-Refresh timestamps renew an allowance. Once a refresh timestamp has passed, orders
-placed before it stop counting, so every customer starts the limit again from zero.
-A timestamp in the future changes nothing until it arrives.
+  Each row takes three values:
 
-Write timestamps with the store's timezone offset, for example
-'2026-09-01 00:00:00 +0800'. A slot with a blank refresh falls back to
-customer_order_limit_refresh_all, and when that is blank too every past order
-keeps counting forever.
+    limit_handle   EasyStore product handle or SKU. Matched against both, because
+                   order line items expose one or the other depending on the
+                   store, and normalized to lowercase at runtime because
+                   EasyStore product URLs are lowercase even when the
+                   administrative value is capitalized.
+    limit_maximum  units one customer may buy. Delete the row to leave a product
+                   unlimited; handles that are not listed here are unlimited.
+    limit_refresh  the date the allowance is counted from, so a limit is measured
+                   over a window instead of over every order ever placed. Orders
+                   placed before it stop counting and every customer starts that
+                   limit again from zero. A timestamp in the future changes
+                   nothing until it arrives. Write the store's timezone offset:
+                   '2026-09-01 00:00:00 +0800'.
+
+  A blank limit_refresh falls back to customer_order_limit_refresh_all below,
+  which renews every limit that does not name its own date. Every row leaves its
+  own blank today, so all of them count from that shared date. When both are
+  blank a limit counts every past order instead.
+
+  To renew one limit, set its limit_refresh rather than clearing its maximum:
+  clearing the maximum disables the limit entirely, while a refresh keeps it
+  enforced for purchases made from that date onwards.
 {% endcomment %}
-{% assign customer_order_limit_refresh_all = '' %}
-{% assign customer_order_limit_handle_1 = 'MTG-HOB-BDL-EN' %}
-{% assign customer_order_limit_maximum_1 = 6 %}
-{% assign customer_order_limit_refresh_1 = '' %}
-{% assign customer_order_limit_handle_2 = 'MTG-HOB-CBB-EN' %}
-{% assign customer_order_limit_maximum_2 = 1 %}
-{% assign customer_order_limit_refresh_2 = '' %}
-{% assign customer_order_limit_handle_3 = 'MTG-HOB-CBB-EN-CASE6' %}
-{% assign customer_order_limit_maximum_3 = 1 %}
-{% assign customer_order_limit_refresh_3 = '' %}
-{% assign customer_order_limit_handle_4 = 'MTG-HOB-CBB-EN-PACK' %}
-{% assign customer_order_limit_maximum_4 = 2 %}
-{% assign customer_order_limit_refresh_4 = '' %}
-{% assign customer_order_limit_handle_5 = 'MTG-HOB-DNK-EN' %}
-{% assign customer_order_limit_maximum_5 = 3 %}
-{% assign customer_order_limit_refresh_5 = '' %}
-{% assign customer_order_limit_handle_6 = 'MTG-HOB-PBB-EN' %}
-{% assign customer_order_limit_maximum_6 = 12 %}
-{% assign customer_order_limit_refresh_6 = '' %}
-{% assign customer_order_limit_handle_7 = 'MTG-HOB-PRK-EN-SET4' %}
-{% assign customer_order_limit_maximum_7 = 3 %}
-{% assign customer_order_limit_refresh_7 = '' %}
-{% assign customer_order_limit_handle_8 = 'MTG-HOB-OBP-EN' %}
-{% assign customer_order_limit_maximum_8 = 1 %}
-{% assign customer_order_limit_refresh_8 = '' %}
-{% assign customer_order_limit_handle_9 = 'MTG-HOB-SCN-EN-SET2' %}
-{% assign customer_order_limit_maximum_9 = 2 %}
-{% assign customer_order_limit_refresh_9 = '' %}
-{% assign customer_order_limit_handle_10 = 'CC-BDL-SCENES3-EN' %}
-{% assign customer_order_limit_maximum_10 = 1 %}
-{% assign customer_order_limit_refresh_10 = '' %}
-{% assign customer_order_limit_handle_11 = 'CC-BDL-FRIENDS3-EN-SPM' %}
-{% assign customer_order_limit_maximum_11 = 1 %}
-{% assign customer_order_limit_refresh_11 = '' %}
-{% assign customer_order_limit_handle_12 = 'CC-BDL-FRIENDS3-EN-MSH' %}
-{% assign customer_order_limit_maximum_12 = 1 %}
-{% assign customer_order_limit_refresh_12 = '' %}
-{% assign customer_order_limit_handle_13 = 'CC-BDL-SPIDERVAULT-EN' %}
-{% assign customer_order_limit_maximum_13 = 1 %}
-{% assign customer_order_limit_refresh_13 = '' %}
-{% assign customer_order_limit_handle_14 = 'CC-BDL-UNEXPECTED-EN' %}
-{% assign customer_order_limit_maximum_14 = 2 %}
-{% assign customer_order_limit_refresh_14 = '' %}
-{% assign customer_order_limit_handle_15 = 'MTG-HOB-GFB-EN' %}
-{% assign customer_order_limit_maximum_15 = 1 %}
-{% assign customer_order_limit_refresh_15 = '' %}
-{% assign customer_order_limit_handle_16 = 'MTG-MSH-JBB-EN' %}
-{% assign customer_order_limit_maximum_16 = 6 %}
-{% assign customer_order_limit_refresh_16 = '' %}
-{% assign customer_order_limit_handle_17 = 'MTG-MSH-CMD-EN-CE-SET4' %}
-{% assign customer_order_limit_maximum_17 = 1 %}
-{% assign customer_order_limit_refresh_17 = '' %}
+{% comment %}
+  Every limit counts from 9 Aug 2026, store time: orders placed before it no
+  longer consume an allowance. A row that needs a different date sets its own
+  limit_refresh, which overrides this.
+{% endcomment %}
+{% assign customer_order_limit_refresh_all = '2026-08-09 00:00:00 +0800' %}
+{% include 'customer-order-limit-row', limit_handle: 'MTG-HOB-BDL-EN', limit_maximum: 6, limit_refresh: '' %}
+{% include 'customer-order-limit-row', limit_handle: 'MTG-HOB-CBB-EN', limit_maximum: 1, limit_refresh: '' %}
+{% include 'customer-order-limit-row', limit_handle: 'MTG-HOB-CBB-EN-CASE6', limit_maximum: 1, limit_refresh: '' %}
+{% include 'customer-order-limit-row', limit_handle: 'MTG-HOB-CBB-EN-PACK', limit_maximum: 2, limit_refresh: '' %}
+{% include 'customer-order-limit-row', limit_handle: 'MTG-HOB-DNK-EN', limit_maximum: 3, limit_refresh: '' %}
+{% include 'customer-order-limit-row', limit_handle: 'MTG-HOB-PBB-EN', limit_maximum: 12, limit_refresh: '' %}
+{% include 'customer-order-limit-row', limit_handle: 'MTG-HOB-PRK-EN-SET4', limit_maximum: 3, limit_refresh: '' %}
+{% include 'customer-order-limit-row', limit_handle: 'MTG-HOB-OBP-EN', limit_maximum: 1, limit_refresh: '' %}
+{% include 'customer-order-limit-row', limit_handle: 'MTG-HOB-SCN-EN-SET2', limit_maximum: 2, limit_refresh: '' %}
+{% include 'customer-order-limit-row', limit_handle: 'CC-BDL-SCENES3-EN', limit_maximum: 1, limit_refresh: '' %}
+{% include 'customer-order-limit-row', limit_handle: 'CC-BDL-FRIENDS3-EN-SPM', limit_maximum: 1, limit_refresh: '' %}
+{% include 'customer-order-limit-row', limit_handle: 'CC-BDL-FRIENDS3-EN-MSH', limit_maximum: 1, limit_refresh: '' %}
+{% include 'customer-order-limit-row', limit_handle: 'CC-BDL-SPIDERVAULT-EN', limit_maximum: 1, limit_refresh: '' %}
+{% include 'customer-order-limit-row', limit_handle: 'CC-BDL-UNEXPECTED-EN', limit_maximum: 2, limit_refresh: '' %}
+{% include 'customer-order-limit-row', limit_handle: 'MTG-HOB-GFB-EN', limit_maximum: 1, limit_refresh: '' %}
+{% include 'customer-order-limit-row', limit_handle: 'MTG-MSH-JBB-EN', limit_maximum: 6, limit_refresh: '' %}
+{% include 'customer-order-limit-row', limit_handle: 'MTG-MSH-CMD-EN-CE-SET4', limit_maximum: 1, limit_refresh: '' %}

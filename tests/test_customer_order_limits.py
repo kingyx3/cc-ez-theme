@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 import re
+import sys
 import unittest
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from limit_config import configured_rows, row_liquid  # noqa: E402
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,33 +21,26 @@ class CustomerOrderLimitTests(unittest.TestCase):
     def test_exact_limit_matrix_is_preserved(self) -> None:
         config = self.read("snippets/customer-order-limit-config.liquid")
         expected = (
-            (1, "MTG-HOB-BDL-EN", 6),
-            (2, "MTG-HOB-CBB-EN", 1),
-            (3, "MTG-HOB-CBB-EN-CASE6", 1),
-            (4, "MTG-HOB-CBB-EN-PACK", 2),
-            (5, "MTG-HOB-DNK-EN", 3),
-            (6, "MTG-HOB-PBB-EN", 12),
-            (7, "MTG-HOB-PRK-EN-SET4", 3),
-            (8, "MTG-HOB-OBP-EN", 1),
-            (9, "MTG-HOB-SCN-EN-SET2", 2),
-            (10, "CC-BDL-SCENES3-EN", 1),
-            (11, "CC-BDL-FRIENDS3-EN-SPM", 1),
-            (12, "CC-BDL-FRIENDS3-EN-MSH", 1),
-            (13, "CC-BDL-SPIDERVAULT-EN", 1),
-            (14, "CC-BDL-UNEXPECTED-EN", 2),
-            (15, "MTG-HOB-GFB-EN", 1),
-            (16, "MTG-MSH-JBB-EN", 6),
-            (17, "MTG-MSH-CMD-EN-CE-SET4", 1),
+            ("MTG-HOB-BDL-EN", 6),
+            ("MTG-HOB-CBB-EN", 1),
+            ("MTG-HOB-CBB-EN-CASE6", 1),
+            ("MTG-HOB-CBB-EN-PACK", 2),
+            ("MTG-HOB-DNK-EN", 3),
+            ("MTG-HOB-PBB-EN", 12),
+            ("MTG-HOB-PRK-EN-SET4", 3),
+            ("MTG-HOB-OBP-EN", 1),
+            ("MTG-HOB-SCN-EN-SET2", 2),
+            ("CC-BDL-SCENES3-EN", 1),
+            ("CC-BDL-FRIENDS3-EN-SPM", 1),
+            ("CC-BDL-FRIENDS3-EN-MSH", 1),
+            ("CC-BDL-SPIDERVAULT-EN", 1),
+            ("CC-BDL-UNEXPECTED-EN", 2),
+            ("MTG-HOB-GFB-EN", 1),
+            ("MTG-MSH-JBB-EN", 6),
+            ("MTG-MSH-CMD-EN-CE-SET4", 1),
         )
-        for slot, handle, maximum in expected:
-            self.assertIn(
-                f"customer_order_limit_handle_{slot} = '{handle}'",
-                config,
-            )
-            self.assertIn(
-                f"customer_order_limit_maximum_{slot} = {maximum}",
-                config,
-            )
+        rows = configured_rows(config)
+        self.assertEqual([(handle, maximum) for handle, maximum, _ in rows], list(expected))
 
         unlimited = (
             "MTG-MSH-BGB-EN",
@@ -69,39 +67,57 @@ class CustomerOrderLimitTests(unittest.TestCase):
         for handle in unlimited:
             self.assertNotIn(handle, config)
 
-        self.assertEqual(config.count("customer_order_limit_handle_"), 17)
-        self.assertEqual(config.count("customer_order_limit_maximum_"), 17)
+        self.assertEqual(len(rows), 17)
         self.assertIn("normalized to lowercase", config)
-        self.assertIn("blank promo maximum", config)
+        self.assertIn("Delete the row to leave a product", config)
         self.assertNotIn("split:", config)
+
+    def test_a_limit_is_one_row_of_configuration(self) -> None:
+        # A limit used to be spread over seven numbered places in two files, so a
+        # product added to some of them but not all enforced nothing. Everything
+        # a limit needs now travels on its own row.
+        config = self.read("snippets/customer-order-limit-config.liquid")
+        row = self.read("snippets/customer-order-limit-row.liquid")
+
+        for handle, maximum, refresh in configured_rows(config):
+            with self.subTest(handle=handle):
+                self.assertIn(row_liquid(handle, maximum, refresh), config)
+        # No numbered slots survive anywhere: a row carries its own handle,
+        # maximum, refresh window, counts and published rule.
+        self.assertIsNone(re.search(r"customer_order_limit_(handle|maximum|refresh)_\d", config))
+        self.assertIsNone(
+            re.search(r"customer_order_limit_\w*_\d", self.read("snippets/customer-order-limits.liquid"))
+        )
+        self.assertEqual(row.count("{% include 'customer-order-limit-rule'"), 1)
+        self.assertEqual(row.count("{% include 'customer-order-limit-window'"), 1)
+        # `include` shares the caller's scope on EasyStore, so a row that omits
+        # limit_refresh must not inherit the previous row's timestamp.
+        self.assertIn("{% assign limit_handle = '' %}", row)
+        self.assertIn("{% assign limit_maximum = 0 %}", row)
+        self.assertIn("{% assign limit_refresh = '' %}", row)
 
     def test_liquid_normalizes_handles_and_passes_authentication_explicitly(self) -> None:
         liquid = self.read("snippets/customer-order-limits.liquid")
+        row = self.read("snippets/customer-order-limit-row.liquid")
         rule = self.read("snippets/customer-order-limit-rule.liquid")
-        # One pass each, over collections resolved with a fallback name so a
-        # different EasyStore field name cannot silently read nothing.
-        self.assertEqual(liquid.count("{% for order in customer_order_limit_orders %}"), 1)
-        self.assertEqual(liquid.count("{% for line_item in customer_order_limit_lines %}"), 1)
-        self.assertEqual(liquid.count("{% for cart_item in cart.items %}"), 1)
-        self.assertIn("customer.orders | default: customer.recent_orders", liquid)
-        self.assertIn("order.line_items | default: order.items", liquid)
-        self.assertEqual(
-            liquid.count("{% include 'customer-order-limit-rule'"),
-            17,
+        # One pass each per row, over collections resolved with a fallback name
+        # so a different EasyStore field name cannot silently read nothing.
+        self.assertEqual(row.count("{% for order in customer_order_limit_row_orders %}"), 1)
+        self.assertEqual(row.count("{% for line_item in customer_order_limit_row_lines %}"), 1)
+        self.assertEqual(row.count("{% for cart_item in cart.items %}"), 1)
+        self.assertIn("customer.orders | default: customer.recent_orders", row)
+        self.assertIn("order.line_items | default: order.items", row)
+        self.assertIn(
+            "rule_customer_authenticated: customer_order_limit_customer_authenticated",
+            row,
         )
-        self.assertEqual(
-            liquid.count(
-                "rule_customer_authenticated: customer_order_limit_customer_authenticated"
-            ),
-            17,
-        )
+        self.assertIn("{% if customer_order_limit_customer_authenticated %}", row)
         self.assertIn("customer_order_limit_customer_id != '' or customer_order_limit_customer_email != ''", liquid)
         self.assertIn("customer.id | default: '' | append: '' | strip", liquid)
         self.assertIn("customerAuthenticated:", liquid)
-        self.assertIn("customer_order_limit_handle_17_normalized", liquid)
-        self.assertIn("line_item.product.handle", liquid)
-        self.assertIn("cart_item.product.handle", liquid)
-        self.assertGreaterEqual(liquid.count("| downcase"), 19)
+        self.assertIn("limit_handle | default: '' | append: '' | strip | downcase", row)
+        self.assertIn("line_item.product.handle", row)
+        self.assertIn("cart_item.product.handle", row)
         self.assertIn("rule_handle | default: '' | append: '' | strip | downcase", rule)
         # `blank` comparisons are not portable across Liquid engines.
         self.assertNotIn("blank", rule)

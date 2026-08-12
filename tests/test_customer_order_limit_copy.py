@@ -84,10 +84,11 @@ class CustomerOrderLimitCopyTests(unittest.TestCase):
         config = self.read("snippets/customer-order-limit-config.liquid")
 
         self.assertIn(
-            "customer_order_limit_handle_7 = 'MTG-HOB-PRK-EN-SET4'",
+            "{% include 'customer-order-limit-row',"
+            " limit_handle: 'MTG-HOB-PRK-EN-SET4', limit_maximum: 3,"
+            " limit_refresh: '' %}",
             config,
         )
-        self.assertIn("customer_order_limit_maximum_7 = 3", config)
 
 
 if __name__ == "__main__":
