@@ -273,20 +273,21 @@ background.
 
 ### Navigation data
 
-The desktop header and mobile drawer expose a Browse dropdown followed by four
+The desktop header and mobile drawer expose a Browse dropdown followed by five
 top-level destinations in a fixed order:
 
 1. Browse (EasyStore product collection hierarchy)
-2. Hobbit (`/collections/the-hobbit`)
-3. Marvel (`/collections/marvel-super-heroes`)
-4. Strixhaven (`/collections/secrets-of-strixhaven`)
-5. About Us (`/pages/about-us`)
+2. Late Night Crackers (`/collections/late-night-crackers`)
+3. Hobbit (`/collections/the-hobbit`)
+4. Marvel (`/collections/marvel-super-heroes`)
+5. Strixhaven (`/collections/secrets-of-strixhaven`)
+6. About Us (`/pages/about-us`)
 
 About Us is pushed to the right edge of the desktop navigation area. The
 Browse reads `contents.catalog.links` and renders up to three collection levels
 from EasyStore's product catalog hierarchy. On desktop, hovering or focusing a
 parent collection opens its child collection flyout; mobile retains nested
-drill-down navigation. The three fixed collection shortcuts remain direct
+drill-down navigation. The four fixed collection shortcuts remain direct
 EasyStore links.
 
 The theme controls:

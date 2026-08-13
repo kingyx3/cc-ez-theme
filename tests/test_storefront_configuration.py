@@ -455,6 +455,9 @@ class StorefrontConfigurationTests(unittest.TestCase):
             )
         )
         self.assertNotIn("{% continue %}", header)
+        self.assertEqual(
+            header.count('href="/collections/late-night-crackers"'), 2
+        )
         self.assertEqual(header.count('href="/collections/the-hobbit"'), 2)
         self.assertEqual(
             header.count('href="/collections/marvel-super-heroes"'), 2
@@ -465,7 +468,12 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertEqual(header.count('href="/pages/about-us"'), 2)
 
         first_browse = header.index("navigation-browse")
-        first_hobbit = header.index('href="/collections/the-hobbit"')
+        first_crackers = header.index(
+            'href="/collections/late-night-crackers"'
+        )
+        first_hobbit = header.index(
+            'href="/collections/the-hobbit"', first_crackers
+        )
         first_marvel = header.index(
             'href="/collections/marvel-super-heroes"', first_hobbit
         )
@@ -473,14 +481,18 @@ class StorefrontConfigurationTests(unittest.TestCase):
             'href="/collections/secrets-of-strixhaven"', first_marvel
         )
         first_about = header.index('href="/pages/about-us"', first_strixhaven)
-        self.assertLess(first_browse, first_hobbit)
+        self.assertLess(first_browse, first_crackers)
+        self.assertLess(first_crackers, first_hobbit)
         self.assertLess(first_hobbit, first_marvel)
         self.assertLess(first_marvel, first_strixhaven)
         self.assertLess(first_strixhaven, first_about)
 
         second_browse = header.index("navigation-browse", first_browse + 1)
+        second_crackers = header.index(
+            'href="/collections/late-night-crackers"', first_about
+        )
         second_hobbit = header.index(
-            'href="/collections/the-hobbit"', first_about
+            'href="/collections/the-hobbit"', second_crackers
         )
         second_marvel = header.index(
             'href="/collections/marvel-super-heroes"', second_hobbit
@@ -489,7 +501,8 @@ class StorefrontConfigurationTests(unittest.TestCase):
             'href="/collections/secrets-of-strixhaven"', second_marvel
         )
         second_about = header.index('href="/pages/about-us"', second_strixhaven)
-        self.assertLess(second_browse, second_hobbit)
+        self.assertLess(second_browse, second_crackers)
+        self.assertLess(second_crackers, second_hobbit)
         self.assertLess(second_hobbit, second_marvel)
         self.assertLess(second_marvel, second_strixhaven)
         self.assertLess(second_strixhaven, second_about)
