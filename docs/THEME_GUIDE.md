@@ -128,7 +128,8 @@ Snippets are shared partials. Examples:
 - `translation-fallback.liquid` prints a platform translation, or a literal
   fallback when the store has none.
 - `low-inventory-notice.liquid` prints the remaining stock when only a few units
-  are left.
+  are left, and `low-inventory-threshold-config.liquid` sets how few that is for
+  a given product.
 
 Use a snippet when the same rendering is needed in several sections or
 templates. Use a section when merchants need editor-facing settings or blocks.
@@ -323,16 +324,42 @@ Packs. Use tags for narrower operational detail.
 ## 9. Remaining stock and out-of-stock interest
 
 `snippets/low-inventory-notice.liquid` prints "Only N left" once a product is
-down to five or fewer units. Cards report the total across the variants a
+down to five or fewer units, or to whatever threshold that product is configured
+with below. Cards report the total across the variants a
 shopper can buy; the product page reports the selected variant, and
 `assets/product-form.js` refreshes it when the shopper picks another variant.
 
 The count is only printed when the platform reports a positive quantity. A
 product whose stock is not tracked reports zero or nothing, which is
 indistinguishable here from sold out, so no count is claimed for it. Sold-out
-products keep their existing badge. The threshold lives in one place, the
-`low_inventory_threshold` assignment in the snippet, and reaches the script
-through `data-low-inventory-threshold`.
+products keep their existing badge. The threshold reaches the script through
+`data-low-inventory-threshold`, so the card, the product page, and a later
+variant change cannot disagree about what counts as low.
+
+### Per-product thresholds
+
+Five units is the shared default, not a fixed rule.
+`snippets/low-inventory-threshold-config.liquid` holds that default and one row
+per product that needs a different one:
+
+```liquid
+{% assign low_inventory_threshold_default = 5 %}
+{% include 'low-inventory-threshold-row', threshold_handle: 'MTG-HOB-CBB-EN-PACK', threshold_maximum: 'all' %}
+```
+
+`threshold_handle` is matched against the product's handle, its SKU, and its
+variants' SKUs, because a store exposes one or the other depending on how the
+product was created; case does not matter. `threshold_maximum` is the highest
+remaining count that still prints a notice, or `all` to print the count at every
+quantity — which is what `MTG-HOB-CBB-EN-PACK` ships with, so the Hobbit
+Collector Booster pack advertises its stock the whole way down rather than only
+in its last five units.
+
+Changing a threshold is one row and nothing else. The first matching row wins,
+so a specific SKU listed above a broader one keeps its own number, and a row
+whose maximum is neither a positive number nor `all` is ignored rather than
+applied — a typo leaves the product on the default instead of silently hiding a
+notice that was showing before.
 
 For out-of-stock products, a free manual alternative is a theme-rendered
 WhatsApp interest link containing the product title, selected variant, and

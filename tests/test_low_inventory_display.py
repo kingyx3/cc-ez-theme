@@ -29,16 +29,22 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 THEME_ROOT = REPOSITORY_ROOT / "theme"
 SNIPPETS = THEME_ROOT / "snippets"
 NOTICE = SNIPPETS / "low-inventory-notice.liquid"
+THRESHOLD_RESOLVER = SNIPPETS / "low-inventory-threshold.liquid"
+THRESHOLD_CONFIG = SNIPPETS / "low-inventory-threshold-config.liquid"
+THRESHOLD_ROW = SNIPPETS / "low-inventory-threshold-row.liquid"
 PRODUCT_CARD = SNIPPETS / "product-card.liquid"
 MAIN_PRODUCT = THEME_ROOT / "sections" / "main-product.liquid"
 LAYOUT = THEME_ROOT / "layout" / "theme.liquid"
 THRESHOLD = 5
+UNLIMITED_HANDLE = "mtg-hob-cbb-en-pack"
 
 
-def variant(quantity, available: bool = True) -> dict:
+def variant(quantity, available: bool = True, sku: str = None) -> dict:
     entry = {"available": available}
     if quantity is not None:
         entry["inventory_quantity"] = quantity
+    if sku is not None:
+        entry["sku"] = sku
     return entry
 
 
@@ -138,20 +144,28 @@ class LowInventoryScriptTests(unittest.TestCase):
         self.assertEqual(1, self.source.count("dataset.inventoryQuantity"))
 
     def test_the_threshold_comes_from_the_rendered_markup(self) -> None:
-        # One number, defined in the snippet, so the card and the product page
+        # One number, resolved by the snippets, so the card and the product page
         # cannot disagree about what counts as low.
         self.assertIn("notice.dataset.lowInventoryThreshold", self.source)
         self.assertNotIn("= 5;", self.source)
+
+    def test_a_product_that_prints_every_count_is_not_hidden_after_a_variant_change(
+        self,
+    ) -> None:
+        # 'all' is not a number, so parsing it as one yields no threshold and the
+        # notice the snippet rendered would be cleared on the next variant.
+        body = self.source.split("updateLowInventoryNotice() {", 1)[1].split("\n    }", 1)[0]
+
+        self.assertIn("'all'", body)
+        self.assertIn("printsEveryCount ||", body)
 
     def test_runtime_and_editor_copies_stay_in_sync(self) -> None:
         self.assertEqual(self.source, self.EDITOR.read_text(encoding="utf-8"))
 
 
-@unittest.skipIf(
-    Environment is None and not REQUIRE_ENGINE,
-    "python-liquid is not installed; run pip install -r requirements-dev.txt",
-)
-class LowInventoryRenderingTests(unittest.TestCase):
+class LiquidRendering:
+    """Renders the notice and the threshold snippets through python-liquid."""
+
     def setUp(self) -> None:
         if Environment is None:
             self.fail(
@@ -159,9 +173,14 @@ class LowInventoryRenderingTests(unittest.TestCase):
                 "that execute the stock arithmetic the notice prints."
             )
 
-    def render(self, template: str, translation: str = "", **context) -> str:
+    def render(self, template: str, translation: str = "", config: str = None, **context) -> str:
         loader = DictLoader({
             "low-inventory-notice": NOTICE.read_text(encoding="utf-8"),
+            "low-inventory-threshold": THRESHOLD_RESOLVER.read_text(encoding="utf-8"),
+            "low-inventory-threshold-config": (
+                THRESHOLD_CONFIG.read_text(encoding="utf-8") if config is None else config
+            ),
+            "low-inventory-threshold-row": THRESHOLD_ROW.read_text(encoding="utf-8"),
             "translation-fallback": (SNIPPETS / "translation-fallback.liquid").read_text(
                 encoding="utf-8"
             ),
@@ -170,19 +189,29 @@ class LowInventoryRenderingTests(unittest.TestCase):
         environment.filters["t"] = lambda key, *args, **kwargs: translation
         return environment.from_string(template).render(**context)
 
-    def card(self, product: dict, translation: str = "") -> str:
+    def card(self, product: dict, translation: str = "", config: str = None) -> str:
         return self.render(
-            "{% include 'low-inventory-notice' %}", translation, product=product
+            "{% include 'low-inventory-notice' %}",
+            translation,
+            config=config,
+            product=product,
         ).strip()
 
-    def page(self, product: dict) -> str:
+    def page(self, product: dict, config: str = None) -> str:
         return self.render(
             "{% include 'low-inventory-notice', "
             "low_inventory_variant: product.selected_or_first_available_variant, "
             "low_inventory_persist: true %}",
+            config=config,
             product=product,
         ).strip()
 
+
+@unittest.skipIf(
+    Environment is None and not REQUIRE_ENGINE,
+    "python-liquid is not installed; run pip install -r requirements-dev.txt",
+)
+class LowInventoryRenderingTests(LiquidRendering, unittest.TestCase):
     def test_a_card_counts_down_to_the_threshold(self) -> None:
         for quantity in range(1, THRESHOLD + 1):
             with self.subTest(quantity=quantity):
@@ -267,6 +296,17 @@ class LowInventoryRenderingTests(unittest.TestCase):
 
         self.assertIn(f'data-low-inventory-threshold="{THRESHOLD}"', self.card(product))
 
+    def test_an_unlisted_product_keeps_the_shared_default(self) -> None:
+        # The shipped configuration names one product; everything else counts
+        # down from five, as it did before thresholds were configurable.
+        product = {
+            "handle": "mtg-hob-pbb-en",
+            "available": True,
+            "variants": [variant(6, sku="MTG-HOB-PBB-EN")],
+        }
+
+        self.assertEqual("", self.card(product))
+
     def test_a_card_after_the_product_page_is_not_still_reading_that_variant(self) -> None:
         # The related products below the product page render through the same
         # shared scope. Before the reset they inherited the selected variant and
@@ -289,6 +329,212 @@ class LowInventoryRenderingTests(unittest.TestCase):
         self.assertNotIn("Only", page)
         self.assertIn(">Only 3 left<", card)
         self.assertNotIn('role="status"', card)
+
+
+class LowInventoryThresholdConfigurationTests(unittest.TestCase):
+    """The configuration file itself: one row per product, and nothing else."""
+
+    def setUp(self) -> None:
+        self.config = THRESHOLD_CONFIG.read_text(encoding="utf-8")
+        self.row = THRESHOLD_ROW.read_text(encoding="utf-8")
+        self.resolver = THRESHOLD_RESOLVER.read_text(encoding="utf-8")
+
+    def test_the_notice_reads_its_threshold_from_the_configuration(self) -> None:
+        self.assertIn("{% include 'low-inventory-threshold' %}", NOTICE.read_text(encoding="utf-8"))
+        self.assertIn("{% include 'low-inventory-threshold-config' %}", self.resolver)
+
+    def test_the_shared_default_is_a_positive_number(self) -> None:
+        # Deleting it would leave every product with a threshold of zero, which
+        # prints no count anywhere rather than reverting to the old behaviour.
+        match = re.search(
+            r"{%\s*assign low_inventory_threshold_default = (\d+)\s*%}", self.config
+        )
+
+        self.assertIsNotNone(match, "the configuration must assign a default threshold")
+        self.assertEqual(THRESHOLD, int(match.group(1)))
+
+    def test_the_hobbit_collector_booster_pack_prints_every_count(self) -> None:
+        self.assertIn(
+            "{% include 'low-inventory-threshold-row', "
+            "threshold_handle: 'MTG-HOB-CBB-EN-PACK', threshold_maximum: 'all' %}",
+            self.config,
+        )
+
+    def test_a_row_clears_its_inputs_for_the_next_row(self) -> None:
+        # `include` shares one scope: a row that omits a value would otherwise
+        # inherit the previous row's and configure the wrong product.
+        self.assertIn("{% assign threshold_handle = '' %}", self.row)
+        self.assertIn("{% assign threshold_maximum = '' %}", self.row)
+
+
+@unittest.skipIf(
+    Environment is None and not REQUIRE_ENGINE,
+    "python-liquid is not installed; run pip install -r requirements-dev.txt",
+)
+class LowInventoryThresholdRenderingTests(LiquidRendering, unittest.TestCase):
+    """Executes the configuration against products that match its rows."""
+
+    PACK = "{% include 'low-inventory-threshold-row', threshold_handle: 'MTG-HOB-CBB-EN-PACK', threshold_maximum: 'all' %}"
+
+    def config_liquid(self, rows: str, default: int = THRESHOLD) -> str:
+        return f"{{% assign low_inventory_threshold_default = {default} %}}\n{rows}\n"
+
+    def test_the_configured_product_prints_a_count_the_whole_way_down(self) -> None:
+        product = {
+            "handle": UNLIMITED_HANDLE,
+            "available": True,
+            "variants": [variant(40)],
+        }
+
+        self.assertIn(">Only 40 left<", self.card(product))
+
+    def test_the_configured_product_is_matched_by_sku_as_well_as_by_handle(self) -> None:
+        # A store that exposes the value as a variant SKU rather than as the
+        # product handle must configure the same product, not a different one.
+        product = {
+            "handle": "hobbit-collector-booster-pack",
+            "available": True,
+            "variants": [variant(40, sku="MTG-HOB-CBB-EN-PACK")],
+        }
+
+        self.assertIn(">Only 40 left<", self.card(product))
+
+    def test_the_configured_product_publishes_its_threshold_to_the_script(self) -> None:
+        product = {
+            "handle": UNLIMITED_HANDLE,
+            "available": True,
+            "variants": [variant(40)],
+        }
+
+        self.assertIn('data-low-inventory-threshold="all"', self.card(product))
+
+    def test_the_product_page_prints_every_count_for_the_configured_product(self) -> None:
+        product = {
+            "handle": UNLIMITED_HANDLE,
+            "available": True,
+            "variants": [variant(40), variant(9)],
+            "selected_or_first_available_variant": variant(40),
+        }
+        rendered = self.page(product)
+
+        self.assertIn(">Only 40 left<", rendered)
+        self.assertNotIn('hidden="hidden"', rendered)
+
+    def test_a_configured_product_still_claims_no_count_for_untracked_stock(self) -> None:
+        # 'all' widens the threshold; it does not invent a quantity the platform
+        # never reported.
+        for quantity in (0, None):
+            with self.subTest(quantity=quantity):
+                product = {
+                    "handle": UNLIMITED_HANDLE,
+                    "available": True,
+                    "variants": [variant(quantity)],
+                }
+
+                self.assertEqual("", self.card(product))
+
+    def test_a_sold_out_configured_product_keeps_only_its_badge(self) -> None:
+        product = {
+            "handle": UNLIMITED_HANDLE,
+            "available": False,
+            "variants": [variant(12, available=False)],
+        }
+
+        self.assertEqual("", self.card(product))
+
+    def test_a_row_may_set_a_number_instead_of_all(self) -> None:
+        config = self.config_liquid(
+            "{% include 'low-inventory-threshold-row', "
+            "threshold_handle: 'MTG-HOB-PBB-EN', threshold_maximum: 20 %}"
+        )
+        product = {"handle": "mtg-hob-pbb-en", "available": True, "variants": [variant(18)]}
+
+        self.assertIn(">Only 18 left<", self.card(product, config=config))
+        product["variants"] = [variant(21)]
+        self.assertEqual("", self.card(product, config=config))
+        self.assertIn(
+            'data-low-inventory-threshold="20"',
+            self.card(
+                {"handle": "mtg-hob-pbb-en", "available": True, "variants": [variant(18)]},
+                config=config,
+            ),
+        )
+
+    def test_the_configured_handle_is_matched_whatever_its_case(self) -> None:
+        config = self.config_liquid(
+            "{% include 'low-inventory-threshold-row', "
+            "threshold_handle: 'mtg-hob-cbb-en-pack', threshold_maximum: 'all' %}"
+        )
+        product = {
+            "handle": "MTG-HOB-CBB-EN-PACK",
+            "available": True,
+            "variants": [variant(40)],
+        }
+
+        self.assertIn(">Only 40 left<", self.card(product, config=config))
+
+    def test_a_shorter_handle_does_not_claim_a_longer_one(self) -> None:
+        # The box and the single pack are separate products whose handles share a
+        # prefix; a substring match would give the box the pack's threshold.
+        config = self.config_liquid(
+            "{% include 'low-inventory-threshold-row', "
+            "threshold_handle: 'MTG-HOB-CBB-EN', threshold_maximum: 'all' %}"
+        )
+        product = {
+            "handle": UNLIMITED_HANDLE,
+            "available": True,
+            "variants": [variant(40)],
+        }
+
+        self.assertEqual("", self.card(product, config=config))
+
+    def test_the_first_matching_row_wins(self) -> None:
+        config = self.config_liquid(
+            "{% include 'low-inventory-threshold-row', "
+            "threshold_handle: 'MTG-HOB-CBB-EN-PACK', threshold_maximum: 8 %}\n"
+            + self.PACK
+        )
+        product = {
+            "handle": UNLIMITED_HANDLE,
+            "available": True,
+            "variants": [variant(40)],
+        }
+
+        self.assertEqual("", self.card(product, config=config))
+
+    def test_an_unusable_row_leaves_the_product_on_the_default(self) -> None:
+        # A typo must not hide a notice that was showing before the row was added.
+        for maximum in ("''", "0", "'evrything'", "-3"):
+            with self.subTest(maximum=maximum):
+                config = self.config_liquid(
+                    "{% include 'low-inventory-threshold-row', "
+                    f"threshold_handle: 'MTG-HOB-CBB-EN-PACK', threshold_maximum: {maximum} %}}"
+                )
+                product = {
+                    "handle": UNLIMITED_HANDLE,
+                    "available": True,
+                    "variants": [variant(3)],
+                }
+
+                self.assertIn(">Only 3 left<", self.card(product, config=config))
+
+    def test_a_configured_product_does_not_leak_its_threshold_to_the_next_card(self) -> None:
+        # Cards render in a loop through one shared scope, so the pack's 'all'
+        # must not follow the card rendered after it.
+        rendered = self.render(
+            "{% include 'low-inventory-notice' %}<hr>"
+            "{% assign product = other %}{% include 'low-inventory-notice' %}",
+            product={
+                "handle": UNLIMITED_HANDLE,
+                "available": True,
+                "variants": [variant(40)],
+            },
+            other={"handle": "mtg-hob-pbb-en", "available": True, "variants": [variant(40)]},
+        )
+        pack, _, other = rendered.partition("<hr>")
+
+        self.assertIn(">Only 40 left<", pack)
+        self.assertEqual("", other.strip())
 
 
 if __name__ == "__main__":

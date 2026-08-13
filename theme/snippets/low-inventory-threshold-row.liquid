@@ -1,0 +1,42 @@
+{% comment %}
+  One row of low-inventory-threshold-config, matched against the current product.
+
+  Input:  threshold_handle   product handle or SKU. Blank ignores the row.
+          threshold_maximum  highest count that still prints a notice, or 'all'
+                             for every count. Anything else ignores the row.
+
+  From low-inventory-threshold.liquid: low_inventory_threshold_keys, the current
+  product's identifiers, each wrapped in pipes so a row matches a whole
+  identifier. Without the wrapping, 'MTG-HOB-CBB-EN' would also claim
+  'MTG-HOB-CBB-EN-PACK', and the pack would inherit the wrong number.
+
+  Output is left in low_inventory_threshold, low_inventory_threshold_all and
+  low_inventory_threshold_matched. The first matching row wins: once a row has
+  matched, the rows after it are skipped.
+
+  The inputs are cleared again at the end. `include` shares the caller's scope on
+  EasyStore, so a row that omits a value would otherwise inherit the previous
+  row's.
+{% endcomment %}
+{% assign low_inventory_threshold_row_handle = threshold_handle | default: '' | append: '' | strip | downcase %}
+{% assign low_inventory_threshold_row_value = threshold_maximum | default: '' | append: '' | strip | downcase %}
+{% unless low_inventory_threshold_matched %}
+  {% if low_inventory_threshold_row_handle != '' and low_inventory_threshold_row_value != '' %}
+    {% capture low_inventory_threshold_row_key %}|{{ low_inventory_threshold_row_handle }}|{% endcapture %}
+    {% if low_inventory_threshold_keys contains low_inventory_threshold_row_key %}
+      {% if low_inventory_threshold_row_value == 'all' %}
+        {% assign low_inventory_threshold_all = true %}
+        {% assign low_inventory_threshold_matched = true %}
+      {% else %}
+        {% comment %} A non-numeric maximum reads as 0 and is ignored, so a typo leaves the product on the default instead of silently hiding its notice. {% endcomment %}
+        {% assign low_inventory_threshold_row_number = low_inventory_threshold_row_value | plus: 0 %}
+        {% if low_inventory_threshold_row_number > 0 %}
+          {% assign low_inventory_threshold = low_inventory_threshold_row_number %}
+          {% assign low_inventory_threshold_matched = true %}
+        {% endif %}
+      {% endif %}
+    {% endif %}
+  {% endif %}
+{% endunless %}
+{% assign threshold_handle = '' %}
+{% assign threshold_maximum = '' %}

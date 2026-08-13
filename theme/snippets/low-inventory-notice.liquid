@@ -11,6 +11,10 @@
                            refresh it after a variant change without having to
                            build markup of its own.
 
+  The count is printed once stock is down to the product's threshold, which is
+  five units unless low-inventory-threshold-config.liquid gives that product a
+  number of its own or puts it on 'all', where every count is printed.
+
   Remaining stock is only claimed when the platform reports a positive quantity.
   A product whose stock is not tracked reports nothing or zero, which is
   indistinguishable here from sold out, so no count is shown for it. Sold-out
@@ -22,8 +26,8 @@
   translation-fallback and is reset for the same reason - the copy that follows
   this notice asked for the unescaped form.
 {%- endcomment -%}
+{% include 'low-inventory-threshold' %}
 {% comment %} `| plus: 0` keeps every count a number: a product or variant that reports no quantity at all compares as nil, and comparing nil with a number is an error rather than a false on Liquid. {% endcomment %}
-{% assign low_inventory_threshold = 5 %}
 {% assign low_inventory_remaining = 0 %}
 {% if low_inventory_variant %}
   {% assign low_inventory_count = low_inventory_variant.inventory_quantity | plus: 0 %}
@@ -44,12 +48,19 @@
   {% endif %}
 {% endif %}
 {% assign low_inventory_is_low = false %}
-{% if low_inventory_remaining > 0 and low_inventory_remaining <= low_inventory_threshold %}
-  {% assign low_inventory_is_low = true %}
+{% if low_inventory_remaining > 0 %}
+  {% if low_inventory_threshold_all or low_inventory_remaining <= low_inventory_threshold %}
+    {% assign low_inventory_is_low = true %}
+  {% endif %}
+{% endif %}
+{% comment %} 'all' travels to product-form.js the same way a number does, so the script keeps printing the count after a variant change instead of hiding it at six units. {% endcomment %}
+{% assign low_inventory_threshold_attribute = low_inventory_threshold %}
+{% if low_inventory_threshold_all %}
+  {% assign low_inventory_threshold_attribute = 'all' %}
 {% endif %}
 {% capture low_inventory_text %}{% include 'translation-fallback', translation_key: 'products.product.low_inventory', fallback: 'Only __COUNT__ left', escape_output: true %}{% endcapture %}
 {% assign low_inventory_text = low_inventory_text | strip | replace: '__COUNT__', low_inventory_remaining %}
-{% if low_inventory_is_low or low_inventory_persist %}<span class="low-inventory-notice{% unless low_inventory_is_low %} hidden{% endunless %}" data-low-inventory-notice data-low-inventory-threshold="{{ low_inventory_threshold }}"{% unless low_inventory_is_low %} hidden="hidden"{% endunless %}{% if low_inventory_persist %} role="status" aria-live="polite"{% endif %}>{% if low_inventory_is_low %}{{ low_inventory_text }}{% endif %}</span>{% endif %}
+{% if low_inventory_is_low or low_inventory_persist %}<span class="low-inventory-notice{% unless low_inventory_is_low %} hidden{% endunless %}" data-low-inventory-notice data-low-inventory-threshold="{{ low_inventory_threshold_attribute }}"{% unless low_inventory_is_low %} hidden="hidden"{% endunless %}{% if low_inventory_persist %} role="status" aria-live="polite"{% endif %}>{% if low_inventory_is_low %}{{ low_inventory_text }}{% endif %}</span>{% endif %}
 {% assign low_inventory_variant = null %}
 {% assign low_inventory_persist = null %}
 {% assign escape_output = null %}

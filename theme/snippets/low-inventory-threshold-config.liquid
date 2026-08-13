@@ -1,0 +1,31 @@
+{% comment %}
+  How much stock a product may print a count for, one row per product.
+
+  Every product shows "Only N left" once it is down to five units or fewer.
+  A row here overrides that for one product and changes nothing else:
+
+    threshold_handle   EasyStore product handle or SKU. Matched against the
+                       product's handle, its SKU, and its variants' SKUs,
+                       because a store exposes one or the other depending on how
+                       the product was created. Case does not matter: the value
+                       is normalized at runtime, so 'MTG-HOB-CBB-EN-PACK' and
+                       'mtg-hob-cbb-en-pack' behave identically.
+    threshold_maximum  the highest remaining count that still prints a notice,
+                       or 'all' to print the count at every quantity. Delete the
+                       row to put a product back on the shared default; handles
+                       that are not listed here use that default.
+
+  The first row that matches wins, so a specific SKU listed above a broader one
+  keeps its own number. A row with a blank handle, a blank maximum, or a maximum
+  that is neither a positive number nor 'all' is ignored rather than applied,
+  which leaves the product on the default instead of hiding its notice.
+{% endcomment %}
+{% comment %}
+  The default for every product that names no row of its own.
+{% endcomment %}
+{% assign low_inventory_threshold_default = 5 %}
+{% comment %}
+  The Hobbit Collector Booster pack sells its remaining stock as the draw, so it
+  prints its count the whole way down instead of waiting for the last five.
+{% endcomment %}
+{% include 'low-inventory-threshold-row', threshold_handle: 'MTG-HOB-CBB-EN-PACK', threshold_maximum: 'all' %}
