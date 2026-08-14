@@ -101,6 +101,22 @@ test.describe('product, cart, and checkout handoff', () => {
     const handle = new URL(page.url()).pathname.match(/\/products\/([^/?#]+)/)?.[1] || '';
     expect(await page.evaluate(productHandle => Boolean(window.CustomerOrderLimits?.ruleFor?.(productHandle)), handle)).toBe(true);
     const add = page.locator('#AddToCart').first();
+    await expect(add).toHaveCount(1);
+
+    // The limited product is a real catalog product, so it can sell out, and a
+    // sold-out fixture is not a theme regression. EasyStore renders Add to Cart
+    // disabled when the variant is unavailable, while the limit feature never
+    // disables that button for a guest — it sends the shopper to sign in — and
+    // stamps every control it does disable. A button disabled without that
+    // marker is therefore out of stock, and the redirect below cannot be
+    // exercised until it is restocked. The rule assertion above still runs, so
+    // the limit itself stays covered; a button disabled *by the limit feature*
+    // is still a failure, because a guest must never be blocked that way.
+    const soldOut = await add.evaluate(button => (
+      button.disabled && button.dataset.customerOrderLimitDisabled !== 'true'
+    ));
+    test.skip(soldOut, `${limitedProductPath} is sold out, so the signed-out add-to-cart redirect cannot be exercised`);
+
     await expect(add).toBeEnabled();
     await add.click();
     await page.waitForURL(url => url.pathname.includes('/account/login'));
