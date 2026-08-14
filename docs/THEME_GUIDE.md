@@ -344,19 +344,26 @@ per product that needs a different one:
 
 ```liquid
 {% assign low_inventory_threshold_default = 5 %}
-{% include 'low-inventory-threshold-row', threshold_handle: 'MTG-HOB-CBB-EN-PACK', threshold_maximum: 'all' %}
+{% include 'low-inventory-threshold-row', threshold_handle: 'late-night-crackers-*', threshold_maximum: 'all' %}
 ```
 
 `threshold_handle` is matched against the product's handle, its SKU, and its
 variants' SKUs, because a store exposes one or the other depending on how the
-product was created; case does not matter. `threshold_maximum` is the highest
-remaining count that still prints a notice, or `all` to print the count at every
-quantity — which is what `MTG-HOB-CBB-EN-PACK` ships with, so the Hobbit
-Collector Booster pack advertises its stock the whole way down rather than only
-in its last five units.
+product was created; case does not matter on either side. A trailing `*` matches
+a prefix instead of the whole value, which is how a series is configured once
+rather than a row per release: `late-night-crackers-*` claims
+`late-night-crackers-ep3` and every episode released after it. The prefix is
+anchored to the start of an identifier, so `bundle-late-night-crackers-ep3` is a
+different product and keeps the default, and a row that leads with `*` is
+dropped rather than claiming the whole store.
 
-Changing a threshold is one row and nothing else. The first matching row wins,
-so a specific SKU listed above a broader one keeps its own number, and a row
+`threshold_maximum` is the highest remaining count that still prints a notice, or
+`all` to print the count at every quantity — which is what the Late Night
+Crackers series ships with, so those products advertise their stock the whole way
+down rather than only in their last five units.
+
+Changing a threshold is one row and nothing else. The first matching row wins, so
+a single episode listed above the series row keeps its own number, and a row
 whose maximum is neither a positive number nor `all` is ignored rather than
 applied — a typo leaves the product on the default instead of silently hiding a
 notice that was showing before.

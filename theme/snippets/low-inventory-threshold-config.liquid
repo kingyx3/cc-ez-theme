@@ -9,7 +9,11 @@
                        because a store exposes one or the other depending on how
                        the product was created. Case does not matter: the value
                        is normalized at runtime, so 'MTG-HOB-CBB-EN-PACK' and
-                       'mtg-hob-cbb-en-pack' behave identically.
+                       'mtg-hob-cbb-en-pack' behave identically. A trailing '*'
+                       matches a prefix rather than the whole value, which is how
+                       a series is configured once instead of a row per release:
+                       'late-night-crackers-*' claims late-night-crackers-ep3
+                       and every episode after it.
     threshold_maximum  the highest remaining count that still prints a notice,
                        or 'all' to print the count at every quantity. Delete the
                        row to put a product back on the shared default; handles
@@ -25,7 +29,9 @@
 {% endcomment %}
 {% assign low_inventory_threshold_default = 5 %}
 {% comment %}
-  The Hobbit Collector Booster pack sells its remaining stock as the draw, so it
-  prints its count the whole way down instead of waiting for the last five.
+  Late Night Crackers sells its remaining stock as the draw, so every episode
+  prints its count the whole way down instead of waiting for the last five. The
+  prefix covers episodes that do not exist yet, which is the point of listing the
+  series rather than each release.
 {% endcomment %}
-{% include 'low-inventory-threshold-row', threshold_handle: 'MTG-HOB-CBB-EN-PACK', threshold_maximum: 'all' %}
+{% include 'low-inventory-threshold-row', threshold_handle: 'late-night-crackers-*', threshold_maximum: 'all' %}

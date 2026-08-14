@@ -13,9 +13,11 @@
                                  not consulted.
 
   Every identifier is wrapped in pipes so a row matches a whole value rather than
-  a fragment of one: 'MTG-HOB-CBB-EN' must not claim 'MTG-HOB-CBB-EN-PACK'. A
-  product that reports no handle and no SKU still produces '||', which no row can
-  match because a row with a blank handle is ignored.
+  a fragment of one: 'MTG-HOB-CBB-EN' must not claim 'MTG-HOB-CBB-EN-PACK'. The
+  opening pipe does the same job for a prefix row, anchoring it to the start of an
+  identifier instead of anywhere inside one. A product that reports no handle and
+  no SKU still produces '||', which no row can match because a row with a blank
+  handle is ignored.
 {% endcomment %}
 {% assign low_inventory_threshold_matched = false %}
 {% assign low_inventory_threshold_all = false %}

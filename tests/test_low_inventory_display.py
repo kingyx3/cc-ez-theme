@@ -36,7 +36,8 @@ PRODUCT_CARD = SNIPPETS / "product-card.liquid"
 MAIN_PRODUCT = THEME_ROOT / "sections" / "main-product.liquid"
 LAYOUT = THEME_ROOT / "layout" / "theme.liquid"
 THRESHOLD = 5
-UNLIMITED_HANDLE = "mtg-hob-cbb-en-pack"
+UNLIMITED_PREFIX = "late-night-crackers-"
+UNLIMITED_HANDLE = "late-night-crackers-ep3"
 
 
 def variant(quantity, available: bool = True, sku: str = None) -> dict:
@@ -353,10 +354,10 @@ class LowInventoryThresholdConfigurationTests(unittest.TestCase):
         self.assertIsNotNone(match, "the configuration must assign a default threshold")
         self.assertEqual(THRESHOLD, int(match.group(1)))
 
-    def test_the_hobbit_collector_booster_pack_prints_every_count(self) -> None:
+    def test_the_late_night_crackers_series_prints_every_count(self) -> None:
         self.assertIn(
             "{% include 'low-inventory-threshold-row', "
-            "threshold_handle: 'MTG-HOB-CBB-EN-PACK', threshold_maximum: 'all' %}",
+            f"threshold_handle: '{UNLIMITED_PREFIX}*', threshold_maximum: 'all' %}}",
             self.config,
         )
 
@@ -374,7 +375,7 @@ class LowInventoryThresholdConfigurationTests(unittest.TestCase):
 class LowInventoryThresholdRenderingTests(LiquidRendering, unittest.TestCase):
     """Executes the configuration against products that match its rows."""
 
-    PACK = "{% include 'low-inventory-threshold-row', threshold_handle: 'MTG-HOB-CBB-EN-PACK', threshold_maximum: 'all' %}"
+    SERIES = "{% include 'low-inventory-threshold-row', threshold_handle: 'late-night-crackers-*', threshold_maximum: 'all' %}"
 
     def config_liquid(self, rows: str, default: int = THRESHOLD) -> str:
         return f"{{% assign low_inventory_threshold_default = {default} %}}\n{rows}\n"
@@ -389,15 +390,33 @@ class LowInventoryThresholdRenderingTests(LiquidRendering, unittest.TestCase):
         self.assertIn(">Only 40 left<", self.card(product))
 
     def test_the_configured_product_is_matched_by_sku_as_well_as_by_handle(self) -> None:
-        # A store that exposes the value as a variant SKU rather than as the
-        # product handle must configure the same product, not a different one.
+        # A store that names the series in the SKU rather than in the handle must
+        # configure the same product, not a different one.
         product = {
-            "handle": "hobbit-collector-booster-pack",
+            "handle": "ln-crackers-ep3",
             "available": True,
-            "variants": [variant(40, sku="MTG-HOB-CBB-EN-PACK")],
+            "variants": [variant(40, sku="LATE-NIGHT-CRACKERS-EP3")],
         }
 
         self.assertIn(">Only 40 left<", self.card(product))
+
+    def test_every_episode_of_the_series_is_covered_by_the_one_row(self) -> None:
+        # Listing the series rather than each release is the point of the prefix:
+        # an episode that does not exist yet is already configured.
+        for handle in ("late-night-crackers-ep3", "late-night-crackers-ep11-bundle"):
+            with self.subTest(handle=handle):
+                product = {"handle": handle, "available": True, "variants": [variant(40)]}
+
+                self.assertIn(">Only 40 left<", self.card(product))
+
+    def test_the_prefix_is_anchored_to_the_start_of_the_handle(self) -> None:
+        # A product that merely mentions the series later in its handle is a
+        # different product and keeps the default.
+        for handle in ("bundle-late-night-crackers-ep3", "late-night-crackers"):
+            with self.subTest(handle=handle):
+                product = {"handle": handle, "available": True, "variants": [variant(40)]}
+
+                self.assertEqual("", self.card(product))
 
     def test_the_configured_product_publishes_its_threshold_to_the_script(self) -> None:
         product = {
@@ -461,38 +480,69 @@ class LowInventoryThresholdRenderingTests(LiquidRendering, unittest.TestCase):
         )
 
     def test_the_configured_handle_is_matched_whatever_its_case(self) -> None:
+        # Both sides are normalized, so a row written the way the product is
+        # administered still matches the lowercase storefront handle.
         config = self.config_liquid(
             "{% include 'low-inventory-threshold-row', "
-            "threshold_handle: 'mtg-hob-cbb-en-pack', threshold_maximum: 'all' %}"
+            "threshold_handle: 'Late-Night-Crackers-*', threshold_maximum: 'all' %}"
         )
         product = {
-            "handle": "MTG-HOB-CBB-EN-PACK",
+            "handle": "LATE-NIGHT-CRACKERS-EP3",
             "available": True,
             "variants": [variant(40)],
         }
 
         self.assertIn(">Only 40 left<", self.card(product, config=config))
 
-    def test_a_shorter_handle_does_not_claim_a_longer_one(self) -> None:
-        # The box and the single pack are separate products whose handles share a
-        # prefix; a substring match would give the box the pack's threshold.
+    def test_a_row_without_a_wildcard_still_matches_the_whole_handle_only(self) -> None:
+        # A box and a single pack are separate products whose handles share a
+        # prefix; without the '*' a row must claim neither of the other's stock.
         config = self.config_liquid(
             "{% include 'low-inventory-threshold-row', "
             "threshold_handle: 'MTG-HOB-CBB-EN', threshold_maximum: 'all' %}"
         )
-        product = {
-            "handle": UNLIMITED_HANDLE,
-            "available": True,
-            "variants": [variant(40)],
-        }
 
-        self.assertEqual("", self.card(product, config=config))
+        self.assertEqual(
+            "",
+            self.card(
+                {
+                    "handle": "mtg-hob-cbb-en-pack",
+                    "available": True,
+                    "variants": [variant(40)],
+                },
+                config=config,
+            ),
+        )
+        self.assertIn(
+            ">Only 40 left<",
+            self.card(
+                {"handle": "mtg-hob-cbb-en", "available": True, "variants": [variant(40)]},
+                config=config,
+            ),
+        )
+
+    def test_a_bare_wildcard_is_ignored_rather_than_claiming_every_product(self) -> None:
+        # A row that leads with the wildcard leaves nothing to anchor against, so
+        # it is dropped instead of matching anything a suffix rule would.
+        for row_handle, product_handle in (("*", "mtg-hob-pbb-en"), ("*-crackers", "late-night-crackers")):
+            with self.subTest(row_handle=row_handle):
+                config = self.config_liquid(
+                    "{% include 'low-inventory-threshold-row', "
+                    f"threshold_handle: '{row_handle}', threshold_maximum: 'all' %}}"
+                )
+                product = {
+                    "handle": product_handle,
+                    "available": True,
+                    "variants": [variant(40)],
+                }
+
+                self.assertEqual("", self.card(product, config=config))
 
     def test_the_first_matching_row_wins(self) -> None:
         config = self.config_liquid(
             "{% include 'low-inventory-threshold-row', "
-            "threshold_handle: 'MTG-HOB-CBB-EN-PACK', threshold_maximum: 8 %}\n"
-            + self.PACK
+            "threshold_handle: 'late-night-crackers-ep3', threshold_maximum: 8 %}\n"
+            + self.SERIES
         )
         product = {
             "handle": UNLIMITED_HANDLE,
@@ -508,7 +558,7 @@ class LowInventoryThresholdRenderingTests(LiquidRendering, unittest.TestCase):
             with self.subTest(maximum=maximum):
                 config = self.config_liquid(
                     "{% include 'low-inventory-threshold-row', "
-                    f"threshold_handle: 'MTG-HOB-CBB-EN-PACK', threshold_maximum: {maximum} %}}"
+                    f"threshold_handle: 'late-night-crackers-*', threshold_maximum: {maximum} %}}"
                 )
                 product = {
                     "handle": UNLIMITED_HANDLE,
@@ -519,7 +569,7 @@ class LowInventoryThresholdRenderingTests(LiquidRendering, unittest.TestCase):
                 self.assertIn(">Only 3 left<", self.card(product, config=config))
 
     def test_a_configured_product_does_not_leak_its_threshold_to_the_next_card(self) -> None:
-        # Cards render in a loop through one shared scope, so the pack's 'all'
+        # Cards render in a loop through one shared scope, so the series' 'all'
         # must not follow the card rendered after it.
         rendered = self.render(
             "{% include 'low-inventory-notice' %}<hr>"

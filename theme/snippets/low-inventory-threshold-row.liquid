@@ -1,14 +1,18 @@
 {% comment %}
   One row of low-inventory-threshold-config, matched against the current product.
 
-  Input:  threshold_handle   product handle or SKU. Blank ignores the row.
+  Input:  threshold_handle   product handle or SKU, matched whole. A trailing '*'
+                             makes it a prefix instead, so 'late-night-crackers-*'
+                             claims every product whose handle or SKU starts that
+                             way. Blank ignores the row.
           threshold_maximum  highest count that still prints a notice, or 'all'
                              for every count. Anything else ignores the row.
 
   From low-inventory-threshold.liquid: low_inventory_threshold_keys, the current
-  product's identifiers, each wrapped in pipes so a row matches a whole
-  identifier. Without the wrapping, 'MTG-HOB-CBB-EN' would also claim
-  'MTG-HOB-CBB-EN-PACK', and the pack would inherit the wrong number.
+  product's identifiers, each wrapped in pipes. A whole-value row is compared
+  with both pipes, so 'MTG-HOB-CBB-EN' cannot claim 'MTG-HOB-CBB-EN-PACK'; a
+  prefix row keeps only the opening pipe, which still anchors it to the start of
+  an identifier so 'crackers-*' cannot claim 'late-night-crackers-ep3'.
 
   Output is left in low_inventory_threshold, low_inventory_threshold_all and
   low_inventory_threshold_matched. The first matching row wins: once a row has
@@ -20,9 +24,23 @@
 {% endcomment %}
 {% assign low_inventory_threshold_row_handle = threshold_handle | default: '' | append: '' | strip | downcase %}
 {% assign low_inventory_threshold_row_value = threshold_maximum | default: '' | append: '' | strip | downcase %}
+{% comment %}
+  Everything from the first '*' onwards is the wildcard tail, so a bare '*' or a
+  row that leads with one leaves a blank handle and is ignored rather than
+  claiming every product in the store.
+{% endcomment %}
+{% assign low_inventory_threshold_row_prefix = false %}
+{% if low_inventory_threshold_row_handle contains '*' %}
+  {% assign low_inventory_threshold_row_prefix = true %}
+  {% assign low_inventory_threshold_row_handle = low_inventory_threshold_row_handle | split: '*' | first | default: '' | append: '' | strip %}
+{% endif %}
 {% unless low_inventory_threshold_matched %}
   {% if low_inventory_threshold_row_handle != '' and low_inventory_threshold_row_value != '' %}
-    {% capture low_inventory_threshold_row_key %}|{{ low_inventory_threshold_row_handle }}|{% endcapture %}
+    {% if low_inventory_threshold_row_prefix %}
+      {% capture low_inventory_threshold_row_key %}|{{ low_inventory_threshold_row_handle }}{% endcapture %}
+    {% else %}
+      {% capture low_inventory_threshold_row_key %}|{{ low_inventory_threshold_row_handle }}|{% endcapture %}
+    {% endif %}
     {% if low_inventory_threshold_keys contains low_inventory_threshold_row_key %}
       {% if low_inventory_threshold_row_value == 'all' %}
         {% assign low_inventory_threshold_all = true %}
