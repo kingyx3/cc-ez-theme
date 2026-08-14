@@ -2,7 +2,9 @@
   Customer purchase limits.
 
   Limits are configured one row per product in customer-order-limit-config.liquid,
-  and each row counts and publishes itself through customer-order-limit-row.
+  and each row counts and publishes itself through customer-order-limit-row. A
+  prefix row limits every product whose handle starts with a given value, and
+  publishes an ordinary row for each product it matches.
   This snippet only prepares what every row needs — sign-in state, the current
   time, the page's product identifiers, and the diagnostics that report what the
   order pass could actually read — and then renders the configuration.
@@ -107,6 +109,9 @@
       variantIds: [{{ customer_order_limit_page_variant_ids | strip }}]
     },
     rules: {},
+    /* Prefix limits report themselves here, one entry per configured prefix,
+       with the handles the page could match against it. */
+    prefixes: {},
     /* Read window.customerOrderLimitsV2.diagnostics in the console to see what
        the order pass could actually read: zero orders means the storefront
        cannot see order history, and identifiers show which value each line item

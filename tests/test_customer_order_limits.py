@@ -7,7 +7,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from limit_config import configured_rows, row_liquid  # noqa: E402
+from limit_config import (  # noqa: E402
+    configured_prefixes,
+    configured_rows,
+    prefix_liquid,
+    row_liquid,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -95,6 +100,62 @@ class CustomerOrderLimitTests(unittest.TestCase):
         self.assertIn("{% assign limit_handle = '' %}", row)
         self.assertIn("{% assign limit_maximum = 0 %}", row)
         self.assertIn("{% assign limit_refresh = '' %}", row)
+
+    def test_late_night_crackers_is_limited_to_four_by_handle_prefix(self) -> None:
+        config = self.read("snippets/customer-order-limit-config.liquid")
+        prefixes = configured_prefixes(config)
+
+        self.assertEqual(prefixes, [("late-night-crackers-", 4, "")])
+        self.assertIn(prefix_liquid("late-night-crackers-", 4, ""), config)
+        # A prefix limit names no product, so it never joins the exact matrix.
+        self.assertNotIn(
+            "late-night-crackers-",
+            [handle for handle, _, _ in configured_rows(config)],
+        )
+
+    def test_a_prefix_limit_publishes_ordinary_rows_for_what_it_matches(self) -> None:
+        prefix = self.read("snippets/customer-order-limit-prefix.liquid")
+        match = self.read("snippets/customer-order-limit-prefix-match.liquid")
+        # The prefix is compared against the start of a handle. `contains` would
+        # also limit 'sale-late-night-crackers-ep9', which is another product.
+        self.assertIn(
+            "customer_order_limit_prefix_candidate | truncate: customer_order_limit_prefix_size, ''",
+            match,
+        )
+        self.assertIn(
+            "{% if customer_order_limit_prefix_head == customer_order_limit_prefix_value %}",
+            match,
+        )
+        self.assertNotIn("contains customer_order_limit_prefix_value", match)
+        # Handles are collected wrapped in commas, so one is never read as the
+        # prefix of a longer one, and a product is published once.
+        self.assertIn("{% capture customer_order_limit_prefix_key %},", match)
+        self.assertIn("unless customer_order_limit_prefix_found contains", match)
+        # Every surface a purchase starts from is read.
+        for source in (
+            "product.handle",
+            "product.sku",
+            "{% for customer_order_limit_prefix_listed in collection.products %}",
+            "{% for customer_order_limit_prefix_listed in search.results %}",
+            "{% for customer_order_limit_prefix_line in cart.items %}",
+        ):
+            with self.subTest(source=source):
+                self.assertIn(source, prefix)
+        # Matches become ordinary rows, so counting, copy and the published rule
+        # are the same code an exact handle uses.
+        self.assertEqual(prefix.count("{% include 'customer-order-limit-row'"), 1)
+        self.assertIn("limit_maximum: customer_order_limit_prefix_maximum", prefix)
+        self.assertIn("limit_refresh: customer_order_limit_prefix_refresh", prefix)
+        self.assertIn("prefix_handle | default: '' | append: '' | strip | downcase", prefix)
+        # `include` shares the caller's scope on EasyStore.
+        self.assertIn("{% assign prefix_handle = '' %}", prefix)
+        self.assertIn("{% assign prefix_maximum = 0 %}", prefix)
+        self.assertIn("{% assign prefix_refresh = '' %}", prefix)
+        self.assertIn("{% assign match_value = '' %}", match)
+        # What a prefix could see is reportable, so "the prefix is wrong" can be
+        # told apart from "limits are off" without another release.
+        self.assertIn("prefixes: {},", self.read("snippets/customer-order-limits.liquid"))
+        self.assertIn("window.customerOrderLimitsV2.prefixes[", prefix)
 
     def test_liquid_normalizes_handles_and_passes_authentication_explicitly(self) -> None:
         liquid = self.read("snippets/customer-order-limits.liquid")

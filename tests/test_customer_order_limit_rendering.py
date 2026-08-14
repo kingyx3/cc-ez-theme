@@ -20,7 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from limit_config import row_liquid  # noqa: E402
+from limit_config import prefix_liquid, row_liquid  # noqa: E402
 
 try:  # pragma: no cover - exercised by the absence of the dependency
     from liquid import DictLoader, Environment
@@ -39,6 +39,7 @@ NOW = datetime.now(timezone.utc)
 STAMP = "%Y-%m-%d %H:%M:%S +0000"
 HANDLE = "MTG-HOB-SCN-EN-SET2"
 LOWER = HANDLE.lower()
+PREFIX = "late-night-crackers-"
 
 
 def config_liquid(rows: str, refresh_all: str) -> str:
@@ -72,6 +73,8 @@ class CustomerOrderLimitRenderingTests(unittest.TestCase):
         cart_items: list | None = None,
         authenticated: bool = True,
         product: dict | None = None,
+        collection: dict | None = None,
+        search: dict | None = None,
     ) -> str:
         if rows is None:
             rows = row_liquid(HANDLE, maximum, refresh)
@@ -81,6 +84,8 @@ class CustomerOrderLimitRenderingTests(unittest.TestCase):
                 "customer-order-limit-window",
                 "customer-order-limit-rule",
                 "customer-order-limit-row",
+                "customer-order-limit-prefix",
+                "customer-order-limit-prefix-match",
                 "customer-order-limits",
             )
         }
@@ -98,6 +103,8 @@ class CustomerOrderLimitRenderingTests(unittest.TestCase):
             customer=customer,
             cart={"items": cart_items or []},
             product=product,
+            collection=collection,
+            search=search,
         )
 
     def rule(self, output: str, handle: str = LOWER) -> dict:
@@ -443,6 +450,8 @@ class CustomerOrderLimitRenderingTests(unittest.TestCase):
                 "customer-order-limit-window",
                 "customer-order-limit-rule",
                 "customer-order-limit-row",
+                "customer-order-limit-prefix",
+                "customer-order-limit-prefix-match",
                 "customer-order-limit-config",
                 "customer-order-limits",
             )
@@ -479,6 +488,172 @@ class CustomerOrderLimitRenderingTests(unittest.TestCase):
         self.assertEqual(rules[LOWER]["remaining"], 2)
         self.assertEqual(rules["mtg-hob-bdl-en"]["purchased"], 1)
         self.assertEqual(rules["mtg-hob-bdl-en"]["remaining"], 5)
+
+    def test_the_shipped_prefix_limits_late_night_crackers_to_four(self) -> None:
+        # The same configuration on a Late Night Crackers product page: the
+        # episode is limited without being named in the configuration.
+        output = self.render(
+            rows=prefix_liquid(PREFIX, 4),
+            refresh_all="2026-08-09 00:00:00 +0800",
+            product={"handle": "late-night-crackers-ep3"},
+        )
+        rule = self.rule(output, "late-night-crackers-ep3")
+
+        self.assertEqual(rule["maximum"], 4)
+        self.assertEqual(rule["remaining"], 4)
+        self.assertEqual(rule["refreshAt"], "2026-08-09 00:00:00 +0800")
+        self.assertIn("The limit is 4 per customer across orders.", rule["message"])
+
+    # --- prefix limits ------------------------------------------------------
+
+    def prefixes(self, output: str) -> dict:
+        found = {}
+        pattern = r"window\.customerOrderLimitsV2\.prefixes\[(\".*?\")\] = (\{.*?\n    \});"
+        for match in re.finditer(pattern, output, re.S):
+            payload = {}
+            for field in re.finditer(r"(\w+): (\".*?\"|true|false|-?\d+)", match.group(2)):
+                payload[field.group(1)] = json.loads(field.group(2))
+            found[json.loads(match.group(1))] = payload
+        return found
+
+    def test_a_prefix_limits_every_product_the_page_can_see(self) -> None:
+        # The product being viewed, the products a listing shows, and the lines
+        # already in the cart are the surfaces a purchase starts from.
+        output = self.render(
+            rows=prefix_liquid(PREFIX, 4),
+            product={"handle": "late-night-crackers-ep3"},
+            collection={"products": [{"handle": "late-night-crackers-ep5"}]},
+            search={"results": [{"handle": "late-night-crackers-ep7"}]},
+            cart_items=[{"product": {"handle": "late-night-crackers-ep4"}, "quantity": 1}],
+        )
+        rules = self.rules(output)
+
+        self.assertEqual(sorted(rules), [
+            "late-night-crackers-ep3",
+            "late-night-crackers-ep4",
+            "late-night-crackers-ep5",
+            "late-night-crackers-ep7",
+        ])
+        for handle, rule in rules.items():
+            with self.subTest(handle=handle):
+                self.assertEqual(rule["maximum"], 4)
+
+    def test_a_prefix_limit_is_counted_per_product(self) -> None:
+        # Four units of each episode, not four across the family.
+        output = self.render(
+            rows=prefix_liquid(PREFIX, 4),
+            product={"handle": "late-night-crackers-ep3"},
+            orders=[self.order(days_ago=30, handle="late-night-crackers-ep3", quantity=3)],
+            cart_items=[{"product": {"handle": "late-night-crackers-ep4"}, "quantity": 2}],
+        )
+        rules = self.rules(output)
+
+        self.assertEqual(rules["late-night-crackers-ep3"]["purchased"], 3)
+        self.assertEqual(rules["late-night-crackers-ep3"]["remaining"], 1)
+        self.assertEqual(rules["late-night-crackers-ep4"]["purchased"], 0)
+        self.assertEqual(rules["late-night-crackers-ep4"]["cartQuantity"], 2)
+        self.assertEqual(rules["late-night-crackers-ep4"]["remaining"], 2)
+
+    def test_a_prefix_matches_the_start_of_a_handle_only(self) -> None:
+        # `contains` would have limited a handle carrying the prefix anywhere in
+        # it, which is a different product.
+        output = self.render(
+            rows=prefix_liquid(PREFIX, 4),
+            collection={"products": [
+                {"handle": "sale-late-night-crackers-ep9"},
+                {"handle": "late-night-crackersep9"},
+                {"handle": "late-night-snacks-ep9"},
+                {"handle": PREFIX},
+            ]},
+        )
+
+        self.assertEqual(sorted(self.rules(output)), [PREFIX])
+
+    def test_a_matching_product_publishes_one_rule_that_counts_the_cart(self) -> None:
+        output = self.render(
+            rows=prefix_liquid(PREFIX, 4),
+            product={"handle": "late-night-crackers-ep3"},
+            cart_items=[
+                {"product": {"handle": "Late-Night-Crackers-EP3"}, "quantity": 2},
+                {"sku": "LATE-NIGHT-CRACKERS-EP3", "quantity": 1},
+            ],
+        )
+        rules = self.rules(output)
+
+        self.assertEqual(list(rules), ["late-night-crackers-ep3"])
+        self.assertEqual(rules["late-night-crackers-ep3"]["cartQuantity"], 3)
+        self.assertEqual(rules["late-night-crackers-ep3"]["remaining"], 1)
+
+    def test_a_prefix_row_carries_the_shared_refresh_date(self) -> None:
+        output = self.render(
+            rows=prefix_liquid(PREFIX, 4),
+            refresh_all="2026-08-09 00:00:00 +0800",
+            product={"handle": "late-night-crackers-ep3"},
+            orders=[
+                self.order(days_ago=30, handle="late-night-crackers-ep3"),
+                self.order(days_ago=0, handle="late-night-crackers-ep3", quantity=2),
+            ],
+        )
+        rule = self.rule(output, "late-night-crackers-ep3")
+
+        self.assertEqual(rule["refreshAt"], "2026-08-09 00:00:00 +0800")
+        self.assertEqual(rule["purchased"], 2)
+        self.assertEqual(rule["remaining"], 2)
+
+    def test_a_prefix_row_with_no_maximum_limits_nothing(self) -> None:
+        output = self.render(
+            rows=prefix_liquid(PREFIX, 0),
+            product={"handle": "late-night-crackers-ep3"},
+        )
+
+        self.assertEqual(self.rules(output), {})
+        self.assertEqual(self.prefixes(output), {})
+
+    def test_a_prefix_reports_the_handles_it_matched(self) -> None:
+        # An empty `matched` on a page showing a product that should be limited
+        # is the difference between "the prefix is wrong" and "limits are off".
+        matched = self.render(
+            rows=prefix_liquid(PREFIX, 4),
+            product={"handle": "late-night-crackers-ep3"},
+            collection={"products": [{"handle": "late-night-crackers-ep5"}]},
+        )
+        unmatched = self.render(rows=prefix_liquid(PREFIX, 4), product={"handle": LOWER})
+
+        self.assertEqual(
+            self.prefixes(matched)[PREFIX],
+            {
+                "maximum": 4,
+                "refreshAt": "",
+                "matched": "late-night-crackers-ep3 late-night-crackers-ep5",
+            },
+        )
+        self.assertEqual(self.prefixes(unmatched)[PREFIX]["matched"], "")
+        self.assertEqual(self.rules(unmatched), {})
+
+    def test_prefix_and_exact_rows_configure_independent_limits(self) -> None:
+        output = self.render(
+            rows="\n".join((row_liquid(HANDLE, 2, ""), prefix_liquid(PREFIX, 4))),
+            product={"handle": "late-night-crackers-ep3"},
+            cart_items=[{"product": {"handle": LOWER}, "quantity": 1}],
+        )
+        rules = self.rules(output)
+
+        self.assertEqual(rules[LOWER]["maximum"], 2)
+        self.assertEqual(rules[LOWER]["cartQuantity"], 1)
+        self.assertEqual(rules["late-night-crackers-ep3"]["maximum"], 4)
+        self.assertEqual(rules["late-night-crackers-ep3"]["cartQuantity"], 0)
+
+    def test_a_guest_is_sent_to_sign_in_for_a_prefix_limit_too(self) -> None:
+        output = self.render(
+            rows=prefix_liquid(PREFIX, 4),
+            product={"handle": "late-night-crackers-ep3"},
+            orders=[self.order(days_ago=2, handle="late-night-crackers-ep3")],
+            authenticated=False,
+        )
+        rule = self.rule(output, "late-night-crackers-ep3")
+
+        self.assertTrue(rule["loginRequired"])
+        self.assertEqual(rule["purchased"], 0)
 
     # --- diagnostics --------------------------------------------------------
 

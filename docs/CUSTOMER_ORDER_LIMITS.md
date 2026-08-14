@@ -24,6 +24,12 @@ This feature limits a signed-in customer to a configured number of units for an 
 | `CC-BDL-SPIDERVAULT-EN` | 1 |
 | `CC-BDL-UNEXPECTED-EN` | 2 |
 
+| Handle prefix | Per-customer maximum, per matching product |
+| --- | ---: |
+| `late-night-crackers-` | 4 |
+
+Every product whose handle starts with `late-night-crackers-` — `late-night-crackers-ep3`, `late-night-crackers-ep4`, and every episode published after this was configured — allows 4 units per customer. The maximum is counted per product, not across the family: 4 of `ep3` and 4 of `ep4` are both allowed. See [Limiting a family of products by handle prefix](#limiting-a-family-of-products-by-handle-prefix).
+
 Rows supplied with a blank promo maximum are intentionally not configured and remain unlimited. This includes the remaining `MTG-MSH-*`, `MTG-SOS-*`, and `MTG-SPM-*` handles not listed above, plus `CC-BDL-HAPPYHAMPER-EN` and `CC-BDL-HAPPYHAMPER-EN-PBB`.
 
 Every limit counts from **9 Aug 2026 00:00 store time (GMT+8)**, set once as `customer_order_limit_refresh_all`. Orders placed before that date do not consume an allowance, so a customer who bought a limited product earlier may buy it again up to its maximum. No row overrides the shared date; setting `limit_refresh` on a row counts that one limit from a different date. See [Renewing an allowance](#renewing-an-allowance).
@@ -42,9 +48,44 @@ One limit is one row in `theme/snippets/customer-order-limit-config.liquid`, and
 | `limit_maximum` | units one customer may buy. |
 | `limit_refresh` | the date the allowance is counted from. Blank falls back to `customer_order_limit_refresh_all`. |
 
+A product family that shares a handle prefix takes one prefix row instead — see [Limiting a family of products by handle prefix](#limiting-a-family-of-products-by-handle-prefix).
+
 The row resolves its own refresh window, counts the customer's orders and cart for that handle, and publishes its rule, so nothing else in the theme changes when a product is added, updated, or removed. Handles are normalized to lowercase on both sides of every comparison because EasyStore product URLs use lowercase handles even when administrative values are capitalized.
 
 This replaces the earlier numbered slots, where one limit was spread over seven places in two files — `customer_order_limit_handle_N`, `_maximum_N`, `_refresh_N`, a normalization line, a window block, a history-matching block, a cart-matching block and a rule include. A product added to some of them but not all enforced nothing, and the omission was invisible.
+
+## Limiting a family of products by handle prefix
+
+A family of products that shares a handle prefix takes one prefix row instead of one row per product:
+
+```liquid
+{% include 'customer-order-limit-prefix', prefix_handle: 'late-night-crackers-', prefix_maximum: 4, prefix_refresh: '' %}
+```
+
+| Value | Meaning |
+| --- | --- |
+| `prefix_handle` | the start of an EasyStore product handle. Every product whose handle begins with it is limited. Delete the row to leave the whole family unlimited. |
+| `prefix_maximum` | units one customer may buy **of each matching product**. |
+| `prefix_refresh` | the date each matching allowance is counted from. Blank falls back to `customer_order_limit_refresh_all`, exactly as on a per-handle row. |
+
+The maximum applies per product, so `late-night-crackers-` at 4 allows 4 units of `late-night-crackers-ep3` *and* 4 units of `late-night-crackers-ep4`. An episode published later is limited on the day it appears, with no configuration change.
+
+The comparison is a prefix test, not `contains`: the first characters of a handle are taken with `truncate` and compared with the configured value, so `sale-late-night-crackers-ep9` is not limited by `late-night-crackers-`. Handles are compared in lowercase on both sides, like every other identifier here. SKUs are matched as well as handles, because an order or cart line does not expose the same identifier on every store and a row already matches a line on either one.
+
+### What a prefix can see
+
+Liquid cannot ask the store for "every handle starting with X", so `customer-order-limit-prefix.liquid` matches the prefix against the identifiers the page already carries, and publishes an ordinary `customer-order-limit-row` for each distinct match. A prefix limit therefore counts orders and cart quantities through exactly the same code as a per-handle limit, publishes the same rule, and needs no storefront JavaScript of its own. Four sources are read:
+
+1. the product being viewed — `product.handle` and `product.sku`;
+2. `collection.products` on a collection page;
+3. `search.results` on a search page;
+4. `cart.items`.
+
+That covers the surfaces a purchase starts from: product page, collection, search, and cart. A matching product added from a section that renders its own collection — a featured collection on the home page, for example — is not seen while it is only on that page, so quick add there is not blocked. The unit it adds is seen as soon as it reaches the cart, where the limit applies again and blocks checkout above the maximum.
+
+Each match is collected once, wrapped in commas so `late-night-crackers-ep3` is never read as a match of `late-night-crackers-ep30`, and a product that appears both on the page and in the cart still publishes a single rule that counts the whole cart.
+
+`window.customerOrderLimitsV2.prefixes` reports each configured prefix with its maximum and the handles the page matched against it, for the same reason `diagnostics` exists: an empty `matched` on a page showing a product that should be limited means the handle does not start with the configured prefix, which is a different fault from limits not running at all.
 
 ## Renewing an allowance
 
@@ -177,7 +218,8 @@ Before merging or publishing, upload the exact workflow ZIP to an unpublished Ea
 8. signed in, every purchase path works normally on desktop and mobile and never reaches an account page — check a limited product, an unlimited product, and an unlimited product bought while a limited product sits in the cart;
 9. signed in, `window.customerOrderLimitsV2.customerAuthenticated` is `true` and each rule's `purchased` matches prior orders — buy one unit, complete the order, then reload the product page and confirm `purchased` increased. If `diagnostics.lineItemsSeen` is `0`, the page could not read history itself: confirm `window.CustomerOrderLimits.historyState()` reports `loaded` and that `/account/orders` contains `#customer-order-limit-history` with the expected lines;
 10. with a refresh timestamp set in the past, `purchased` drops to zero for orders placed before it and `limitWindowLabel` is set, while no message on the page names the date; with one set in the future, nothing changes and `refreshAt` still reports the configured value;
-11. on a product with a limit of 1: Buy Now from an empty cart adds one unit and reaches checkout; Buy Now again goes straight to checkout without adding; the buttons never stay disabled or spinning; and every message on the page reflects the current cart.
+11. on a product with a limit of 1: Buy Now from an empty cart adds one unit and reaches checkout; Buy Now again goes straight to checkout without adding; the buttons never stay disabled or spinning; and every message on the page reflects the current cart;
+12. on a Late Night Crackers product page, `window.customerOrderLimitsV2.rules` carries that episode's handle with `maximum: 4`, and `prefixes["late-night-crackers-"].matched` names it. Check two episodes: each allows 4 units, and the units of one never reduce the allowance of the other. Check the collection page and the cart page as well, and confirm a product outside the family is still unlimited.
 
 ## Enforcement boundary
 
@@ -185,4 +227,4 @@ This is a theme-level storefront safeguard, not server-side authorization. Disab
 
 ## Rollback
 
-Delete the rows from `customer-order-limit-config.liquid` — a configuration with no rows publishes no rules and leaves every purchase path native — or deploy the known-good PR #61 artifact.
+Delete the rows from `customer-order-limit-config.liquid` — a configuration with no rows publishes no rules and leaves every purchase path native — or deploy the known-good PR #61 artifact. Deleting the prefix row, or setting its `prefix_maximum` to 0, leaves the whole family unlimited and every other limit untouched.

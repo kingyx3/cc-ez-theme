@@ -203,6 +203,8 @@ class HistoryPayloadRenderingTests(unittest.TestCase):
                 "customer-order-limit-window",
                 "customer-order-limit-rule",
                 "customer-order-limit-row",
+                "customer-order-limit-prefix",
+                "customer-order-limit-prefix-match",
                 "customer-order-limits",
                 "customer-order-limit-history",
             )

@@ -1,0 +1,31 @@
+{% comment %}
+  One candidate identifier considered against the prefix being collected.
+
+  Input:  match_value  a product handle or SKU read from the page, the cart, or a
+                       listing. Blank, or not starting with the prefix, is
+                       ignored.
+
+  From customer-order-limit-prefix.liquid: customer_order_limit_prefix_value,
+  customer_order_limit_prefix_size, customer_order_limit_prefix_found.
+
+  A match is appended to customer_order_limit_prefix_found, which is a string of
+  comma-wrapped handles rather than an array because Liquid cannot push onto one.
+  Each handle is looked up wrapped in its own commas, so 'late-night-crackers-ep3'
+  is never mistaken for a match of 'late-night-crackers-ep30'.
+
+  The comparison is a prefix test, not `contains`: 'contains' would also match a
+  handle that carries the prefix in the middle, such as
+  'sale-late-night-crackers-ep3'. The first characters are taken with `truncate`
+  and compared, so only handles that begin with the prefix are collected.
+{% endcomment %}
+{% assign customer_order_limit_prefix_candidate = match_value | default: '' | append: '' | strip | downcase %}
+{% if customer_order_limit_prefix_candidate != '' %}
+  {% assign customer_order_limit_prefix_head = customer_order_limit_prefix_candidate | truncate: customer_order_limit_prefix_size, '' %}
+  {% if customer_order_limit_prefix_head == customer_order_limit_prefix_value %}
+    {% capture customer_order_limit_prefix_key %},{{ customer_order_limit_prefix_candidate }},{% endcapture %}
+    {% unless customer_order_limit_prefix_found contains customer_order_limit_prefix_key %}
+      {% capture customer_order_limit_prefix_found %}{{ customer_order_limit_prefix_found }}{{ customer_order_limit_prefix_candidate }},{% endcapture %}
+    {% endunless %}
+  {% endif %}
+{% endif %}
+{% assign match_value = '' %}

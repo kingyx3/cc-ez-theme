@@ -1,0 +1,113 @@
+{% comment %}
+  One customer purchase limit applied to a family of products by handle prefix.
+
+  A prefix row limits every product whose handle starts with the given value to
+  the same maximum, each product counted on its own. `late-night-crackers-` with
+  a maximum of 4 allows 4 units of `late-night-crackers-ep3` and 4 units of
+  `late-night-crackers-ep4`, not 4 across the family. New episodes are limited
+  the day they are published, without a configuration change.
+
+  Input:  prefix_handle   the start of an EasyStore product handle. Blank
+                          disables the row. Compared in lowercase, because
+                          EasyStore product URLs are lowercase even when the
+                          administrative value is capitalized.
+          prefix_maximum  units per customer, per matching product. 0 disables
+                          the row.
+          prefix_refresh  timestamp each matching allowance is counted from.
+                          Blank falls back to customer_order_limit_refresh_all.
+
+  Liquid cannot ask the store for "every handle starting with X", so the prefix
+  is matched against the identifiers the page already carries: the product being
+  viewed, the products listed by a collection or a search, and the lines in the
+  cart. Each distinct match becomes an ordinary customer-order-limit-row, so a
+  prefix limit counts orders and cart quantities exactly like a per-handle one
+  and publishes the same rule.
+
+  That covers the surfaces a purchase starts from — product page, collection,
+  search, and cart. A matching product added from a section that renders its own
+  collection, such as a featured collection on the home page, is not seen while
+  it is only on that page; the unit it adds is seen as soon as it reaches the
+  cart, where the limit applies again and blocks checkout over the maximum.
+
+  SKUs are matched as well as handles, because an order or cart line does not
+  expose the same identifier on every EasyStore store, and a row matches a line
+  on either one.
+
+  The inputs are cleared again at the end, for the reason given in
+  customer-order-limit-row.liquid: `include` shares the caller's scope on
+  EasyStore, so the next row would otherwise inherit these values.
+{% endcomment %}
+{% assign customer_order_limit_prefix_value = prefix_handle | default: '' | append: '' | strip | downcase %}
+{% assign customer_order_limit_prefix_maximum = prefix_maximum | default: 0 | plus: 0 %}
+{% assign customer_order_limit_prefix_refresh = prefix_refresh | default: '' | append: '' | strip %}
+{% if customer_order_limit_prefix_value != '' and customer_order_limit_prefix_maximum > 0 %}
+  {% assign customer_order_limit_prefix_size = customer_order_limit_prefix_value | size %}
+  {% assign customer_order_limit_prefix_found = ',' %}
+
+  {% comment %}
+    The product being viewed. This is the page a limit has to hold on, so it is
+    collected first.
+  {% endcomment %}
+  {% assign customer_order_limit_prefix_page = product.handle %}
+  {% include 'customer-order-limit-prefix-match', match_value: customer_order_limit_prefix_page %}
+  {% assign customer_order_limit_prefix_page = product.sku %}
+  {% include 'customer-order-limit-prefix-match', match_value: customer_order_limit_prefix_page %}
+
+  {% comment %}
+    Listing pages, so quick add from a collection or a search result is limited
+    by the same rule as the product page.
+  {% endcomment %}
+  {% for customer_order_limit_prefix_listed in collection.products %}
+    {% assign customer_order_limit_prefix_page = customer_order_limit_prefix_listed.handle %}
+    {% include 'customer-order-limit-prefix-match', match_value: customer_order_limit_prefix_page %}
+    {% assign customer_order_limit_prefix_page = customer_order_limit_prefix_listed.sku %}
+    {% include 'customer-order-limit-prefix-match', match_value: customer_order_limit_prefix_page %}
+  {% endfor %}
+  {% for customer_order_limit_prefix_listed in search.results %}
+    {% assign customer_order_limit_prefix_page = customer_order_limit_prefix_listed.handle %}
+    {% include 'customer-order-limit-prefix-match', match_value: customer_order_limit_prefix_page %}
+    {% assign customer_order_limit_prefix_page = customer_order_limit_prefix_listed.sku %}
+    {% include 'customer-order-limit-prefix-match', match_value: customer_order_limit_prefix_page %}
+  {% endfor %}
+
+  {% comment %}
+    The cart, so a matching product that reached it from anywhere else is still
+    counted and still blocks checkout above the maximum.
+  {% endcomment %}
+  {% for customer_order_limit_prefix_line in cart.items %}
+    {% assign customer_order_limit_prefix_page = customer_order_limit_prefix_line.product.handle | default: customer_order_limit_prefix_line.handle %}
+    {% include 'customer-order-limit-prefix-match', match_value: customer_order_limit_prefix_page %}
+    {% assign customer_order_limit_prefix_page = customer_order_limit_prefix_line.sku | default: customer_order_limit_prefix_line.variant.sku | default: customer_order_limit_prefix_line.product.sku %}
+    {% include 'customer-order-limit-prefix-match', match_value: customer_order_limit_prefix_page %}
+  {% endfor %}
+
+  {% comment %}
+    Rows are published after every source has been read, rather than as each
+    match is found, so a product that appears both on the page and in the cart
+    publishes one rule and each rule counts the whole cart.
+  {% endcomment %}
+  {% assign customer_order_limit_prefix_handles = customer_order_limit_prefix_found | split: ',' %}
+  {% assign customer_order_limit_prefix_matched = '' %}
+  {% for customer_order_limit_prefix_handle in customer_order_limit_prefix_handles %}
+    {% unless customer_order_limit_prefix_handle == '' %}
+      {% assign customer_order_limit_prefix_matched = customer_order_limit_prefix_matched | append: ' ' | append: customer_order_limit_prefix_handle %}
+      {% include 'customer-order-limit-row', limit_handle: customer_order_limit_prefix_handle, limit_maximum: customer_order_limit_prefix_maximum, limit_refresh: customer_order_limit_prefix_refresh %}
+    {% endunless %}
+  {% endfor %}
+
+  {% comment %}
+    A prefix limit is only as good as what the page could see, so what it saw is
+    reported. An empty `matched` on a page showing a product that should be
+    limited means the handle does not start with the configured prefix.
+  {% endcomment %}
+  <script>
+    window.customerOrderLimitsV2.prefixes[{{ customer_order_limit_prefix_value | json }}] = {
+      maximum: {{ customer_order_limit_prefix_maximum | json }},
+      refreshAt: {{ customer_order_limit_prefix_refresh | json }},
+      matched: {{ customer_order_limit_prefix_matched | strip | json }}
+    };
+  </script>
+{% endif %}
+{% assign prefix_handle = '' %}
+{% assign prefix_maximum = 0 %}
+{% assign prefix_refresh = '' %}

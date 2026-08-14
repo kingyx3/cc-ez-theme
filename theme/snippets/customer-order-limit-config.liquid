@@ -25,6 +25,13 @@
   To renew one limit, set its limit_refresh rather than clearing its maximum:
   clearing the maximum disables the limit entirely, while a refresh keeps it
   enforced for purchases made from that date onwards.
+
+  A family of products that shares a handle prefix takes one prefix row, of the
+  form written at the bottom of this file, instead of one row per product. Every
+  product whose handle starts with prefix_handle is limited to prefix_maximum
+  units, each product counted on its own, so a product added to the family later
+  is limited without a configuration change. Delete the prefix row to leave the
+  whole family unlimited.
 {% endcomment %}
 {% comment %}
   Every limit counts from 9 Aug 2026, store time: orders placed before it no
@@ -49,3 +56,9 @@
 {% include 'customer-order-limit-row', limit_handle: 'MTG-HOB-GFB-EN', limit_maximum: 1, limit_refresh: '' %}
 {% include 'customer-order-limit-row', limit_handle: 'MTG-MSH-JBB-EN', limit_maximum: 6, limit_refresh: '' %}
 {% include 'customer-order-limit-row', limit_handle: 'MTG-MSH-CMD-EN-CE-SET4', limit_maximum: 1, limit_refresh: '' %}
+{% comment %}
+  Every Late Night Crackers product — late-night-crackers-ep3 and every other
+  handle in the family, including episodes published after this row — allows 4
+  units per customer, counted per product rather than across the family.
+{% endcomment %}
+{% include 'customer-order-limit-prefix', prefix_handle: 'late-night-crackers-', prefix_maximum: 4, prefix_refresh: '' %}
