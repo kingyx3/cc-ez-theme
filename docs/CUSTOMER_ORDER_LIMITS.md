@@ -23,6 +23,9 @@ This feature limits a signed-in customer to a configured number of units for an 
 | `CC-BDL-FRIENDS3-EN-MSH` | 1 |
 | `CC-BDL-SPIDERVAULT-EN` | 1 |
 | `CC-BDL-UNEXPECTED-EN` | 2 |
+| `late-night-crackers-ep3` | 2 |
+| `late-night-crackers-ep4-1` | 4 |
+| `late-night-crackers-ep4-2` | 1 |
 
 Rows supplied with a blank promo maximum are intentionally not configured and remain unlimited. This includes the remaining `MTG-MSH-*`, `MTG-SOS-*`, and `MTG-SPM-*` handles not listed above, plus `CC-BDL-HAPPYHAMPER-EN` and `CC-BDL-HAPPYHAMPER-EN-PBB`.
 
