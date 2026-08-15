@@ -20,7 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from limit_config import row_liquid  # noqa: E402
+from limit_config import configured_rows, row_liquid  # noqa: E402
 
 try:  # pragma: no cover - exercised by the absence of the dependency
     from liquid import DictLoader, Environment
@@ -465,7 +465,13 @@ class CustomerOrderLimitRenderingTests(unittest.TestCase):
         )
         rules = self.rules(rendered)
 
-        self.assertEqual(len(rules), 17)
+        # Every configured row publishes exactly one rule, whatever the store
+        # currently sells. The handles and maximums themselves are pinned by
+        # test_customer_order_limits; counting them again here only broke a
+        # rendering check every time a product was added.
+        self.assertEqual(
+            sorted(rules), sorted(handle.lower() for handle, _, _ in configured_rows())
+        )
         for handle, rule in rules.items():
             with self.subTest(handle=handle):
                 self.assertEqual(rule["refreshAt"], "2026-08-09 00:00:00 +0800")
