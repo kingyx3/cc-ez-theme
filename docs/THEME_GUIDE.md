@@ -344,22 +344,34 @@ per product that needs a different one:
 
 ```liquid
 {% assign low_inventory_threshold_default = 5 %}
-{% include 'low-inventory-threshold-row', threshold_handle: 'late-night-crackers-*', threshold_maximum: 'all' %}
+{% include 'low-inventory-threshold-row', threshold_handle: '*late-night-crackers*', threshold_maximum: 'all' %}
 ```
 
 `threshold_handle` is matched against the product's handle, its SKU, and its
 variants' SKUs, because a store exposes one or the other depending on how the
-product was created; case does not matter on either side. A trailing `*` matches
-a prefix instead of the whole value, which is how a series is configured once
-rather than a row per release: `late-night-crackers-*` claims
-`late-night-crackers-ep3` and every episode released after it. The prefix is
-anchored to the start of an identifier, so `bundle-late-night-crackers-ep3` is a
-different product and keeps the default, and a row that leads with `*` is
-dropped rather than claiming the whole store.
+product was created; case does not matter on either side. A `*` at either end
+widens the match, which is how a series is configured once rather than a row per
+release:
+
+| Written as | Matches |
+| --- | --- |
+| `MTG-HOB-CBB-EN` | that value and nothing else — not `MTG-HOB-CBB-EN-PACK` |
+| `late-night-crackers-*` | anything starting with it |
+| `*-en-pack` | anything ending with it |
+| `*late-night-crackers*` | anything containing it, anywhere |
+
+The shipped row uses the last form, so every Late Night Crackers product is
+covered — `late-night-crackers-ep3`, episodes not released yet, and
+`bundle-late-night-crackers-ep3` or `preorder-late-night-crackers-ep5`, which
+carry the name in the middle of their handle.
+
+A `*` anywhere other than the two ends means nothing — no handle or SKU contains
+one — so such a row is dropped rather than kept as a row that matches nothing.
+A bare `*` is dropped for the opposite reason: it would claim the whole store.
 
 `threshold_maximum` is the highest remaining count that still prints a notice, or
 `all` to print the count at every quantity — which is what the Late Night
-Crackers series ships with, so those products advertise their stock the whole way
+Crackers row ships with, so those products advertise their stock the whole way
 down rather than only in their last five units.
 
 Changing a threshold is one row and nothing else. The first matching row wins, so

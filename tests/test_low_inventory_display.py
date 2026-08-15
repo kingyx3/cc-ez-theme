@@ -36,7 +36,7 @@ PRODUCT_CARD = SNIPPETS / "product-card.liquid"
 MAIN_PRODUCT = THEME_ROOT / "sections" / "main-product.liquid"
 LAYOUT = THEME_ROOT / "layout" / "theme.liquid"
 THRESHOLD = 5
-UNLIMITED_PREFIX = "late-night-crackers-"
+UNLIMITED_FRAGMENT = "late-night-crackers"
 UNLIMITED_HANDLE = "late-night-crackers-ep3"
 
 
@@ -357,7 +357,7 @@ class LowInventoryThresholdConfigurationTests(unittest.TestCase):
     def test_the_late_night_crackers_series_prints_every_count(self) -> None:
         self.assertIn(
             "{% include 'low-inventory-threshold-row', "
-            f"threshold_handle: '{UNLIMITED_PREFIX}*', threshold_maximum: 'all' %}}",
+            f"threshold_handle: '*{UNLIMITED_FRAGMENT}*', threshold_maximum: 'all' %}}",
             self.config,
         )
 
@@ -375,7 +375,7 @@ class LowInventoryThresholdConfigurationTests(unittest.TestCase):
 class LowInventoryThresholdRenderingTests(LiquidRendering, unittest.TestCase):
     """Executes the configuration against products that match its rows."""
 
-    SERIES = "{% include 'low-inventory-threshold-row', threshold_handle: 'late-night-crackers-*', threshold_maximum: 'all' %}"
+    SERIES = "{% include 'low-inventory-threshold-row', threshold_handle: '*late-night-crackers*', threshold_maximum: 'all' %}"
 
     def config_liquid(self, rows: str, default: int = THRESHOLD) -> str:
         return f"{{% assign low_inventory_threshold_default = {default} %}}\n{rows}\n"
@@ -400,19 +400,24 @@ class LowInventoryThresholdRenderingTests(LiquidRendering, unittest.TestCase):
 
         self.assertIn(">Only 40 left<", self.card(product))
 
-    def test_every_episode_of_the_series_is_covered_by_the_one_row(self) -> None:
-        # Listing the series rather than each release is the point of the prefix:
-        # an episode that does not exist yet is already configured.
-        for handle in ("late-night-crackers-ep3", "late-night-crackers-ep11-bundle"):
+    def test_every_product_naming_the_series_is_covered_by_the_one_row(self) -> None:
+        # Listing the series rather than each release is the point of the row: an
+        # episode that does not exist yet is already configured, and so is a
+        # bundle or a preorder that carries the name in the middle of its handle.
+        for handle in (
+            "late-night-crackers",
+            "late-night-crackers-ep3",
+            "late-night-crackers-ep11-bundle",
+            "bundle-late-night-crackers-ep3",
+            "preorder-late-night-crackers-ep5",
+        ):
             with self.subTest(handle=handle):
                 product = {"handle": handle, "available": True, "variants": [variant(40)]}
 
                 self.assertIn(">Only 40 left<", self.card(product))
 
-    def test_the_prefix_is_anchored_to_the_start_of_the_handle(self) -> None:
-        # A product that merely mentions the series later in its handle is a
-        # different product and keeps the default.
-        for handle in ("bundle-late-night-crackers-ep3", "late-night-crackers"):
+    def test_a_product_that_does_not_name_the_series_keeps_the_default(self) -> None:
+        for handle in ("late-night-cracker", "mtg-hob-cbb-en-pack", "crackers-late-night"):
             with self.subTest(handle=handle):
                 product = {"handle": handle, "available": True, "variants": [variant(40)]}
 
@@ -484,7 +489,7 @@ class LowInventoryThresholdRenderingTests(LiquidRendering, unittest.TestCase):
         # administered still matches the lowercase storefront handle.
         config = self.config_liquid(
             "{% include 'low-inventory-threshold-row', "
-            "threshold_handle: 'Late-Night-Crackers-*', threshold_maximum: 'all' %}"
+            "threshold_handle: '*Late-Night-Crackers*', threshold_maximum: 'all' %}"
         )
         product = {
             "handle": "LATE-NIGHT-CRACKERS-EP3",
@@ -521,17 +526,50 @@ class LowInventoryThresholdRenderingTests(LiquidRendering, unittest.TestCase):
             ),
         )
 
-    def test_a_bare_wildcard_is_ignored_rather_than_claiming_every_product(self) -> None:
-        # A row that leads with the wildcard leaves nothing to anchor against, so
-        # it is dropped instead of matching anything a suffix rule would.
-        for row_handle, product_handle in (("*", "mtg-hob-pbb-en"), ("*-crackers", "late-night-crackers")):
+    def test_each_wildcard_position_drops_only_that_anchor(self) -> None:
+        # 'crackers' names the end of one handle and the middle of the other, so
+        # each form is only claimed by the rows that reach that far.
+        cases = {
+            # row handle          crackers  crackers-ep3  late-night-crackers  late-night-crackers-ep3
+            "crackers": (True, False, False, False),
+            "crackers*": (True, True, False, False),
+            "*crackers": (True, False, True, False),
+            "*crackers*": (True, True, True, True),
+        }
+        handles = ("crackers", "crackers-ep3", "late-night-crackers", "late-night-crackers-ep3")
+        cases = {row: dict(zip(handles, expected)) for row, expected in cases.items()}
+        for row_handle, expectations in cases.items():
+            config = self.config_liquid(
+                "{% include 'low-inventory-threshold-row', "
+                f"threshold_handle: '{row_handle}', threshold_maximum: 'all' %}}"
+            )
+            for product_handle, matches in expectations.items():
+                with self.subTest(row_handle=row_handle, product_handle=product_handle):
+                    product = {
+                        "handle": product_handle,
+                        "available": True,
+                        "variants": [variant(40)],
+                    }
+                    rendered = self.card(product, config=config)
+
+                    if matches:
+                        self.assertIn(">Only 40 left<", rendered)
+                    else:
+                        self.assertEqual("", rendered)
+
+    def test_an_unusable_wildcard_is_ignored_rather_than_claiming_every_product(self) -> None:
+        # A bare '*' would match every identifier in the store, and a '*' left in
+        # the middle can never appear in a handle, so neither row is kept. The
+        # third case is the one that matters: dropping the row is not the same as
+        # ignoring the '*', which would quietly claim the product it spells out.
+        for row_handle in ("*", "**", "late-night-crackers*-ep3"):
             with self.subTest(row_handle=row_handle):
                 config = self.config_liquid(
                     "{% include 'low-inventory-threshold-row', "
                     f"threshold_handle: '{row_handle}', threshold_maximum: 'all' %}}"
                 )
                 product = {
-                    "handle": product_handle,
+                    "handle": "late-night-crackers-ep3",
                     "available": True,
                     "variants": [variant(40)],
                 }
@@ -558,7 +596,7 @@ class LowInventoryThresholdRenderingTests(LiquidRendering, unittest.TestCase):
             with self.subTest(maximum=maximum):
                 config = self.config_liquid(
                     "{% include 'low-inventory-threshold-row', "
-                    f"threshold_handle: 'late-night-crackers-*', threshold_maximum: {maximum} %}}"
+                    f"threshold_handle: '*late-night-crackers*', threshold_maximum: {maximum} %}}"
                 )
                 product = {
                     "handle": UNLIMITED_HANDLE,
