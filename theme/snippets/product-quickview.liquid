@@ -44,6 +44,8 @@
         </select>
 
         
+        {% include 'low-inventory-notice', low_inventory_variant: product.selected_or_first_available_variant, low_inventory_persist: true %}
+
         {% assign timestamp = 'now' | date: '%s' %}
         <div id="product-properties_{{ product.id }}_{{ timestamp }}" class="product-properties-wrapper"></div>
 

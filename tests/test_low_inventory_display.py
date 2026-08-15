@@ -31,6 +31,8 @@ SNIPPETS = THEME_ROOT / "snippets"
 NOTICE = SNIPPETS / "low-inventory-notice.liquid"
 PRODUCT_CARD = SNIPPETS / "product-card.liquid"
 MAIN_PRODUCT = THEME_ROOT / "sections" / "main-product.liquid"
+QUICKVIEW = SNIPPETS / "product-quickview.liquid"
+FEATURED_PRODUCT = THEME_ROOT / "sections" / "featured-product.liquid"
 LAYOUT = THEME_ROOT / "layout" / "theme.liquid"
 THRESHOLD = 5
 # Products naming this series print their count at every quantity instead of
@@ -79,6 +81,42 @@ class LowInventoryWiringTests(unittest.TestCase):
             section,
         )
 
+    def test_every_surface_with_a_product_form_reports_its_stock(self) -> None:
+        # Quick view and the featured-product section render the same form as
+        # the product page and reported nothing at all, so a shopper who never
+        # opened the product page was told nothing about the stock - including
+        # for the series that is meant to print its count at any quantity.
+        quickview = QUICKVIEW.read_text(encoding="utf-8")
+        featured = FEATURED_PRODUCT.read_text(encoding="utf-8")
+
+        self.assertIn(
+            "{% include 'low-inventory-notice', "
+            "low_inventory_variant: product.selected_or_first_available_variant, "
+            "low_inventory_persist: true %}",
+            quickview,
+        )
+        # This section renders `featured_product`, so the product is passed in.
+        self.assertIn(
+            "{% include 'low-inventory-notice', "
+            "low_inventory_product: featured_product, "
+            "low_inventory_variant: featured_product.selected_or_first_available_variant, "
+            "low_inventory_persist: true %}",
+            featured,
+        )
+
+    def test_the_notice_sits_inside_the_form_on_every_surface(self) -> None:
+        # product-form.js refreshes the notice through its own subtree, so an
+        # element outside <product-form> would freeze on the first variant.
+        for source in (
+            MAIN_PRODUCT.read_text(encoding="utf-8"),
+            QUICKVIEW.read_text(encoding="utf-8"),
+            FEATURED_PRODUCT.read_text(encoding="utf-8"),
+        ):
+            with self.subTest(source=source[:40]):
+                form = source.split("<product-form", 1)[1].split("</product-form>", 1)[0]
+
+                self.assertIn("low-inventory-notice", form)
+
     def test_the_product_page_notice_sits_inside_the_product_form(self) -> None:
         # product-form.js refreshes the notice through its own subtree, so an
         # element outside <product-form> would freeze on the first variant.
@@ -125,7 +163,9 @@ class LowInventoryWiringTests(unittest.TestCase):
         snippet = NOTICE.read_text(encoding="utf-8")
 
         self.assertIn(
-            "{{ product.handle }}|{{ low_inventory_url_handle }}|{{ product.sku }}", snippet
+            "{{ low_inventory_product.handle }}|{{ low_inventory_url_handle }}"
+            "|{{ low_inventory_product.sku }}",
+            snippet,
         )
         self.assertIn("split: '/products/' | last", snippet)
 
@@ -234,6 +274,17 @@ class LowInventoryRenderingTests(unittest.TestCase):
             product=product,
         ).strip()
 
+    def printed(self, product: dict, translation: str = "") -> str:
+        """The text a shopper actually sees.
+
+        The element is always rendered now, so an empty string here means the
+        notice is present but hidden, which is what "prints nothing" means.
+        """
+        rendered = self.card(product, translation)
+        if 'hidden="hidden"' in rendered:
+            return ""
+        return (re.search(r">([^<]*)</span>", rendered) or re.match("", "")).group(1)
+
     def test_a_card_counts_down_to_the_threshold(self) -> None:
         for quantity in range(1, THRESHOLD + 1):
             with self.subTest(quantity=quantity):
@@ -244,7 +295,7 @@ class LowInventoryRenderingTests(unittest.TestCase):
         for quantity in (THRESHOLD + 1, 40):
             with self.subTest(quantity=quantity):
                 self.assertEqual(
-                    "", self.card({"available": True, "variants": [variant(quantity)]})
+                    "", self.printed({"available": True, "variants": [variant(quantity)]})
                 )
 
     def test_a_card_totals_the_variants_a_shopper_can_buy(self) -> None:
@@ -261,13 +312,13 @@ class LowInventoryRenderingTests(unittest.TestCase):
         for quantity in (0, None, -2):
             with self.subTest(quantity=quantity):
                 self.assertEqual(
-                    "", self.card({"available": True, "variants": [variant(quantity)]})
+                    "", self.printed({"available": True, "variants": [variant(quantity)]})
                 )
 
     def test_a_sold_out_card_keeps_only_its_badge(self) -> None:
         product = {"available": False, "variants": [variant(0, available=False)]}
 
-        self.assertEqual("", self.card(product))
+        self.assertEqual("", self.printed(product))
 
     def test_a_card_falls_back_to_a_product_level_count(self) -> None:
         product = {"available": True, "variants": [], "inventory_quantity": 2}
@@ -304,7 +355,7 @@ class LowInventoryRenderingTests(unittest.TestCase):
             with self.subTest(handle=handle):
                 product = {"handle": handle, "available": True, "variants": [variant(40)]}
 
-                self.assertEqual("", self.card(product))
+                self.assertEqual("", self.printed(product))
                 product["variants"] = [variant(THRESHOLD)]
                 self.assertIn(f">Only {THRESHOLD} left<", self.card(product))
 
@@ -319,7 +370,7 @@ class LowInventoryRenderingTests(unittest.TestCase):
                     "variants": [variant(quantity)],
                 }
 
-                self.assertEqual("", self.card(product))
+                self.assertEqual("", self.printed(product))
 
         sold_out = {
             "handle": f"{SHOW_ALL_HANDLE}-ep3",
@@ -327,7 +378,7 @@ class LowInventoryRenderingTests(unittest.TestCase):
             "variants": [variant(40, available=False)],
         }
 
-        self.assertEqual("", self.card(sold_out))
+        self.assertEqual("", self.printed(sold_out))
 
     def test_the_product_page_prints_every_count_for_the_configured_series(self) -> None:
         product = {
@@ -355,19 +406,37 @@ class LowInventoryRenderingTests(unittest.TestCase):
                 self.assertIn(">Only 3 left<", self.card(product))
 
     def test_a_card_drops_a_variant_whose_flag_reads_false(self) -> None:
-        # Dropping is for a flag that says no, in any of its spellings, not for
-        # a flag the listing did not send.
+        # Dropping is for a flag that says no, in whichever spelling the
+        # platform sent, not for a flag the listing did not send.
         for flags in (
             {"available": False},
+            {"available": 0},
             {"is_available": False},
             {"is_enabled": False},
             {"is_enabled": 0},
-            {"available": True, "is_enabled": False},
         ):
             with self.subTest(flags=flags):
                 product = {"available": True, "variants": [listing_variant(3, **flags)]}
 
-                self.assertEqual("", self.card(product))
+                self.assertEqual("", self.printed(product))
+
+    def test_only_the_first_flag_the_variant_carries_decides(self) -> None:
+        # This is what emptied every product page on the store: a variant that
+        # reports `available` true alongside an `is_enabled` of 0 was dropped,
+        # because a false found anywhere among the three flags dropped it. The
+        # flags are not synonyms, so the first one present is the one that
+        # answers and the others are not consulted.
+        for flags in (
+            {"available": True, "is_enabled": 0},
+            {"available": True, "is_enabled": False},
+            {"available": True, "is_available": False},
+            {"available": 1, "is_enabled": 0},
+            {"is_available": True, "is_enabled": False},
+        ):
+            with self.subTest(flags=flags):
+                product = {"available": True, "variants": [listing_variant(3, **flags)]}
+
+                self.assertEqual("Only 3 left", self.printed(product))
 
     def test_a_card_counts_listing_variants_alongside_flagged_ones(self) -> None:
         product = {
@@ -401,7 +470,7 @@ class LowInventoryRenderingTests(unittest.TestCase):
             with self.subTest(quantity=quantity):
                 product = {"available": True, "variants": [listing_variant(quantity)]}
 
-                self.assertEqual("", self.card(product))
+                self.assertEqual("", self.printed(product))
 
     def test_the_series_is_recognised_from_the_product_link(self) -> None:
         # The failure this fixes: on the product page the handle is there and
@@ -422,6 +491,53 @@ class LowInventoryRenderingTests(unittest.TestCase):
 
                 self.assertIn(">Only 40 left<", self.card(product))
 
+    def test_a_series_card_is_matched_through_any_collection_it_is_shown_in(self) -> None:
+        # The reported case: the same product, carded in three collections, and
+        # the link is the only identifier the card was given.
+        for collection in ("marvel-super-heroes", "feature-on-homepage", SHOW_ALL_HANDLE):
+            with self.subTest(collection=collection):
+                product = {
+                    "url": f"/collections/{collection}/products/{SHOW_ALL_HANDLE}-ep3",
+                    "available": True,
+                    "variants": [listing_variant(40)],
+                }
+
+                self.assertIn(">Only 40 left<", self.card(product))
+
+    def test_the_notice_reads_the_product_it_is_given(self) -> None:
+        # The featured-product section renders `featured_product`, so the
+        # product is passed in; reading `product` there would have matched the
+        # series against whatever product the surrounding page had set, or none.
+        rendered = self.render(
+            "{% include 'low-inventory-notice', low_inventory_product: featured_product, "
+            "low_inventory_variant: featured_product.selected_or_first_available_variant, "
+            "low_inventory_persist: true %}",
+            featured_product={
+                "handle": f"{SHOW_ALL_HANDLE}-ep3",
+                "available": True,
+                "variants": [listing_variant(40)],
+                "selected_or_first_available_variant": listing_variant(40),
+            },
+        ).strip()
+
+        self.assertIn(">Only 40 left<", rendered)
+        self.assertIn('data-low-inventory-threshold="all"', rendered)
+
+    def test_the_product_parameter_is_reset_for_the_next_include(self) -> None:
+        # `include` shares one scope, so a featured product left set would be
+        # reported by every card rendered after it.
+        rendered = self.render(
+            "{% include 'low-inventory-notice', low_inventory_product: featured_product %}"
+            "<hr>"
+            "{% include 'low-inventory-notice' %}",
+            featured_product={"handle": "featured", "available": True, "variants": [variant(2)]},
+            product={"handle": "carded", "available": True, "variants": [variant(4)]},
+        )
+        featured, _, card = rendered.partition("<hr>")
+
+        self.assertIn(">Only 2 left<", featured)
+        self.assertIn(">Only 4 left<", card)
+
     def test_a_link_written_through_the_collection_matches_only_its_product(self) -> None:
         # A card in a collection links within it, so the collection's own handle
         # travels in the URL. Matching the whole URL would have claimed every
@@ -432,14 +548,14 @@ class LowInventoryRenderingTests(unittest.TestCase):
             "variants": [listing_variant(40)],
         }
 
-        self.assertEqual("", self.card(product))
+        self.assertEqual("", self.printed(product))
 
     def test_a_link_that_names_no_product_is_not_matched_whole(self) -> None:
         for url in (f"/collections/{SHOW_ALL_HANDLE}", f"/pages/{SHOW_ALL_HANDLE}-faq", ""):
             with self.subTest(url=url):
                 product = {"url": url, "available": True, "variants": [listing_variant(40)]}
 
-                self.assertEqual("", self.card(product))
+                self.assertEqual("", self.printed(product))
 
     def test_a_product_outside_the_series_is_not_matched(self) -> None:
         for identity in (
@@ -451,7 +567,7 @@ class LowInventoryRenderingTests(unittest.TestCase):
             with self.subTest(identity=identity):
                 product = {"available": True, "variants": [listing_variant(40)], **identity}
 
-                self.assertEqual("", self.card(product))
+                self.assertEqual("", self.printed(product))
 
     def test_no_match_is_made_across_two_identifiers(self) -> None:
         # The identifiers are joined, so a value ending one and a value starting
@@ -464,7 +580,7 @@ class LowInventoryRenderingTests(unittest.TestCase):
             "variants": [listing_variant(40)],
         }
 
-        self.assertEqual("", self.card(product))
+        self.assertEqual("", self.printed(product))
 
     def test_the_configured_series_is_counted_through_the_listing_shape_too(self) -> None:
         product = {
@@ -491,6 +607,35 @@ class LowInventoryRenderingTests(unittest.TestCase):
         }
 
         self.assertIn(">Only 3 left<", self.page(product))
+
+    def test_the_product_page_counts_a_variant_that_reports_a_disabled_flag(self) -> None:
+        # The store's own shape: EasyStore sends the selected variant with
+        # `available` true and an `is_enabled` of 0, and every product page
+        # rendered its notice empty for a product that had stock.
+        product = {
+            "handle": "mtg-msh-bgb-en",
+            "available": True,
+            "variants": [listing_variant(3, available=True, is_enabled=0)],
+            "selected_or_first_available_variant": listing_variant(
+                3, available=True, is_enabled=0
+            ),
+        }
+
+        self.assertIn(">Only 3 left<", self.page(product))
+
+    def test_the_element_carries_the_count_the_snippet_arrived_at(self) -> None:
+        # A card that printed nothing is otherwise indistinguishable from a card
+        # that was never asked to. The count says which: 0 means the platform
+        # sent no stock, and a positive count that printed nothing means the
+        # product was not recognised as one that prints at every quantity.
+        no_stock = {"available": True, "variants": [listing_variant(None)]}
+        above_threshold = {"available": True, "variants": [listing_variant(40)]}
+
+        self.assertIn('data-low-inventory-remaining="0"', self.card(no_stock))
+        self.assertIn('data-low-inventory-remaining="40"', self.card(above_threshold))
+        # Neither prints anything to a shopper.
+        self.assertEqual("", self.printed(no_stock))
+        self.assertEqual("", self.printed(above_threshold))
 
     def test_the_product_page_keeps_a_hidden_element_for_the_next_variant(self) -> None:
         product = {

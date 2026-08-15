@@ -109,6 +109,9 @@
                     {% endfor %}
                   </select>
                 </div>
+
+                {% include 'low-inventory-notice', low_inventory_product: featured_product, low_inventory_variant: featured_product.selected_or_first_available_variant, low_inventory_persist: true %}
+
                 <!-- quantity_selector -->
                 <div class="product-form__input product-form__quantity">
                   <label class="form__label" for="FeaturedQuantity-{{ section.__key }}">
