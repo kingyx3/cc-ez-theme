@@ -336,8 +336,12 @@ through `data-low-inventory-threshold`.
 
 One series is exempt from the threshold and prints its count at every quantity,
 so those products advertise their stock the whole way down rather than only in
-their last five units. It is configured by the other assignment in the same
-snippet:
+their last five units. That series is Late Night Crackers, sold through
+`/collections/late-night-crackers` and merchandised in the header as
+Crack-a-Pack. Each episode is a livestream, so its products sell against a
+scheduled stream rather than an on-demand release, and a live count is worth
+more to a shopper watching it than a notice that appears only in the last five
+units. It is configured by the other assignment in the same snippet:
 
 ```liquid
 {% assign low_inventory_show_all_handle = 'late-night-crackers' %}
@@ -345,7 +349,7 @@ snippet:
 
 The value is matched anywhere in the product's handle, and case does not matter
 on either side, so the one line covers `late-night-crackers-ep3`, episodes not
-released yet, and `bundle-late-night-crackers-ep3`, which carries the series
+streamed yet, and `bundle-late-night-crackers-ep3`, which carries the series
 name in the middle of its handle. Products whose handle does not contain it stay
 on the five-unit threshold. Those products render `all` in place of the number in
 `data-low-inventory-threshold`, which is how `assets/product-form.js` keeps

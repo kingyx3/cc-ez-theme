@@ -30,9 +30,11 @@
 {% assign low_inventory_threshold = 5 %}
 {% comment %}
   Products whose handle names this series advertise their stock the whole way
-  down rather than only in their last five units. It is matched anywhere in the
+  down rather than only in their last five units, because each episode is a
+  livestream and a live count is worth more to a shopper watching it than a
+  notice that appears only in the last five units. It is matched anywhere in the
   handle, so every shape of the series is covered by the one value:
-  'late-night-crackers-ep3', episodes not released yet, and
+  'late-night-crackers-ep3', episodes not streamed yet, and
   'bundle-late-night-crackers-ep3', which carries the name in the middle of its
   handle. Case does not matter on either side, because EasyStore product URLs
   are lowercase even when the administrative value is capitalized. Blank leaves
