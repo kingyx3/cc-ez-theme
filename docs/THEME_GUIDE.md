@@ -330,7 +330,18 @@ shopper can buy; the product page reports the selected variant, and
 The count is only printed when the platform reports a positive quantity. A
 product whose stock is not tracked reports zero or nothing, which is
 indistinguishable here from sold out, so no count is claimed for it. Sold-out
-products keep their existing badge. The threshold lives in one place, the
+products keep their existing badge.
+
+Which variants are counted is decided by the quantity, not by an availability
+flag. A variant is dropped only when `available`, `is_available`, or
+`is_enabled` reads false, and is counted when none of them is sent: a product
+page renders the product EasyStore loads in full, where a variant carries
+`available`, while cards render the product objects from a collection, whose
+variants do not all carry that field — the card's own variant thumbnails read
+`is_enabled`, and EasyStore names the same idea `is_available` on order line
+items. Requiring `available` counted nothing for those variants, so cards on the
+collection, home, search, and cart pages fell back to the product-level total
+or printed nothing while the product page printed a count. The threshold lives in one place, the
 `low_inventory_threshold` assignment in the snippet, and reaches the script
 through `data-low-inventory-threshold`.
 

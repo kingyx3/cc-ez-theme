@@ -46,18 +46,46 @@
 {% if low_inventory_show_all_handle != '' and low_inventory_handle contains low_inventory_show_all_handle %}
   {% assign low_inventory_show_all = true %}
 {% endif %}
+{% comment %}
+  Stock is counted for a variant unless the platform says that variant cannot be
+  bought. It is deliberately not the other way round: a variant is only dropped
+  for a flag that reads false, never for a flag that is missing.
+
+  A product page renders the product EasyStore loads in full, where a variant
+  carries `available`. Collection, home, search, and cart listings render the
+  product objects from a collection, which do not all carry that field - this
+  theme's own card reads `variant.is_enabled` for its variant thumbnails, and
+  EasyStore names the same idea `is_available` on order line items. Requiring
+  `available` therefore counted nothing on a listing whose variants spell
+  availability another way, and those cards fell back to the product-level total
+  or, where the platform reports none, printed nothing at all while the product
+  page printed a count. All three spellings are read here, and any of them
+  reading false drops the variant.
+
+  The count itself is still the gate that matters: a variant with no stock, or
+  with stock the platform does not track, is excluded by its quantity below
+  whatever its flags say.
+{% endcomment %}
 {% assign low_inventory_remaining = 0 %}
 {% if low_inventory_variant %}
   {% assign low_inventory_count = low_inventory_variant.inventory_quantity | plus: 0 %}
-  {% if low_inventory_variant.available and low_inventory_count > 0 %}
-    {% assign low_inventory_remaining = low_inventory_count %}
-  {% endif %}
+  {% capture low_inventory_availability %}{{ low_inventory_variant.available }} {{ low_inventory_variant.is_available }} {{ low_inventory_variant.is_enabled }}{% endcapture %}
+  {% assign low_inventory_availability = low_inventory_availability | downcase %}
+  {% unless low_inventory_availability contains 'false' or low_inventory_availability contains '0' %}
+    {% if low_inventory_count > 0 %}
+      {% assign low_inventory_remaining = low_inventory_count %}
+    {% endif %}
+  {% endunless %}
 {% elsif product.available %}
   {% for variant in product.variants %}
     {% assign low_inventory_count = variant.inventory_quantity | plus: 0 %}
-    {% if variant.available and low_inventory_count > 0 %}
-      {% assign low_inventory_remaining = low_inventory_remaining | plus: low_inventory_count %}
-    {% endif %}
+    {% capture low_inventory_availability %}{{ variant.available }} {{ variant.is_available }} {{ variant.is_enabled }}{% endcapture %}
+    {% assign low_inventory_availability = low_inventory_availability | downcase %}
+    {% unless low_inventory_availability contains 'false' or low_inventory_availability contains '0' %}
+      {% if low_inventory_count > 0 %}
+        {% assign low_inventory_remaining = low_inventory_remaining | plus: low_inventory_count %}
+      {% endif %}
+    {% endunless %}
   {% endfor %}
   {% comment %} Products that report stock on the product itself rather than per variant. {% endcomment %}
   {% assign low_inventory_count = product.inventory_quantity | plus: 0 %}
