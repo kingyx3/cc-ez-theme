@@ -328,8 +328,17 @@ shopper can buy; the product page, quick view, and the featured-product section
 report the selected variant, and `assets/product-form.js` refreshes it when the
 shopper picks another variant. Every surface that renders a `<product-form>`
 renders the notice inside it, because the script refreshes it through its own
-subtree. The featured-product section renders `featured_product` rather than
-`product`, so it passes its product in as `low_inventory_product`.
+subtree.
+
+The snippet reads `product` directly and never assigns a product to a variable
+of its own. EasyStore does not carry a product through an assignment: the object
+does not survive it, and the snippet then reads a product with no fields at all
+— no handle to match the series on, and no variants to count — which empties the
+notice on every card and every product page. Objects reach the snippet as
+include parameters only, the way `low_inventory_variant` does. The
+featured-product section renders `featured_product` rather than `product`, so it
+passes the handle to match the series on as a string,
+`low_inventory_identity_override`, and its variant as a parameter.
 
 The count is only printed when the platform reports a positive quantity. A
 product whose stock is not tracked reports zero or nothing, which is
