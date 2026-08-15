@@ -31,6 +31,8 @@ SNIPPETS = THEME_ROOT / "snippets"
 NOTICE = SNIPPETS / "low-inventory-notice.liquid"
 PRODUCT_CARD = SNIPPETS / "product-card.liquid"
 MAIN_PRODUCT = THEME_ROOT / "sections" / "main-product.liquid"
+QUICKVIEW = SNIPPETS / "product-quickview.liquid"
+FEATURED_PRODUCT = THEME_ROOT / "sections" / "featured-product.liquid"
 LAYOUT = THEME_ROOT / "layout" / "theme.liquid"
 THRESHOLD = 5
 # Products naming this series print their count at every quantity instead of
@@ -79,6 +81,42 @@ class LowInventoryWiringTests(unittest.TestCase):
             section,
         )
 
+    def test_every_surface_with_a_product_form_reports_its_stock(self) -> None:
+        # Quick view and the featured-product section render the same form as
+        # the product page and reported nothing at all, so a shopper who never
+        # opened the product page was told nothing about the stock - including
+        # for the series that is meant to print its count at any quantity.
+        quickview = QUICKVIEW.read_text(encoding="utf-8")
+        featured = FEATURED_PRODUCT.read_text(encoding="utf-8")
+
+        self.assertIn(
+            "{% include 'low-inventory-notice', "
+            "low_inventory_variant: product.selected_or_first_available_variant, "
+            "low_inventory_persist: true %}",
+            quickview,
+        )
+        # This section renders `featured_product`, so the product is passed in.
+        self.assertIn(
+            "{% include 'low-inventory-notice', "
+            "low_inventory_product: featured_product, "
+            "low_inventory_variant: featured_product.selected_or_first_available_variant, "
+            "low_inventory_persist: true %}",
+            featured,
+        )
+
+    def test_the_notice_sits_inside_the_form_on_every_surface(self) -> None:
+        # product-form.js refreshes the notice through its own subtree, so an
+        # element outside <product-form> would freeze on the first variant.
+        for source in (
+            MAIN_PRODUCT.read_text(encoding="utf-8"),
+            QUICKVIEW.read_text(encoding="utf-8"),
+            FEATURED_PRODUCT.read_text(encoding="utf-8"),
+        ):
+            with self.subTest(source=source[:40]):
+                form = source.split("<product-form", 1)[1].split("</product-form>", 1)[0]
+
+                self.assertIn("low-inventory-notice", form)
+
     def test_the_product_page_notice_sits_inside_the_product_form(self) -> None:
         # product-form.js refreshes the notice through its own subtree, so an
         # element outside <product-form> would freeze on the first variant.
@@ -125,7 +163,9 @@ class LowInventoryWiringTests(unittest.TestCase):
         snippet = NOTICE.read_text(encoding="utf-8")
 
         self.assertIn(
-            "{{ product.handle }}|{{ low_inventory_url_handle }}|{{ product.sku }}", snippet
+            "{{ low_inventory_product.handle }}|{{ low_inventory_url_handle }}"
+            "|{{ low_inventory_product.sku }}",
+            snippet,
         )
         self.assertIn("split: '/products/' | last", snippet)
 
@@ -421,6 +461,53 @@ class LowInventoryRenderingTests(unittest.TestCase):
                 product = {"available": True, "variants": [listing_variant(40)], **identity}
 
                 self.assertIn(">Only 40 left<", self.card(product))
+
+    def test_a_series_card_is_matched_through_any_collection_it_is_shown_in(self) -> None:
+        # The reported case: the same product, carded in three collections, and
+        # the link is the only identifier the card was given.
+        for collection in ("marvel-super-heroes", "feature-on-homepage", SHOW_ALL_HANDLE):
+            with self.subTest(collection=collection):
+                product = {
+                    "url": f"/collections/{collection}/products/{SHOW_ALL_HANDLE}-ep3",
+                    "available": True,
+                    "variants": [listing_variant(40)],
+                }
+
+                self.assertIn(">Only 40 left<", self.card(product))
+
+    def test_the_notice_reads_the_product_it_is_given(self) -> None:
+        # The featured-product section renders `featured_product`, so the
+        # product is passed in; reading `product` there would have matched the
+        # series against whatever product the surrounding page had set, or none.
+        rendered = self.render(
+            "{% include 'low-inventory-notice', low_inventory_product: featured_product, "
+            "low_inventory_variant: featured_product.selected_or_first_available_variant, "
+            "low_inventory_persist: true %}",
+            featured_product={
+                "handle": f"{SHOW_ALL_HANDLE}-ep3",
+                "available": True,
+                "variants": [listing_variant(40)],
+                "selected_or_first_available_variant": listing_variant(40),
+            },
+        ).strip()
+
+        self.assertIn(">Only 40 left<", rendered)
+        self.assertIn('data-low-inventory-threshold="all"', rendered)
+
+    def test_the_product_parameter_is_reset_for_the_next_include(self) -> None:
+        # `include` shares one scope, so a featured product left set would be
+        # reported by every card rendered after it.
+        rendered = self.render(
+            "{% include 'low-inventory-notice', low_inventory_product: featured_product %}"
+            "<hr>"
+            "{% include 'low-inventory-notice' %}",
+            featured_product={"handle": "featured", "available": True, "variants": [variant(2)]},
+            product={"handle": "carded", "available": True, "variants": [variant(4)]},
+        )
+        featured, _, card = rendered.partition("<hr>")
+
+        self.assertIn(">Only 2 left<", featured)
+        self.assertIn(">Only 4 left<", card)
 
     def test_a_link_written_through_the_collection_matches_only_its_product(self) -> None:
         # A card in a collection links within it, so the collection's own handle

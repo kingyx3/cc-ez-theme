@@ -33,6 +33,13 @@
 
   console.log(`--- ${cards.length} cards, ${seen.size} products ---`);
 
+  // The page-level reading, printed again at the end. One silent card cannot
+  // say whether the listing carried no stock or the card failed to recognise
+  // the product; a page where no card at all printed a count can.
+  const printedOnThisPage = Array.from(seen.values())
+    .flat()
+    .filter(entry => entry.cardNotice !== '(no element)' && entry.cardNotice !== '(empty)').length;
+
   for (const [handle, entries] of seen) {
     console.log(`\n=== ${handle || '(no handle in the card link)'} ===`);
     out('title on the card', entries[0].title);
@@ -85,5 +92,18 @@
     } else {
       console.log('  -> neither surface prints a count; check the quantities above against the threshold.');
     }
+  }
+
+  console.log('\n--- verdict for this page ---');
+  out('cards that printed a count', `${printedOnThisPage} of ${cards.length}`);
+  if (printedOnThisPage === 0) {
+    console.log('EasyStore sent no usable stock with any product on this page. No card can print a');
+    console.log('count whatever the theme does, and the fix has to come from the product data:');
+    console.log('check that inventory is tracked for these products in the EasyStore admin.');
+  } else {
+    console.log('Some cards printed, so the listing does carry stock. A card that stayed silent');
+    console.log('either has more stock than the threshold - which is correct - or was not');
+    console.log('recognised as a product that prints at every quantity. Its threshold attribute');
+    console.log('above says which: "all" is recognised, 5 is not.');
   }
 })();
