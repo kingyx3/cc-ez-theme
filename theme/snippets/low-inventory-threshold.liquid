@@ -1,0 +1,38 @@
+{% comment %}
+  Resolves the remaining-stock threshold for the current product.
+
+  Thresholds are configured one row per product in
+  low-inventory-threshold-config.liquid; this snippet only collects the
+  identifiers a row can be matched against and then renders that configuration.
+
+  Output:
+    low_inventory_threshold      highest remaining count that still prints a
+                                 notice.
+    low_inventory_threshold_all  true when the product prints its count at every
+                                 quantity, in which case the threshold above is
+                                 not consulted.
+
+  Every identifier is wrapped in pipes, and those pipes are the anchors a row
+  matches against: a whole-value row is compared with both, so 'MTG-HOB-CBB-EN'
+  must not claim 'MTG-HOB-CBB-EN-PACK', while a row that drops an anchor with '*'
+  matches from that end onwards. A product that reports no handle and no SKU still
+  produces '||', which no row can match because a row with a blank handle is
+  ignored.
+{% endcomment %}
+{% assign low_inventory_threshold_matched = false %}
+{% assign low_inventory_threshold_all = false %}
+{% capture low_inventory_threshold_keys -%}
+  |{{ product.handle | default: '' | append: '' | strip }}||{{ product.sku | default: '' | append: '' | strip }}|
+  {%- for variant in product.variants -%}
+    |{{ variant.sku | default: '' | append: '' | strip }}|
+  {%- endfor -%}
+{%- endcapture %}
+{% assign low_inventory_threshold_keys = low_inventory_threshold_keys | strip | downcase %}
+{% comment %}
+  The configuration assigns the shared default and then renders its rows, so the
+  default is only applied here once no row has claimed the product.
+{% endcomment %}
+{% include 'low-inventory-threshold-config' %}
+{% unless low_inventory_threshold_matched %}
+  {% assign low_inventory_threshold = low_inventory_threshold_default | plus: 0 %}
+{% endunless %}
