@@ -45,6 +45,22 @@ def variant(quantity, available: bool = True) -> dict:
     return entry
 
 
+def listing_variant(quantity, **flags) -> dict:
+    """A variant as a collection listing serializes it.
+
+    The product page renders the product EasyStore loads in full, where a
+    variant carries `available`. A card renders a product object from a
+    collection, and this theme's own card markup reads `is_enabled` from those
+    variants while EasyStore names the same idea `is_available` elsewhere. A
+    listing variant here therefore carries whichever flag the caller names, and
+    none of them by default.
+    """
+    entry = dict(flags)
+    if quantity is not None:
+        entry["inventory_quantity"] = quantity
+    return entry
+
+
 class LowInventoryWiringTests(unittest.TestCase):
     def test_product_cards_render_the_notice(self) -> None:
         card = PRODUCT_CARD.read_text(encoding="utf-8")
@@ -314,6 +330,75 @@ class LowInventoryRenderingTests(unittest.TestCase):
         # The script reads the same attribute after a variant change.
         self.assertIn('data-low-inventory-threshold="all"', rendered)
         self.assertNotIn('hidden="hidden"', rendered)
+
+    def test_a_card_counts_a_variant_that_does_not_carry_available(self) -> None:
+        # The listing serialization is what made the notice inconsistent on
+        # collection and home pages: a variant that spells availability another
+        # way, or not at all, was dropped, so the card printed the product-level
+        # total or nothing while the product page printed a count.
+        for flags in ({}, {"is_enabled": True}, {"is_available": True}, {"is_enabled": 1}):
+            with self.subTest(flags=flags):
+                product = {"available": True, "variants": [listing_variant(3, **flags)]}
+
+                self.assertIn(">Only 3 left<", self.card(product))
+
+    def test_a_card_drops_a_variant_whose_flag_reads_false(self) -> None:
+        # Dropping is for a flag that says no, in any of its spellings, not for
+        # a flag the listing did not send.
+        for flags in (
+            {"available": False},
+            {"is_available": False},
+            {"is_enabled": False},
+            {"is_enabled": 0},
+            {"available": True, "is_enabled": False},
+        ):
+            with self.subTest(flags=flags):
+                product = {"available": True, "variants": [listing_variant(3, **flags)]}
+
+                self.assertEqual("", self.card(product))
+
+    def test_a_card_counts_listing_variants_alongside_flagged_ones(self) -> None:
+        product = {
+            "available": True,
+            "variants": [
+                listing_variant(1),
+                listing_variant(2, is_enabled=True),
+                variant(1),
+                listing_variant(4, is_enabled=False),
+            ],
+        }
+
+        self.assertIn(">Only 4 left<", self.card(product))
+
+    def test_a_card_and_its_product_page_agree_on_a_listing_variant(self) -> None:
+        # The same stock, read through both surfaces: the card no longer stays
+        # silent for a product whose page prints a count.
+        product = {
+            "available": True,
+            "variants": [listing_variant(2, is_enabled=True)],
+            "selected_or_first_available_variant": listing_variant(2, is_enabled=True),
+        }
+
+        self.assertIn(">Only 2 left<", self.card(product))
+        self.assertIn(">Only 2 left<", self.page(product))
+
+    def test_a_card_still_claims_nothing_for_untracked_listing_stock(self) -> None:
+        # Counting a variant that did not say no is not the same as inventing a
+        # count for one that reports no stock at all.
+        for quantity in (0, None, -2):
+            with self.subTest(quantity=quantity):
+                product = {"available": True, "variants": [listing_variant(quantity)]}
+
+                self.assertEqual("", self.card(product))
+
+    def test_the_configured_series_is_counted_through_the_listing_shape_too(self) -> None:
+        product = {
+            "handle": f"{SHOW_ALL_HANDLE}-ep4-1",
+            "available": True,
+            "variants": [listing_variant(40, is_enabled=True)],
+        }
+
+        self.assertIn(">Only 40 left<", self.card(product))
 
     def test_a_store_translation_is_preferred_over_the_fallback_copy(self) -> None:
         rendered = self.card(
