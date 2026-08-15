@@ -1,7 +1,34 @@
+const fs = require('fs');
+const path = require('path');
 const { expect } = require('./fixtures');
 
-const limitedProductPath = process.env.E2E_LIMITED_PRODUCT_PATH
-  || '/collections/feature-on-homepage/products/mtg-hob-cbb-en-pack';
+const LIMIT_CONFIG = path.join(__dirname, '..', 'theme', 'snippets', 'customer-order-limit-config.liquid');
+const LIMIT_ROW = /\{% include 'customer-order-limit-row', limit_handle: '([^']*)', limit_maximum: (\d+)/g;
+
+// Which products carry a limit is theme configuration, so the suite reads it
+// rather than naming a product of its own. A hardcoded SKU went stale as soon
+// as the catalog moved on, and the E2E run failed for a product that was
+// simply retired rather than for anything wrong with the theme.
+function configuredLimitHandles() {
+  const config = fs.readFileSync(LIMIT_CONFIG, 'utf8');
+  const handles = [];
+  for (const [, handle, maximum] of config.matchAll(LIMIT_ROW)) {
+    if (handle && Number(maximum) > 0) handles.push(handle.toLowerCase());
+  }
+  return handles;
+}
+
+// Collections known to carry limited products, used only when a configured
+// handle does not resolve as a bare product URL.
+const limitedProductCollections = [
+  '/collections/late-night-crackers',
+  '/collections/the-hobbit',
+  '/collections/feature-on-homepage',
+];
+
+const limitedProductCandidates = process.env.E2E_LIMITED_PRODUCT_PATH
+  ? [process.env.E2E_LIMITED_PRODUCT_PATH]
+  : configuredLimitHandles().map(handle => `/products/${handle}`);
 const searchTerm = process.env.E2E_SEARCH_TERM || 'Hobbit';
 
 async function gotoStorefront(page, path) {
@@ -73,6 +100,33 @@ async function openUnlimitedPurchasableProduct(page) {
   throw new Error('Could not find an in-stock unlimited product in the configured collections. Set E2E_UNLIMITED_PRODUCT_PATH to a known product if the catalog changes.');
 }
 
+async function isLimitedProductPage(page) {
+  if (!(await page.locator('form[action="/cart/add"]').first().count())) return false;
+  const handle = new URL(page.url()).pathname.match(/\/products\/([^/?#]+)/)?.[1] || '';
+  if (!handle) return false;
+  return page.evaluate(productHandle => Boolean(window.CustomerOrderLimits?.ruleFor?.(productHandle)), handle);
+}
+
+// Opens a product the storefront actually publishes a limit rule for, and
+// returns its path. The configured handles are tried first; a store that does
+// not serve a bare `/products/<handle>` URL falls back to the collections that
+// carry limited products.
+async function openLimitedProduct(page) {
+  for (const candidate of limitedProductCandidates) {
+    await gotoStorefront(page, candidate);
+    if (await isLimitedProductPage(page)) return candidate;
+  }
+
+  for (const collection of limitedProductCollections) {
+    for (const href of await productLinksFromCollection(page, collection)) {
+      await gotoStorefront(page, href);
+      if (await isLimitedProductPage(page)) return href;
+    }
+  }
+
+  throw new Error(`Could not open a product publishing a purchase-limit rule. Tried ${limitedProductCandidates.join(', ')} and the collections ${limitedProductCollections.join(', ')}. Set E2E_LIMITED_PRODUCT_PATH to a known limited product if the catalog changes.`);
+}
+
 async function openConfiguredUnlimitedProduct(page) {
   if (process.env.E2E_UNLIMITED_PRODUCT_PATH) {
     await gotoStorefront(page, process.env.E2E_UNLIMITED_PRODUCT_PATH);
@@ -120,10 +174,11 @@ async function removeFirstCartItem(page) {
 
 module.exports = {
   addCurrentProductToCart,
+  configuredLimitHandles,
   expectBasicPageHealth,
   gotoStorefront,
-  limitedProductPath,
   openConfiguredUnlimitedProduct,
+  openLimitedProduct,
   readCart,
   removeFirstCartItem,
   searchTerm,

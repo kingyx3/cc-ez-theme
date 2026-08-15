@@ -20,7 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from limit_config import row_liquid  # noqa: E402
+from limit_config import configured_rows, row_liquid  # noqa: E402
 
 try:  # pragma: no cover - exercised by the absence of the dependency
     from liquid import DictLoader, Environment
@@ -39,6 +39,10 @@ NOW = datetime.now(timezone.utc)
 STAMP = "%Y-%m-%d %H:%M:%S +0000"
 HANDLE = "MTG-HOB-SCN-EN-SET2"
 LOWER = HANDLE.lower()
+# A product whose SKU differs from its handle, so the two are proved to be
+# published separately. It names no catalog product: what these checks need is
+# a value that is not the handle, not a SKU the store has to keep selling.
+FIXTURE_SKU = "E2E-FIXTURE-SKU-EN"
 
 
 def config_liquid(rows: str, refresh_all: str) -> str:
@@ -192,13 +196,13 @@ class CustomerOrderLimitRenderingTests(unittest.TestCase):
         # own ids are published for the storefront to match history against.
         rendered = self.render(product={
             "handle": LOWER,
-            "sku": "MTG-HOB-CBB-EN-PACK",
+            "sku": FIXTURE_SKU,
             "id": 700,
             "variants": [{"id": 9911}, {"id": 9912}],
         })
 
         self.assertIn(f'handle: "{LOWER}"', rendered)
-        self.assertIn('sku: "mtg-hob-cbb-en-pack"', rendered)
+        self.assertIn(f'sku: "{FIXTURE_SKU.lower()}"', rendered)
         self.assertIn('productId: "700"', rendered)
         self.assertIn('variantIds: ["9911","9912"]', rendered)
 
@@ -465,7 +469,13 @@ class CustomerOrderLimitRenderingTests(unittest.TestCase):
         )
         rules = self.rules(rendered)
 
-        self.assertEqual(len(rules), 17)
+        # Every configured row publishes exactly one rule, whatever the store
+        # currently sells. The handles and maximums themselves are pinned by
+        # test_customer_order_limits; counting them again here only broke a
+        # rendering check every time a product was added.
+        self.assertEqual(
+            sorted(rules), sorted(handle.lower() for handle, _, _ in configured_rows())
+        )
         for handle, rule in rules.items():
             with self.subTest(handle=handle):
                 self.assertEqual(rule["refreshAt"], "2026-08-09 00:00:00 +0800")

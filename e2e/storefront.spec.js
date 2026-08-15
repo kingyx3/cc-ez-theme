@@ -3,8 +3,8 @@ const {
   addCurrentProductToCart,
   expectBasicPageHealth,
   gotoStorefront,
-  limitedProductPath,
   openConfiguredUnlimitedProduct,
+  openLimitedProduct,
   readCart,
   removeFirstCartItem,
   searchTerm,
@@ -79,7 +79,7 @@ test.describe('storefront navigation and discovery', () => {
 
 test.describe('product, cart, and checkout handoff', () => {
   test('product page exposes variant, quantity, add-to-cart, buy-now, and image modal behavior', async ({ page }) => {
-    await gotoStorefront(page, limitedProductPath);
+    await openLimitedProduct(page);
     await expect(page.locator('.product__title').first()).toBeVisible();
     await expect(page.locator('form[action="/cart/add"]').first()).toBeVisible();
     await expect(page.locator('select[name="id"]').first()).toHaveCount(1);
@@ -97,9 +97,9 @@ test.describe('product, cart, and checkout handoff', () => {
   });
 
   test('limited products send signed-out add-to-cart attempts to login with a return target', async ({ page }) => {
-    await gotoStorefront(page, limitedProductPath);
-    const handle = new URL(page.url()).pathname.match(/\/products\/([^/?#]+)/)?.[1] || '';
-    expect(await page.evaluate(productHandle => Boolean(window.CustomerOrderLimits?.ruleFor?.(productHandle)), handle)).toBe(true);
+    // openLimitedProduct only returns a product the storefront publishes a rule
+    // for, so reaching this point already proves the limit is live.
+    await openLimitedProduct(page);
     const add = page.locator('#AddToCart').first();
     await expect(add).toBeEnabled();
     await add.click();

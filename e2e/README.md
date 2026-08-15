@@ -14,11 +14,13 @@ Override runtime data without changing test code:
 
 ```bash
 E2E_BASE_URL=https://preview.example.com \
-E2E_LIMITED_PRODUCT_PATH=/products/known-limited-product \
+E2E_LIMITED_PRODUCT_PATH=/products/pin-a-specific-limited-product \
 E2E_UNLIMITED_PRODUCT_PATH=/products/known-unlimited-product \
 E2E_SEARCH_TERM=Hobbit \
 npm run test:e2e
 ```
+
+`E2E_LIMITED_PRODUCT_PATH` is optional. Left unset, the suite reads the handles configured in `theme/snippets/customer-order-limit-config.liquid` and opens the first one the storefront publishes a purchase-limit rule for, falling back to the collections that carry limited products if a handle does not resolve as a bare `/products/<handle>` URL. So a product whose SKU changes — or a limit that moves to a different product — needs no change here. Set the variable only to pin one specific product.
 
 ## GitHub Actions
 
