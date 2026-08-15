@@ -33,6 +33,9 @@ PRODUCT_CARD = SNIPPETS / "product-card.liquid"
 MAIN_PRODUCT = THEME_ROOT / "sections" / "main-product.liquid"
 LAYOUT = THEME_ROOT / "layout" / "theme.liquid"
 THRESHOLD = 5
+# Products naming this series print their count at every quantity instead of
+# waiting for the threshold.
+SHOW_ALL_HANDLE = "late-night-crackers"
 
 
 def variant(quantity, available: bool = True) -> dict:
@@ -88,6 +91,16 @@ class LowInventoryWiringTests(unittest.TestCase):
                 continue
             self.assertNotIn(".inventory_quantity", expression, expression)
 
+    def test_the_series_that_prints_every_count_is_configured_in_one_place(self) -> None:
+        # One value, matched against the handle, so a new episode or bundle in
+        # the series is covered without another edit.
+        snippet = NOTICE.read_text(encoding="utf-8")
+
+        self.assertIn(
+            f"{{% assign low_inventory_show_all_handle = '{SHOW_ALL_HANDLE}' %}}", snippet
+        )
+        self.assertIn("low_inventory_handle contains low_inventory_show_all_handle", snippet)
+
     def test_include_parameters_are_reset_for_the_next_include(self) -> None:
         # `include` shares one scope: the product page's variant would still be
         # set when the related-product cards below it render.
@@ -142,6 +155,16 @@ class LowInventoryScriptTests(unittest.TestCase):
         # cannot disagree about what counts as low.
         self.assertIn("notice.dataset.lowInventoryThreshold", self.source)
         self.assertNotIn("= 5;", self.source)
+
+    def test_a_variant_of_the_configured_series_keeps_printing_its_count(self) -> None:
+        # The snippet renders 'all' rather than a number for those products; a
+        # script that read it as a number would hide the notice above five units
+        # as soon as the shopper picked another variant.
+        body = self.source.split("updateLowInventoryNotice() {", 1)[1].split("\n    }", 1)[0]
+
+        self.assertIn("=== 'all'", body)
+        self.assertIn("printsEveryCount ||", body)
+        self.assertNotIn("!threshold", body)
 
     def test_runtime_and_editor_copies_stay_in_sync(self) -> None:
         self.assertEqual(self.source, self.EDITOR.read_text(encoding="utf-8"))
@@ -222,6 +245,75 @@ class LowInventoryRenderingTests(unittest.TestCase):
         product = {"available": True, "variants": [], "inventory_quantity": 2}
 
         self.assertIn(">Only 2 left<", self.card(product))
+
+    def test_a_configured_card_prints_its_count_at_every_quantity(self) -> None:
+        for quantity in (1, THRESHOLD, THRESHOLD + 1, 40):
+            with self.subTest(quantity=quantity):
+                product = {
+                    "handle": f"{SHOW_ALL_HANDLE}-ep3",
+                    "available": True,
+                    "variants": [variant(quantity)],
+                }
+
+                self.assertIn(f">Only {quantity} left<", self.card(product))
+
+    def test_a_configured_handle_is_matched_wherever_the_series_name_falls(self) -> None:
+        # Bundles and preorders carry the series name in the middle of their
+        # handle, and the series' own handle carries nothing after it.
+        for handle in (
+            SHOW_ALL_HANDLE,
+            f"{SHOW_ALL_HANDLE}-ep4-1",
+            f"bundle-{SHOW_ALL_HANDLE}-ep3",
+            f"PREORDER-{SHOW_ALL_HANDLE.upper()}-EP5",
+        ):
+            with self.subTest(handle=handle):
+                product = {"handle": handle, "available": True, "variants": [variant(40)]}
+
+                self.assertIn(">Only 40 left<", self.card(product))
+
+    def test_a_product_outside_the_series_keeps_the_threshold(self) -> None:
+        for handle in ("MTG-HOB-CBB-EN", "late-night-snacks-ep3", ""):
+            with self.subTest(handle=handle):
+                product = {"handle": handle, "available": True, "variants": [variant(40)]}
+
+                self.assertEqual("", self.card(product))
+                product["variants"] = [variant(THRESHOLD)]
+                self.assertIn(f">Only {THRESHOLD} left<", self.card(product))
+
+    def test_a_configured_card_claims_no_count_for_untracked_or_sold_out_stock(self) -> None:
+        # Printing every count is not a licence to invent one: untracked stock
+        # is still reported the same way as none at all.
+        for quantity in (0, None, -2):
+            with self.subTest(quantity=quantity):
+                product = {
+                    "handle": f"{SHOW_ALL_HANDLE}-ep3",
+                    "available": True,
+                    "variants": [variant(quantity)],
+                }
+
+                self.assertEqual("", self.card(product))
+
+        sold_out = {
+            "handle": f"{SHOW_ALL_HANDLE}-ep3",
+            "available": False,
+            "variants": [variant(40, available=False)],
+        }
+
+        self.assertEqual("", self.card(sold_out))
+
+    def test_the_product_page_prints_every_count_for_the_configured_series(self) -> None:
+        product = {
+            "handle": f"{SHOW_ALL_HANDLE}-ep4-2",
+            "available": True,
+            "variants": [variant(40), variant(2)],
+            "selected_or_first_available_variant": variant(40),
+        }
+        rendered = self.page(product)
+
+        self.assertIn(">Only 40 left<", rendered)
+        # The script reads the same attribute after a variant change.
+        self.assertIn('data-low-inventory-threshold="all"', rendered)
+        self.assertNotIn('hidden="hidden"', rendered)
 
     def test_a_store_translation_is_preferred_over_the_fallback_copy(self) -> None:
         rendered = self.card(

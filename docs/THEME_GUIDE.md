@@ -128,7 +128,7 @@ Snippets are shared partials. Examples:
 - `translation-fallback.liquid` prints a platform translation, or a literal
   fallback when the store has none.
 - `low-inventory-notice.liquid` prints the remaining stock when only a few units
-  are left.
+  are left, and at every quantity for the configured series.
 
 Use a snippet when the same rendering is needed in several sections or
 templates. Use a section when merchants need editor-facing settings or blocks.
@@ -333,6 +333,28 @@ indistinguishable here from sold out, so no count is claimed for it. Sold-out
 products keep their existing badge. The threshold lives in one place, the
 `low_inventory_threshold` assignment in the snippet, and reaches the script
 through `data-low-inventory-threshold`.
+
+One series is exempt from the threshold and prints its count at every quantity,
+so those products advertise their stock the whole way down rather than only in
+their last five units. It is configured by the other assignment in the same
+snippet:
+
+```liquid
+{% assign low_inventory_show_all_handle = 'late-night-crackers' %}
+```
+
+The value is matched anywhere in the product's handle, and case does not matter
+on either side, so the one line covers `late-night-crackers-ep3`, episodes not
+released yet, and `bundle-late-night-crackers-ep3`, which carries the series
+name in the middle of its handle. Products whose handle does not contain it stay
+on the five-unit threshold. Those products render `all` in place of the number in
+`data-low-inventory-threshold`, which is how `assets/product-form.js` keeps
+printing the count after a variant change. Leaving the value blank puts every
+product back on the threshold.
+
+Printing every count is not a licence to invent one: a product whose stock is
+untracked or sold out still shows nothing, exactly as it does under the
+threshold.
 
 For out-of-stock products, a free manual alternative is a theme-rendered
 WhatsApp interest link containing the product title, selected variant, and
