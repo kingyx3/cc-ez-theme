@@ -19,7 +19,10 @@ concurrency:
 
 env:
   E2E_BASE_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.base_url || vars.E2E_PR_BASE_URL || vars.E2E_BASE_URL || 'https://cardboard.sg' }}
-  E2E_LIMITED_PRODUCT_PATH: ${{ vars.E2E_LIMITED_PRODUCT_PATH || '/collections/feature-on-homepage/products/mtg-hob-cbb-en-pack' }}
+  # Left empty on purpose: the suite reads the theme's configured limits and
+  # opens one of those products. Set the repository variable only to pin a
+  # specific product.
+  E2E_LIMITED_PRODUCT_PATH: ${{ vars.E2E_LIMITED_PRODUCT_PATH }}
   E2E_UNLIMITED_PRODUCT_PATH: ${{ vars.E2E_UNLIMITED_PRODUCT_PATH }}
   E2E_SEARCH_TERM: ${{ vars.E2E_SEARCH_TERM || 'Hobbit' }}
 
