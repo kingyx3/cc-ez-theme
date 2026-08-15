@@ -1,6 +1,6 @@
 # EasyStore API Deployment
 
-The `Package EasyStore theme` GitHub Actions workflow automatically imports a theme into EasyStore after validation and packaging complete successfully.
+The `Package EasyStore theme` GitHub Actions workflow automatically imports a theme into EasyStore after validation and packaging complete successfully on `main`. Pushes to any other branch stop after the ZIP is built.
 
 The import uses the same EasyStore admin endpoint observed in the browser UI:
 
@@ -16,11 +16,13 @@ For every push branch, and for a manual workflow dispatch, the workflow runs the
 
 1. `test` validates the real `theme/` source and enforces the existing test coverage requirement;
 2. `package` creates and validates the normal downloadable `cc-ez-theme` artifact;
-3. `deploy` runs only after `package` succeeds and imports a deployment-specific ZIP into EasyStore.
+3. `deploy` runs only after `package` succeeds, and only when the run's ref is `refs/heads/main`, and imports a deployment-specific ZIP into EasyStore.
+
+On every other branch the workflow ends at step 2. The ZIP artifact is still produced for download and manual upload, but nothing is sent to EasyStore. A manual `workflow_dispatch` follows the same rule: it imports only when dispatched against `main`.
 
 The deploy job does not replace the normal package artifact. The artifact remains available as a manual fallback.
 
-If `EASYSTORE_ADMIN_TOKEN` is not configured, validation and packaging still succeed. The deploy job prints a warning and skips the EasyStore request. Once the secret is configured, subsequent successful workflow runs import automatically.
+If `EASYSTORE_ADMIN_TOKEN` is not configured, validation and packaging still succeed. The deploy job prints a warning and skips the EasyStore request. Once the secret is configured, subsequent successful `main` runs import automatically.
 
 The chained path has been verified against EasyStore with a successful HTTP 200 import from the PR branch.
 
@@ -36,6 +38,8 @@ editor_config/settings_schema.json
 Only the staging copy is changed. The workflow updates `theme`, `theme_name` when present, and `theme_version`, then validates and packages that staging copy.
 
 The upload ZIP filename also carries the same Git identity while preserving the required internal `cc-ez-theme/` archive root.
+
+Because the deploy job is gated to `main`, the automatic import always produces the `main` identity below. The branch and release naming rules are retained so the same identity scheme still applies if the gate is ever widened, and so the naming is unambiguous when a non-`main` package artifact is uploaded manually.
 
 ### Normal branch
 
@@ -161,7 +165,9 @@ Browser-only headers such as `sec-ch-ua`, `user-agent`, `referer`, and the multi
 
 ### Import was skipped
 
-Check the deploy job for the warning that `EASYSTORE_ADMIN_TOKEN` is not configured. Add the repository secret and rerun the workflow or push another commit.
+First check the branch. The deploy job only runs on `main`, so a run on any other branch shows the job as skipped and ends after the packaging step. This is expected; download the `cc-ez-theme` artifact and upload it manually if a preview is needed.
+
+On a `main` run, check the deploy job for the warning that `EASYSTORE_ADMIN_TOKEN` is not configured. Add the repository secret and rerun the workflow or push another commit.
 
 ### 401 or 403
 

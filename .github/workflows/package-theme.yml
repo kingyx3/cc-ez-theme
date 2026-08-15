@@ -73,6 +73,12 @@ jobs:
             echo "Download the \`cc-ez-theme\` artifact and upload that ZIP directly to EasyStore if a manual fallback is needed."
             echo
             echo "SHA-256: \`$(sha256sum cc-ez-theme.zip | cut -d ' ' -f 1)\`"
+            echo
+            if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
+              echo "This run is on \`main\`, so the automatic EasyStore import job also runs."
+            else
+              echo "This run is not on \`main\`, so the workflow stops after packaging. Automatic EasyStore import only happens on \`main\`."
+            fi
           } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Upload theme package
@@ -86,6 +92,7 @@ jobs:
   deploy:
     name: Import packaged theme into EasyStore
     needs: package
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     concurrency:
       group: easystore-theme-import
