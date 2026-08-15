@@ -89,12 +89,17 @@
   carries `available`. Collection, home, search, and cart listings render the
   product objects from a collection, which do not all carry that field - this
   theme's own card reads `variant.is_enabled` for its variant thumbnails, and
-  EasyStore names the same idea `is_available` on order line items. Requiring
-  `available` therefore counted nothing on a listing whose variants spell
-  availability another way, and those cards fell back to the product-level total
-  or, where the platform reports none, printed nothing at all while the product
-  page printed a count. All three spellings are read here, and any of them
-  reading false drops the variant.
+  EasyStore names the same idea `is_available` on order line items. All three
+  are read, in that order, and the first one the variant actually carries
+  decides. Only that flag is consulted, and only an exact 'false' or '0' drops
+  the variant.
+
+  Reading all three at once, and dropping a variant for a false found anywhere
+  among them, is what broke every product page on this store: a variant that
+  reports `available` true alongside an `is_enabled` of 0 was dropped, and the
+  page rendered its notice empty for a product with stock. The flags are not
+  synonyms, so they are not merged - the first one present is the one that
+  answers.
 
   The count itself is still the gate that matters: a variant with no stock, or
   with stock the platform does not track, is excluded by its quantity below
@@ -103,9 +108,11 @@
 {% assign low_inventory_remaining = 0 %}
 {% if low_inventory_variant %}
   {% assign low_inventory_count = low_inventory_variant.inventory_quantity | plus: 0 %}
-  {% capture low_inventory_availability %}{{ low_inventory_variant.available }} {{ low_inventory_variant.is_available }} {{ low_inventory_variant.is_enabled }}{% endcapture %}
-  {% assign low_inventory_availability = low_inventory_availability | downcase %}
-  {% unless low_inventory_availability contains 'false' or low_inventory_availability contains '0' %}
+  {% capture low_inventory_flag %}{{ low_inventory_variant.available }}{% endcapture %}
+  {% assign low_inventory_flag = low_inventory_flag | downcase | strip %}
+  {% if low_inventory_flag == '' %}{% capture low_inventory_flag %}{{ low_inventory_variant.is_available }}{% endcapture %}{% assign low_inventory_flag = low_inventory_flag | downcase | strip %}{% endif %}
+  {% if low_inventory_flag == '' %}{% capture low_inventory_flag %}{{ low_inventory_variant.is_enabled }}{% endcapture %}{% assign low_inventory_flag = low_inventory_flag | downcase | strip %}{% endif %}
+  {% unless low_inventory_flag == 'false' or low_inventory_flag == '0' %}
     {% if low_inventory_count > 0 %}
       {% assign low_inventory_remaining = low_inventory_count %}
     {% endif %}
@@ -113,9 +120,11 @@
 {% elsif low_inventory_product.available %}
   {% for variant in low_inventory_product.variants %}
     {% assign low_inventory_count = variant.inventory_quantity | plus: 0 %}
-    {% capture low_inventory_availability %}{{ variant.available }} {{ variant.is_available }} {{ variant.is_enabled }}{% endcapture %}
-    {% assign low_inventory_availability = low_inventory_availability | downcase %}
-    {% unless low_inventory_availability contains 'false' or low_inventory_availability contains '0' %}
+    {% capture low_inventory_flag %}{{ variant.available }}{% endcapture %}
+    {% assign low_inventory_flag = low_inventory_flag | downcase | strip %}
+    {% if low_inventory_flag == '' %}{% capture low_inventory_flag %}{{ variant.is_available }}{% endcapture %}{% assign low_inventory_flag = low_inventory_flag | downcase | strip %}{% endif %}
+    {% if low_inventory_flag == '' %}{% capture low_inventory_flag %}{{ variant.is_enabled }}{% endcapture %}{% assign low_inventory_flag = low_inventory_flag | downcase | strip %}{% endif %}
+    {% unless low_inventory_flag == 'false' or low_inventory_flag == '0' %}
       {% if low_inventory_count > 0 %}
         {% assign low_inventory_remaining = low_inventory_remaining | plus: low_inventory_count %}
       {% endif %}
@@ -140,7 +149,16 @@
 {% endif %}
 {% capture low_inventory_text %}{% include 'translation-fallback', translation_key: 'products.product.low_inventory', fallback: 'Only __COUNT__ left', escape_output: true %}{% endcapture %}
 {% assign low_inventory_text = low_inventory_text | strip | replace: '__COUNT__', low_inventory_remaining %}
-{% if low_inventory_is_low or low_inventory_persist %}<span class="low-inventory-notice{% unless low_inventory_is_low %} hidden{% endunless %}" data-low-inventory-notice data-low-inventory-threshold="{{ low_inventory_threshold_attribute }}"{% unless low_inventory_is_low %} hidden="hidden"{% endunless %}{% if low_inventory_persist %} role="status" aria-live="polite"{% endif %}>{% if low_inventory_is_low %}{{ low_inventory_text }}{% endif %}</span>{% endif %}
+{% comment %}
+  The element is always rendered, empty and hidden while there is nothing to
+  print, and carries the count the snippet arrived at. A card that printed
+  nothing is otherwise indistinguishable from a card that was never asked to,
+  and the difference is the whole diagnosis: a remaining of 0 means the platform
+  sent no stock with that product, while a positive remaining that printed
+  nothing means the product was not recognised as one that prints at every
+  quantity. scripts/inventory-notice-probe.console.js reads exactly that.
+{% endcomment %}
+<span class="low-inventory-notice{% unless low_inventory_is_low %} hidden{% endunless %}" data-low-inventory-notice data-low-inventory-threshold="{{ low_inventory_threshold_attribute }}" data-low-inventory-remaining="{{ low_inventory_remaining }}"{% unless low_inventory_is_low %} hidden="hidden"{% endunless %}{% if low_inventory_persist %} role="status" aria-live="polite"{% endif %}>{% if low_inventory_is_low %}{{ low_inventory_text }}{% endif %}</span>
 {% assign low_inventory_product = null %}
 {% assign low_inventory_variant = null %}
 {% assign low_inventory_persist = null %}

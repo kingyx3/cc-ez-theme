@@ -5,10 +5,11 @@
 // each product shown here, does EasyStore report a remaining quantity, and did
 // the card print it the way that product's own page does?
 //
-// A card only renders the notice element when it has a count to print, so an
-// absent element means the snippet found no stock to claim - not that CSS hid
-// it. The product page always renders the element, so its threshold attribute
-// and quantity are read from there and compared.
+// Every surface renders the notice element, empty and hidden while there is
+// nothing to print, and carries the stock the snippet counted. A count of 0
+// means the platform sent no stock with that product; a count above the
+// threshold that printed nothing is correct. An element missing altogether
+// means the page predates the theme this probe was written for.
 (async () => {
   const out = (label, value) => console.log(String(label).padEnd(34), value);
   const cards = Array.from(document.querySelectorAll('.product-card-wrapper'));
@@ -28,6 +29,10 @@
       title: title.trim(),
       cardNotice: notice ? notice.textContent.trim() || '(empty)' : '(no element)',
       cardThreshold: notice ? notice.dataset.lowInventoryThreshold : '-',
+      // What the snippet counted. 0 means the platform sent no stock with this
+      // product; a positive count that printed nothing means the threshold, or
+      // the series match, kept it quiet.
+      cardRemaining: notice ? notice.dataset.lowInventoryRemaining ?? '(older theme)' : '-',
     });
   }
 
@@ -47,6 +52,7 @@
     entries.forEach((entry, index) => {
       out(`  card ${index + 1} printed`, entry.cardNotice);
       out(`  card ${index + 1} threshold attribute`, entry.cardThreshold);
+      out(`  card ${index + 1} stock the card counted`, entry.cardRemaining);
     });
 
     if (!handle) {
@@ -83,10 +89,16 @@
       console.log('  -> EasyStore reports no quantity for this product, so no surface can print one.');
     } else if (pagePrinted && !cardPrinted) {
       console.log('  -> THE DISAGREEMENT: the product page prints a count and the card does not.');
-      console.log('     Compare the threshold attributes above: "all" on the page and 5 on the card');
-      console.log('     means the card did not recognise the series from the handle in its link;');
-      console.log('     no element on the card at all means the card counted no stock from the');
-      console.log('     product object it was given.');
+      const counted = entries.map(entry => entry.cardRemaining).join(', ');
+      if (entries.every(entry => entry.cardRemaining === '0')) {
+        console.log(`     The card counted ${counted}: EasyStore sent no stock with this product in`);
+        console.log('     the listing, so no card can print it. The product page reads a fuller');
+        console.log('     object, which is why it has a number to show.');
+      } else {
+        console.log(`     The card counted ${counted}, so it had the stock and chose not to print:`);
+        console.log('     compare its threshold attribute, where "all" means the series was');
+        console.log('     recognised and 5 means it was not.');
+      }
     } else if (cardPrinted && pagePrinted) {
       console.log('  -> both surfaces print a count.');
     } else {
@@ -96,14 +108,21 @@
 
   console.log('\n--- verdict for this page ---');
   out('cards that printed a count', `${printedOnThisPage} of ${cards.length}`);
-  if (printedOnThisPage === 0) {
-    console.log('EasyStore sent no usable stock with any product on this page. No card can print a');
-    console.log('count whatever the theme does, and the fix has to come from the product data:');
-    console.log('check that inventory is tracked for these products in the EasyStore admin.');
+  const counted = Array.from(seen.values()).flat()
+    .filter(entry => entry.cardRemaining !== '0' && entry.cardRemaining !== '-'
+      && entry.cardRemaining !== '(older theme)').length;
+  out('cards that counted any stock', `${counted} of ${cards.length}`);
+  if (counted === 0) {
+    console.log('No card was given any stock to print. That is the product data, not the theme:');
+    console.log('EasyStore serializes less of a product into a collection listing than into the');
+    console.log('product page, and nothing in the theme can print a number it was never sent.');
+  } else if (printedOnThisPage === 0) {
+    console.log('Cards were given stock and printed none of it, so every one of them is above the');
+    console.log('threshold. For a product that should print at every quantity, its threshold');
+    console.log('attribute above says whether it was recognised: "all" yes, 5 no.');
   } else {
-    console.log('Some cards printed, so the listing does carry stock. A card that stayed silent');
-    console.log('either has more stock than the threshold - which is correct - or was not');
-    console.log('recognised as a product that prints at every quantity. Its threshold attribute');
-    console.log('above says which: "all" is recognised, 5 is not.');
+    console.log('Cards are printing. A card that stayed silent either has more stock than the');
+    console.log('threshold - which is correct - or was not recognised as a product that prints at');
+    console.log('every quantity; its threshold attribute above says which.');
   }
 })();

@@ -337,15 +337,29 @@ indistinguishable here from sold out, so no count is claimed for it. Sold-out
 products keep their existing badge.
 
 Which variants are counted is decided by the quantity, not by an availability
-flag. A variant is dropped only when `available`, `is_available`, or
-`is_enabled` reads false, and is counted when none of them is sent: a product
+flag. `available`, `is_available`, and `is_enabled` are read in that order, and
+the first one the variant actually carries decides — only that flag, and only an
+exact `false` or `0` drops the variant. They are not synonyms, so they are not
+merged: reading all three at once and dropping a variant for a false found
+anywhere among them emptied every product page on this store, because EasyStore
+sends `available` true alongside an `is_enabled` of 0.
+
+A variant is counted when none of the flags is sent: a product
 page renders the product EasyStore loads in full, where a variant carries
 `available`, while cards render the product objects from a collection, whose
 variants do not all carry that field — the card's own variant thumbnails read
 `is_enabled`, and EasyStore names the same idea `is_available` on order line
 items. Requiring `available` counted nothing for those variants, so cards on the
 collection, home, search, and cart pages fell back to the product-level total
-or printed nothing while the product page printed a count. The threshold lives in one place, the
+or printed nothing while the product page printed a count.
+
+The notice element is always rendered, empty and hidden while there is nothing
+to print, and carries `data-low-inventory-remaining`: the stock the snippet
+arrived at. A card that printed nothing is otherwise indistinguishable from a
+card that was never asked to, and the difference is the whole diagnosis — 0
+means the platform sent no stock with that product, while a positive count that
+printed nothing means the product was not recognised as one that prints at every
+quantity. The threshold lives in one place, the
 `low_inventory_threshold` assignment in the snippet, and reaches the script
 through `data-low-inventory-threshold`.
 
