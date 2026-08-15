@@ -277,7 +277,7 @@ The desktop header and mobile drawer expose a Browse dropdown followed by five
 top-level destinations in a fixed order:
 
 1. Browse (EasyStore product collection hierarchy)
-2. Late Night Crackers (`/collections/late-night-crackers`)
+2. Crack-a-Pack (`/collections/late-night-crackers`)
 3. Hobbit (`/collections/the-hobbit`)
 4. Marvel (`/collections/marvel-super-heroes`)
 5. Strixhaven (`/collections/secrets-of-strixhaven`)
