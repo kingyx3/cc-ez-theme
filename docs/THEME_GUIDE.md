@@ -361,7 +361,20 @@ units. It is configured by the other assignment in the same snippet:
 The value is matched anywhere in the product's handle, and case does not matter
 on either side, so the one line covers `late-night-crackers-ep3`, episodes not
 streamed yet, and `bundle-late-night-crackers-ep3`, which carries the series
-name in the middle of its handle. Products whose handle does not contain it stay
+name in the middle of its handle.
+
+The handle is read from the product's link as well as from `product.handle`,
+because a card is not given the same product object a product page is: a listing
+serializes less of the product, and a card whose product arrived without a handle
+read as a product outside the series and went back to the five-unit threshold —
+which is how a series product printed its count on its own page and on none of
+its cards. Every card links to its product, so the link always spells the handle
+out. Only the segment after `/products/` is read, so a link written within a
+collection (`/collections/late-night-crackers/products/mtg-hob-cbb-en`) is
+matched on the product it points at, never on the collection it was written
+through, and a link naming no product is ignored rather than matched whole. The
+SKU is read as well, since this theme already identifies a product by either,
+as the purchase limits do. Products whose handle does not contain it stay
 on the five-unit threshold. Those products render `all` in place of the number in
 `data-low-inventory-threshold`, which is how `assets/product-form.js` keeps
 printing the count after a variant change. Leaving the value blank puts every
@@ -370,6 +383,14 @@ product back on the threshold.
 Printing every count is not a licence to invent one: a product whose stock is
 untracked or sold out still shows nothing, exactly as it does under the
 threshold.
+
+When a card and its product page disagree about a count, paste
+`scripts/inventory-notice-probe.console.js` into the browser console on the page
+showing the cards. For every product on it, the probe prints what the card
+printed, what that product's own page prints, the quantities EasyStore reports
+for it, and which of the two is at fault: an untracked product, a card that did
+not recognise the series, or a card that counted no stock from the product
+object it was given.
 
 For out-of-stock products, a free manual alternative is a theme-rendered
 WhatsApp interest link containing the product title, selected variant, and

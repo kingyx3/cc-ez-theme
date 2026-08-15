@@ -115,7 +115,19 @@ class LowInventoryWiringTests(unittest.TestCase):
         self.assertIn(
             f"{{% assign low_inventory_show_all_handle = '{SHOW_ALL_HANDLE}' %}}", snippet
         )
-        self.assertIn("low_inventory_handle contains low_inventory_show_all_handle", snippet)
+        self.assertIn("low_inventory_identity contains low_inventory_show_all_handle", snippet)
+
+    def test_the_series_is_matched_on_more_than_the_handle(self) -> None:
+        # A card is not given the same product object a product page is, so a
+        # match that only reads the handle recognised the series on the product
+        # page and nowhere else. Every card links to its product, so the link is
+        # where the handle is always spelled out.
+        snippet = NOTICE.read_text(encoding="utf-8")
+
+        self.assertIn(
+            "{{ product.handle }}|{{ low_inventory_url_handle }}|{{ product.sku }}", snippet
+        )
+        self.assertIn("split: '/products/' | last", snippet)
 
     def test_include_parameters_are_reset_for_the_next_include(self) -> None:
         # `include` shares one scope: the product page's variant would still be
@@ -390,6 +402,69 @@ class LowInventoryRenderingTests(unittest.TestCase):
                 product = {"available": True, "variants": [listing_variant(quantity)]}
 
                 self.assertEqual("", self.card(product))
+
+    def test_the_series_is_recognised_from_the_product_link(self) -> None:
+        # The failure this fixes: on the product page the handle is there and
+        # the count printed at any quantity; on a card whose product arrived
+        # without one, the same product read as an ordinary product and printed
+        # nothing above five units. The card still links to the product, so the
+        # handle is still there to be read.
+        for identity in (
+            {"url": f"/products/{SHOW_ALL_HANDLE}-ep3"},
+            {"url": f"/PRODUCTS/{SHOW_ALL_HANDLE.upper()}-EP3"},
+            {"url": f"/products/bundle-{SHOW_ALL_HANDLE}-ep3?variant=8891"},
+            {"url": f"/products/{SHOW_ALL_HANDLE}-ep4-1#gallery"},
+            {"url": f"/collections/all/products/{SHOW_ALL_HANDLE}-ep4-2"},
+            {"sku": f"{SHOW_ALL_HANDLE}-ep3"},
+        ):
+            with self.subTest(identity=identity):
+                product = {"available": True, "variants": [listing_variant(40)], **identity}
+
+                self.assertIn(">Only 40 left<", self.card(product))
+
+    def test_a_link_written_through_the_collection_matches_only_its_product(self) -> None:
+        # A card in a collection links within it, so the collection's own handle
+        # travels in the URL. Matching the whole URL would have claimed every
+        # product shown in the series' collection.
+        product = {
+            "url": f"/collections/{SHOW_ALL_HANDLE}/products/MTG-HOB-CBB-EN",
+            "available": True,
+            "variants": [listing_variant(40)],
+        }
+
+        self.assertEqual("", self.card(product))
+
+    def test_a_link_that_names_no_product_is_not_matched_whole(self) -> None:
+        for url in (f"/collections/{SHOW_ALL_HANDLE}", f"/pages/{SHOW_ALL_HANDLE}-faq", ""):
+            with self.subTest(url=url):
+                product = {"url": url, "available": True, "variants": [listing_variant(40)]}
+
+                self.assertEqual("", self.card(product))
+
+    def test_a_product_outside_the_series_is_not_matched(self) -> None:
+        for identity in (
+            {"url": "/products/late-night-snacks-ep3"},
+            {"url": "/products/crackers"},
+            {"handle": "MTG-HOB-CBB-EN", "url": "/products/MTG-HOB-CBB-EN"},
+            {},
+        ):
+            with self.subTest(identity=identity):
+                product = {"available": True, "variants": [listing_variant(40)], **identity}
+
+                self.assertEqual("", self.card(product))
+
+    def test_no_match_is_made_across_two_identifiers(self) -> None:
+        # The identifiers are joined, so a value ending one and a value starting
+        # the next must not read as the series spanning the join.
+        product = {
+            "handle": "clearance-late-night",
+            "url": "/products/clearance-late-night",
+            "sku": "crackers-ep3",
+            "available": True,
+            "variants": [listing_variant(40)],
+        }
+
+        self.assertEqual("", self.card(product))
 
     def test_the_configured_series_is_counted_through_the_listing_shape_too(self) -> None:
         product = {

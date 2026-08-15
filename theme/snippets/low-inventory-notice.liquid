@@ -39,11 +39,38 @@
   handle. Case does not matter on either side, because EasyStore product URLs
   are lowercase even when the administrative value is capitalized. Blank leaves
   every product on the threshold above.
+
+  The handle is read from the product's link as well as from product.handle,
+  because a card is not given the same product object a product page is. The
+  product page reads the product EasyStore loads in full, so the handle is
+  always there and the series was recognised; a collection listing serializes
+  less of it, and a card whose product arrived without a handle read as a
+  product outside the series and went back to the five-unit threshold, which is
+  why one of these products printed its count on its own page and on nothing
+  else. Every card links to its product, so the link is the one place the handle
+  is always spelled out.
+
+  Only the segment after '/products/' is read, so a link written within a
+  collection - '/collections/late-night-crackers/products/mtg-hob-cbb-en' -
+  is matched on the product it points at and never on the collection it was
+  written through. A link that names no product is ignored rather than matched
+  whole, for the same reason. The SKU is read too, because this theme already
+  identifies a product by either, as the purchase limits do.
+
+  The identifiers are joined with '|' so that no match can be made across the
+  join between one identifier and the next.
 {% endcomment %}
 {% assign low_inventory_show_all_handle = 'late-night-crackers' %}
-{% assign low_inventory_handle = product.handle | default: '' | append: '' | strip | downcase %}
+{% comment %} The URL is lowered before it is split as well as after, so the '/products/' it is split on is found whatever case the link was written in. {% endcomment %}
+{% assign low_inventory_url = product.url | default: '' | append: '' | downcase %}
+{% assign low_inventory_url_handle = '' %}
+{% if low_inventory_url contains '/products/' %}
+  {% assign low_inventory_url_handle = low_inventory_url | split: '/products/' | last | split: '?' | first | split: '#' | first %}
+{% endif %}
+{% capture low_inventory_identity %}{{ product.handle }}|{{ low_inventory_url_handle }}|{{ product.sku }}{% endcapture %}
+{% assign low_inventory_identity = low_inventory_identity | downcase %}
 {% assign low_inventory_show_all = false %}
-{% if low_inventory_show_all_handle != '' and low_inventory_handle contains low_inventory_show_all_handle %}
+{% if low_inventory_show_all_handle != '' and low_inventory_identity contains low_inventory_show_all_handle %}
   {% assign low_inventory_show_all = true %}
 {% endif %}
 {% comment %}
