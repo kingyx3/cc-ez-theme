@@ -105,16 +105,11 @@ if (!customElements.get('product-form')) {
       if (!notice) return;
 
       const variant = this.currentVariant || {};
-      // A product configured to print every count renders 'all' rather than a
-      // number, so the threshold is not a limit for it at any quantity.
-      const configured = notice.dataset.lowInventoryThreshold;
-      const printsEveryCount = String(configured == null ? '' : configured).trim().toLowerCase() === 'all';
-      const threshold = this.toPositiveLimit(configured);
+      const threshold = this.toPositiveLimit(notice.dataset.lowInventoryThreshold);
       const remaining = this.getVariantInventory();
       const template = window.purchaseStrings && window.purchaseStrings.lowInventory;
-      const withinThreshold = printsEveryCount || (threshold !== null && remaining <= threshold);
 
-      if (!template || !remaining || !withinThreshold || variant.available === false) {
+      if (!template || !remaining || !threshold || remaining > threshold || variant.available === false) {
         notice.textContent = '';
         notice.classList.add('hidden');
         notice.setAttribute('hidden', 'hidden');
