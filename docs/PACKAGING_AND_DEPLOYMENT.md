@@ -144,7 +144,9 @@ Its jobs are chained in this order:
 
 1. `test` validates the real theme and enforces coverage;
 2. `package` builds the normal downloadable `cc-ez-theme` artifact;
-3. `deploy` starts only after `package` succeeds and imports an unpublished deployment candidate into EasyStore when `EASYSTORE_ADMIN_TOKEN` is configured.
+3. `deploy` starts only after `package` succeeds, only when the run is on `main`, and imports an unpublished deployment candidate into EasyStore when `EASYSTORE_ADMIN_TOKEN` is configured.
+
+On any branch other than `main`, the workflow stops after `package`. The `cc-ez-theme` artifact is still built and uploaded, and `deploy` is skipped, so no EasyStore import happens from feature or release branches.
 
 The normal package job:
 
@@ -162,7 +164,7 @@ See [EasyStore API deployment](EASYSTORE_API_DEPLOYMENT.md) for the credential a
 
 ## 9. Automatic import and manual fallback
 
-When `EASYSTORE_ADMIN_TOKEN` exists, every successful workflow run automatically attempts an EasyStore import after packaging. The workflow does not intentionally publish the imported theme.
+When `EASYSTORE_ADMIN_TOKEN` exists, every successful workflow run on `main` automatically attempts an EasyStore import after packaging. Runs on other branches stop at the ZIP. The workflow does not intentionally publish the imported theme.
 
 In EasyStore:
 
@@ -188,7 +190,7 @@ If `EASYSTORE_ADMIN_TOKEN` is missing, packaging still succeeds and the deploy j
 - [ ] The package job succeeded.
 - [ ] The artifact has one `cc-ez-theme/` root.
 - [ ] There is no nested ZIP.
-- [ ] The deploy job imported the expected branch/run/SHA candidate, or manual fallback was used intentionally.
+- [ ] For a `main` run, the deploy job imported the expected branch/run/SHA candidate, or manual fallback was used intentionally. For a non-`main` run, the deploy job was skipped and the artifact was used for manual upload if a preview was needed.
 - [ ] EasyStore Edit source shows populated runtime directories.
 - [ ] The unpublished preview renders.
 - [ ] Best Sellers, The Hobbit, Marvel, and Strixhaven each show two rows of three products on desktop.
