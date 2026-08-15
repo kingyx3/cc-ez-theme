@@ -1,11 +1,14 @@
 const AxeBuilder = require('@axe-core/playwright').default;
 const { test, expect } = require('./fixtures');
-const { gotoStorefront, limitedProductPath } = require('./storefront-helpers');
+const { gotoStorefront, openLimitedProduct } = require('./storefront-helpers');
 
+// A page is either a fixed path or a helper that opens one, because which
+// product carries a purchase limit is theme configuration rather than a
+// literal this suite should keep in step.
 const pages = [
   ['home', '/'],
   ['collection', '/collections/the-hobbit'],
-  ['product', limitedProductPath],
+  ['product', openLimitedProduct],
   ['search', '/search?q=Hobbit'],
   ['cart', '/cart'],
   ['login', '/account/login'],
@@ -44,7 +47,11 @@ function splitKnownAccessibilityBaseline(violations) {
 
 for (const [name, path] of pages) {
   test(`${name} has no unexpected serious or critical automated accessibility violations`, async ({ page }, testInfo) => {
-    await gotoStorefront(page, path);
+    if (typeof path === 'function') {
+      await path(page);
+    } else {
+      await gotoStorefront(page, path);
+    }
     const results = await new AxeBuilder({ page }).analyze();
     const severe = results.violations.filter(v => v.impact === 'serious' || v.impact === 'critical');
     const { known, unexpected } = splitKnownAccessibilityBaseline(severe);
