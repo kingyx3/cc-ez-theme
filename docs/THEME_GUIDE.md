@@ -411,6 +411,24 @@ Printing every count is not a licence to invent one: a product whose stock is
 untracked or sold out still shows nothing, exactly as it does under the
 threshold.
 
+A collection listing does not carry the same product object a product page does,
+and EasyStore is not consistent about it: a probe of the landing page found
+`late-night-crackers-ep3` serialized without its stock there and with it on a
+collection page, the same product on the same store within one run. Half the
+cards on a collection page were given a count and half were given nothing.
+
+`assets/card-inventory-fill.js` fills in the cards the platform starved, but
+only those that promise a count at every quantity — a `data-low-inventory-threshold`
+of `all` beside a `data-low-inventory-remaining` of `0`. It reads the product's
+quick view payload, which at about 14 KB is the cheapest place the number is
+available; the same product's JSON is about 226 KB. It waits for the page to go
+idle, spends at most four requests on a page, and prints the store's own
+translation. A card that is merely near its threshold is left alone, because
+finding out whether it was close would mean fetching every card on the page.
+
+Nothing is invented: a product that reports no stock in its quick view either is
+left as the snippet rendered it, empty and hidden.
+
 When a card and its product page disagree about a count, paste
 `scripts/inventory-notice-probe.console.js` into the browser console on the page
 showing the cards. For every product on it, the probe prints what the card

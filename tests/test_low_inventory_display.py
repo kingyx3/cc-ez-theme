@@ -255,6 +255,69 @@ class LowInventoryScriptTests(unittest.TestCase):
         self.assertEqual(self.source, self.EDITOR.read_text(encoding="utf-8"))
 
 
+class CardInventoryFillTests(unittest.TestCase):
+    """The fallback for cards EasyStore sends without any stock.
+
+    A collection listing does not carry the same product object a product page
+    does, and it is not consistent about it: a probe of the landing page found
+    `late-night-crackers-ep3` serialized without its stock there and with it on
+    a collection page, the same product on the same store within one run.
+    """
+
+    RUNTIME = THEME_ROOT / "assets" / "card-inventory-fill.js"
+    EDITOR = THEME_ROOT / "editor_assets" / "card-inventory-fill.js"
+
+    def setUp(self) -> None:
+        self.source = self.RUNTIME.read_text(encoding="utf-8")
+
+    def test_it_is_loaded_for_every_page_that_renders_cards(self) -> None:
+        layout = LAYOUT.read_text(encoding="utf-8")
+
+        self.assertIn(
+            "<script src=\"{{ 'card-inventory-fill.js' | asset_url }}\" defer=\"defer\"></script>",
+            layout,
+        )
+
+    def test_it_only_fetches_for_a_card_the_platform_starved(self) -> None:
+        # Both attributes are required: a card that prints at every quantity,
+        # and a count of 0 because nothing was sent. A card that is merely near
+        # its threshold is left alone rather than fetching every card to find
+        # out whether it was close.
+        self.assertIn('[data-low-inventory-notice]', self.source)
+        self.assertIn('[data-low-inventory-threshold="all"]', self.source)
+        self.assertIn('[data-low-inventory-remaining="0"]', self.source)
+
+    def test_it_reads_the_cheapest_payload_that_carries_the_count(self) -> None:
+        # Measured on the store: the quickview payload is 14 KB and the products
+        # JSON for the same product is 226 KB. Both report the same number.
+        self.assertIn("/product_quickview_html", self.source)
+        self.assertNotIn(".json", self.source)
+
+    def test_it_spends_a_bounded_number_of_requests_on_a_page(self) -> None:
+        self.assertIn("MOST_REQUESTS = 4", self.source)
+        self.assertIn("slice(0, MOST_REQUESTS)", self.source)
+
+    def test_it_claims_no_count_for_a_product_that_reports_none(self) -> None:
+        # Inventing a count for untracked stock is what the snippet refuses to
+        # do, and fetching the number elsewhere is not a licence to start.
+        self.assertIn("if (remaining > 0) print(notice, remaining);", self.source)
+
+    def test_it_prints_the_store_translation_rather_than_its_own_copy(self) -> None:
+        self.assertIn("window.purchaseStrings && window.purchaseStrings.lowInventory", self.source)
+        # No copy of its own: the fallback prints whatever the store's
+        # translation says, which is what the snippet beside it prints.
+        for literal in ("'Only", '"Only', "`Only"):
+            self.assertNotIn(literal, self.source)
+
+    def test_it_waits_until_the_page_is_idle(self) -> None:
+        # The count is worth having, not worth delaying the page for.
+        self.assertIn("requestIdleCallback", self.source)
+        self.assertIn('defer="defer"', LAYOUT.read_text(encoding="utf-8"))
+
+    def test_runtime_and_editor_copies_stay_in_sync(self) -> None:
+        self.assertEqual(self.source, self.EDITOR.read_text(encoding="utf-8"))
+
+
 @unittest.skipIf(
     Environment is None and not REQUIRE_ENGINE,
     "python-liquid is not installed; run pip install -r requirements-dev.txt",
