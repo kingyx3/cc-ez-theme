@@ -106,6 +106,31 @@
     }
   }
 
+  // When a card was given no stock, the theme has nothing to print and the only
+  // remaining question is whether the browser could fetch the number instead.
+  // This asks the store, once, for one such product.
+  const starved = Array.from(seen.entries()).find(([handle, entries]) =>
+    handle && entries.every(entry => entry.cardRemaining === '0'));
+  if (starved) {
+    console.log(`\n--- can the browser fetch what the card was not given? (${starved[0]}) ---`);
+    for (const path of [`/products/${starved[0]}.json`, `/products/${starved[0]}/product_quickview_html`]) {
+      try {
+        const response = await fetch(path, { credentials: 'same-origin' });
+        if (!response.ok) {
+          out(path, `HTTP ${response.status}`);
+          continue;
+        }
+        const body = await response.text();
+        const found = body.match(/inventory_quantity["']?\s*[:=]\s*["']?(-?\d+)/)
+          || body.match(/data-inventory-quantity=["'](-?\d+)["']/);
+        out(path, found ? `reports ${found[1]} - usable` : 'no inventory in the body');
+        out('  bytes', body.length);
+      } catch (error) {
+        out(path, `failed: ${error.message}`);
+      }
+    }
+  }
+
   console.log('\n--- verdict for this page ---');
   out('cards that printed a count', `${printedOnThisPage} of ${cards.length}`);
   const counted = Array.from(seen.values()).flat()
