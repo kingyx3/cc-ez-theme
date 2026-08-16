@@ -803,20 +803,43 @@ class LowInventoryRenderingTests(unittest.TestCase):
         # each use resolves nothing at all on EasyStore.
         self.assertIn(
             "{% assign low_inventory_lookup_variants = "
-            "products[low_inventory_url_handle].variants %}",
+            "products[low_inventory_lookup_handle].variants %}",
             snippet,
         )
         self.assertIn(
             "{% assign low_inventory_lookup_fallback = "
-            "all_products[low_inventory_url_handle].variants %}",
+            "all_products[low_inventory_lookup_handle].variants %}",
             snippet,
         )
         # Only when the listing gave nothing, and only within the page's budget.
         self.assertIn(
-            "{% if low_inventory_remaining == 0 and low_inventory_url_handle != '' "
+            "{% if low_inventory_remaining == 0 and low_inventory_lookup_handle != '' "
             "and low_inventory_lookups < 8 %}",
             snippet,
         )
+
+    def test_the_lookup_handle_falls_back_to_the_product_field(self) -> None:
+        # The link and the handle field are not populated on the same pages: a
+        # card whose link the listing did not carry still has a lookup to make.
+        snippet = NOTICE.read_text(encoding="utf-8")
+
+        self.assertIn("{% assign low_inventory_lookup_handle = low_inventory_url_handle %}", snippet)
+        self.assertIn(
+            "{% assign low_inventory_lookup_handle = product.handle "
+            "| default: '' | append: '' | strip | downcase %}",
+            snippet,
+        )
+
+    def test_the_element_says_which_handle_it_could_look_up(self) -> None:
+        # A card that made no lookup is otherwise silent about whether it had a
+        # handle to make one with.
+        product = {
+            "handle": "MTG-HOB-CBB-EN",
+            "available": True,
+            "variants": [listing_variant(None)],
+        }
+
+        self.assertIn('data-low-inventory-handle="mtg-hob-cbb-en"', self.card(product))
 
     def test_the_page_spends_a_bounded_number_of_lookups(self) -> None:
         # `include` shares one scope, so the counter survives from one card to

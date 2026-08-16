@@ -82,6 +82,15 @@
 {% if low_inventory_url contains '/products/' %}
   {% assign low_inventory_url_handle = low_inventory_url | split: '/products/' | last | split: '?' | first | split: '#' | first %}
 {% endif %}
+{% comment %}
+  The handle the lookup will use. The link is preferred because it is the one
+  identifier every card carries, and `product.handle` covers a surface that
+  renders no link - the two are not populated on the same pages.
+{% endcomment %}
+{% assign low_inventory_lookup_handle = low_inventory_url_handle %}
+{% if low_inventory_lookup_handle == '' %}
+  {% assign low_inventory_lookup_handle = product.handle | default: '' | append: '' | strip | downcase %}
+{% endif %}
 {% capture low_inventory_identity %}{{ product.handle }}|{{ low_inventory_url_handle }}|{{ product.sku }}{% endcapture %}
 {% comment %} A surface that renders its product under another name passes the identity itself, as a string. It replaces rather than joins what was read from `product`, which on that surface is either nothing or somebody else's product. {% endcomment %}
 {% if low_inventory_identity_override %}
@@ -172,7 +181,7 @@
 {% endcomment %}
 {% assign low_inventory_source = 'listing' %}
 {% assign low_inventory_lookups = low_inventory_lookups | default: 0 | plus: 0 %}
-{% if low_inventory_remaining == 0 and low_inventory_url_handle != '' and low_inventory_lookups < 8 %}
+{% if low_inventory_remaining == 0 and low_inventory_lookup_handle != '' and low_inventory_lookups < 8 %}
   {% assign low_inventory_lookups = low_inventory_lookups | plus: 1 %}
   {% comment %}
     Only the variants come back from the lookup, never the product itself.
@@ -183,8 +192,8 @@
     counts simply went back to zero - so what is kept is the list of variants,
     which is an array, and the numbers read out of it.
   {% endcomment %}
-  {% assign low_inventory_lookup_variants = products[low_inventory_url_handle].variants %}
-  {% assign low_inventory_lookup_fallback = all_products[low_inventory_url_handle].variants %}
+  {% assign low_inventory_lookup_variants = products[low_inventory_lookup_handle].variants %}
+  {% assign low_inventory_lookup_fallback = all_products[low_inventory_lookup_handle].variants %}
   {% for variant in low_inventory_lookup_variants %}
     {% assign low_inventory_count = variant.inventory_quantity | plus: 0 %}
     {% if low_inventory_count > 0 %}
@@ -200,9 +209,9 @@
     {% endfor %}
   {% endif %}
   {% if low_inventory_remaining == 0 %}
-    {% assign low_inventory_count = products[low_inventory_url_handle].inventory_quantity | plus: 0 %}
+    {% assign low_inventory_count = products[low_inventory_lookup_handle].inventory_quantity | plus: 0 %}
     {% if low_inventory_count == 0 %}
-      {% assign low_inventory_count = all_products[low_inventory_url_handle].inventory_quantity | plus: 0 %}
+      {% assign low_inventory_count = all_products[low_inventory_lookup_handle].inventory_quantity | plus: 0 %}
     {% endif %}
     {% if low_inventory_count > 0 %}
       {% assign low_inventory_remaining = low_inventory_count %}
@@ -234,7 +243,7 @@
   nothing means the product was not recognised as one that prints at every
   quantity. scripts/inventory-notice-probe.console.js reads exactly that.
 {% endcomment %}
-<span class="low-inventory-notice{% if low_inventory_is_low == false %} hidden{% endif %}" data-low-inventory-notice data-low-inventory-threshold="{{ low_inventory_threshold_attribute }}" data-low-inventory-remaining="{{ low_inventory_remaining }}" data-low-inventory-source="{{ low_inventory_source }}"{% if low_inventory_is_low == false %} hidden="hidden"{% endif %}{% if low_inventory_persist %} role="status" aria-live="polite"{% endif %}>{% if low_inventory_is_low %}{{ low_inventory_text }}{% endif %}</span>
+<span class="low-inventory-notice{% if low_inventory_is_low == false %} hidden{% endif %}" data-low-inventory-notice data-low-inventory-threshold="{{ low_inventory_threshold_attribute }}" data-low-inventory-remaining="{{ low_inventory_remaining }}" data-low-inventory-source="{{ low_inventory_source }}" data-low-inventory-handle="{{ low_inventory_lookup_handle }}"{% if low_inventory_is_low == false %} hidden="hidden"{% endif %}{% if low_inventory_persist %} role="status" aria-live="polite"{% endif %}>{% if low_inventory_is_low %}{{ low_inventory_text }}{% endif %}</span>
 {% assign low_inventory_identity_override = null %}
 {% assign low_inventory_variant = null %}
 {% assign low_inventory_persist = null %}

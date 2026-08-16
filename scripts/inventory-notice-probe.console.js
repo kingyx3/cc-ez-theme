@@ -70,6 +70,9 @@
       // Text in the markup is not the same as text a shopper can see. This says
       // whether the element is actually painted, and what is hiding it if not.
       cardOnScreen: notice ? onScreen(notice) : '-',
+      // The handle the snippet had to look the product up by. Blank means it
+      // never made a lookup because it had nothing to look up.
+      cardHandle: notice ? notice.dataset.lowInventoryHandle ?? '(older theme)' : '-',
     });
   }
 
@@ -92,6 +95,9 @@
       out(`  card ${index + 1} stock the card counted`, entry.cardRemaining);
       out(`  card ${index + 1} where that came from`, entry.cardSource);
       out(`  card ${index + 1} visible to a shopper`, entry.cardOnScreen);
+      if (entry.cardRemaining === '0') {
+        out(`  card ${index + 1} handle it could look up`, entry.cardHandle || '(none - no lookup was made)');
+      }
     });
 
     if (!handle) {
@@ -173,6 +179,17 @@
   console.log('\n--- the fill-in script ---');
   const tag = document.querySelector('script[src*="card-inventory-fill"]');
   out('loaded by the page', tag ? 'yes' : 'NO - the layout is not serving it');
+  if (tag) {
+    try {
+      const response = await fetch(tag.src, { credentials: 'same-origin' });
+      const body = response.ok ? await response.text() : '';
+      out('the file the page is served', response.ok
+        ? `HTTP ${response.status}, ${body.length} bytes, ${body.includes('cardInventoryFill') ? 'current' : 'STALE - it predates this probe'}`
+        : `HTTP ${response.status}`);
+    } catch (error) {
+      out('the file the page is served', `could not be read: ${error.message}`);
+    }
+  }
   const fillState = window.cardInventoryFill;
   if (!fillState) {
     out('what it did', tag ? 'it did not run - check the console for an error' : 'not loaded');
