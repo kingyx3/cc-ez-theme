@@ -330,11 +330,15 @@ shopper picks another variant. Every surface that renders a `<product-form>`
 renders the notice inside it, because the script refreshes it through its own
 subtree.
 
-The snippet reads `product` directly and never assigns a product to a variable
-of its own. EasyStore does not carry a product through an assignment: the object
-does not survive it, and the snippet then reads a product with no fields at all
-— no handle to match the series on, and no variants to count — which empties the
-notice on every card and every product page. Objects reach the snippet as
+The snippet reads `product` directly and never assigns a product-like object to a
+variable of its own — not `product`, and not a lookup such as
+`products[handle]`. EasyStore does not carry one through an assignment. The
+object does not survive it, so the snippet reads a product with no fields at all
+— no handle to match the series on, and no variants to count — and the page it
+renders afterwards behaves as though the notice should be hidden even where it
+has a count to print. Both failures have been seen on this store: a product page
+with no notice at all, and cards that shipped "Only 10 left" inside a hidden
+span. Objects are read where they are used and only numbers are kept. Objects reach the snippet as
 include parameters only, the way `low_inventory_variant` does. The
 featured-product section renders `featured_product` rather than `product`, so it
 passes the handle to match the series on as a string,

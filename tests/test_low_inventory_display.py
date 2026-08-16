@@ -106,22 +106,42 @@ class LowInventoryWiringTests(unittest.TestCase):
             featured,
         )
 
-    def test_the_product_object_is_never_assigned_to_a_variable(self) -> None:
-        # EasyStore does not carry a product through an assignment: the object
-        # does not survive it, and the snippet then read a product with no
-        # fields at all - no handle to match the series on, and no variants to
-        # count. It emptied the notice on every card and every product page on
-        # the store. Objects arrive as include parameters; everything else the
-        # snippet needs is a string.
+    def test_no_product_like_object_is_ever_assigned_to_a_variable(self) -> None:
+        # Assigning one leaves this snippet reading a page that behaves as
+        # though the notice should be hidden even where it has a count to print:
+        # every card the lookup answered shipped its count inside a hidden
+        # element, while the cards that made no such assignment were fine. The
+        # earlier shape of this cost a product page its whole notice.
+        #
+        # A named object was already forbidden here. A looked-up one -
+        # products[handle] - was not, and that is what came back.
         snippet = NOTICE.read_text(encoding="utf-8")
 
-        for source in re.findall(r"{%-?\s*assign ([a-z_]+) = ([^%|]+)", snippet):
-            name, value = source[0], source[1].strip()
+        for name, value in re.findall(r"{%-?\s*assign ([a-z_]+) = ([^%|]+)", snippet):
+            value = value.strip()
             self.assertNotIn(
                 value,
                 ("product", "featured_product", "collection", "cart", "customer"),
                 f"{name} is assigned the {value} object",
             )
+            # A scalar read out of a lookup is fine - it is a number by the
+            # time it lands. The object itself is what must never be kept.
+            self.assertNotRegex(
+                value,
+                r"^(all_products|products|collections)\[[^\]]*\]$",
+                f"{name} is assigned a looked-up object: {value}",
+            )
+        # Objects are read where they are used, and only numbers are kept.
+        self.assertNotIn("low_inventory_lookup ", snippet)
+
+    def test_the_markup_reads_one_explicit_comparison(self) -> None:
+        # The class, the hidden attribute and the text all key off the same
+        # value, so an element can never ship a count inside a hidden span.
+        snippet = NOTICE.read_text(encoding="utf-8")
+        span = snippet.split("<span class=\"low-inventory-notice", 1)[1].split("</span>", 1)[0]
+
+        self.assertEqual(2, span.count("{% if low_inventory_is_low == false %}"))
+        self.assertNotIn("unless", span)
 
     def test_the_notice_sits_inside_the_form_on_every_surface(self) -> None:
         # product-form.js refreshes the notice through its own subtree, so an
@@ -768,8 +788,8 @@ class LowInventoryRenderingTests(unittest.TestCase):
         # assets/card-inventory-fill.js.
         snippet = NOTICE.read_text(encoding="utf-8")
 
-        self.assertIn("{% assign low_inventory_lookup = products[low_inventory_url_handle] %}", snippet)
-        self.assertIn("{% assign low_inventory_lookup = all_products[low_inventory_url_handle] %}", snippet)
+        self.assertIn("{% for variant in products[low_inventory_url_handle].variants %}", snippet)
+        self.assertIn("{% for variant in all_products[low_inventory_url_handle].variants %}", snippet)
         # Only when the listing gave nothing, and only within the page's budget.
         self.assertIn(
             "{% if low_inventory_remaining == 0 and low_inventory_url_handle != '' "
