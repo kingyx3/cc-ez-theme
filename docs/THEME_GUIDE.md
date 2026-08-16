@@ -421,27 +421,29 @@ A card the listing starved has two ways back to the number, tried in that order:
 
 1. **The snippet looks the product up by handle**, the same global lookup the
    featured-collection section already uses for its collection. This costs no
-   request at all. It is only done for a product that promises a count at every
-   quantity, and only when the listing gave nothing — every card on a page
-   looking itself up would be a page of lookups for a notice that usually should
-   not appear. A store that exposes no such global returns nothing here, and the
-   card falls through to the fetch.
-2. **`assets/card-inventory-fill.js` fetches it** after the page goes idle.
+   request at all. It is only done when the listing gave nothing, and a page may
+   make eight of them: `include` shares one scope, so the counter is the page's
+   budget rather than each card's, and a collection of starved products cannot
+   turn into a page of lookups. A store that exposes no such global returns
+   nothing here, and the card falls through to the fetch.
+2. **`assets/card-inventory-fill.js` fetches it** when the card comes near the
+   viewport, so a page of starved cards nobody scrolls to costs nothing.
 
 `data-low-inventory-source` on the notice says which one produced the count:
 `listing`, `lookup`, or `fetch`.
 
-`assets/card-inventory-fill.js` fills in the cards the platform starved, but
-only those that promise a count at every quantity — a `data-low-inventory-threshold`
-of `all` beside a `data-low-inventory-remaining` of `0`. It reads the product's
+`assets/card-inventory-fill.js` fills in the cards the platform starved and the
+lookup could not answer either — a `data-low-inventory-remaining` of `0`. It
+prints within the card's own threshold: a card that prints below five still
+prints below five, and only a card marked `all` prints whatever the count is. It
+reads the product's
 quick view payload, which at about 14 KB is the cheapest place the number is
 available; the same product's JSON is about 226 KB. That endpoint answers with
 JSON — `{ product: {...}, html: "<markup>" }`, the same shape
 `assets/product-quickview.js` reads — so the variants are read from the payload,
 and the markup only if the payload does not carry them. It waits for the page to go
-idle, spends at most four requests on a page, and prints the store's own
-translation. A card that is merely near its threshold is left alone, because
-finding out whether it was close would mean fetching every card on the page.
+idle, spends at most eight requests on a page, asks once for a product that is
+carded more than once, and prints the store's own translation.
 
 Nothing is invented: a product that reports no stock in its quick view either is
 left as the snippet rendered it, empty and hidden.

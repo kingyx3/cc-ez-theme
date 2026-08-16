@@ -155,22 +155,25 @@
   without it on the landing page, minutes apart. The card is then asked to print
   a count it was never given.
 
-  For a product that promises a count at every quantity, the product is looked
-  up by handle instead - the same global lookup the featured-collection section
-  already uses for its collection - which costs no request at all. A store that
-  exposes no such global returns nothing here and the card falls back to
-  assets/card-inventory-fill.js, which fetches the number.
+  The product is looked up by handle instead - the same global lookup the
+  featured-collection section already uses for its collection - which costs no
+  request at all. A store that exposes no such global returns nothing here and
+  the card falls back to assets/card-inventory-fill.js, which fetches it.
 
-  The lookup is only made for those products, and only when the listing gave
-  nothing. Every card on a page looking itself up would be a page of lookups to
-  print a notice that usually should not appear.
+  The lookup is made only when the listing gave nothing, and a page may make
+  eight of them. `include` shares one scope, so the counter below survives from
+  one card to the next and is the page's budget rather than each card's: a
+  collection of starved products cannot turn into a page of lookups. The cards
+  past the budget are left to the script.
 
   Only quantities are read here: a variant a shopper cannot buy reports no stock
   of its own, and the flag spellings that matter on a listing object are not
   what a fully loaded product sends.
 {% endcomment %}
 {% assign low_inventory_source = 'listing' %}
-{% if low_inventory_remaining == 0 and low_inventory_show_all and low_inventory_url_handle != '' %}
+{% assign low_inventory_lookups = low_inventory_lookups | default: 0 | plus: 0 %}
+{% if low_inventory_remaining == 0 and low_inventory_url_handle != '' and low_inventory_lookups < 8 %}
+  {% assign low_inventory_lookups = low_inventory_lookups | plus: 1 %}
   {% assign low_inventory_lookup = products[low_inventory_url_handle] %}
   {% unless low_inventory_lookup %}
     {% assign low_inventory_lookup = all_products[low_inventory_url_handle] %}

@@ -279,13 +279,31 @@ class CardInventoryFillTests(unittest.TestCase):
         )
 
     def test_it_only_fetches_for_a_card_the_platform_starved(self) -> None:
-        # Both attributes are required: a card that prints at every quantity,
-        # and a count of 0 because nothing was sent. A card that is merely near
-        # its threshold is left alone rather than fetching every card to find
-        # out whether it was close.
-        self.assertIn('[data-low-inventory-notice]', self.source)
-        self.assertIn('[data-low-inventory-threshold="all"]', self.source)
-        self.assertIn('[data-low-inventory-remaining="0"]', self.source)
+        # A count of 0 is the whole condition: the snippet found nothing to
+        # print, and the lookup it tries first found nothing either. A card that
+        # was given its stock is never fetched for.
+        self.assertIn(
+            "const STARVED = '[data-low-inventory-notice][data-low-inventory-remaining=\"0\"]';",
+            self.source,
+        )
+
+    def test_it_waits_until_a_card_is_near_the_viewport(self) -> None:
+        # A page of starved cards that nobody scrolls to costs nothing.
+        self.assertIn("IntersectionObserver", self.source)
+        self.assertIn("observer.unobserve(entry.target);", self.source)
+
+    def test_it_asks_once_for_a_product_carded_more_than_once(self) -> None:
+        # The landing page cards the same product twice in different sections.
+        self.assertIn("if (!asked.has(handle))", self.source)
+        self.assertIn("asked.set(handle,", self.source)
+
+    def test_it_prints_only_within_the_card_own_threshold(self) -> None:
+        # A fetched count is not a licence to print at any quantity: a card that
+        # prints below five still prints below five, and only a card the snippet
+        # marked with 'all' prints whatever the count is.
+        self.assertIn("=== 'all'", self.source)
+        self.assertIn("remaining <= limit", self.source)
+        self.assertIn("if (!withinThreshold || !template) return;", self.source)
 
     def test_it_reads_the_cheapest_payload_that_carries_the_count(self) -> None:
         # Measured on the store: the quickview payload is 14 KB and the products
@@ -312,8 +330,8 @@ class CardInventoryFillTests(unittest.TestCase):
         self.assertIn("notice.dataset.lowInventorySource = 'fetch';", self.source)
 
     def test_it_spends_a_bounded_number_of_requests_on_a_page(self) -> None:
-        self.assertIn("MOST_REQUESTS = 4", self.source)
-        self.assertIn("slice(0, MOST_REQUESTS)", self.source)
+        self.assertIn("MOST_REQUESTS = 8", self.source)
+        self.assertIn("spent >= MOST_REQUESTS", self.source)
 
     def test_it_claims_no_count_for_a_product_that_reports_none(self) -> None:
         # Inventing a count for untracked stock is what the snippet refuses to
@@ -742,22 +760,36 @@ class LowInventoryRenderingTests(unittest.TestCase):
 
         self.assertIn(">Only 3 left<", self.page(product))
 
-    def test_a_starved_series_card_looks_the_product_up_before_anything_fetches(self) -> None:
+    def test_a_starved_card_looks_the_product_up_before_anything_fetches(self) -> None:
         # A collection listing does not always carry stock, and the same product
         # was serialized with it on one page and without it on another. A
-        # product that promises a count at every quantity looks itself up, which
-        # costs no request; a store that exposes no such global returns nothing
-        # and the card falls back to the fetch.
+        # starved card looks the product up, which costs no request; a store
+        # that exposes no such global returns nothing and the card falls back to
+        # assets/card-inventory-fill.js.
         snippet = NOTICE.read_text(encoding="utf-8")
 
         self.assertIn("{% assign low_inventory_lookup = products[low_inventory_url_handle] %}", snippet)
         self.assertIn("{% assign low_inventory_lookup = all_products[low_inventory_url_handle] %}", snippet)
-        # Only for those products, and only when the listing gave nothing.
+        # Only when the listing gave nothing, and only within the page's budget.
         self.assertIn(
-            "{% if low_inventory_remaining == 0 and low_inventory_show_all "
-            "and low_inventory_url_handle != '' %}",
+            "{% if low_inventory_remaining == 0 and low_inventory_url_handle != '' "
+            "and low_inventory_lookups < 8 %}",
             snippet,
         )
+
+    def test_the_page_spends_a_bounded_number_of_lookups(self) -> None:
+        # `include` shares one scope, so the counter survives from one card to
+        # the next: it is the page's budget, not each card's. A collection of
+        # starved products cannot turn into a page of lookups, and the counter
+        # is deliberately not reset with the parameters.
+        snippet = NOTICE.read_text(encoding="utf-8")
+
+        self.assertIn(
+            "{% assign low_inventory_lookups = low_inventory_lookups | default: 0 | plus: 0 %}",
+            snippet,
+        )
+        self.assertIn("{% assign low_inventory_lookups = low_inventory_lookups | plus: 1 %}", snippet)
+        self.assertNotIn("{% assign low_inventory_lookups = null %}", snippet)
 
     def test_the_element_says_where_its_count_came_from(self) -> None:
         product = {"available": True, "variants": [listing_variant(3)]}

@@ -7,20 +7,24 @@
 // its stock at every quantity can come out empty while its product page prints
 // a count.
 //
-// Only those cards are filled in. They are the ones the theme promises a count
-// for, they are rare on a page, and each one costs a request; a card that is
-// merely near its threshold is left alone rather than fetching every card on
-// the page to find out whether it was close.
+// The snippet looks a starved product up first, which costs no request, so this
+// only runs for the cards that lookup could not answer either. It waits until a
+// card is close to the viewport before spending anything on it, so a page of
+// starved cards that nobody scrolls to costs nothing.
 //
-// snippets/low-inventory-notice.liquid renders the two attributes this reads:
-// a threshold of 'all' marks a product that prints at every quantity, and a
-// remaining of 0 means the platform sent nothing to print.
+// snippets/low-inventory-notice.liquid renders the attributes this reads: a
+// remaining of 0 means nothing was found to print, and the threshold is the
+// count to print below - or 'all' for a product that prints at every quantity.
 (() => {
-  const STARVED =
-    '[data-low-inventory-notice][data-low-inventory-threshold="all"][data-low-inventory-remaining="0"]';
+  const STARVED = '[data-low-inventory-notice][data-low-inventory-remaining="0"]';
   // A ceiling on the requests one page may spend on this, in case a collection
-  // of these products is ever rendered in full.
-  const MOST_REQUESTS = 4;
+  // of starved products is ever rendered in full.
+  const MOST_REQUESTS = 8;
+  // Fetch a card before it is scrolled to rather than as it appears.
+  const MARGIN = '400px';
+  // The same product is often carded more than once on a page.
+  const asked = new Map();
+  let spent = 0;
 
   function handleFor(notice) {
     const card = notice.closest('.product-card-wrapper');
@@ -88,44 +92,75 @@
     );
   }
 
+  // A card prints below its own threshold, or at any quantity when the snippet
+  // marked it as a product that always prints. The count is recorded either way,
+  // so a card that stays quiet still says what it was told.
   function print(notice, remaining) {
+    // So the probe can say which of the three routes produced this number.
+    notice.dataset.lowInventoryRemaining = String(remaining);
+    notice.dataset.lowInventorySource = 'fetch';
+
+    const threshold = notice.dataset.lowInventoryThreshold;
+    const limit = Number(threshold);
+    const withinThreshold = String(threshold).trim().toLowerCase() === 'all'
+      || (Number.isFinite(limit) && limit > 0 && remaining <= limit);
     const template = window.purchaseStrings && window.purchaseStrings.lowInventory;
-    if (!template) return;
+    if (!withinThreshold || !template) return;
 
     notice.textContent = String(template).replace('__COUNT__', remaining);
-    notice.dataset.lowInventoryRemaining = String(remaining);
-    // So the probe can say which of the three routes produced this number.
-    notice.dataset.lowInventorySource = 'fetch';
     notice.classList.remove('hidden');
     notice.removeAttribute('hidden');
   }
 
-  async function fill() {
-    const starved = Array.from(document.querySelectorAll(STARVED)).slice(0, MOST_REQUESTS);
+  async function fill(notice) {
+    const handle = handleFor(notice);
+    if (!handle || spent >= MOST_REQUESTS) return;
 
-    for (const notice of starved) {
-      const handle = handleFor(notice);
-      if (!handle) continue;
-
-      try {
-        const remaining = await remainingFor(handle);
-        // A product whose stock the platform does not track anywhere reports
-        // nothing here either, and inventing a count for it is exactly what
-        // the snippet refuses to do.
-        if (remaining > 0) print(notice, remaining);
-      } catch (error) {
-        // A card that cannot be filled in stays as the snippet left it, which
-        // is empty and hidden. Nothing else on the page depends on this.
-      }
+    if (!asked.has(handle)) {
+      spent += 1;
+      asked.set(handle, remainingFor(handle).catch(() => 0));
     }
+
+    try {
+      const remaining = await asked.get(handle);
+      // A product whose stock the platform does not track anywhere reports
+      // nothing here either, and inventing a count for it is exactly what the
+      // snippet refuses to do.
+      if (remaining > 0) print(notice, remaining);
+    } catch (error) {
+      // A card that cannot be filled in stays as the snippet left it, which is
+      // empty and hidden. Nothing else on the page depends on this.
+    }
+  }
+
+  function watch() {
+    const starved = document.querySelectorAll(STARVED);
+    if (!starved.length) return;
+
+    if (!window.IntersectionObserver) {
+      Array.from(starved).slice(0, MOST_REQUESTS).forEach(fill);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          observer.unobserve(entry.target);
+          fill(entry.target);
+        }
+      },
+      { rootMargin: MARGIN }
+    );
+    starved.forEach(notice => observer.observe(notice));
   }
 
   function start() {
     if (window.requestIdleCallback) {
-      window.requestIdleCallback(fill, { timeout: 2000 });
+      window.requestIdleCallback(watch, { timeout: 2000 });
       return;
     }
-    setTimeout(fill, 0);
+    setTimeout(watch, 0);
   }
 
   if (document.readyState === 'loading') {
