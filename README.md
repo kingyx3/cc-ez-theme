@@ -11,7 +11,8 @@ shopping on desktop and mobile.
 - [Packaging and deployment](docs/PACKAGING_AND_DEPLOYMENT.md) — validation,
   ZIP generation, GitHub artifacts, and EasyStore upload
 - [EasyStore API deployment](docs/EASYSTORE_API_DEPLOYMENT.md) — automatic
-  post-package imports, branch/version naming, token setup, and troubleshooting
+  post-package imports and publishing, theme id resolution, branch/version
+  naming, token setup, and troubleshooting
 
 ## Repository layout
 
