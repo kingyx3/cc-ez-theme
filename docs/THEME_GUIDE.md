@@ -421,36 +421,23 @@ and EasyStore is not consistent about it: a probe of the landing page found
 collection page, the same product on the same store within one run. Half the
 cards on a collection page were given a count and half were given nothing.
 
-A card the listing starved has two ways back to the number, tried in that order:
+A card the listing starved looks its product up by handle — the same global
+lookup the featured-collection section makes for its collection — which costs no
+request and runs while the page renders. It happens only when the listing gave
+nothing, and a page may make twenty-four of them: `include` shares one scope, so
+the counter is the page's budget rather than each card's, and twenty-four covers
+a full collection grid. Cards past the budget print nothing; raising it is one
+number in the snippet, and the honest fix for a page that needs far more is
+fewer products on it rather than a cap that silently drops the tail.
 
-1. **The snippet looks the product up by handle**, the same global lookup the
-   featured-collection section already uses for its collection. This costs no
-   request at all. It is only done when the listing gave nothing, and a page may
-   make eight of them: `include` shares one scope, so the counter is the page's
-   budget rather than each card's, and a collection of starved products cannot
-   turn into a page of lookups. A store that exposes no such global returns
-   nothing here, and the card falls through to the fetch.
-2. **`assets/card-inventory-fill.js` fetches it** when the card comes near the
-   viewport, so a page of starved cards nobody scrolls to costs nothing.
+The handle comes from the product's link, or from `product.handle` where the
+listing sent no link — the two are not populated on the same pages, and a card
+with neither makes no lookup. `data-low-inventory-source` says which route
+produced a count, `listing` or `lookup`, and `data-low-inventory-handle` says
+what the card had to look itself up by.
 
-`data-low-inventory-source` on the notice says which one produced the count:
-`listing`, `lookup`, or `fetch`.
-
-`assets/card-inventory-fill.js` fills in the cards the platform starved and the
-lookup could not answer either — a `data-low-inventory-remaining` of `0`. It
-prints within the card's own threshold: a card that prints below five still
-prints below five, and only a card marked `all` prints whatever the count is. It
-reads the product's
-quick view payload, which at about 14 KB is the cheapest place the number is
-available; the same product's JSON is about 226 KB. That endpoint answers with
-JSON — `{ product: {...}, html: "<markup>" }`, the same shape
-`assets/product-quickview.js` reads — so the variants are read from the payload,
-and the markup only if the payload does not carry them. It waits for the page to go
-idle, spends at most eight requests on a page, asks once for a product that is
-carded more than once, and prints the store's own translation.
-
-Nothing is invented: a product that reports no stock in its quick view either is
-left as the snippet rendered it, empty and hidden.
+Nothing is invented: a product the lookup cannot find is left as the snippet
+rendered it, empty and hidden.
 
 When a card and its product page disagree about a count, paste
 `scripts/inventory-notice-probe.console.js` into the browser console on the page

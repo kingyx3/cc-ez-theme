@@ -275,115 +275,6 @@ class LowInventoryScriptTests(unittest.TestCase):
         self.assertEqual(self.source, self.EDITOR.read_text(encoding="utf-8"))
 
 
-class CardInventoryFillTests(unittest.TestCase):
-    """The fallback for cards EasyStore sends without any stock.
-
-    A collection listing does not carry the same product object a product page
-    does, and it is not consistent about it: a probe of the landing page found
-    `late-night-crackers-ep3` serialized without its stock there and with it on
-    a collection page, the same product on the same store within one run.
-    """
-
-    RUNTIME = THEME_ROOT / "assets" / "card-inventory-fill.js"
-    EDITOR = THEME_ROOT / "editor_assets" / "card-inventory-fill.js"
-
-    def setUp(self) -> None:
-        self.source = self.RUNTIME.read_text(encoding="utf-8")
-
-    def test_it_is_loaded_for_every_page_that_renders_cards(self) -> None:
-        layout = LAYOUT.read_text(encoding="utf-8")
-
-        self.assertIn(
-            "<script src=\"{{ 'card-inventory-fill.js' | asset_url }}\" defer=\"defer\"></script>",
-            layout,
-        )
-
-    def test_it_only_fetches_for_a_card_the_platform_starved(self) -> None:
-        # A count of 0 is the whole condition: the snippet found nothing to
-        # print, and the lookup it tries first found nothing either. A card that
-        # was given its stock is never fetched for.
-        self.assertIn(
-            "const STARVED = '[data-low-inventory-notice][data-low-inventory-remaining=\"0\"]';",
-            self.source,
-        )
-
-    def test_it_runs_once_the_page_is_idle_rather_than_on_scroll(self) -> None:
-        # A card that fills only when it is scrolled to cannot be told apart
-        # from a card that never filled at all, and that difference cost
-        # several rounds of guessing on this store.
-        self.assertIn("requestIdleCallback", self.source)
-        self.assertNotIn("IntersectionObserver", self.source)
-
-    def test_it_reports_what_it_did(self) -> None:
-        # So "did not run", "ran and found nothing" and "ran and filled" are
-        # readable from the console instead of inferred.
-        self.assertIn("window.cardInventoryFill = state;", self.source)
-        for key in ("ran:", "starved:", "fetched:", "filled:", "errors:"):
-            self.assertIn(key, self.source)
-
-    def test_it_asks_once_for_a_product_carded_more_than_once(self) -> None:
-        # The landing page cards the same product twice in different sections.
-        self.assertIn("if (!asked.has(handle))", self.source)
-        self.assertIn("asked.set(handle,", self.source)
-
-    def test_it_prints_only_within_the_card_own_threshold(self) -> None:
-        # A fetched count is not a licence to print at any quantity: a card that
-        # prints below five still prints below five, and only a card the snippet
-        # marked with 'all' prints whatever the count is.
-        self.assertIn("=== 'all'", self.source)
-        self.assertIn("remaining <= limit", self.source)
-        self.assertIn("if (!withinThreshold || !template) return;", self.source)
-
-    def test_it_reads_the_cheapest_payload_that_carries_the_count(self) -> None:
-        # Measured on the store: the quickview payload is 14 KB and the products
-        # JSON for the same product is 226 KB. Both report the same number.
-        self.assertIn("/product_quickview_html", self.source)
-        self.assertNotIn("${handle}.json", self.source)
-
-    def test_it_reads_the_payload_as_the_json_the_endpoint_returns(self) -> None:
-        # The endpoint answers { product: {...}, html: "<markup>" }, which is
-        # what assets/product-quickview.js reads from it. Parsing the body as
-        # HTML finds nothing, because the markup is a string inside the JSON.
-        self.assertIn("JSON.parse(body)", self.source)
-        self.assertIn("payload.product", self.source)
-        self.assertIn("product.variants", self.source)
-        # And still copes with a body that is markup rather than JSON.
-        self.assertIn("payload && typeof payload.html === 'string' ? payload.html : body", self.source)
-
-    def test_it_drops_a_variant_only_for_a_flag_that_reads_false(self) -> None:
-        # The same rule the snippet follows, for the same reason.
-        self.assertIn("function unbuyable(variant)", self.source)
-        self.assertIn("variant.available, variant.is_available, variant.is_enabled", self.source)
-
-    def test_it_records_where_the_count_came_from(self) -> None:
-        self.assertIn("notice.dataset.lowInventorySource = 'fetch';", self.source)
-
-    def test_it_spends_a_bounded_number_of_requests_on_a_page(self) -> None:
-        self.assertIn("MOST_REQUESTS = 8", self.source)
-        self.assertIn("spent >= MOST_REQUESTS", self.source)
-
-    def test_it_claims_no_count_for_a_product_that_reports_none(self) -> None:
-        # Inventing a count for untracked stock is what the snippet refuses to
-        # do, and fetching the number elsewhere is not a licence to start.
-        self.assertIn("if (remaining > 0) {", self.source)
-        self.assertIn("print(notice, remaining);", self.source)
-
-    def test_it_prints_the_store_translation_rather_than_its_own_copy(self) -> None:
-        self.assertIn("window.purchaseStrings && window.purchaseStrings.lowInventory", self.source)
-        # No copy of its own: the fallback prints whatever the store's
-        # translation says, which is what the snippet beside it prints.
-        for literal in ("'Only", '"Only', "`Only"):
-            self.assertNotIn(literal, self.source)
-
-    def test_it_waits_until_the_page_is_idle(self) -> None:
-        # The count is worth having, not worth delaying the page for.
-        self.assertIn("requestIdleCallback", self.source)
-        self.assertIn('defer="defer"', LAYOUT.read_text(encoding="utf-8"))
-
-    def test_runtime_and_editor_copies_stay_in_sync(self) -> None:
-        self.assertEqual(self.source, self.EDITOR.read_text(encoding="utf-8"))
-
-
 @unittest.skipIf(
     Environment is None and not REQUIRE_ENGINE,
     "python-liquid is not installed; run pip install -r requirements-dev.txt",
@@ -800,7 +691,8 @@ class LowInventoryRenderingTests(unittest.TestCase):
 
         # The variants are kept, never the product: an object in a variable
         # renders a hidden notice around a count, and a lookup written out at
-        # each use resolves nothing at all on EasyStore.
+        # each use resolves nothing at all on EasyStore. This is the only route
+        # a starved card has - there is no script behind it.
         self.assertIn(
             "{% assign low_inventory_lookup_variants = "
             "products[low_inventory_lookup_handle].variants %}",
@@ -814,7 +706,7 @@ class LowInventoryRenderingTests(unittest.TestCase):
         # Only when the listing gave nothing, and only within the page's budget.
         self.assertIn(
             "{% if low_inventory_remaining == 0 and low_inventory_lookup_handle != '' "
-            "and low_inventory_lookups < 8 %}",
+            "and low_inventory_lookups < 24 %}",
             snippet,
         )
 
@@ -843,9 +735,9 @@ class LowInventoryRenderingTests(unittest.TestCase):
 
     def test_the_page_spends_a_bounded_number_of_lookups(self) -> None:
         # `include` shares one scope, so the counter survives from one card to
-        # the next: it is the page's budget, not each card's. A collection of
-        # starved products cannot turn into a page of lookups, and the counter
-        # is deliberately not reset with the parameters.
+        # the next: it is the page's budget, not each card's. Twenty-four covers
+        # a full collection grid, and the counter is deliberately not reset with
+        # the parameters. Cards past it print nothing.
         snippet = NOTICE.read_text(encoding="utf-8")
 
         self.assertIn(

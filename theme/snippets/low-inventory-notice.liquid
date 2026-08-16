@@ -170,10 +170,11 @@
   the card falls back to assets/card-inventory-fill.js, which fetches it.
 
   The lookup is made only when the listing gave nothing, and a page may make
-  eight of them. `include` shares one scope, so the counter below survives from
-  one card to the next and is the page's budget rather than each card's: a
-  collection of starved products cannot turn into a page of lookups. The cards
-  past the budget are left to the script.
+  twenty-four of them, which covers a full collection grid. `include` shares one
+  scope, so the counter below survives from one card to the next and is the
+  page's budget rather than each card's. Cards past the budget print nothing:
+  raising it is one number here, and the honest fix for a page that needs far
+  more is fewer products on it rather than a cap that silently drops the tail.
 
   Only quantities are read here: a variant a shopper cannot buy reports no stock
   of its own, and the flag spellings that matter on a listing object are not
@@ -181,7 +182,7 @@
 {% endcomment %}
 {% assign low_inventory_source = 'listing' %}
 {% assign low_inventory_lookups = low_inventory_lookups | default: 0 | plus: 0 %}
-{% if low_inventory_remaining == 0 and low_inventory_lookup_handle != '' and low_inventory_lookups < 8 %}
+{% if low_inventory_remaining == 0 and low_inventory_lookup_handle != '' and low_inventory_lookups < 24 %}
   {% assign low_inventory_lookups = low_inventory_lookups | plus: 1 %}
   {% comment %}
     Only the variants come back from the lookup, never the product itself.

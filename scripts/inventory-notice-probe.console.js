@@ -65,7 +65,7 @@
       // the series match, kept it quiet.
       cardRemaining: notice ? notice.dataset.lowInventoryRemaining ?? '(older theme)' : '-',
       // listing = the count came with the card, lookup = the snippet looked the
-      // product up, fetch = card-inventory-fill.js fetched it after load.
+      // product up by handle when the listing sent none.
       cardSource: notice ? notice.dataset.lowInventorySource ?? '(older theme)' : '-',
       // Text in the markup is not the same as text a shopper can see. This says
       // whether the element is actually painted, and what is hiding it if not.
@@ -176,26 +176,14 @@
     }
   }
 
-  console.log('\n--- the fill-in script ---');
-  const tag = document.querySelector('script[src*="card-inventory-fill"]');
-  out('loaded by the page', tag ? 'yes' : 'NO - the layout is not serving it');
-  if (tag) {
-    // The file cannot be read from here: theme assets are served from another
-    // origin, and a cross-origin fetch of them is blocked. The stamp EasyStore
-    // puts on the URL is the useful part anyway. Compare it between two pages:
-    // a page whose stamp is older is serving HTML rendered by an older theme,
-    // which is a cached page rather than anything the theme did wrong.
-    const stamp = (tag.src.match(/[?&]t=(\d+)/) || [])[1];
+  // Two pages whose stamps differ are being served HTML rendered at different
+  // times, and the older one is a cached page rather than a theme that failed.
+  const stamped = document.querySelector('script[src*="global.js"]');
+  if (stamped) {
+    console.log('\n--- when this page was rendered ---');
+    const stamp = (stamped.src.match(/[?&]t=(\d+)/) || [])[1];
     out('asset stamp on this page', stamp || '(none on the URL)');
     if (stamp) out('  which is', new Date(Number(stamp) * 1000).toISOString());
-    out('asset origin', new URL(tag.src, location.href).origin);
-  }
-  const fillState = window.cardInventoryFill;
-  if (!fillState) {
-    out('what it did', tag ? 'it did not run - check the console for an error' : 'not loaded');
-  } else {
-    out('what it did', `ran=${fillState.ran} starved=${fillState.starved} fetched=${fillState.fetched} filled=${fillState.filled}`);
-    if (fillState.errors.length) out('errors', fillState.errors.slice(0, 4).join(' | '));
   }
 
   console.log('\n--- verdict for this page ---');
