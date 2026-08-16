@@ -65,7 +65,7 @@ A row with no refresh configured must leave the window inert. Comparisons in `cu
 
 Renewal is evaluated when the page renders, so it takes effect on the next page load after the timestamp passes.
 
-The date is never shown to shoppers. It is store configuration, not something a customer needs to reason about, so storefront copy states the ceiling only — "The limit is 1 unit per customer across orders." Each rule still publishes `refreshAt`, `limitWindowLabel` and `windowStart`, so the configuration can be verified in the browser console and the client-side history filter knows which orders to count.
+The date is never shown to shoppers. It is store configuration, not something a customer needs to reason about, so storefront copy states the ceiling only — "Limit reached: 1 unit per customer." Each rule still publishes `refreshAt`, `limitWindowLabel` and `windowStart`, so the configuration can be verified in the browser console and the client-side history filter knows which orders to count.
 
 To renew a limit, set the timestamp rather than clearing the maximum: clearing the maximum disables the limit entirely, while a refresh keeps the limit enforced for purchases made from that date onwards.
 
@@ -91,7 +91,7 @@ So history is loaded when the page could not read it:
 2. A page whose `diagnostics.lineItemsSeen` is `0` treats history as **unknown**, not as "nothing purchased", and fetches `/account/orders` in the background as the page loads. That list is tab filtered and paginated, so one request only covers the default tab's first page — on a live store that returned zero lines because the default tab held none of the customer's completed orders. The loader therefore walks every tab except cancelled ones — tabs reporting orders first, but a reported count of zero never skips a tab, because the live store rendered a count only for the tab being viewed — follows each tab's pagination, de-duplicates identical lines, and stops at twelve requests. The merged result is cached in `sessionStorage` for five minutes per customer, so it costs one walk per session.
 3. `purchased` is recomputed from the payload, allowances and copy update, and `customer-order-limits:history` fires alongside the usual `cart-sync`.
 
-A purchase attempted while history is still unknown is **held** rather than measured against an allowance that assumes nothing was bought: the shopper sees "Checking your purchase limit for this product. One moment, then try again." Because the load starts at page load, that window is normally too short to see.
+A purchase attempted while history is still unknown is **held** rather than measured against an allowance that assumes nothing was bought: the shopper sees "Checking your purchase limit. Try again in a moment." Because the load starts at page load, that window is normally too short to see.
 
 Every failure path falls open to cart-only enforcement rather than blocking a sale: a failed or redirected request, a missing payload (an account template that was not updated), a browser without `fetch` or `DOMParser`, and a shopper proven to be signed out, who is never fetched for. `window.CustomerOrderLimits.historyState()` reports which case applies — `inline`, `loaded`, `pending`, `unknown`, or `unavailable`.
 
@@ -120,7 +120,25 @@ The modal is for the cases where checkout with the current cart is not what the 
 
 Limit copy is generated from live quantities, not from the message rendered into the page by Liquid. The rendered copy is correct only for the cart as it was on page load, which is how a maxed-out product ended up saying "you can add up to 1 more".
 
-The rule reports two different numbers and they must not be confused. `maximum` is what may still be added — net of the cart and of past orders — while `totalMaximum` is the configured ceiling. `contextual: true` marks the pair, and any reader that measures the cart itself must skip its own subtraction for such a limit. Quoting `maximum` as the ceiling is what produced "2 units in cart + 2 units selected = 0 units maximum" on a product limited to 2 per person: nothing was left to add, and that nothing was printed as the limit. The shared formatter now states a ceiling as a clause — "the limit is 2 units per customer", "only 3 units are available" — and the product page repeats the validator's own sentence verbatim rather than rebuilding one, so it agrees with the cart and listing and keeps what it says about earlier orders.
+## What a shopper is told
+
+Every message is one short lead naming the ceiling, followed by at most one clause accounting for it. Nothing states the same number twice, and no message names the refresh date.
+
+| Situation | Message |
+| --- | --- |
+| Nothing left, bought some and holding some | `Limit reached: 3 units per customer. You have 2 ordered and 1 in your cart.` |
+| Nothing left, all of it in the cart | `Limit reached: 2 units per customer. You have 2 in your cart.` |
+| Nothing left, all of it on past orders | `Limit reached: 2 units per customer. You have already ordered 2.` |
+| Nothing left, neither | `Limit reached: 1 unit per customer.` |
+| More requested than may be added | `You can add 2 more units (6 units per customer).` |
+| Cart blocks checkout, none allowed | `Limit reached: 2 units per customer. Remove this item to check out.` |
+| Cart blocks checkout, some allowed | `Reduce this item to 2 units to check out (6 units per customer).` |
+
+The shared formatter in `purchase-limit-feedback.js` phrases store-raised limits the same way, varying only the ceiling phrase: `only 5 units in stock`, `4 units per order`, `3 units for this promotion`. A limit that already phrased its own copy is quoted verbatim rather than rebuilt, so the product page, listing and cart agree.
+
+This replaced copy that spent three sentences on one number — "Customer purchase limit reached. You have already purchased 2 units of the 2 units allowed per customer across orders." — where the ceiling, the tally and the rule were each stated in full and the shopper had to read to the end to learn they could not buy.
+
+The rule reports two different numbers and they must not be confused. `maximum` is what may still be added — net of the cart and of past orders — while `totalMaximum` is the configured ceiling. `contextual: true` marks the pair, and any reader that measures the cart itself must skip its own subtraction for such a limit. Quoting `maximum` as the ceiling is what produced "2 units in cart + 2 units selected = 0 units maximum" on a product limited to 2 per person: nothing was left to add, and that nothing was printed as the limit. The shared formatter now names a ceiling as a short phrase — "2 units per customer", "only 3 units in stock" — and the product page repeats the validator's own sentence verbatim rather than rebuilding one, so it agrees with the cart and listing and keeps what it says about earlier orders.
 
 ## Signed-out shoppers
 
@@ -164,7 +182,7 @@ Paste `scripts/limit-check.console.js` into the browser console on a product pag
 | `GUEST` | not signed in, so limits do not apply and purchase clicks go to login |
 | `older build is published` | the uploaded theme predates the diagnostics field |
 
-Without the console: buy one unit of a product whose limit is 1, complete the order, then reload its product page. Add to Cart should be disabled with "Maximum quantity reached", and Buy Now should go straight to checkout rather than adding a second unit.
+Without the console: buy one unit of a product whose limit is 1, complete the order, then reload its product page. Add to Cart should be disabled with "Limit reached: 1 unit per customer", and Buy Now should go straight to checkout rather than adding a second unit.
 
 ## Preview validation
 

@@ -37,23 +37,19 @@ class CustomerOrderLimitCopyTests(unittest.TestCase):
         limits = self.read("assets/customer-order-limits.js")
 
         self.assertIn("const unitLabel = (value) => {", limits)
+        self.assertIn("const moreUnits = (value) => {", limits)
+        self.assertIn("Limit reached: ${unitLabel(maximum)} per customer.", limits)
         self.assertIn(
-            "Maximum quantity reached. You have already purchased ${unitLabel(purchased)}"
-            " and have ${unitLabel(cartQuantity)} in your cart.",
+            "${limitReached} You have ${purchased} ordered and ${cartQuantity} in your cart.",
             limits,
         )
-        self.assertIn(
-            "Maximum quantity reached. You already have ${unitLabel(cartQuantity)} in your cart.",
-            limits,
-        )
-        self.assertIn(
-            "Customer purchase limit reached. You have already purchased ${unitLabel(purchased)}"
-            " of the ${unitLabel(maximum)} allowed per customer across orders",
-            limits,
-        )
-        self.assertIn("The limit is ${unitLabel(maximum)} per customer across orders", limits)
+        self.assertIn("${limitReached} You have ${cartQuantity} in your cart.", limits)
+        self.assertIn("${limitReached} You have already ordered ${purchased}.", limits)
         self.assertNotIn("0 units maximum", limits)
         self.assertNotIn("in cart +", limits)
+        # The ceiling is named once, by the lead. Restating it as a trailing
+        # sentence is what made every message three sentences long.
+        self.assertNotIn("The limit is ${", limits)
 
         # The equation copy this guard was written for lived in the shared
         # formatter, not here, so it survived. Guard the file it came from.

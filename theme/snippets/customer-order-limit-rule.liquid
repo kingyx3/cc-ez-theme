@@ -37,13 +37,13 @@
 
   {% capture customer_order_limit_rule_message %}
     {% if customer_order_limit_rule_login_required %}
-      Sign in to purchase this limited item. The limit is {{ customer_order_limit_rule_maximum }} per customer across orders.
+      Sign in to buy this item. Limit: {{ customer_order_limit_rule_maximum }} per customer.
     {% elsif customer_order_limit_rule_cart_exceeded %}
-      Your cart contains {{ customer_order_limit_rule_cart_quantity }} units, but only {{ customer_order_limit_rule_allowed_cart_quantity }} are available after previous orders. Reduce the quantity before checkout.
+      Limit reached: {{ customer_order_limit_rule_maximum }} per customer. Reduce this item to {{ customer_order_limit_rule_allowed_cart_quantity }} to check out.
     {% elsif customer_order_limit_rule_remaining == 0 %}
-      Customer purchase limit reached. You have purchased or added {{ customer_order_limit_rule_maximum }} of {{ customer_order_limit_rule_maximum }} allowed units.
+      Limit reached: {{ customer_order_limit_rule_maximum }} per customer.
     {% else %}
-      You can add up to {{ customer_order_limit_rule_remaining }} more. The limit is {{ customer_order_limit_rule_maximum }} per customer across orders.
+      You can add {{ customer_order_limit_rule_remaining }} more ({{ customer_order_limit_rule_maximum }} per customer).
     {% endif %}
   {% endcapture %}
   <script>

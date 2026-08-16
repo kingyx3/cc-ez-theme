@@ -58,14 +58,11 @@ class BuyNowCheckoutJourneyTests(unittest.TestCase):
         self.assertNotIn("rule.message", limits.replace("`rule.message`", ""))
         self.assertIn("const messageFor = (rule, requestedQuantity, remaining) => {", limits)
         self.assertIn("const cartMessageFor = (rule, allowed) => {", limits)
-        self.assertIn("You already have ${unitLabel(cartQuantity)} in your cart.", limits)
-        self.assertIn("You can add up to ${unitLabel(remaining)} more.", limits)
-        self.assertIn("Reduce this product to ${unitLabel(allowed)} before checkout.", limits)
-        self.assertIn("Remove this product before checkout.", limits)
-        self.assertIn(
-            "The limit is ${unitLabel(maximum)} per customer across orders.",
-            limits,
-        )
+        self.assertIn("You have ${cartQuantity} in your cart.", limits)
+        self.assertIn("You can add ${moreUnits(remaining)}.", limits)
+        self.assertIn("Reduce this item to ${unitLabel(allowed)} to check out", limits)
+        self.assertIn("Remove this item to check out.", limits)
+        self.assertIn("Limit reached: ${unitLabel(maximum)} per customer.", limits)
 
     def test_storefront_and_editor_journey_assets_match(self) -> None:
         for filename in (

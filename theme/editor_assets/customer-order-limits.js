@@ -33,6 +33,11 @@
     return `${count} unit${count === 1 ? '' : 's'}`;
   };
 
+  const moreUnits = (value) => {
+    const count = quantity(value, 0);
+    return `${count} more unit${count === 1 ? '' : 's'}`;
+  };
+
   // A refresh date is store configuration, not something a shopper needs to
   // reason about, so no message names it. The resolved window still travels on
   // the rule as `refreshAt` and `limitWindowLabel` for console verification.
@@ -170,45 +175,50 @@
 
   // Built from live numbers rather than the server-rendered `rule.message`: once
   // the shopper adds or removes a unit the rendered copy is stale, and saying
-  // "you can add up to 1 more" to someone who cannot add anything is worse than
+  // "you can add 1 more unit" to someone who cannot add anything is worse than
   // saying nothing.
+  //
+  // One short lead naming the ceiling, then at most one clause accounting for
+  // it. The copy this replaced spent three sentences restating the same number
+  // — "you have already purchased 2 units of the 2 units allowed per customer
+  // across orders" — which is the ceiling, the tally and the rule all at once.
   const messageFor = (rule, requestedQuantity, remaining) => {
     const maximum = quantity(rule && rule.maximum, 0);
     const purchased = quantity(rule && rule.purchased, 0);
     const cartQuantity = quantity(rule && rule.cartQuantity, 0);
-    const limitSuffix = `The limit is ${unitLabel(maximum)} per customer across orders.`;
+    const limitReached = `Limit reached: ${unitLabel(maximum)} per customer.`;
 
     if (remaining <= 0) {
       if (purchased > 0 && cartQuantity > 0) {
-        return `Maximum quantity reached. You have already purchased ${unitLabel(purchased)} and have ${unitLabel(cartQuantity)} in your cart. ${limitSuffix}`;
+        return `${limitReached} You have ${purchased} ordered and ${cartQuantity} in your cart.`;
       }
       if (cartQuantity > 0) {
-        return `Maximum quantity reached. You already have ${unitLabel(cartQuantity)} in your cart. ${limitSuffix}`;
+        return `${limitReached} You have ${cartQuantity} in your cart.`;
       }
       if (purchased > 0) {
-        return `Customer purchase limit reached. You have already purchased ${unitLabel(purchased)} of the ${unitLabel(maximum)} allowed per customer across orders.`;
+        return `${limitReached} You have already ordered ${purchased}.`;
       }
-      return `Maximum quantity reached. ${limitSuffix}`;
+      return limitReached;
     }
 
     if (requestedQuantity > remaining) {
-      return `Customer purchase limit exceeded. You can add up to ${unitLabel(remaining)} more. ${limitSuffix}`;
+      return `You can add ${moreUnits(remaining)} (${unitLabel(maximum)} per customer).`;
     }
-    return `You can add up to ${unitLabel(remaining)} more. ${limitSuffix}`;
+    return `You can add ${moreUnits(remaining)}.`;
   };
 
   const cartMessageFor = (rule, allowed) => {
     const maximum = quantity(rule && rule.maximum, 0);
     const purchased = quantity(rule && rule.purchased, 0);
-    const limitSuffix = `The limit is ${unitLabel(maximum)} per customer across orders.`;
+    const perCustomer = `${unitLabel(maximum)} per customer`;
 
     if (allowed <= 0) {
       if (purchased > 0) {
-        return `Customer purchase limit reached. You have already purchased ${unitLabel(purchased)} of the ${unitLabel(maximum)} allowed, so remove this product before checkout.`;
+        return `Limit reached: ${perCustomer}. You have already ordered ${purchased}, so remove this item to check out.`;
       }
-      return `Customer purchase limit reached. Remove this product before checkout. ${limitSuffix}`;
+      return `Limit reached: ${perCustomer}. Remove this item to check out.`;
     }
-    return `Customer purchase limit exceeded. Reduce this product to ${unitLabel(allowed)} before checkout. ${limitSuffix}`;
+    return `Reduce this item to ${unitLabel(allowed)} to check out (${perCustomer}).`;
   };
 
   // --- purchase history ------------------------------------------------------
@@ -469,7 +479,7 @@
   // A purchase attempt made while history is still unknown must not be measured
   // against an allowance that assumes nothing was ever bought. The attempt is
   // held, history is loaded, and the shopper is told to try again a moment later.
-  const HISTORY_PENDING_MESSAGE = 'Checking your purchase limit for this product. One moment, then try again.';
+  const HISTORY_PENDING_MESSAGE = 'Checking your purchase limit. Try again in a moment.';
 
   const historyBlocks = (handle) => {
     const rule = ruleFor(handle);
@@ -524,7 +534,7 @@
       totalMaximum: quantity(rule.maximum, 0),
       currentQuantity: quantity(rule.cartQuantity, 0),
       purchasedQuantity: quantity(rule.purchased, 0),
-      reason: 'a customer purchase limit across orders',
+      reason: 'a customer limit',
       message: messageFor(rule, Math.max(1, remaining + 1), remaining),
     };
   };
@@ -619,7 +629,7 @@
 
   const showListingError = (message) => {
     const alert = ensureAlert();
-    alert.textContent = String(message || 'Customer purchase limit exceeded.');
+    alert.textContent = String(message || 'Purchase limit reached.');
     alert.hidden = false;
     window.clearTimeout(alert.hideTimer);
     alert.hideTimer = window.setTimeout(() => { alert.hidden = true; }, 7000);
@@ -633,7 +643,7 @@
       showListingError(message);
       return;
     }
-    formContent.textContent = String(message || 'Customer purchase limit exceeded.');
+    formContent.textContent = String(message || 'Purchase limit reached.');
     formMessage.classList.remove('hidden');
     formMessage.focus?.();
   };
@@ -641,13 +651,13 @@
   const showCartError = (message) => {
     const cartItems = document.querySelector('cart-items');
     if (cartItems && typeof cartItems.renderErrorMsg === 'function') {
-      cartItems.renderErrorMsg(String(message || 'Reduce limited-item quantities before checkout.'));
+      cartItems.renderErrorMsg(String(message || 'Reduce limited items to check out.'));
       return;
     }
     const wrapper = document.querySelector('.cart_form__error');
     const content = wrapper?.querySelector('.js-error-content');
     if (wrapper && content) {
-      content.textContent = String(message || 'Reduce limited-item quantities before checkout.');
+      content.textContent = String(message || 'Reduce limited items to check out.');
       wrapper.classList.remove('hidden');
       window.scrollTo(0, 0);
       return;

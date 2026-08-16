@@ -34,11 +34,9 @@ class ContextualPurchaseLimitFeedbackTests(unittest.TestCase):
         self.assertIn("container.textContent", storefront)
         self.assertIn("const extractMaximum", storefront)
         self.assertIn("only\\s+(?:has\\s+)?(?:left\\s+)?", storefront)
-        self.assertIn("Stock limit reached.", storefront)
-        self.assertIn("Purchase limit reached.", storefront)
-        self.assertIn("Quantity limit exceeded.", storefront)
-        self.assertIn("Maximum quantity reached.", storefront)
-        self.assertIn("You can add up to", storefront)
+        self.assertIn("Limit reached: ${clause}.", storefront)
+        self.assertIn("You can add ${moreUnits(remaining)} (${clause}).", storefront)
+        self.assertIn("This item cannot be added right now.", storefront)
         self.assertIn("Math.max(0, totalMaximum - currentQuantity)", storefront)
         self.assertNotIn("would bring your cart to", storefront)
         self.assertNotIn("Remove an item before adding more.", storefront)
@@ -46,23 +44,22 @@ class ContextualPurchaseLimitFeedbackTests(unittest.TestCase):
     def test_limit_copy_states_the_ceiling_instead_of_an_equation(self) -> None:
         # "2 units in cart + 2 units selected = 0 units maximum" read as broken
         # arithmetic and quoted the remaining allowance as though it were the
-        # limit. Copy now names the ceiling in a sentence.
+        # limit. Copy now names the ceiling as a short phrase.
         storefront = (
             THEME_ROOT / "assets" / "purchase-limit-feedback.js"
         ).read_text(encoding="utf-8")
 
         self.assertIn("const limitClause = (reason, maximum) => {", storefront)
-        self.assertIn("the limit is ${unitLabel(maximum)} per customer", storefront)
+        self.assertIn("${unitLabel(maximum)} per customer", storefront)
+        self.assertIn("only ${unitLabel(maximum)} in stock", storefront)
         self.assertIn(
-            "only ${unitLabel(maximum)} ${maximum === 1 ? 'is' : 'are'} available",
+            "Limit reached: ${clause}. You have ${current} in your cart.",
             storefront,
         )
-        self.assertIn(
-            "Maximum quantity reached. You already have ${unitLabel(current)}"
-            " in your cart, and ${clause}.",
-            storefront,
-        )
-        self.assertIn("cannot add more of this item.", storefront)
+        # One lead, one clause. The copy this replaced restated the ceiling in a
+        # second sentence of its own after already naming it.
+        self.assertNotIn("the limit is ${", storefront)
+        self.assertNotIn("cannot add more of this item.", storefront)
         self.assertNotIn("in cart +", storefront)
         self.assertNotIn("selected = ${", storefront)
         self.assertNotIn("units maximum", storefront)

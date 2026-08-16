@@ -210,8 +210,8 @@ class CustomerOrderLimitRefreshTests(unittest.TestCase):
         self.assertNotIn("customer_order_limit_rule_since", rule)
         self.assertNotIn("sinceLabel", limits)
         self.assertNotIn(" since ", limits)
-        self.assertIn("across orders.", rule)
-        self.assertIn("across orders.`", limits)
+        self.assertIn("per customer.", rule)
+        self.assertIn("per customer.`", limits)
         self.assertEqual(limits, self.read("editor_assets/customer-order-limits.js"))
 
     def test_window_and_row_snippets_are_packaged_liquid_only(self) -> None:

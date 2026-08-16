@@ -13,6 +13,8 @@
 
   const unitLabel = (quantity) => `${quantity} unit${quantity === 1 ? '' : 's'}`;
 
+  const moreUnits = (quantity) => `${quantity} more unit${quantity === 1 ? '' : 's'}`;
+
   const stripMarkup = (value) => {
     const container = document.createElement('div');
     container.innerHTML = String(value == null ? '' : value);
@@ -95,26 +97,25 @@
     );
   };
 
-  // A whole clause rather than a noun phrase: the copy states what the ceiling
-  // is, so it never has to be glued into an equation to make sense.
+  // A short phrase naming the ceiling, never an equation and never a clause the
+  // copy has to build a sentence around. It reads the same after "Limit
+  // reached:" and inside a parenthetical, so one phrase covers every message.
   const limitClause = (reason, maximum) => {
     switch (reason.key) {
       case 'inventory':
-        return `only ${unitLabel(maximum)} ${maximum === 1 ? 'is' : 'are'} available`;
+        return `only ${unitLabel(maximum)} in stock`;
       case 'customer':
-        return `the limit is ${unitLabel(maximum)} per customer`;
+        return `${unitLabel(maximum)} per customer`;
       case 'promotion':
-        return `the limit is ${unitLabel(maximum)} for this promotion`;
+        return `${unitLabel(maximum)} for this promotion`;
       case 'store':
-        return `the limit is ${unitLabel(maximum)} for this store`;
+        return `${unitLabel(maximum)} for this store`;
       case 'order':
-        return `the limit is ${unitLabel(maximum)} per order`;
+        return `${unitLabel(maximum)} per order`;
       default:
-        return `the limit is ${unitLabel(maximum)}`;
+        return unitLabel(maximum);
     }
   };
-
-  const sentence = (clause) => `${clause.charAt(0).toUpperCase()}${clause.slice(1)}`;
 
   const format = ({
     rawMessage = '',
@@ -136,42 +137,34 @@
       // something. Say plainly that nothing more can be added.
       if (parsedMaximum <= 0) {
         return current > 0
-          ? `Maximum quantity reached. You already have ${unitLabel(current)} in your cart and cannot add more of this item.`
-          : 'Maximum quantity reached. This item cannot be added right now.';
+          ? `Limit reached. You have ${unitLabel(current)} in your cart.`
+          : 'This item cannot be added right now.';
       }
 
       const remaining = Math.max(0, parsedMaximum - current);
       const clause = limitClause(inferredReason, parsedMaximum);
 
-      if (mode === 'reached') {
-        if (current > 0) {
-          return `Maximum quantity reached. You already have ${unitLabel(current)} in your cart, and ${clause}.`;
-        }
-        return `Maximum quantity reached. ${sentence(clause)}.`;
-      }
-
-      if (current > 0 && remaining === 0) {
-        if (inferredReason.key === 'inventory') {
-          return `Stock limit reached. You already have ${unitLabel(current)} in your cart, and ${clause}.`;
-        }
-        return `Purchase limit reached. You already have ${unitLabel(current)} in your cart, and ${clause}.`;
+      // Nothing left to add, whether the shopper is at the ceiling or asked for
+      // more than it allows. One message covers both: the ceiling, and what the
+      // cart already holds of it.
+      if (mode === 'reached' || remaining === 0) {
+        return current > 0
+          ? `Limit reached: ${clause}. You have ${current} in your cart.`
+          : `Limit reached: ${clause}.`;
       }
 
       if (requested > remaining) {
-        if (remaining > 0) {
-          return `Quantity limit exceeded. You can add up to ${unitLabel(remaining)} more because ${clause}.`;
-        }
-        return `Quantity limit exceeded. ${sentence(clause)}.`;
+        return `You can add ${moreUnits(remaining)} (${clause}).`;
       }
 
-      return `Unable to add this item. ${sentence(clause)}.`;
+      return `Unable to add this item (${clause}).`;
     }
 
     if (cleanMessage) return cleanMessage;
 
     return window.purchaseStrings && window.purchaseStrings.addLimitError
       ? stripMarkup(window.purchaseStrings.addLimitError)
-      : 'Unable to add this item because a quantity limit was reached.';
+      : 'This item cannot be added right now.';
   };
 
   // A limit that phrased its own copy already knows what the cart holds and what
