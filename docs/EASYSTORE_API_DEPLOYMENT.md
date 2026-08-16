@@ -1,14 +1,15 @@
 # EasyStore API Deployment
 
-The `Package EasyStore theme` GitHub Actions workflow automatically imports a theme into EasyStore after validation and packaging complete successfully on `main`. Pushes to any other branch stop after the ZIP is built.
+The `Package EasyStore theme` GitHub Actions workflow automatically imports a theme into EasyStore and then publishes it, after validation and packaging complete successfully on `main`. Pushes to any other branch stop after the ZIP is built.
 
-The import uses the same EasyStore admin endpoint observed in the browser UI:
+Both calls use the same EasyStore admin endpoints observed in the browser UI:
 
 ```text
 POST https://api.easystore.co/admin/v2/store/themes/assets/import
+PUT  https://api.easystore.co/admin/v2/store/themes/<theme id>
 ```
 
-The imported theme is not intentionally published. Treat every automated import as an unpublished preview candidate until it has been reviewed in EasyStore.
+Publishing puts the imported theme live on the storefront. A successful `main` run therefore changes what customers see. Set the `EASYSTORE_PUBLISH` repository variable to `false` to keep every import an unpublished preview candidate instead.
 
 ## Workflow order
 
@@ -16,13 +17,13 @@ For every push branch, and for a manual workflow dispatch, the workflow runs the
 
 1. `test` validates the real `theme/` source and enforces the existing test coverage requirement;
 2. `package` creates and validates the normal downloadable `cc-ez-theme` artifact;
-3. `deploy` runs only after `package` succeeds, and only when the run's ref is `refs/heads/main`, and imports a deployment-specific ZIP into EasyStore.
+3. `deploy` runs only after `package` succeeds, and only when the run's ref is `refs/heads/main`, and imports a deployment-specific ZIP into EasyStore, resolves the imported theme's id, and publishes that theme.
 
-On every other branch the workflow ends at step 2. The ZIP artifact is still produced for download and manual upload, but nothing is sent to EasyStore. A manual `workflow_dispatch` follows the same rule: it imports only when dispatched against `main`.
+On every other branch the workflow ends at step 2. The ZIP artifact is still produced for download and manual upload, but nothing is sent to EasyStore. A manual `workflow_dispatch` follows the same rule: it imports and publishes only when dispatched against `main`.
 
 The deploy job does not replace the normal package artifact. The artifact remains available as a manual fallback.
 
-If `EASYSTORE_ADMIN_TOKEN` is not configured, validation and packaging still succeed. The deploy job prints a warning and skips the EasyStore request. Once the secret is configured, subsequent successful `main` runs import automatically.
+If `EASYSTORE_ADMIN_TOKEN` is not configured, validation and packaging still succeed. The deploy job prints a warning and skips the EasyStore requests. Once the secret is configured, subsequent successful `main` runs import and publish automatically.
 
 The chained path has been verified against EasyStore with a successful HTTP 200 import from the PR branch.
 
@@ -139,11 +140,14 @@ The workflow defaults to the values observed for this store:
 ```text
 EASYSTORE_POD_ID=1007
 EASYSTORE_STORE_DOMAIN=cardboardcollective.easy.co
+EASYSTORE_PUBLISH=true
 ```
 
 To override them, create repository Actions variables with those names under **Settings → Secrets and variables → Actions → Variables**.
 
-The API URL is intentionally fixed in the workflow so a secret or variable cannot silently redirect the upload to another host.
+Setting `EASYSTORE_PUBLISH` to `false` keeps the import and stops before the publish request. The deploy job then records a warning and the imported theme stays an unpublished preview candidate. Any other value, including the default of leaving the variable unset, publishes.
+
+The API URLs are intentionally fixed in the workflow so a secret or variable cannot silently redirect the upload to another host.
 
 ## Import request
 
@@ -160,6 +164,59 @@ idempotency-key: phase1-dummy:web:<fresh UUID>
 ```
 
 Browser-only headers such as `sec-ch-ua`, `user-agent`, `referer`, and the multipart boundary are intentionally not hard-coded.
+
+## Resolving the theme id
+
+Publishing addresses one theme by id:
+
+```text
+PUT https://api.easystore.co/admin/v2/store/themes/<theme id>
+```
+
+The id is different for every imported theme, so the workflow discovers it after the import rather than storing it. An id copied from a browser session is not reusable: it identifies whichever theme owns it at that moment, and publishing it later would take the wrong theme live.
+
+After a successful import the deploy job:
+
+1. requests the theme listing at `GET https://api.easystore.co/admin/v2/store/themes`;
+2. runs `scripts/easystore_publish.py resolve` against both the import response and the listing response;
+3. exposes the resolved id as the `theme` step output, which the publish step uses.
+
+The resolver accepts an id only when it can tie the id back to the identity this run stamped into the package, trying in order:
+
+1. a theme in the import response whose name matches the deployment display name;
+2. a theme in the import response whose version matches the deployment version;
+3. a theme in the theme listing whose name matches the deployment display name;
+4. a theme in the theme listing whose version matches the deployment version;
+5. the single theme described by the import response, when the response describes exactly one theme.
+
+Name comparison ignores case and repeated whitespace. Because the display name and version both carry the run number and commit SHA, a match identifies exactly one deployment.
+
+The resolver fails the job rather than guessing when two different ids claim the same identity, or when nothing matches. It never falls back to an arbitrary theme in the listing, and no id is hard-coded in the workflow or the script. If the listing request itself fails, the job continues to the resolver, which still succeeds when the import response alone identifies the theme.
+
+Run the same resolution locally against saved responses:
+
+```bash
+python scripts/easystore_publish.py resolve \
+  --import-response easystore-import.json \
+  --themes-response easystore-themes.json \
+  --display-name "CC main r451 abc1234" \
+  --version "2.0.0+gh.451.abc1234"
+```
+
+## Publish request
+
+The publish step repeats the observed browser request:
+
+```text
+PUT https://api.easystore.co/admin/v2/store/themes/<resolved theme id>
+Content-Type: application/json
+
+{}
+```
+
+It sends the same authorization and EasyStore infrastructure headers as the import, with a fresh `idempotency-key`. A non-2xx response fails the job and prints the response body.
+
+After a successful publish the job re-reads the theme listing and records the state EasyStore reports for that theme, such as `role` and `published_at`, in the job summary. That readback is informational: it never fails the job, since the publish status code is the authoritative result.
 
 ## Troubleshooting
 
@@ -184,6 +241,26 @@ python -c "from scripts.theme_ci import validate_archive; print(validate_archive
 ```
 
 The archive validation command should print `[]`.
+
+### Publish was skipped
+
+Check whether the `EASYSTORE_PUBLISH` repository variable is set to `false`. The deploy job records a warning and a job summary note when it is. Remove the variable, or set it to `true`, to publish again.
+
+### The theme id could not be resolved
+
+The resolve step prints the expected theme name and version plus the themes EasyStore returned, then fails before anything is published. This is the safe outcome: no theme is published unless it can be identified.
+
+Common causes:
+
+- the theme listing request failed and the import response carried no theme id, so nothing identified the import;
+- EasyStore renamed or truncated the theme card title, so no name matched. Check the printed candidate list against the expected name;
+- an earlier run with the same run number and commit left a duplicate theme, so two ids claim one identity. Delete the stale theme in EasyStore and rerun.
+
+The job summary and the failed step name the theme id it would have used, so the theme can also be published by hand in EasyStore.
+
+### Publish returns 404
+
+The resolved theme no longer exists, usually because it was deleted in EasyStore between import and publish. Rerun the workflow to import a fresh copy.
 
 ### Wrong store or infrastructure headers
 

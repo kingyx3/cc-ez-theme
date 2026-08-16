@@ -11,8 +11,10 @@ permissions:
 
 env:
   EASYSTORE_API_URL: https://api.easystore.co/admin/v2/store/themes/assets/import
+  EASYSTORE_THEMES_API_URL: https://api.easystore.co/admin/v2/store/themes
   EASYSTORE_POD_ID: ${{ vars.EASYSTORE_POD_ID || '1007' }}
   EASYSTORE_STORE_DOMAIN: ${{ vars.EASYSTORE_STORE_DOMAIN || 'cardboardcollective.easy.co' }}
+  EASYSTORE_PUBLISH: ${{ vars.EASYSTORE_PUBLISH || 'true' }}
 
 jobs:
   test:
@@ -75,9 +77,9 @@ jobs:
             echo "SHA-256: \`$(sha256sum cc-ez-theme.zip | cut -d ' ' -f 1)\`"
             echo
             if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
-              echo "This run is on \`main\`, so the automatic EasyStore import job also runs."
+              echo "This run is on \`main\`, so the automatic EasyStore import and publish job also runs."
             else
-              echo "This run is not on \`main\`, so the workflow stops after packaging. Automatic EasyStore import only happens on \`main\`."
+              echo "This run is not on \`main\`, so the workflow stops after packaging. Automatic EasyStore import and publish only happens on \`main\`."
             fi
           } >> "${GITHUB_STEP_SUMMARY}"
 
@@ -90,7 +92,7 @@ jobs:
           retention-days: 30
 
   deploy:
-    name: Import packaged theme into EasyStore
+    name: Import and publish packaged theme in EasyStore
     needs: package
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -232,7 +234,7 @@ jobs:
               --header "x-easystore-infra-source: admin" \
               --header "idempotency-key: ${idempotency_key}" \
               --form "file=@${PACKAGE_FILENAME};type=application/zip" \
-              --output easystore-response.json \
+              --output easystore-import.json \
               --write-out "%{http_code}"
           )"
 
@@ -240,8 +242,8 @@ jobs:
 
           if [[ ! "${http_code}" =~ ^2[0-9][0-9]$ ]]; then
             echo "::error::EasyStore theme import failed."
-            if [[ -s easystore-response.json ]]; then
-              cat easystore-response.json
+            if [[ -s easystore-import.json ]]; then
+              cat easystore-import.json
             fi
             exit 1
           fi
@@ -257,6 +259,136 @@ jobs:
             echo "- HTTP status: \`${http_code}\`"
             echo "- Store domain: \`${EASYSTORE_STORE_DOMAIN}\`"
             echo "- Package SHA-256: \`$(sha256sum "${PACKAGE_FILENAME}" | cut -d ' ' -f 1)\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      # The publish call targets one theme id, so the id has to be discovered
+      # before anything is published. It is never hard-coded: an id observed once
+      # in a browser session belongs to whichever theme owns it today, and
+      # publishing that would take the wrong theme live.
+      - name: Resolve the imported theme id
+        if: steps.credential.outputs.configured == 'true' && env.EASYSTORE_PUBLISH != 'false'
+        id: theme
+        env:
+          EASYSTORE_ADMIN_TOKEN: ${{ secrets.EASYSTORE_ADMIN_TOKEN }}
+          THEME_DISPLAY_NAME: ${{ steps.identity.outputs.display_name }}
+          THEME_VERSION: ${{ steps.identity.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          http_code="$(
+            curl --silent --show-error \
+              --request GET "${EASYSTORE_THEMES_API_URL}" \
+              --header "Accept: application/json" \
+              --header "Authorization: Bearer ${EASYSTORE_ADMIN_TOKEN}" \
+              --header "easystore-pod-id: ${EASYSTORE_POD_ID}" \
+              --header "easystore-source: admin" \
+              --header "x-easystore-infra-default-domain: ${EASYSTORE_STORE_DOMAIN}" \
+              --header "x-easystore-infra-pod-id: ${EASYSTORE_POD_ID}" \
+              --header "x-easystore-infra-source: admin" \
+              --output easystore-themes.json \
+              --write-out "%{http_code}"
+          )" || http_code="000"
+
+          echo "EasyStore theme listing HTTP status: ${http_code}"
+
+          # A failed listing is not fatal on its own: the import response may
+          # already carry the id. The resolver decides whether it knows enough.
+          if [[ ! "${http_code}" =~ ^2[0-9][0-9]$ ]]; then
+            echo "::warning::EasyStore theme listing request returned ${http_code}."
+            rm -f easystore-themes.json
+          fi
+
+          python scripts/easystore_publish.py resolve \
+            --import-response easystore-import.json \
+            --themes-response easystore-themes.json \
+            --display-name "${THEME_DISPLAY_NAME}" \
+            --version "${THEME_VERSION}" \
+            --github-output "${GITHUB_OUTPUT}"
+
+      - name: Publish theme in EasyStore
+        if: steps.credential.outputs.configured == 'true' && env.EASYSTORE_PUBLISH != 'false'
+        env:
+          EASYSTORE_ADMIN_TOKEN: ${{ secrets.EASYSTORE_ADMIN_TOKEN }}
+          THEME_ID: ${{ steps.theme.outputs.theme_id }}
+          THEME_ID_SOURCE: ${{ steps.theme.outputs.theme_id_source }}
+          THEME_DISPLAY_NAME: ${{ steps.identity.outputs.display_name }}
+          THEME_VERSION: ${{ steps.identity.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          idempotency_key="phase1-dummy:web:$(python -c 'import uuid; print(uuid.uuid4())')"
+
+          http_code="$(
+            curl --silent --show-error \
+              --request PUT "${EASYSTORE_THEMES_API_URL}/${THEME_ID}" \
+              --header "Accept: application/json" \
+              --header "Authorization: Bearer ${EASYSTORE_ADMIN_TOKEN}" \
+              --header "Content-Type: application/json" \
+              --header "easystore-pod-id: ${EASYSTORE_POD_ID}" \
+              --header "easystore-source: admin" \
+              --header "x-easystore-infra-default-domain: ${EASYSTORE_STORE_DOMAIN}" \
+              --header "x-easystore-infra-pod-id: ${EASYSTORE_POD_ID}" \
+              --header "x-easystore-infra-source: admin" \
+              --header "idempotency-key: ${idempotency_key}" \
+              --data '{}' \
+              --output easystore-publish.json \
+              --write-out "%{http_code}"
+          )"
+
+          echo "EasyStore publish HTTP status: ${http_code}"
+
+          if [[ ! "${http_code}" =~ ^2[0-9][0-9]$ ]]; then
+            echo "::error::EasyStore theme publish failed for theme ${THEME_ID}."
+            if [[ -s easystore-publish.json ]]; then
+              cat easystore-publish.json
+            fi
+            exit 1
+          fi
+
+          curl --silent --show-error \
+            --request GET "${EASYSTORE_THEMES_API_URL}" \
+            --header "Accept: application/json" \
+            --header "Authorization: Bearer ${EASYSTORE_ADMIN_TOKEN}" \
+            --header "easystore-pod-id: ${EASYSTORE_POD_ID}" \
+            --header "easystore-source: admin" \
+            --header "x-easystore-infra-default-domain: ${EASYSTORE_STORE_DOMAIN}" \
+            --header "x-easystore-infra-pod-id: ${EASYSTORE_POD_ID}" \
+            --header "x-easystore-infra-source: admin" \
+            --output easystore-themes-after-publish.json || true
+
+          {
+            echo "### EasyStore automatic theme publish"
             echo
-            echo "The theme was imported after the package job succeeded. It was not intentionally published."
+            echo "- Theme id: \`${THEME_ID}\`"
+            echo "- Theme id source: \`${THEME_ID_SOURCE}\`"
+            echo "- Theme identity: \`${THEME_DISPLAY_NAME}\`"
+            echo "- Theme version: \`${THEME_VERSION}\`"
+            echo "- Publish endpoint: \`PUT ${EASYSTORE_THEMES_API_URL}/${THEME_ID}\`"
+            echo "- HTTP status: \`${http_code}\`"
+            echo "- Store domain: \`${EASYSTORE_STORE_DOMAIN}\`"
+            echo
+            echo "State EasyStore reports for the theme after publishing:"
+            echo
+            echo '```text'
+            python scripts/easystore_publish.py describe \
+              --themes-response easystore-themes-after-publish.json \
+              --theme-id "${THEME_ID}"
+            echo '```'
+            echo
+            echo "This theme is now live on the storefront."
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Report skipped publish
+        if: steps.credential.outputs.configured == 'true' && env.EASYSTORE_PUBLISH == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "::warning::EASYSTORE_PUBLISH is set to false; the theme was imported but not published."
+          {
+            echo "### EasyStore automatic theme publish"
+            echo
+            echo "Skipped because the \`EASYSTORE_PUBLISH\` repository variable is set to \`false\`."
+            echo "The imported theme stays an unpublished preview candidate."
           } >> "${GITHUB_STEP_SUMMARY}"

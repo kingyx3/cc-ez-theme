@@ -59,6 +59,8 @@ Review all of these paths for shared commerce changes:
 8. Test realistic customer data and installed app snippets.
 9. Record a rollback that restores the last known-good storefront behavior without retaining experimental hooks.
 
+Every step above happens before the change reaches `main`. A successful workflow run on `main` imports the theme into EasyStore and publishes it, so the merge itself is the release. There is no post-merge window in which to preview.
+
 Static validation proves syntax and repository contracts. It cannot prove live asset ordering, account data, app integration, platform responses, or storefront rendering. A production preview is mandatory for shared commerce changes.
 
 ## PR #56 incident rule
