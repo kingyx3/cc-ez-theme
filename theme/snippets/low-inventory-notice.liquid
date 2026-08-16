@@ -175,24 +175,30 @@
 {% if low_inventory_remaining == 0 and low_inventory_url_handle != '' and low_inventory_lookups < 8 %}
   {% assign low_inventory_lookups = low_inventory_lookups | plus: 1 %}
   {% comment %}
-    The looked-up product is never held in a variable. Assigning a product-like
-    object to one leaves this snippet reading a page that behaves as though the
-    notice should be hidden even where it has a count to print, which is how
-    every card the lookup answered shipped its count inside a hidden element.
-    The lookup is written out at each use instead, and only numbers are assigned.
+    Only the variants come back from the lookup, never the product itself.
+    Holding a product-like object in a variable leaves the page rendering as
+    though the notice should be hidden even where it has a count to print: the
+    cards this answered shipped 'Only 10 left' inside a hidden span. Writing the
+    lookup out at each use instead resolves nothing at all on EasyStore - the
+    counts simply went back to zero - so what is kept is the list of variants,
+    which is an array, and the numbers read out of it.
   {% endcomment %}
-  {% for variant in products[low_inventory_url_handle].variants %}
+  {% assign low_inventory_lookup_variants = products[low_inventory_url_handle].variants %}
+  {% assign low_inventory_lookup_fallback = all_products[low_inventory_url_handle].variants %}
+  {% for variant in low_inventory_lookup_variants %}
     {% assign low_inventory_count = variant.inventory_quantity | plus: 0 %}
     {% if low_inventory_count > 0 %}
       {% assign low_inventory_remaining = low_inventory_remaining | plus: low_inventory_count %}
     {% endif %}
   {% endfor %}
-  {% for variant in all_products[low_inventory_url_handle].variants %}
-    {% assign low_inventory_count = variant.inventory_quantity | plus: 0 %}
-    {% if low_inventory_remaining == 0 and low_inventory_count > 0 %}
-      {% assign low_inventory_remaining = low_inventory_count %}
-    {% endif %}
-  {% endfor %}
+  {% if low_inventory_remaining == 0 %}
+    {% for variant in low_inventory_lookup_fallback %}
+      {% assign low_inventory_count = variant.inventory_quantity | plus: 0 %}
+      {% if low_inventory_count > 0 %}
+        {% assign low_inventory_remaining = low_inventory_remaining | plus: low_inventory_count %}
+      {% endif %}
+    {% endfor %}
+  {% endif %}
   {% if low_inventory_remaining == 0 %}
     {% assign low_inventory_count = products[low_inventory_url_handle].inventory_quantity | plus: 0 %}
     {% if low_inventory_count == 0 %}

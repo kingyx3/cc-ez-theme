@@ -170,6 +170,17 @@
     }
   }
 
+  console.log('\n--- the fill-in script ---');
+  const tag = document.querySelector('script[src*="card-inventory-fill"]');
+  out('loaded by the page', tag ? 'yes' : 'NO - the layout is not serving it');
+  const fillState = window.cardInventoryFill;
+  if (!fillState) {
+    out('what it did', tag ? 'it did not run - check the console for an error' : 'not loaded');
+  } else {
+    out('what it did', `ran=${fillState.ran} starved=${fillState.starved} fetched=${fillState.fetched} filled=${fillState.filled}`);
+    if (fillState.errors.length) out('errors', fillState.errors.slice(0, 4).join(' | '));
+  }
+
   console.log('\n--- verdict for this page ---');
   out('cards that printed a count', `${printedOnThisPage} of ${cards.length}`);
   const counted = Array.from(seen.values()).flat()

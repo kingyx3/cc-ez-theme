@@ -8,9 +8,14 @@
 // a count.
 //
 // The snippet looks a starved product up first, which costs no request, so this
-// only runs for the cards that lookup could not answer either. It waits until a
-// card is close to the viewport before spending anything on it, so a page of
-// starved cards that nobody scrolls to costs nothing.
+// only runs for the cards that lookup could not answer either. It runs once the
+// page is idle rather than when a card is scrolled to: a card that fills only
+// on scroll cannot be told apart from a card that never filled at all, and that
+// difference has cost several rounds of guessing here.
+//
+// window.cardInventoryFill reports what it did, so the difference between "did
+// not run", "ran and found nothing" and "ran and filled" is readable from the
+// console rather than inferred.
 //
 // snippets/low-inventory-notice.liquid renders the attributes this reads: a
 // remaining of 0 means nothing was found to print, and the threshold is the
@@ -20,11 +25,11 @@
   // A ceiling on the requests one page may spend on this, in case a collection
   // of starved products is ever rendered in full.
   const MOST_REQUESTS = 8;
-  // Fetch a card before it is scrolled to rather than as it appears.
-  const MARGIN = '400px';
   // The same product is often carded more than once on a page.
   const asked = new Map();
   let spent = 0;
+  const state = { ran: false, starved: 0, fetched: 0, filled: 0, errors: [] };
+  window.cardInventoryFill = state;
 
   function handleFor(notice) {
     const card = notice.closest('.product-card-wrapper');
@@ -114,45 +119,38 @@
 
   async function fill(notice) {
     const handle = handleFor(notice);
-    if (!handle || spent >= MOST_REQUESTS) return;
+    if (!handle) {
+      state.errors.push('a starved card carries no product link');
+      return;
+    }
+    if (spent >= MOST_REQUESTS) return;
 
     if (!asked.has(handle)) {
       spent += 1;
-      asked.set(handle, remainingFor(handle).catch(() => 0));
+      state.fetched += 1;
+      asked.set(handle, remainingFor(handle).catch((error) => {
+        state.errors.push(`${handle}: ${error.message}`);
+        return 0;
+      }));
     }
 
-    try {
-      const remaining = await asked.get(handle);
-      // A product whose stock the platform does not track anywhere reports
-      // nothing here either, and inventing a count for it is exactly what the
-      // snippet refuses to do.
-      if (remaining > 0) print(notice, remaining);
-    } catch (error) {
-      // A card that cannot be filled in stays as the snippet left it, which is
-      // empty and hidden. Nothing else on the page depends on this.
+    const remaining = await asked.get(handle);
+    // A product whose stock the platform does not track anywhere reports
+    // nothing here either, and inventing a count for it is exactly what the
+    // snippet refuses to do.
+    if (remaining > 0) {
+      print(notice, remaining);
+      state.filled += 1;
     }
   }
 
-  function watch() {
-    const starved = document.querySelectorAll(STARVED);
+  async function watch() {
+    const starved = Array.from(document.querySelectorAll(STARVED));
+    state.ran = true;
+    state.starved = starved.length;
     if (!starved.length) return;
 
-    if (!window.IntersectionObserver) {
-      Array.from(starved).slice(0, MOST_REQUESTS).forEach(fill);
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (!entry.isIntersecting) continue;
-          observer.unobserve(entry.target);
-          fill(entry.target);
-        }
-      },
-      { rootMargin: MARGIN }
-    );
-    starved.forEach(notice => observer.observe(notice));
+    await Promise.all(starved.map(fill));
   }
 
   function start() {

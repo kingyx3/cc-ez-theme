@@ -307,10 +307,19 @@ class CardInventoryFillTests(unittest.TestCase):
             self.source,
         )
 
-    def test_it_waits_until_a_card_is_near_the_viewport(self) -> None:
-        # A page of starved cards that nobody scrolls to costs nothing.
-        self.assertIn("IntersectionObserver", self.source)
-        self.assertIn("observer.unobserve(entry.target);", self.source)
+    def test_it_runs_once_the_page_is_idle_rather_than_on_scroll(self) -> None:
+        # A card that fills only when it is scrolled to cannot be told apart
+        # from a card that never filled at all, and that difference cost
+        # several rounds of guessing on this store.
+        self.assertIn("requestIdleCallback", self.source)
+        self.assertNotIn("IntersectionObserver", self.source)
+
+    def test_it_reports_what_it_did(self) -> None:
+        # So "did not run", "ran and found nothing" and "ran and filled" are
+        # readable from the console instead of inferred.
+        self.assertIn("window.cardInventoryFill = state;", self.source)
+        for key in ("ran:", "starved:", "fetched:", "filled:", "errors:"):
+            self.assertIn(key, self.source)
 
     def test_it_asks_once_for_a_product_carded_more_than_once(self) -> None:
         # The landing page cards the same product twice in different sections.
@@ -356,7 +365,8 @@ class CardInventoryFillTests(unittest.TestCase):
     def test_it_claims_no_count_for_a_product_that_reports_none(self) -> None:
         # Inventing a count for untracked stock is what the snippet refuses to
         # do, and fetching the number elsewhere is not a licence to start.
-        self.assertIn("if (remaining > 0) print(notice, remaining);", self.source)
+        self.assertIn("if (remaining > 0) {", self.source)
+        self.assertIn("print(notice, remaining);", self.source)
 
     def test_it_prints_the_store_translation_rather_than_its_own_copy(self) -> None:
         self.assertIn("window.purchaseStrings && window.purchaseStrings.lowInventory", self.source)
@@ -788,8 +798,19 @@ class LowInventoryRenderingTests(unittest.TestCase):
         # assets/card-inventory-fill.js.
         snippet = NOTICE.read_text(encoding="utf-8")
 
-        self.assertIn("{% for variant in products[low_inventory_url_handle].variants %}", snippet)
-        self.assertIn("{% for variant in all_products[low_inventory_url_handle].variants %}", snippet)
+        # The variants are kept, never the product: an object in a variable
+        # renders a hidden notice around a count, and a lookup written out at
+        # each use resolves nothing at all on EasyStore.
+        self.assertIn(
+            "{% assign low_inventory_lookup_variants = "
+            "products[low_inventory_url_handle].variants %}",
+            snippet,
+        )
+        self.assertIn(
+            "{% assign low_inventory_lookup_fallback = "
+            "all_products[low_inventory_url_handle].variants %}",
+            snippet,
+        )
         # Only when the listing gave nothing, and only within the page's budget.
         self.assertIn(
             "{% if low_inventory_remaining == 0 and low_inventory_url_handle != '' "
