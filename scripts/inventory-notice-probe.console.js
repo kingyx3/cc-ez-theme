@@ -12,6 +12,37 @@
 // means the page predates the theme this probe was written for.
 (async () => {
   const out = (label, value) => console.log(String(label).padEnd(34), value);
+
+  // Why a notice that carries text might still not be seen.
+  function onScreen(notice) {
+    const style = getComputedStyle(notice);
+    if (notice.hasAttribute('hidden')) return 'no - hidden attribute';
+    if (style.display === 'none') return 'no - display:none';
+    if (style.visibility === 'hidden') return 'no - visibility:hidden';
+    if (Number(style.opacity) === 0) return 'no - opacity:0';
+
+    const rect = notice.getBoundingClientRect();
+    if (!rect.width || !rect.height) return `no - no size (${Math.round(rect.width)}x${Math.round(rect.height)})`;
+    if (!notice.offsetParent && style.position !== 'fixed') return 'no - an ancestor is not laid out';
+
+    // An ancestor that hides it, which the element's own style will not show.
+    for (let parent = notice.parentElement; parent; parent = parent.parentElement) {
+      const parentStyle = getComputedStyle(parent);
+      if (parentStyle.display === 'none') return `no - ${describe(parent)} is display:none`;
+      if (parentStyle.visibility === 'hidden') return `no - ${describe(parent)} is visibility:hidden`;
+      if (Number(parentStyle.opacity) === 0) return `no - ${describe(parent)} is opacity:0`;
+      const parentRect = parent.getBoundingClientRect();
+      if (parentStyle.overflow !== 'visible' && (rect.bottom > parentRect.bottom + 1 || rect.right > parentRect.right + 1)) {
+        return `no - clipped by ${describe(parent)}`;
+      }
+    }
+    return `yes (${Math.round(rect.width)}x${Math.round(rect.height)})`;
+  }
+
+  function describe(element) {
+    const classes = String(element.className || '').trim().split(/\s+/).filter(Boolean).slice(0, 2);
+    return element.tagName.toLowerCase() + (classes.length ? `.${classes.join('.')}` : '');
+  }
   const cards = Array.from(document.querySelectorAll('.product-card-wrapper'));
 
   if (!cards.length) return console.log('NOTICE PROBE: no product cards on this page.');
@@ -36,6 +67,9 @@
       // listing = the count came with the card, lookup = the snippet looked the
       // product up, fetch = card-inventory-fill.js fetched it after load.
       cardSource: notice ? notice.dataset.lowInventorySource ?? '(older theme)' : '-',
+      // Text in the markup is not the same as text a shopper can see. This says
+      // whether the element is actually painted, and what is hiding it if not.
+      cardOnScreen: notice ? onScreen(notice) : '-',
     });
   }
 
@@ -57,6 +91,7 @@
       out(`  card ${index + 1} threshold attribute`, entry.cardThreshold);
       out(`  card ${index + 1} stock the card counted`, entry.cardRemaining);
       out(`  card ${index + 1} where that came from`, entry.cardSource);
+      out(`  card ${index + 1} visible to a shopper`, entry.cardOnScreen);
     });
 
     if (!handle) {
