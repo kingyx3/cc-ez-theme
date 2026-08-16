@@ -51,6 +51,27 @@ class CustomerOrderLimitCopyTests(unittest.TestCase):
         # sentence is what made every message three sentences long.
         self.assertNotIn("The limit is ${", limits)
 
+    def test_copy_accounts_for_orders_whenever_an_allowance_is_partly_spent(self) -> None:
+        # A shopper can see their own cart on the page that raised the message.
+        # They cannot see what earlier orders used, so a remaining allowance
+        # that is short of the ceiling has to say why.
+        limits = self.read("assets/customer-order-limits.js")
+
+        self.assertIn(
+            "You can add ${moreUnits(remaining)}"
+            " (${unitLabel(maximum)} per customer, ${purchased} already ordered).",
+            limits,
+        )
+        self.assertIn(
+            "Reduce this item to ${unitLabel(allowed)} to check out"
+            " (${perCustomer}, ${purchased} already ordered).",
+            limits,
+        )
+        # With nothing consumed the ceiling and what may be added are the same
+        # number, so it is stated once rather than twice.
+        self.assertIn("return `Limit: ${unitLabel(maximum)} per customer.`;", limits)
+        self.assertIn("return `Reduce this item to ${unitLabel(allowed)} to check out.`;", limits)
+
         # The equation copy this guard was written for lived in the shared
         # formatter, not here, so it survived. Guard the file it came from.
         feedback = self.read("assets/purchase-limit-feedback.js")

@@ -130,9 +130,16 @@ Every message is one short lead naming the ceiling, followed by at most one clau
 | Nothing left, all of it in the cart | `Limit reached: 2 units per customer. You have 2 in your cart.` |
 | Nothing left, all of it on past orders | `Limit reached: 2 units per customer. You have already ordered 2.` |
 | Nothing left, neither | `Limit reached: 1 unit per customer.` |
-| More requested than may be added | `You can add 2 more units (6 units per customer).` |
-| Cart blocks checkout, none allowed | `Limit reached: 2 units per customer. Remove this item to check out.` |
-| Cart blocks checkout, some allowed | `Reduce this item to 2 units to check out (6 units per customer).` |
+| Room left, some of it spent on orders | `You can add 1 more unit (3 units per customer, 2 already ordered).` |
+| Room left, only the cart holding any | `You can add 1 more unit (3 units per customer).` |
+| Room left, nothing consumed at all | `Limit: 3 units per customer.` |
+| Cart blocks checkout, none allowed | `Limit reached: 3 units per customer. You have already ordered 3, so remove this item to check out.` |
+| Cart blocks checkout, orders took some | `Reduce this item to 1 unit to check out (3 units per customer, 2 already ordered).` |
+| Cart blocks checkout, nothing ordered | `Reduce this item to 3 units to check out.` |
+
+Two rules decide what follows the ceiling. **Past orders are always accounted for**, because they are the one quantity a shopper cannot see on the page raising the message — told only "you can add 1 more unit (3 units per customer)" after ordering 2, they are left to work out where the other 2 went. **A number is never stated twice**: when nothing has been consumed the ceiling and what may be added are the same figure, so the message names it once.
+
+The server-rendered Liquid in `customer-order-limit-rule.liquid` mirrors these branches, including the case where an allowance spent entirely on past orders leaves nothing to reduce to — that one asks for the item to be removed rather than telling a shopper to "reduce this item to 0 to check out".
 
 The shared formatter in `purchase-limit-feedback.js` phrases store-raised limits the same way, varying only the ceiling phrase: `only 5 units in stock`, `4 units per order`, `3 units for this promotion`. A limit that already phrased its own copy is quoted verbatim rather than rebuilt, so the product page, listing and cart agree.
 

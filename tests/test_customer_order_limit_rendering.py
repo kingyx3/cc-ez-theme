@@ -286,6 +286,37 @@ class CustomerOrderLimitRenderingTests(unittest.TestCase):
         self.assertEqual(rule["cartQuantity"], 2)
         self.assertTrue(rule["cartExceeded"])
 
+    def test_an_allowance_spent_on_orders_asks_for_the_item_to_be_removed(self) -> None:
+        # Past orders can leave nothing to reduce to. The cart-exceeded branch
+        # runs before the remaining-is-zero one, so without its own guard it
+        # told the shopper to "reduce this item to 0 to check out".
+        rule = self.rule(self.render(
+            maximum=3,
+            orders=[self.order(days_ago=5, sku=HANDLE, quantity=3)],
+            cart_items=[{"sku": HANDLE, "quantity": 1}],
+        ))
+
+        self.assertEqual(rule["allowedCartQuantity"], 0)
+        self.assertTrue(rule["cartExceeded"])
+        self.assertIn("remove this item to check out", rule["message"])
+        self.assertNotIn("to 0 to check out", rule["message"])
+
+    def test_copy_accounts_for_orders_whenever_an_allowance_is_partly_spent(self) -> None:
+        # The cart is visible on the page that raised the message; past orders
+        # are not. Quoting only the ceiling left a shopper who had ordered 1 of
+        # 3 to work out for themselves why they could add just 2.
+        partly_spent = self.rule(self.render(
+            maximum=3,
+            orders=[self.order(days_ago=5, sku=HANDLE, quantity=1)],
+        ))
+        self.assertIn("1 already ordered", partly_spent["message"])
+
+        # Nothing ordered means nothing to account for, and the ceiling and what
+        # may be added are then the same number — stating it twice reads as a
+        # stutter, so it is stated once.
+        untouched = self.rule(self.render(maximum=3))
+        self.assertEqual(untouched["message"].strip(), "Limit: 3 per customer.")
+
     # --- refresh windows ----------------------------------------------------
 
     def test_a_passed_refresh_renews_the_allowance(self) -> None:

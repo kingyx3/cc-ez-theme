@@ -201,8 +201,21 @@
       return limitReached;
     }
 
+    // Room left, so the message says how much — and why it is less than the
+    // ceiling. Past orders are the part a shopper cannot see: told only "you
+    // can add 1 more unit (3 units per customer)" after ordering 2, they are
+    // left to work out where the other 2 went. The cart needs no such account,
+    // being visible on the page that raised the message.
     if (requestedQuantity > remaining) {
-      return `You can add ${moreUnits(remaining)} (${unitLabel(maximum)} per customer).`;
+      if (purchased > 0) {
+        return `You can add ${moreUnits(remaining)} (${unitLabel(maximum)} per customer, ${purchased} already ordered).`;
+      }
+      if (cartQuantity > 0) {
+        return `You can add ${moreUnits(remaining)} (${unitLabel(maximum)} per customer).`;
+      }
+      // Nothing consumed, so the ceiling and what may be added are the same
+      // number. Stating it twice reads as a stutter.
+      return `Limit: ${unitLabel(maximum)} per customer.`;
     }
     return `You can add ${moreUnits(remaining)}.`;
   };
@@ -218,7 +231,12 @@
       }
       return `Limit reached: ${perCustomer}. Remove this item to check out.`;
     }
-    return `Reduce this item to ${unitLabel(allowed)} to check out (${perCustomer}).`;
+    if (purchased > 0) {
+      return `Reduce this item to ${unitLabel(allowed)} to check out (${perCustomer}, ${purchased} already ordered).`;
+    }
+    // With nothing ordered the target is the ceiling, so naming it again adds
+    // no information.
+    return `Reduce this item to ${unitLabel(allowed)} to check out.`;
   };
 
   // --- purchase history ------------------------------------------------------
