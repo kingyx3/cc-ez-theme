@@ -82,6 +82,15 @@
 {% if low_inventory_url contains '/products/' %}
   {% assign low_inventory_url_handle = low_inventory_url | split: '/products/' | last | split: '?' | first | split: '#' | first %}
 {% endif %}
+{% comment %}
+  The handle the lookup will use. The link is preferred because it is the one
+  identifier every card carries, and `product.handle` covers a surface that
+  renders no link - the two are not populated on the same pages.
+{% endcomment %}
+{% assign low_inventory_lookup_handle = low_inventory_url_handle %}
+{% if low_inventory_lookup_handle == '' %}
+  {% assign low_inventory_lookup_handle = product.handle | default: '' | append: '' | strip | downcase %}
+{% endif %}
 {% capture low_inventory_identity %}{{ product.handle }}|{{ low_inventory_url_handle }}|{{ product.sku }}{% endcapture %}
 {% comment %} A surface that renders its product under another name passes the identity itself, as a string. It replaces rather than joins what was read from `product`, which on that surface is either nothing or somebody else's product. {% endcomment %}
 {% if low_inventory_identity_override %}
@@ -148,6 +157,71 @@
     {% assign low_inventory_remaining = low_inventory_count %}
   {% endif %}
 {% endif %}
+{% comment %}
+  A collection listing does not carry the same product object a product page
+  does, and EasyStore is not consistent about which products it carries stock
+  for: the same product was serialized with its stock on one collection page and
+  without it on the landing page, minutes apart. The card is then asked to print
+  a count it was never given.
+
+  The product is looked up by handle instead - the same global lookup the
+  featured-collection section already uses for its collection - which costs no
+  request at all. A store that exposes no such global returns nothing here and
+  the card falls back to assets/card-inventory-fill.js, which fetches it.
+
+  The lookup is made only when the listing gave nothing, and a page may make
+  twenty-four of them, which covers a full collection grid. `include` shares one
+  scope, so the counter below survives from one card to the next and is the
+  page's budget rather than each card's. Cards past the budget print nothing:
+  raising it is one number here, and the honest fix for a page that needs far
+  more is fewer products on it rather than a cap that silently drops the tail.
+
+  Only quantities are read here: a variant a shopper cannot buy reports no stock
+  of its own, and the flag spellings that matter on a listing object are not
+  what a fully loaded product sends.
+{% endcomment %}
+{% assign low_inventory_source = 'listing' %}
+{% assign low_inventory_lookups = low_inventory_lookups | default: 0 | plus: 0 %}
+{% if low_inventory_remaining == 0 and low_inventory_lookup_handle != '' and low_inventory_lookups < 24 %}
+  {% assign low_inventory_lookups = low_inventory_lookups | plus: 1 %}
+  {% comment %}
+    Only the variants come back from the lookup, never the product itself.
+    Holding a product-like object in a variable leaves the page rendering as
+    though the notice should be hidden even where it has a count to print: the
+    cards this answered shipped 'Only 10 left' inside a hidden span. Writing the
+    lookup out at each use instead resolves nothing at all on EasyStore - the
+    counts simply went back to zero - so what is kept is the list of variants,
+    which is an array, and the numbers read out of it.
+  {% endcomment %}
+  {% assign low_inventory_lookup_variants = products[low_inventory_lookup_handle].variants %}
+  {% assign low_inventory_lookup_fallback = all_products[low_inventory_lookup_handle].variants %}
+  {% for variant in low_inventory_lookup_variants %}
+    {% assign low_inventory_count = variant.inventory_quantity | plus: 0 %}
+    {% if low_inventory_count > 0 %}
+      {% assign low_inventory_remaining = low_inventory_remaining | plus: low_inventory_count %}
+    {% endif %}
+  {% endfor %}
+  {% if low_inventory_remaining == 0 %}
+    {% for variant in low_inventory_lookup_fallback %}
+      {% assign low_inventory_count = variant.inventory_quantity | plus: 0 %}
+      {% if low_inventory_count > 0 %}
+        {% assign low_inventory_remaining = low_inventory_remaining | plus: low_inventory_count %}
+      {% endif %}
+    {% endfor %}
+  {% endif %}
+  {% if low_inventory_remaining == 0 %}
+    {% assign low_inventory_count = products[low_inventory_lookup_handle].inventory_quantity | plus: 0 %}
+    {% if low_inventory_count == 0 %}
+      {% assign low_inventory_count = all_products[low_inventory_lookup_handle].inventory_quantity | plus: 0 %}
+    {% endif %}
+    {% if low_inventory_count > 0 %}
+      {% assign low_inventory_remaining = low_inventory_count %}
+    {% endif %}
+  {% endif %}
+  {% if low_inventory_remaining > 0 %}
+    {% assign low_inventory_source = 'lookup' %}
+  {% endif %}
+{% endif %}
 {% assign low_inventory_is_low = false %}
 {% if low_inventory_remaining > 0 %}
   {% if low_inventory_show_all or low_inventory_remaining <= low_inventory_threshold %}
@@ -170,7 +244,7 @@
   nothing means the product was not recognised as one that prints at every
   quantity. scripts/inventory-notice-probe.console.js reads exactly that.
 {% endcomment %}
-<span class="low-inventory-notice{% unless low_inventory_is_low %} hidden{% endunless %}" data-low-inventory-notice data-low-inventory-threshold="{{ low_inventory_threshold_attribute }}" data-low-inventory-remaining="{{ low_inventory_remaining }}"{% unless low_inventory_is_low %} hidden="hidden"{% endunless %}{% if low_inventory_persist %} role="status" aria-live="polite"{% endif %}>{% if low_inventory_is_low %}{{ low_inventory_text }}{% endif %}</span>
+<span class="low-inventory-notice{% if low_inventory_is_low == false %} hidden{% endif %}" data-low-inventory-notice data-low-inventory-threshold="{{ low_inventory_threshold_attribute }}" data-low-inventory-remaining="{{ low_inventory_remaining }}" data-low-inventory-source="{{ low_inventory_source }}" data-low-inventory-handle="{{ low_inventory_lookup_handle }}"{% if low_inventory_is_low == false %} hidden="hidden"{% endif %}{% if low_inventory_persist %} role="status" aria-live="polite"{% endif %}>{% if low_inventory_is_low %}{{ low_inventory_text }}{% endif %}</span>
 {% assign low_inventory_identity_override = null %}
 {% assign low_inventory_variant = null %}
 {% assign low_inventory_persist = null %}
