@@ -33,6 +33,9 @@
       // product; a positive count that printed nothing means the threshold, or
       // the series match, kept it quiet.
       cardRemaining: notice ? notice.dataset.lowInventoryRemaining ?? '(older theme)' : '-',
+      // listing = the count came with the card, lookup = the snippet looked the
+      // product up, fetch = card-inventory-fill.js fetched it after load.
+      cardSource: notice ? notice.dataset.lowInventorySource ?? '(older theme)' : '-',
     });
   }
 
@@ -53,6 +56,7 @@
       out(`  card ${index + 1} printed`, entry.cardNotice);
       out(`  card ${index + 1} threshold attribute`, entry.cardThreshold);
       out(`  card ${index + 1} stock the card counted`, entry.cardRemaining);
+      out(`  card ${index + 1} where that came from`, entry.cardSource);
     });
 
     if (!handle) {

@@ -417,11 +417,28 @@ and EasyStore is not consistent about it: a probe of the landing page found
 collection page, the same product on the same store within one run. Half the
 cards on a collection page were given a count and half were given nothing.
 
+A card the listing starved has two ways back to the number, tried in that order:
+
+1. **The snippet looks the product up by handle**, the same global lookup the
+   featured-collection section already uses for its collection. This costs no
+   request at all. It is only done for a product that promises a count at every
+   quantity, and only when the listing gave nothing — every card on a page
+   looking itself up would be a page of lookups for a notice that usually should
+   not appear. A store that exposes no such global returns nothing here, and the
+   card falls through to the fetch.
+2. **`assets/card-inventory-fill.js` fetches it** after the page goes idle.
+
+`data-low-inventory-source` on the notice says which one produced the count:
+`listing`, `lookup`, or `fetch`.
+
 `assets/card-inventory-fill.js` fills in the cards the platform starved, but
 only those that promise a count at every quantity — a `data-low-inventory-threshold`
 of `all` beside a `data-low-inventory-remaining` of `0`. It reads the product's
 quick view payload, which at about 14 KB is the cheapest place the number is
-available; the same product's JSON is about 226 KB. It waits for the page to go
+available; the same product's JSON is about 226 KB. That endpoint answers with
+JSON — `{ product: {...}, html: "<markup>" }`, the same shape
+`assets/product-quickview.js` reads — so the variants are read from the payload,
+and the markup only if the payload does not carry them. It waits for the page to go
 idle, spends at most four requests on a page, and prints the store's own
 translation. A card that is merely near its threshold is left alone, because
 finding out whether it was close would mean fetching every card on the page.

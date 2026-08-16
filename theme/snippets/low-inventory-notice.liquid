@@ -148,6 +148,49 @@
     {% assign low_inventory_remaining = low_inventory_count %}
   {% endif %}
 {% endif %}
+{% comment %}
+  A collection listing does not carry the same product object a product page
+  does, and EasyStore is not consistent about which products it carries stock
+  for: the same product was serialized with its stock on one collection page and
+  without it on the landing page, minutes apart. The card is then asked to print
+  a count it was never given.
+
+  For a product that promises a count at every quantity, the product is looked
+  up by handle instead - the same global lookup the featured-collection section
+  already uses for its collection - which costs no request at all. A store that
+  exposes no such global returns nothing here and the card falls back to
+  assets/card-inventory-fill.js, which fetches the number.
+
+  The lookup is only made for those products, and only when the listing gave
+  nothing. Every card on a page looking itself up would be a page of lookups to
+  print a notice that usually should not appear.
+
+  Only quantities are read here: a variant a shopper cannot buy reports no stock
+  of its own, and the flag spellings that matter on a listing object are not
+  what a fully loaded product sends.
+{% endcomment %}
+{% assign low_inventory_source = 'listing' %}
+{% if low_inventory_remaining == 0 and low_inventory_show_all and low_inventory_url_handle != '' %}
+  {% assign low_inventory_lookup = products[low_inventory_url_handle] %}
+  {% unless low_inventory_lookup %}
+    {% assign low_inventory_lookup = all_products[low_inventory_url_handle] %}
+  {% endunless %}
+  {% for variant in low_inventory_lookup.variants %}
+    {% assign low_inventory_count = variant.inventory_quantity | plus: 0 %}
+    {% if low_inventory_count > 0 %}
+      {% assign low_inventory_remaining = low_inventory_remaining | plus: low_inventory_count %}
+    {% endif %}
+  {% endfor %}
+  {% if low_inventory_remaining == 0 %}
+    {% assign low_inventory_count = low_inventory_lookup.inventory_quantity | plus: 0 %}
+    {% if low_inventory_count > 0 %}
+      {% assign low_inventory_remaining = low_inventory_count %}
+    {% endif %}
+  {% endif %}
+  {% if low_inventory_remaining > 0 %}
+    {% assign low_inventory_source = 'lookup' %}
+  {% endif %}
+{% endif %}
 {% assign low_inventory_is_low = false %}
 {% if low_inventory_remaining > 0 %}
   {% if low_inventory_show_all or low_inventory_remaining <= low_inventory_threshold %}
@@ -170,7 +213,7 @@
   nothing means the product was not recognised as one that prints at every
   quantity. scripts/inventory-notice-probe.console.js reads exactly that.
 {% endcomment %}
-<span class="low-inventory-notice{% unless low_inventory_is_low %} hidden{% endunless %}" data-low-inventory-notice data-low-inventory-threshold="{{ low_inventory_threshold_attribute }}" data-low-inventory-remaining="{{ low_inventory_remaining }}"{% unless low_inventory_is_low %} hidden="hidden"{% endunless %}{% if low_inventory_persist %} role="status" aria-live="polite"{% endif %}>{% if low_inventory_is_low %}{{ low_inventory_text }}{% endif %}</span>
+<span class="low-inventory-notice{% unless low_inventory_is_low %} hidden{% endunless %}" data-low-inventory-notice data-low-inventory-threshold="{{ low_inventory_threshold_attribute }}" data-low-inventory-remaining="{{ low_inventory_remaining }}" data-low-inventory-source="{{ low_inventory_source }}"{% unless low_inventory_is_low %} hidden="hidden"{% endunless %}{% if low_inventory_persist %} role="status" aria-live="polite"{% endif %}>{% if low_inventory_is_low %}{{ low_inventory_text }}{% endif %}</span>
 {% assign low_inventory_identity_override = null %}
 {% assign low_inventory_variant = null %}
 {% assign low_inventory_persist = null %}

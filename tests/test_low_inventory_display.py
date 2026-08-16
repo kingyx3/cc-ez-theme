@@ -291,7 +291,25 @@ class CardInventoryFillTests(unittest.TestCase):
         # Measured on the store: the quickview payload is 14 KB and the products
         # JSON for the same product is 226 KB. Both report the same number.
         self.assertIn("/product_quickview_html", self.source)
-        self.assertNotIn(".json", self.source)
+        self.assertNotIn("${handle}.json", self.source)
+
+    def test_it_reads_the_payload_as_the_json_the_endpoint_returns(self) -> None:
+        # The endpoint answers { product: {...}, html: "<markup>" }, which is
+        # what assets/product-quickview.js reads from it. Parsing the body as
+        # HTML finds nothing, because the markup is a string inside the JSON.
+        self.assertIn("JSON.parse(body)", self.source)
+        self.assertIn("payload.product", self.source)
+        self.assertIn("product.variants", self.source)
+        # And still copes with a body that is markup rather than JSON.
+        self.assertIn("payload && typeof payload.html === 'string' ? payload.html : body", self.source)
+
+    def test_it_drops_a_variant_only_for_a_flag_that_reads_false(self) -> None:
+        # The same rule the snippet follows, for the same reason.
+        self.assertIn("function unbuyable(variant)", self.source)
+        self.assertIn("variant.available, variant.is_available, variant.is_enabled", self.source)
+
+    def test_it_records_where_the_count_came_from(self) -> None:
+        self.assertIn("notice.dataset.lowInventorySource = 'fetch';", self.source)
 
     def test_it_spends_a_bounded_number_of_requests_on_a_page(self) -> None:
         self.assertIn("MOST_REQUESTS = 4", self.source)
@@ -723,6 +741,28 @@ class LowInventoryRenderingTests(unittest.TestCase):
         }
 
         self.assertIn(">Only 3 left<", self.page(product))
+
+    def test_a_starved_series_card_looks_the_product_up_before_anything_fetches(self) -> None:
+        # A collection listing does not always carry stock, and the same product
+        # was serialized with it on one page and without it on another. A
+        # product that promises a count at every quantity looks itself up, which
+        # costs no request; a store that exposes no such global returns nothing
+        # and the card falls back to the fetch.
+        snippet = NOTICE.read_text(encoding="utf-8")
+
+        self.assertIn("{% assign low_inventory_lookup = products[low_inventory_url_handle] %}", snippet)
+        self.assertIn("{% assign low_inventory_lookup = all_products[low_inventory_url_handle] %}", snippet)
+        # Only for those products, and only when the listing gave nothing.
+        self.assertIn(
+            "{% if low_inventory_remaining == 0 and low_inventory_show_all "
+            "and low_inventory_url_handle != '' %}",
+            snippet,
+        )
+
+    def test_the_element_says_where_its_count_came_from(self) -> None:
+        product = {"available": True, "variants": [listing_variant(3)]}
+
+        self.assertIn('data-low-inventory-source="listing"', self.card(product))
 
     def test_the_element_carries_the_count_the_snippet_arrived_at(self) -> None:
         # A card that printed nothing is otherwise indistinguishable from a card

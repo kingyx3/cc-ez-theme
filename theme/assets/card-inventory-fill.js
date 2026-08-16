@@ -29,22 +29,63 @@
     return (href.match(/\/products\/([^/?#]+)/) || [])[1] || '';
   }
 
-  // The quickview payload is the cheapest place the count is available: the
-  // product page carries the same numbers, and the products JSON carries them
-  // too, but both are an order of magnitude larger.
+  function total(quantities) {
+    return quantities
+      .filter(quantity => Number.isFinite(quantity) && quantity > 0)
+      .reduce((sum, quantity) => sum + quantity, 0);
+  }
+
+  // A variant is dropped only for a flag that reads false, which is the rule
+  // snippets/low-inventory-notice.liquid follows for the same reason: the three
+  // spellings are not synonyms and a missing one is not a no.
+  function unbuyable(variant) {
+    for (const flag of [variant.available, variant.is_available, variant.is_enabled]) {
+      if (flag === undefined || flag === null || flag === '') continue;
+      return flag === false || flag === 0 || String(flag).toLowerCase() === 'false';
+    }
+    return false;
+  }
+
+  // The quickview payload is the cheapest place the count is available: 14 KB
+  // against 226 KB for the same product's JSON, both measured on the store.
+  //
+  // It answers with JSON - { product: {...}, html: "<markup>" } - which is what
+  // assets/product-quickview.js reads. Parsing the body as HTML finds nothing,
+  // because the markup is a string inside it.
   async function remainingFor(handle) {
     const response = await fetch(`/products/${handle}/product_quickview_html`, {
       credentials: 'same-origin',
+      headers: { Accept: 'application/json' },
     });
     if (!response.ok) return 0;
 
-    const parsed = new DOMParser().parseFromString(await response.text(), 'text/html');
-    // Quick view renders one option per variant a shopper can buy, so this is
-    // the same total the snippet would have counted from the product itself.
-    return Array.from(parsed.querySelectorAll('[data-inventory-quantity]'))
-      .map(option => Number(option.dataset.inventoryQuantity))
-      .filter(quantity => Number.isFinite(quantity) && quantity > 0)
-      .reduce((total, quantity) => total + quantity, 0);
+    const body = await response.text();
+    let payload = null;
+    try {
+      payload = JSON.parse(body);
+    } catch (error) {
+      payload = null;
+    }
+
+    const product = (payload && payload.product) || {};
+    if (Array.isArray(product.variants)) {
+      const counted = total(
+        product.variants
+          .filter(variant => !unbuyable(variant))
+          .map(variant => Number(variant.inventory_quantity))
+      );
+      if (counted > 0) return counted;
+    }
+    if (Number(product.inventory_quantity) > 0) return Number(product.inventory_quantity);
+
+    // The rendered markup, either from the payload or from a body that was not
+    // JSON at all. Quick view renders one option per variant a shopper can buy.
+    const markup = payload && typeof payload.html === 'string' ? payload.html : body;
+    const parsed = new DOMParser().parseFromString(markup, 'text/html');
+    return total(
+      Array.from(parsed.querySelectorAll('[data-inventory-quantity]'))
+        .map(option => Number(option.dataset.inventoryQuantity))
+    );
   }
 
   function print(notice, remaining) {
@@ -53,6 +94,8 @@
 
     notice.textContent = String(template).replace('__COUNT__', remaining);
     notice.dataset.lowInventoryRemaining = String(remaining);
+    // So the probe can say which of the three routes produced this number.
+    notice.dataset.lowInventorySource = 'fetch';
     notice.classList.remove('hidden');
     notice.removeAttribute('hidden');
   }
