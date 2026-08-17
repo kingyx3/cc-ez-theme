@@ -133,6 +133,24 @@ For a guest, no limit rule contributes a quantity maximum, disables a purchase o
 
 The redirect is scoped to the product being bought. A limited product sitting in the cart never diverts Add to Cart or Buy Now for a different product; only the cart's own checkout controls consider the whole cart.
 
+## Coming back after signing in
+
+EasyStore ignores `redirect_uri`. It signs the customer in through its own flow — the login POST, then the OTP step it renders at `/account/auth` — and then lands them on the account area, which is why a shopper who clicked Buy Now arrived at their **order history** instead of the product they were buying. No theme setting changes where the platform lands them, so `assets/account-login-redirect.js` completes the trip from the theme side:
+
+1. on a login, register, or recovery page, a guest's `redirect_uri` is recorded in `sessionStorage` under `cc:pending-login-redirect` with a timestamp;
+2. on the first page that proves the shopper is signed in — the account page EasyStore chose — the recorded target is read, removed, and navigated to with `location.replace`, so Back returns to the product rather than to the account page.
+
+The module loads from `layout/theme.liquid` on every page, because the platform picks the landing page and it need not be an account page. Its safeguards:
+
+- the target is consumed on the first signed-in page load whether or not it is used, so it can never divert a later, unrelated sign-in, and it expires after 30 minutes regardless;
+- only a same-origin path is followed. A protocol, a protocol-relative `//host`, a backslash host, a control character, or an `/account` path is discarded, so the parameter cannot be used to bounce a shopper off the store or back into the sign-in flow;
+- landing on the target already — should the platform ever start honouring the parameter — clears the entry and navigates nowhere;
+- `sessionStorage` being unavailable means the redirect is simply not completed; nothing throws and no purchase path changes.
+
+The platform's login form is deliberately untouched: no field is added to it and no value is written into it. Theme scripts writing into EasyStore's account forms is what broke signup with "Customer already exists (phone)", and landing on the right page one paint later is not worth repeating that.
+
+`e2e/login-redirect.spec.js` runs the module through the real page loads — login page, account landing, product — against pages it serves itself, so it needs no storefront and no store account. `tests/test_login_redirect_completion.py` covers the wiring: both asset trees, the layout include, and the parameter name shared with `customer-order-limits.js` and `cart.js`.
+
 ## How sign-in state is decided
 
 A wrong redirect breaks buying for real customers, so the storefront redirects only when the page proves the shopper is signed out. Three signals are read, in order:

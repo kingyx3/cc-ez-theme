@@ -123,6 +123,43 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  login-redirect:
+    # Serves its own pages, so like the OTP suite it needs no storefront and
+    # depends on validate rather than preflight: a shopper who is sent to sign
+    # in has to come back to the product, and that must stay caught even when
+    # the live store is unreachable.
+    name: Login redirect regression
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Install E2E dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run login redirect regression suite
+        run: npx playwright test e2e/login-redirect.spec.js --project=chromium-desktop
+
+      - name: Upload login redirect failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-test-results-login-redirect
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
   otp-autofill:
     # Runs a replica of the platform's one-time-code widget against the theme
     # module, so it needs no storefront and depends on validate rather than

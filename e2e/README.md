@@ -34,6 +34,7 @@ Every pull request runs all of the following:
 - Pixel 7 / mobile Chrome emulation
 - iPhone 15 / mobile Safari emulation
 - Axe serious/critical accessibility checks
+- OTP autofill and login redirect regression suites, which serve their own pages and so run even when the storefront is unreachable
 
 The PR target resolves in this order: `E2E_PR_BASE_URL`, `E2E_BASE_URL`, then `https://cardboard.sg`. The workflow can also be run manually with an explicit `base_url`.
 
