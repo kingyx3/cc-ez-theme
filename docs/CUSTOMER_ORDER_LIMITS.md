@@ -151,6 +151,26 @@ The platform's login form is deliberately untouched: no field is added to it and
 
 `e2e/login-redirect.spec.js` runs the module through the real page loads — login page, account landing, product — against pages it serves itself, so it needs no storefront and no store account. `tests/test_login_redirect_completion.py` covers the wiring: both asset trees, the layout include, and the parameter name shared with `customer-order-limits.js` and `cart.js`.
 
+## The attempt that signing in interrupted
+
+The click a guest made does not survive the round trip through the platform's login, so it is recorded when they are sent away and answered when they come back. Without that, a customer whose allowance was already spent on previous orders returned to a page that said nothing about it: the button looked ready, and only pressing it a second time produced "Customer purchase limit reached".
+
+Every surface that redirects a guest names what was being bought — `redirectToLogin({ handle, quantity, surface })` — and the attempt is kept in `sessionStorage` under `cc:pending-purchase-intent` with a timestamp. `surface` is one of `product` (Add to Cart), `buy-now`, `listing` (quick-add), or `cart` (checkout with a limited product in the cart).
+
+On the first page that proves the shopper is signed in, the attempt is read, removed, and answered with the message that click would have produced, on the surface that click came from: the product form's own error for a product page, the listing alert for quick-add, and the cart error for checkout. A shopper who can still buy what they asked for is told nothing.
+
+What the answer is careful about:
+
+- **it waits for history.** Answering before the `/account/orders` pass lands would measure against an allowance that assumes nothing was ever bought — the reverse of the mistake worth making — so it waits for the load to land or to give up (`customer-order-limits:history` or `customer-order-limits:history-unavailable`);
+- **it needs proof of signing in**, not merely the absence of proof of signing out, so an attempt is never answered for someone whose allowance cannot be measured. A guest who abandons the sign-in keeps their attempt until they sign in or it expires after 30 minutes;
+- **it skips `/account` pages.** That is where EasyStore lands a freshly signed-in customer, and `account-login-redirect.js` is about to move them on, so the answer belongs on the page they actually return to;
+- **it is consumed once**, whether or not it is used, so an attempt answered on one page can never resurface on the next;
+- **Buy Now with the allowance already in the cart says nothing.** That button checks out with what the cart holds rather than failing, so a warning there would contradict what pressing it does.
+
+Nothing is bought automatically on the way back. The shopper returns to the page they were on, is told if the purchase cannot go through, and presses the button themselves otherwise.
+
+`e2e/purchase-limit-after-login.spec.js` drives the real module through the real page loads for each surface — product page, listing, cart, and the account page in between — against pages it serves itself, including the account order page the history loader reads. `tests/test_purchase_intent_after_login.py` covers what behaviour cannot see: that every redirecting surface names its attempt, and that the answer stays confined to a shopper whose allowance can be measured.
+
 ## How sign-in state is decided
 
 A wrong redirect breaks buying for real customers, so the storefront redirects only when the page proves the shopper is signed out. Three signals are read, in order:
