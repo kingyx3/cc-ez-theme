@@ -1,0 +1,96 @@
+{% comment %}
+  Is this order cancelled? One place answers it, for every pass that counts.
+
+  Input:  cancelled_order  the order object being counted.
+  Output: customer_order_limit_cancelled  true when the order must not count.
+
+  EasyStore does not expose cancellation under one name. This theme's own pages
+  prove it: the order list and the account page read `order.is_cancelled` as an
+  integer (`== 1`), while the order detail page reads `order.cancelled`, both as
+  a boolean and against 0. The order objects a product or cart page receives are
+  not the ones the account templates render, so a pass that reads only
+  `is_cancelled` sees nil on the shape that carries `cancelled`, treats the order
+  as live, and counts a cancelled order against the customer's allowance. That is
+  the bug this snippet exists to close, so every known spelling is read here and
+  nowhere else.
+
+  Only a positive signal cancels an order. A missing, blank, 0 or false field
+  says nothing, so an order whose shape carries none of these fields still counts
+  and the limit stays enforced: an unreadable order is never a free allowance.
+
+  Values are normalized to lowercase strings before comparison because the flag
+  arrives as an integer, a boolean or a label depending on the field, and Liquid
+  treats 0 as truthy — an `unless` on a raw value skipped every order, which is
+  how this pass once counted nothing at all.
+{% endcomment %}
+{% comment %}
+  The order is read through one resolved reference. `include` shares the caller's
+  scope on EasyStore, so the loop variable `order` is already visible here; the
+  passed input is preferred and the ambient loop variable is the fallback, which
+  keeps this snippet correct whether or not the platform binds an object passed as
+  an include parameter. Every caller loops with `order`, and the input is cleared
+  at the end so a stale one cannot be read for the wrong order.
+{% endcomment %}
+{% assign customer_order_limit_cancelled_order = cancelled_order | default: order %}
+{% assign customer_order_limit_cancelled = false %}
+
+{% comment %} The integer flag, as the order list and account page read it. {% endcomment %}
+{% assign customer_order_limit_cancelled_flag = customer_order_limit_cancelled_order.is_cancelled | default: '' | append: '' | strip | downcase %}
+{% if customer_order_limit_cancelled_flag == '1' or customer_order_limit_cancelled_flag == 'true' %}
+  {% assign customer_order_limit_cancelled = true %}
+{% endif %}
+
+{% comment %} The boolean, as the order detail page reads it. {% endcomment %}
+{% assign customer_order_limit_cancelled_flag = customer_order_limit_cancelled_order.cancelled | default: '' | append: '' | strip | downcase %}
+{% if customer_order_limit_cancelled_flag == '1' or customer_order_limit_cancelled_flag == 'true' %}
+  {% assign customer_order_limit_cancelled = true %}
+{% endif %}
+
+{% comment %}
+  A cancellation timestamp. Any readable value is a cancellation date; the
+  falsy spellings are listed because an engine may render an absent field as one
+  of them rather than as an empty string.
+{% endcomment %}
+{% assign customer_order_limit_cancelled_flag = customer_order_limit_cancelled_order.cancelled_at | default: '' | append: '' | strip | downcase %}
+{% unless customer_order_limit_cancelled_flag == '' or customer_order_limit_cancelled_flag == '0' or customer_order_limit_cancelled_flag == 'false' or customer_order_limit_cancelled_flag == 'nil' or customer_order_limit_cancelled_flag == 'null' or customer_order_limit_cancelled_flag == 'none' %}
+  {% assign customer_order_limit_cancelled = true %}
+{% endunless %}
+
+{% comment %}
+  The status the order is filed under. `order.status` is the account order list's
+  own tab filter — the order detail page links back to `?filter={{ order.status }}`
+  — so a cancelled order carries the cancelled tab's status. The American
+  spelling is read alongside it because the status strings are not this theme's.
+{% endcomment %}
+{% assign customer_order_limit_cancelled_flag = customer_order_limit_cancelled_order.status | default: customer_order_limit_cancelled_order.order_status | default: '' | append: '' | strip | downcase %}
+{% if customer_order_limit_cancelled_flag == 'cancelled' or customer_order_limit_cancelled_flag == 'canceled' %}
+  {% assign customer_order_limit_cancelled = true %}
+{% endif %}
+
+{% comment %}
+  The payment and fulfillment labels, which the order pages render as "Cancelled".
+  A refund is deliberately not read here: a refunded order was still placed, and
+  whether it frees an allowance is a merchant decision, not a field name.
+{% endcomment %}
+{% assign customer_order_limit_cancelled_flag = customer_order_limit_cancelled_order.financial_status_label | default: customer_order_limit_cancelled_order.financial_status | default: '' | append: '' | strip | downcase %}
+{% if customer_order_limit_cancelled_flag == 'cancelled' or customer_order_limit_cancelled_flag == 'canceled' %}
+  {% assign customer_order_limit_cancelled = true %}
+{% endif %}
+
+{% assign customer_order_limit_cancelled_flag = customer_order_limit_cancelled_order.fulfillment_status_label | default: customer_order_limit_cancelled_order.fulfillment_status | default: '' | append: '' | strip | downcase %}
+{% if customer_order_limit_cancelled_flag == 'cancelled' or customer_order_limit_cancelled_flag == 'canceled' %}
+  {% assign customer_order_limit_cancelled = true %}
+{% endif %}
+
+{% comment %}
+  A compact record of what this order actually exposed, for the diagnostics pass
+  to sample. Verifying the field names on a live store is otherwise a guess.
+{% endcomment %}
+{% capture customer_order_limit_cancelled_signals %}is_cancelled={{ customer_order_limit_cancelled_order.is_cancelled | default: '' }} cancelled={{ customer_order_limit_cancelled_order.cancelled | default: '' }} cancelled_at={{ customer_order_limit_cancelled_order.cancelled_at | default: '' }} status={{ customer_order_limit_cancelled_order.status | default: '' }} financial={{ customer_order_limit_cancelled_order.financial_status_label | default: customer_order_limit_cancelled_order.financial_status | default: '' }} fulfillment={{ customer_order_limit_cancelled_order.fulfillment_status_label | default: customer_order_limit_cancelled_order.fulfillment_status | default: '' }}{% endcapture %}
+
+{% comment %}
+  The input is cleared so a caller that forgets to pass an order cannot inherit
+  the previous one. `include` shares the caller's scope on EasyStore, and reading
+  a stale order here would answer for the wrong order.
+{% endcomment %}
+{% assign cancelled_order = '' %}

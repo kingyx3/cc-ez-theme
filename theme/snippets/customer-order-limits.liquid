@@ -39,20 +39,31 @@
   without another release.
 {% endcomment %}
 {% assign customer_order_limit_orders_seen = 0 %}
+{% assign customer_order_limit_cancelled_seen = 0 %}
 {% assign customer_order_limit_lines_seen = 0 %}
 {% assign customer_order_limit_sample = '' %}
 {% assign customer_order_limit_sample_count = 0 %}
+{% assign customer_order_limit_status_sample = '' %}
+{% assign customer_order_limit_status_count = 0 %}
 {% if customer_order_limit_customer_authenticated %}
   {% assign customer_order_limit_orders = customer.orders | default: customer.recent_orders %}
   {% for order in customer_order_limit_orders %}
     {% comment %}
-      `order.is_cancelled` is an integer on EasyStore, not a boolean: this theme's
-      own order list compares it with `== 1`. Liquid treats 0 as truthy, so
-      an unless on the raw value skipped every order and reported nothing seen
-      for every customer. The value is compared as a string.
+      The same cancellation decision the counting passes make, so the numbers
+      reported here explain the numbers they produce. The fields each order
+      exposed are sampled alongside it: a limit that counts a cancelled order is
+      a field name this theme is not reading, and that cannot be told apart from
+      a limit counting correctly without seeing the raw values from the store.
     {% endcomment %}
-    {% assign customer_order_limit_order_cancelled = order.is_cancelled | default: 0 | append: '' | strip | downcase %}
-    {% unless customer_order_limit_order_cancelled == '1' or customer_order_limit_order_cancelled == 'true' %}
+    {% include 'customer-order-limit-cancelled', cancelled_order: order %}
+    {% if customer_order_limit_status_count < 5 %}
+      {% capture customer_order_limit_status_sample %}{{ customer_order_limit_status_sample }}{% if customer_order_limit_status_sample != '' %} | {% endif %}{% if customer_order_limit_cancelled %}skipped {% else %}counted {% endif %}{{ customer_order_limit_cancelled_signals | strip }}{% endcapture %}
+      {% assign customer_order_limit_status_count = customer_order_limit_status_count | plus: 1 %}
+    {% endif %}
+    {% if customer_order_limit_cancelled %}
+      {% assign customer_order_limit_cancelled_seen = customer_order_limit_cancelled_seen | plus: 1 %}
+    {% endif %}
+    {% unless customer_order_limit_cancelled %}
       {% assign customer_order_limit_orders_seen = customer_order_limit_orders_seen | plus: 1 %}
       {% assign customer_order_limit_lines = order.line_items | default: order.items %}
       {% for line_item in customer_order_limit_lines %}
@@ -110,11 +121,16 @@
     /* Read window.customerOrderLimitsV2.diagnostics in the console to see what
        the order pass could actually read: zero orders means the storefront
        cannot see order history, and identifiers show which value each line item
-       exposes for matching. */
+       exposes for matching. cancelledOrdersSeen is how many orders were left out
+       as cancelled, and orderStatuses shows the raw cancellation fields each
+       order exposed, so a cancelled order that still counts names the field the
+       store uses. */
     diagnostics: {
       ordersSeen: {{ customer_order_limit_orders_seen | json }},
+      cancelledOrdersSeen: {{ customer_order_limit_cancelled_seen | json }},
       lineItemsSeen: {{ customer_order_limit_lines_seen | json }},
       identifiers: {{ customer_order_limit_sample | strip | json }},
+      orderStatuses: {{ customer_order_limit_status_sample | strip | json }},
       renderedAt: {{ customer_order_limit_now_epoch | json }}
     }
   };
