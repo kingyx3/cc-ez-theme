@@ -157,6 +157,74 @@ class LoginRedirectRefusesUnsafeTargetsTests(unittest.TestCase):
                 self.assertIn(marker, module)
 
 
+class LoginRedirectFinishesBeforeTheLandingPagePaintsTests(unittest.TestCase):
+    """The deferred module runs at DOMContentLoaded, which is a paint too late.
+
+    Reported from the live store: EasyStore's account page was visible for a
+    moment on the way to the product. `snippets/login-redirect-boot.liquid` runs
+    in the head instead, before the body is parsed, so the trip finishes without
+    that page appearing.
+    """
+
+    BOOT = "snippets/login-redirect-boot.liquid"
+
+    def test_it_runs_in_the_head_before_anything_else_does(self) -> None:
+        layout = read("layout/theme.liquid")
+
+        self.assertIn("{% include 'login-redirect-boot' %}", layout)
+        # Before the platform's own header scripts and before the deferred
+        # module: everything after this assumes the page it is on is staying.
+        self.assertLess(
+            layout.index("{% include 'login-redirect-boot' %}"),
+            layout.index("{{ content_for_header }}"),
+        )
+        self.assertLess(
+            layout.index("{% include 'login-redirect-boot' %}"),
+            layout.index(MODULE),
+        )
+        self.assertLess(layout.index("{% include 'login-redirect-boot' %}"), layout.index("<body"))
+
+    def test_it_is_inline_and_only_rendered_for_a_customer(self) -> None:
+        boot = read(self.BOOT)
+
+        # An external script early enough to beat the paint would block parsing
+        # on every page of the store, so this one is inline.
+        self.assertIn("<script>", boot)
+        self.assertNotIn("<script src", boot)
+        self.assertIn("{% if customer %}", boot)
+        self.assertIn("{% endif %}", boot)
+
+    def test_it_acts_on_the_landing_page_and_no_other(self) -> None:
+        boot = read(self.BOOT)
+
+        # The body is not parsed yet, so the markup check that keeps a half
+        # authenticated shopper on the one-time-code step cannot run here. It
+        # judges by path, and every step of the sign-in is excluded.
+        self.assertIn("if (!/^\\/account(\\/|$)/i.test(path)) return;", boot)
+        self.assertIn(
+            "if (/^\\/account\\/(login|register|recover|auth|activate|reset)/i.test(path)) return;",
+            boot,
+        )
+
+    def test_it_agrees_with_the_module_it_stands_in_for(self) -> None:
+        boot = read(self.BOOT)
+        module = code_only(read(f"assets/{MODULE}"))
+
+        # Two copies of one rule, pinned together: the same entry, the same
+        # half-hour window, and the same refusals.
+        self.assertIn("'cc:pending-login-redirect'", boot)
+        self.assertIn("const KEY = 'cc:pending-login-redirect';", module)
+        self.assertIn("> 1800000", boot)
+        self.assertIn("const MAX_AGE_MS = 30 * 60 * 1000;", module)
+        self.assertEqual(30 * 60 * 1000, 1800000)
+        self.assertIn("if (target.charAt(0) !== '/') return;", boot)
+        self.assertIn("if (/^\\/[\\/\\\\]/.test(target)) return;", boot)
+        self.assertIn("if (/^\\/account(\\/|$)/i.test(target)) return;", boot)
+        # Consumed as it is used, exactly as the module consumes it.
+        self.assertIn("window.sessionStorage.removeItem('cc:pending-login-redirect');", boot)
+        self.assertIn("window.location.replace(target);", boot)
+
+
 class LoginRedirectMatchesWhatThePurchaseSurfacesSendTests(unittest.TestCase):
     def test_the_parameter_name_is_the_one_the_purchase_surfaces_use(self) -> None:
         module = code_only(read(f"assets/{MODULE}"))

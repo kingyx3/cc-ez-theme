@@ -23,6 +23,18 @@ const MODULE = fs.readFileSync(
   'utf8'
 );
 
+// The head snippet that finishes the trip before the landing page paints. Its
+// Liquid wrapper is a `{% if customer %}` around one script tag, so the script
+// itself is taken out and run exactly as the layout runs it.
+const BOOT_LIQUID = fs.readFileSync(
+  path.join(__dirname, '..', 'theme', 'snippets', 'login-redirect-boot.liquid'),
+  'utf8'
+);
+const BOOT = BOOT_LIQUID.slice(
+  BOOT_LIQUID.indexOf('<script>') + '<script>'.length,
+  BOOT_LIQUID.indexOf('</script>')
+);
+
 const ORIGIN = 'https://cc-theme.test';
 const PRODUCT = '/products/the-hobbit-omega-booster-pack';
 const LOGIN = '/account/login';
@@ -38,8 +50,9 @@ const OTP_STEP = `<div id="otp-form"><div class="d-flex">${
 // marker, exactly as layout/theme.liquid and sections/header.liquid render them
 // from `{% if customer %}` - which EasyStore already answers during the OTP
 // step, so the fixture renders them on that step too.
-const html = (signedIn, body = '') => `<!doctype html>
+const html = (signedIn, body = '', boot = false) => `<!doctype html>
 <html>
+  <head>${boot && signedIn ? `<script>${BOOT}</script>` : ''}</head>
   <body class="${signedIn ? 'customer-logged-in ' : ''}template-page">
     ${signedIn
       ? '<a href="/account/logout" data-customer-authenticated="true">Log out</a>'
@@ -54,7 +67,7 @@ const html = (signedIn, body = '') => `<!doctype html>
  * how the login page is served to a guest and every other page to the customer
  * the platform has just signed in.
  */
-async function serve(page, signedIn, otpAt = null) {
+async function serve(page, signedIn, otpAt = null, boot = false) {
   const authenticated = typeof signedIn === 'function' ? signedIn : () => signedIn;
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
@@ -62,7 +75,7 @@ async function serve(page, signedIn, otpAt = null) {
     const url = new URL(route.request().url());
     await route.fulfill({
       contentType: 'text/html',
-      body: html(authenticated(url), otpAt === url.pathname ? OTP_STEP : ''),
+      body: html(authenticated(url), otpAt === url.pathname ? OTP_STEP : '', boot),
     });
   });
   return {
@@ -136,6 +149,63 @@ test.describe('returning a shopper to the page they were buying from', () => {
     await store.visit('/account/auth');
     expect(await store.settle()).toBe('/account/auth');
     expect(await store.pending()).toContain(PRODUCT);
+  });
+
+  test('the landing page hands the shopper on before it paints', async ({ page }) => {
+    // Reported from the live store: the order history was visible for a moment
+    // on the way to the product. The deferred module cannot help - it runs at
+    // DOMContentLoaded, after that page has painted - so the head snippet acts
+    // first, on the one page it can judge without a body to read.
+    const store = await serve(page, guestOnLogin, null, true);
+
+    await store.visit(`${LOGIN}?redirect_uri=${encodeURIComponent(PRODUCT)}`);
+    await store.visit(ORDER_HISTORY);
+    expect(await store.settle()).toBe(PRODUCT);
+    expect(await store.pending()).toBeNull();
+  });
+
+  test('the head snippet leaves a one-time-code step alone', async ({ page }) => {
+    // It runs before the body exists, so it cannot read the OTP markup. It
+    // judges by path instead, and every step of the sign-in is excluded.
+    const store = await serve(page, true, '/account/auth', true);
+
+    await store.visit(`${LOGIN}?redirect_uri=${encodeURIComponent(PRODUCT)}`);
+    await store.visit('/account/auth');
+    expect(await store.settle()).toBe('/account/auth');
+    expect(await store.pending()).toContain(PRODUCT);
+  });
+
+  test('the head snippet leaves every page that is not the landing page', async ({ page }) => {
+    // Anywhere else, the deferred module decides with the markup in front of it.
+    const store = await serve(page, true, '/verify', true);
+
+    await store.visit(`${LOGIN}?redirect_uri=${encodeURIComponent(PRODUCT)}`);
+    await store.visit('/verify');
+    expect(await store.settle()).toBe('/verify');
+    expect(await store.pending()).toContain(PRODUCT);
+  });
+
+  test('the head snippet refuses a stale or off-site target', async ({ page }) => {
+    const store = await serve(page, guestOnLogin, null, true);
+
+    await store.visit(`${LOGIN}?redirect_uri=${encodeURIComponent(PRODUCT)}`);
+    await page.evaluate((target) => {
+      window.sessionStorage.setItem('cc:pending-login-redirect', JSON.stringify({
+        target,
+        storedAt: new Date().getTime() - (31 * 60 * 1000),
+      }));
+    }, PRODUCT);
+    await store.visit(ORDER_HISTORY);
+    expect(await store.settle()).toBe(ORDER_HISTORY);
+
+    await page.evaluate(() => {
+      window.sessionStorage.setItem('cc:pending-login-redirect', JSON.stringify({
+        target: '//evil.example/pay',
+        storedAt: new Date().getTime(),
+      }));
+    });
+    await store.visit(ORDER_HISTORY);
+    expect(await store.settle()).toBe(ORDER_HISTORY);
   });
 
   test('a stale target is dropped rather than followed', async ({ page }) => {

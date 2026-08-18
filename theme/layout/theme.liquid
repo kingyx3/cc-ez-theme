@@ -6,6 +6,13 @@
   <meta charset="utf-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
 
+  {% comment %}
+    First thing in the document after the character set: a shopper coming back
+    from signing in is sent on before EasyStore's landing page paints.
+    Everything below assumes the page it is on is the page that stays.
+  {% endcomment %}
+  {% include 'login-redirect-boot' %}
+
   {% if settings.favicon_img %}
   <link rel="icon" href="{{ settings.favicon_img }}" />
   {% endif %}

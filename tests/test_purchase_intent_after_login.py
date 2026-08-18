@@ -148,6 +148,39 @@ class TheAttemptIsAnsweredOnlyWhereItAppliesTests(unittest.TestCase):
             limits,
         )
 
+    def test_the_chosen_quantity_comes_back_capped(self) -> None:
+        limits = code_only(read("assets/customer-order-limits.js"))
+
+        # The page is freshly rendered after login, so the field says 1 whatever
+        # the shopper chose. Their number is put back, never above what may
+        # still be bought and never above what the field itself allows.
+        self.assertIn("const requested = Math.max(1, quantity(intent.quantity, 1));", limits)
+        self.assertIn("const cap = remaining === null ? requested : remaining;", limits)
+        self.assertIn("if (cap < 1) return;", limits)
+        self.assertIn(
+            "const restored = Math.min(requested, cap, inputMaximum > 0 ? inputMaximum : requested);",
+            limits,
+        )
+        # The same event the theme's own plus button emits, so the quantity note
+        # and the buttons settle on the restored number.
+        self.assertIn("input.dispatchEvent(new Event('change', { bubbles: true }));", limits)
+        # Only ever the product form's own field: a cart line is changed by a
+        # request to the store, never by writing into it here.
+        self.assertIn("const input = form && form.querySelector('[name=\"quantity\"]');", limits)
+        self.assertNotIn('updates[]\']);', limits)
+
+    def test_the_quantity_is_restored_whether_or_not_there_is_a_message(self) -> None:
+        limits = code_only(read("assets/customer-order-limits.js"))
+
+        # A shopper who can still buy what they asked for gets their number back
+        # too, so the restore runs before the violation is even looked at.
+        self.assertIn(
+            "    restoreQuantity(addToCartFormFor(intent.handle), intent);\n"
+            "\n"
+            "    const violation = additionViolation(intent.handle, intent.quantity);",
+            limits,
+        )
+
     def test_the_message_lands_on_the_surface_the_click_came_from(self) -> None:
         limits = code_only(read("assets/customer-order-limits.js"))
 
