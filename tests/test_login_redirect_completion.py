@@ -96,12 +96,17 @@ class LoginRedirectRefusesUnsafeTargetsTests(unittest.TestCase):
 
         self.assertIn("const MAX_AGE_MS = 30 * 60 * 1000;", module)
         self.assertIn("if (new Date().getTime() - storedAt > MAX_AGE_MS) return '';", module)
-        # Removed as it is read, so a target can never divert a second sign-in.
-        self.assertIn("window.sessionStorage.removeItem(KEY);", module)
-        self.assertLess(
-            module.index("window.sessionStorage.removeItem(KEY);"),
-            module.index("if (!raw) return '';"),
+        # Read where it lies and removed as it is taken, whether or not it was
+        # usable, so a target can never divert a second sign-in and a stale one
+        # never blocks a fresher one from replacing it.
+        self.assertIn(
+            "  const take = () => {\n"
+            "    const target = readPending();",
+            module,
         )
+        self.assertIn("window.sessionStorage.removeItem(KEY);", module)
+        self.assertEqual(module.count("window.sessionStorage.removeItem(KEY);"), 1)
+        self.assertNotIn("removeItem", module.split("const take = ")[0])
 
     def test_the_platform_login_post_is_left_alone(self) -> None:
         module = code_only(read(f"assets/{MODULE}"))
@@ -139,13 +144,13 @@ class LoginRedirectRefusesUnsafeTargetsTests(unittest.TestCase):
         # The step is checked before the markers, and returns without leaving.
         self.assertIn(
             "    if (stillAuthenticating()) {\n"
-            "      if (requested) store(requested);\n"
-            "      return;\n"
-            "    }\n"
-            "\n"
-            "    if (!signedIn()) return;",
+            "      if (requested) {\n"
+            "        store(requested);\n"
+            "        return;\n"
+            "      }",
             module,
         )
+        self.assertIn("    if (!signedIn()) return;", module)
         self.assertLess(
             module.index("stillAuthenticating()"),
             module.index("if (!signedIn()) return;"),
@@ -155,6 +160,90 @@ class LoginRedirectRefusesUnsafeTargetsTests(unittest.TestCase):
         for marker in ("#otp-form", ".otp-input", 'input[name="customer[password]"]'):
             with self.subTest(marker=marker):
                 self.assertIn(marker, module)
+
+
+class LoginRedirectRemembersWhereTheShopperCameFromTests(unittest.TestCase):
+    """A shopper who opens the login page themselves carries no target.
+
+    Nothing sent them there, so there is no `redirect_uri`, and the platform's
+    landing page is the same order history. The page they came from is where
+    they were, so that is recorded instead.
+    """
+
+    def test_the_previous_page_is_read_from_the_navigation_itself(self) -> None:
+        module = code_only(read(f"assets/{MODULE}"))
+
+        # Same origin only, through the same target rules as everything else,
+        # and never the page it is already on.
+        self.assertIn("const referrer = String(document.referrer || '');", module)
+        self.assertIn("if (previous.origin !== window.location.origin) return '';", module)
+        self.assertIn(
+            "const target = safeTarget(`${previous.pathname}${previous.search}`);",
+            module,
+        )
+        self.assertIn("return target === here() ? '' : target;", module)
+
+    def test_it_never_displaces_what_a_purchase_surface_recorded(self) -> None:
+        module = code_only(read(f"assets/{MODULE}"))
+
+        # The parameter answers first and returns; a recorded target stops the
+        # referrer from being written over it; and only a shopper the page
+        # proves is signed out gets one recorded at all, so a customer who
+        # opens the login page for some other reason is not bounced out of it.
+        self.assertIn(
+            "      const pending = readPending();\n"
+            "      if ((pending && pending !== HOME) "
+            "|| !document.querySelector(SIGNED_OUT_MARKUP)) return;\n"
+            "      store(referrerTarget() || HOME);",
+            module,
+        )
+        self.assertLess(module.index("store(requested);"), module.index("referrerTarget()"))
+        self.assertIn(
+            "const SIGNED_OUT_MARKUP = '[data-customer-authenticated=\"false\"]';",
+            module,
+        )
+
+    def test_a_sign_in_with_nowhere_to_go_back_to_lands_on_the_front_page(self) -> None:
+        module = code_only(read(f"assets/{MODULE}"))
+
+        # The order history EasyStore picks is a list of past orders; the front
+        # page is somewhere to shop from. It is recorded while the shopper is
+        # still signing in, so the trip completes through the same path as any
+        # other target - the head snippet included.
+        self.assertIn("const HOME = '/';", module)
+        self.assertIn("store(referrerTarget() || HOME);", module)
+        # The least specific target there is, so a page the shopper actually
+        # came from may still replace it, and nothing else may.
+        self.assertIn(
+            "      if ((pending && pending !== HOME) "
+            "|| !document.querySelector(SIGNED_OUT_MARKUP)) return;",
+            module,
+        )
+
+    def test_the_front_page_survives_the_target_rules(self) -> None:
+        module = code_only(read(f"assets/{MODULE}"))
+        boot = read("snippets/login-redirect-boot.liquid")
+
+        # Both copies refuse a target that is not a same-origin path, and "/"
+        # has to pass both or the default would be recorded and then dropped.
+        self.assertIn("if (!target || target.charAt(0) !== '/') return '';", module)
+        self.assertIn("if (target.charAt(0) !== '/') return;", boot)
+        for refusal in ("/[/\\\\]", "account"):
+            with self.subTest(refusal=refusal):
+                self.assertIn(refusal, module)
+        # A one-character path trips neither the protocol-relative rule nor the
+        # account rule, which is what makes "/" a usable default.
+        self.assertNotIn("charAt(1)", module)
+
+    def test_the_guest_marker_is_one_the_theme_really_renders(self) -> None:
+        module = code_only(read(f"assets/{MODULE}"))
+        limits = read("assets/customer-order-limits.js")
+        header = read("sections/header.liquid")
+
+        marker = "const SIGNED_OUT_MARKUP = '[data-customer-authenticated=\"false\"]';"
+        self.assertIn(marker, module)
+        self.assertIn(marker, limits)
+        self.assertIn('data-customer-authenticated="false"', header)
 
 
 class LoginRedirectFinishesBeforeTheLandingPagePaintsTests(unittest.TestCase):
