@@ -28,15 +28,23 @@ const PRODUCT = '/products/the-hobbit-omega-booster-pack';
 const LOGIN = '/account/login';
 const ORDER_HISTORY = '/account/orders';
 
+// The platform's one-time-code widget, as scripts/otp-widget-capture.console.js
+// captured it from the live step. It renders no form of its own.
+const OTP_STEP = `<div id="otp-form"><div class="d-flex">${
+  Array.from({ length: 6 }, () => '<input type="number" class="otp-input" maxlength="1">').join('')
+}</div></div>`;
+
 // The signed-in markers are the layout's body class and the header's account
 // marker, exactly as layout/theme.liquid and sections/header.liquid render them
-// from `{% if customer %}`.
-const html = (signedIn) => `<!doctype html>
+// from `{% if customer %}` - which EasyStore already answers during the OTP
+// step, so the fixture renders them on that step too.
+const html = (signedIn, body = '') => `<!doctype html>
 <html>
   <body class="${signedIn ? 'customer-logged-in ' : ''}template-page">
     ${signedIn
       ? '<a href="/account/logout" data-customer-authenticated="true">Log out</a>'
       : '<a href="/account/login" data-customer-authenticated="false">Log in</a>'}
+    ${body}
     <script>${MODULE}</script>
   </body>
 </html>`;
@@ -46,7 +54,7 @@ const html = (signedIn) => `<!doctype html>
  * how the login page is served to a guest and every other page to the customer
  * the platform has just signed in.
  */
-async function serve(page, signedIn) {
+async function serve(page, signedIn, otpAt = null) {
   const authenticated = typeof signedIn === 'function' ? signedIn : () => signedIn;
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
@@ -54,7 +62,7 @@ async function serve(page, signedIn) {
     const url = new URL(route.request().url());
     await route.fulfill({
       contentType: 'text/html',
-      body: html(authenticated(url)),
+      body: html(authenticated(url), otpAt === url.pathname ? OTP_STEP : ''),
     });
   });
   return {
@@ -171,10 +179,47 @@ test.describe('returning a shopper to the page they were buying from', () => {
     expect(await store.settle()).toBe(`/collections/all?redirect_uri=${encodeURIComponent(PRODUCT)}`);
   });
 
-  test('a shopper already signed in on the login page goes straight through', async ({ page }) => {
+  test('the one-time-code step is never left, however signed in it looks', async ({ page }) => {
+    // Reported from the live store: EasyStore counts a shopper who has passed
+    // the mobile-number step as a customer, so the layout class and the header
+    // marker are both there while the code is still outstanding. Reading them
+    // threw the shopper to the product page having typed only their number.
+    const store = await serve(page, true, '/account/auth');
+
+    await store.visit(`${LOGIN}?redirect_uri=${encodeURIComponent(PRODUCT)}`);
+    await store.visit('/account/auth');
+    expect(await store.settle()).toBe('/account/auth');
+    expect(await store.pending()).toContain(PRODUCT);
+
+    // The code is confirmed and EasyStore lands them on the account area, which
+    // asks for nothing further. Now the trip finishes.
+    await store.visit(ORDER_HISTORY);
+    expect(await store.settle()).toBe(PRODUCT);
+  });
+
+  test('a step is recognised by its markup even off an account path', async ({ page }) => {
+    // The platform owns those URLs and has moved this step before, so the OTP
+    // widget's own markup decides too, wherever it is served from.
+    const store = await serve(page, true, '/verify');
+
+    await store.visit(`${LOGIN}?redirect_uri=${encodeURIComponent(PRODUCT)}`);
+    await store.visit('/verify');
+    expect(await store.settle()).toBe('/verify');
+    expect(await store.pending()).toContain(PRODUCT);
+
+    await store.visit(ORDER_HISTORY);
+    expect(await store.settle()).toBe(PRODUCT);
+  });
+
+  test('a signed-in shopper on the login page is not moved by the page itself', async ({ page }) => {
+    // The login page asks for a step, so it is never left from. The target is
+    // recorded and completed on the next page that asks for nothing.
     const store = await serve(page, true);
 
     await store.visit(`${LOGIN}?redirect_uri=${encodeURIComponent(PRODUCT)}`);
+    expect(await store.settle()).toBe(`${LOGIN}?redirect_uri=${encodeURIComponent(PRODUCT)}`);
+
+    await store.visit(ORDER_HISTORY);
     expect(await store.settle()).toBe(PRODUCT);
   });
 });

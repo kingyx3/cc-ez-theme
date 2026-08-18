@@ -95,7 +95,15 @@ class TheAttemptIsAnsweredOnlyWhereItAppliesTests(unittest.TestCase):
             "  );",
             limits,
         )
-        self.assertIn("if (onAccountPage() || !shopperSignedIn()) return;", limits)
+        # An account page is where EasyStore lands them and a step still on the
+        # page means the sign-in is not finished, so neither answers an attempt.
+        self.assertIn("if (stillAuthenticating() || !shopperSignedIn()) return;", limits)
+        self.assertIn(
+            "  const stillAuthenticating = () => (\n"
+            "    onAccountPage() || Boolean(document.querySelector(AUTHENTICATING_MARKUP))\n"
+            "  );",
+            limits,
+        )
 
     def test_the_answer_waits_for_history_instead_of_assuming_none(self) -> None:
         limits = code_only(read("assets/customer-order-limits.js"))
