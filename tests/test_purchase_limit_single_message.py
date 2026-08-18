@@ -67,6 +67,29 @@ class PurchaseLimitSingleMessageTests(unittest.TestCase):
         self.assertIn("content.textContent = text;", feedback)
         self.assertNotIn("this.showQuantityLimit(text, 'error');", feedback)
 
+    def test_reaching_the_ceiling_says_nothing_only_being_refused_does(self) -> None:
+        # Stepping the quantity up to the last unit a shopper may buy is a
+        # permitted action, and the plus handler fired on ">= the maximum", so
+        # selecting exactly what was allowed produced "Limit: 2 units per
+        # customer." The handler cannot see whether `quantity-input` actually
+        # stepped the field, so the value before the click is recorded for it.
+        feedback = self.read("assets/purchase-limit-feedback.js")
+
+        self.assertIn("stepper.dataset.purchaseLimitQuantityBefore = String(", feedback)
+        self.assertIn("{ capture: true }", feedback)
+        self.assertIn(
+            "if (Number.isFinite(before) && selectedQuantity !== before) return;",
+            feedback,
+        )
+
+    def test_a_landed_addition_leaves_the_shopper_unwarned(self) -> None:
+        # The field keeps the quantity just bought while the allowance behind it
+        # shrinks by that much, so revalidating on that number told someone who
+        # had successfully added 2 of 3 that they could "add 1 more unit".
+        product = self.read("assets/product-form.js")
+
+        self.assertIn("if (cartConfirmed) this.purchaseLimitInteracted = false;", product)
+
     def test_storefront_and_editor_copies_match(self) -> None:
         for name in (
             "product-form.js",

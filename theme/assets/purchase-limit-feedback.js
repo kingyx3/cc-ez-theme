@@ -263,6 +263,20 @@
 
       plusButton.dataset.purchaseLimitMaximum = maximum == null ? '' : String(maximum);
 
+      // What the field held before `quantity-input` stepped it. Recorded from a
+      // capture listener on the wrapper, which runs ahead of the button's own
+      // listeners wherever inside the button the click landed.
+      const stepper = this.quantityInput.closest('quantity-input');
+      if (stepper && stepper.dataset.purchaseLimitStepBound !== 'true') {
+        stepper.dataset.purchaseLimitStepBound = 'true';
+        stepper.addEventListener('click', (event) => {
+          if (!event.target?.closest?.('[name="plus"]')) return;
+          stepper.dataset.purchaseLimitQuantityBefore = String(
+            Math.max(1, Number.parseInt(this.quantityInput.value, 10) || 1)
+          );
+        }, { capture: true });
+      }
+
       if (plusButton.dataset.purchaseLimitFeedbackBound === 'true') return;
       plusButton.dataset.purchaseLimitFeedbackBound = 'true';
       plusButton.addEventListener('click', () => {
@@ -276,6 +290,15 @@
         );
 
         if (!Number.isFinite(allowedMaximum) || selectedQuantity < allowedMaximum) return;
+
+        // The step landed, so the shopper has exactly what they asked for and is
+        // at the ceiling rather than past it. Selecting the last unit you are
+        // allowed to buy is not a limit to be told about; only a refused step is.
+        const before = Number.parseInt(
+          stepper && stepper.dataset.purchaseLimitQuantityBefore,
+          10
+        );
+        if (Number.isFinite(before) && selectedQuantity !== before) return;
 
         const limit = this.getQuantityLimit();
         if (!limit) return;

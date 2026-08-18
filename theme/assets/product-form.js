@@ -423,6 +423,13 @@ if (!customElements.get('product-form')) {
           );
         }
 
+        // The addition landed, so the shopper is owed no warning. The field
+        // keeps the quantity they just bought while the allowance behind it has
+        // shrunk by that much, and revalidating on that stale number told
+        // someone who had successfully added 2 of 3 that they could "add 1 more
+        // unit". Their request was met; the next one starts the question again.
+        if (cartConfirmed) this.purchaseLimitInteracted = false;
+
         if (buyNow && !cartConfirmed) {
           this.openBuyNowLimitModal(
             window.purchaseStrings.addLimitError
