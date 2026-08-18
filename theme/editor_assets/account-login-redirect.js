@@ -11,6 +11,12 @@
  * lands them, so the theme remembers the target and completes the trip on the
  * first page that proves the shopper is signed in.
  *
+ * A shopper who simply opens the login page themselves carries no target at
+ * all, and the platform's landing page is the same order history. The page they
+ * came from is where they were, so that is remembered instead - but only when
+ * nothing has already been recorded, so a purchase on its way to sign-in is
+ * never displaced by the page the shopper happened to arrive from.
+ *
  * The target is remembered in `sessionStorage`, which is per tab and survives
  * the full page loads the platform's login flow performs. It is consumed on the
  * first signed-in page load whether or not it is used, so a target can never
@@ -46,6 +52,11 @@
   // marker, and any sign-out link. Missing markup proves nothing either way,
   // and is read here as "not signed in yet", which only defers the redirect.
   const SIGNED_IN_MARKUP = 'body.customer-logged-in, [data-customer-authenticated="true"], a[href^="/account/logout"]';
+  // The header's guest marker, and the only proof of being signed out this
+  // theme renders. Recording where a shopper came from is for a shopper who is
+  // about to sign in; a customer who opens the login page for some other reason
+  // must not be bounced back out of it.
+  const SIGNED_OUT_MARKUP = '[data-customer-authenticated="false"]';
 
   // Pages where a shopper is in the middle of authenticating: the theme's own
   // login and register templates, and the platform-rendered steps they hand off
@@ -112,11 +123,13 @@
     }
   };
 
-  const take = () => {
+  // The recorded target, left where it is. An entry that is stale, damaged, or
+  // no longer safe reads as nothing recorded, so it neither travels nor blocks
+  // a fresher one from being written over it.
+  const readPending = () => {
     let raw = null;
     try {
       raw = window.sessionStorage.getItem(KEY);
-      window.sessionStorage.removeItem(KEY);
     } catch (_error) {
       return '';
     }
@@ -132,6 +145,36 @@
     }
   };
 
+  const take = () => {
+    const target = readPending();
+    // Cleared whether or not it was usable, so a target can never divert a
+    // second sign-in.
+    try {
+      window.sessionStorage.removeItem(KEY);
+    } catch (_error) {
+      /* nothing was recorded to clear */
+    }
+    return target;
+  };
+
+  // Where the shopper was before they came to sign in. `document.referrer` is
+  // the previous page of this navigation, so it is read only on the page they
+  // arrived at - by the time the platform's own steps have posted, it names one
+  // of those steps and is refused like any other account path.
+  const referrerTarget = () => {
+    const referrer = String(document.referrer || '');
+    if (!referrer) return '';
+    let previous = null;
+    try {
+      previous = new URL(referrer, window.location.href);
+    } catch (_error) {
+      return '';
+    }
+    if (previous.origin !== window.location.origin) return '';
+    const target = safeTarget(`${previous.pathname}${previous.search}`);
+    return target === here() ? '' : target;
+  };
+
   const start = () => {
     const requested = requestedTarget();
 
@@ -139,7 +182,19 @@
     // moment to trust the signed-in markers. A page carrying a target records
     // it; every other step, the OTP included, leaves the recorded one alone.
     if (stillAuthenticating()) {
-      if (requested) store(requested);
+      if (requested) {
+        store(requested);
+        return;
+      }
+
+      // Nothing sent this shopper here, so where they came from is where they
+      // were. It never displaces a target a purchase surface recorded, and it
+      // is only written for a shopper the page proves is signed out - a
+      // customer who opens the login page for some other reason is not bounced
+      // back out of it.
+      if (readPending() || !document.querySelector(SIGNED_OUT_MARKUP)) return;
+      const previous = referrerTarget();
+      if (previous) store(previous);
       return;
     }
 

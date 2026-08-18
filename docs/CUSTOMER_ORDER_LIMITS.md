@@ -140,6 +140,14 @@ EasyStore ignores `redirect_uri`. It signs the customer in through its own flow 
 1. on a login, register, or recovery page, a guest's `redirect_uri` is recorded in `sessionStorage` under `cc:pending-login-redirect` with a timestamp;
 2. on the first page that proves the shopper is signed in — the account page EasyStore chose — the recorded target is read, removed, and navigated to with `location.replace`, so Back returns to the product rather than to the account page.
 
+**A shopper who opens the login page themselves is remembered too.** Nothing sent them there, so there is no `redirect_uri`, and EasyStore's landing page is the same order history — rarely where they were going. The page they came from is, so `document.referrer` is recorded instead, under three conditions:
+
+- a `redirect_uri` always wins, and a target a purchase surface already recorded is never displaced by it;
+- the referrer must be same-origin and pass the same target rules as everything else, which refuses any `/account` page — so once the platform's own steps have posted and the referrer names one of them, it is ignored;
+- it is only recorded for a shopper the page proves is signed out, by the header's `[data-customer-authenticated="false"]`. A customer who opens the login page for some other reason is not bounced back out of it.
+
+With no referrer at all — a typed URL, or a referrer policy that strips it — nothing is recorded and the platform's landing page stands, as before.
+
 **The landing page must not be seen on the way past.** The module is deferred, so it runs at `DOMContentLoaded` — a paint too late, and the order history was visible for a moment before the product appeared. `snippets/login-redirect-boot.liquid` is included in the layout's `<head>`, immediately after the character set and before anything the platform injects, so a shopper coming back is sent on before the body is parsed. It is inline because an external script early enough to beat the paint would block parsing on every page of the store to serve one.
 
 Running that early costs it the body: the markup check below cannot run there. So it acts on one page only — an `/account` page that is **not** one of EasyStore's sign-in steps, which is where the platform lands a customer whose sign-in has finished. Every other page is left to the deferred module, which has the markup in front of it. The two share an entry, a half-hour window, and the same refusals; `tests/test_login_redirect_completion.py` pins the copies together, and `e2e/login-redirect.spec.js` runs the snippet's own script the way the layout runs it.
