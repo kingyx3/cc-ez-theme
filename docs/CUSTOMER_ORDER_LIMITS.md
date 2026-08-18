@@ -14,7 +14,7 @@ This feature limits a signed-in customer to a configured number of units for an 
 | `MTG-HOB-GFB-EN` | 1 |
 | `MTG-HOB-PBB-EN` | 12 |
 | `MTG-HOB-PRK-EN-SET4` | 3 |
-| `MTG-HOB-OBP-EN` | 10 |
+| `MTG-HOB-OBP-EN` | 2 |
 | `MTG-HOB-SCN-EN-SET2` | 2 |
 | `MTG-MSH-JBB-EN` | 6 |
 | `MTG-MSH-CMD-EN-CE-SET4` | 1 |
