@@ -191,9 +191,10 @@ class LoginRedirectRemembersWhereTheShopperCameFromTests(unittest.TestCase):
         # proves is signed out gets one recorded at all, so a customer who
         # opens the login page for some other reason is not bounced out of it.
         self.assertIn(
-            "      if (readPending() || !document.querySelector(SIGNED_OUT_MARKUP)) return;\n"
-            "      const previous = referrerTarget();\n"
-            "      if (previous) store(previous);",
+            "      const pending = readPending();\n"
+            "      if ((pending && pending !== HOME) "
+            "|| !document.querySelector(SIGNED_OUT_MARKUP)) return;\n"
+            "      store(referrerTarget() || HOME);",
             module,
         )
         self.assertLess(module.index("store(requested);"), module.index("referrerTarget()"))
@@ -201,6 +202,38 @@ class LoginRedirectRemembersWhereTheShopperCameFromTests(unittest.TestCase):
             "const SIGNED_OUT_MARKUP = '[data-customer-authenticated=\"false\"]';",
             module,
         )
+
+    def test_a_sign_in_with_nowhere_to_go_back_to_lands_on_the_front_page(self) -> None:
+        module = code_only(read(f"assets/{MODULE}"))
+
+        # The order history EasyStore picks is a list of past orders; the front
+        # page is somewhere to shop from. It is recorded while the shopper is
+        # still signing in, so the trip completes through the same path as any
+        # other target - the head snippet included.
+        self.assertIn("const HOME = '/';", module)
+        self.assertIn("store(referrerTarget() || HOME);", module)
+        # The least specific target there is, so a page the shopper actually
+        # came from may still replace it, and nothing else may.
+        self.assertIn(
+            "      if ((pending && pending !== HOME) "
+            "|| !document.querySelector(SIGNED_OUT_MARKUP)) return;",
+            module,
+        )
+
+    def test_the_front_page_survives_the_target_rules(self) -> None:
+        module = code_only(read(f"assets/{MODULE}"))
+        boot = read("snippets/login-redirect-boot.liquid")
+
+        # Both copies refuse a target that is not a same-origin path, and "/"
+        # has to pass both or the default would be recorded and then dropped.
+        self.assertIn("if (!target || target.charAt(0) !== '/') return '';", module)
+        self.assertIn("if (target.charAt(0) !== '/') return;", boot)
+        for refusal in ("/[/\\\\]", "account"):
+            with self.subTest(refusal=refusal):
+                self.assertIn(refusal, module)
+        # A one-character path trips neither the protocol-relative rule nor the
+        # account rule, which is what makes "/" a usable default.
+        self.assertNotIn("charAt(1)", module)
 
     def test_the_guest_marker_is_one_the_theme_really_renders(self) -> None:
         module = code_only(read(f"assets/{MODULE}"))

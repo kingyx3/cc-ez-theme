@@ -13,9 +13,11 @@
  *
  * A shopper who simply opens the login page themselves carries no target at
  * all, and the platform's landing page is the same order history. The page they
- * came from is where they were, so that is remembered instead - but only when
- * nothing has already been recorded, so a purchase on its way to sign-in is
- * never displaced by the page the shopper happened to arrive from.
+ * came from is where they were, so that is remembered instead - and where even
+ * that is unknown, the shop's own front page is, which is somewhere to shop
+ * from rather than a list of past orders. Neither displaces a target already
+ * recorded, so a purchase on its way to sign-in is never diverted by the page
+ * the shopper happened to arrive from.
  *
  * The target is remembered in `sessionStorage`, which is per tab and survives
  * the full page loads the platform's login flow performs. It is consumed on the
@@ -43,6 +45,10 @@
   'use strict';
 
   const KEY = 'cc:pending-login-redirect';
+  // Where a sign-in with nothing else to say ends. It is also the least
+  // specific target there is, so a page the shopper actually came from may
+  // still replace it while they are signing in.
+  const HOME = '/';
   // Long enough for an OTP that arrives slowly, short enough that a target can
   // never outlive the purchase the shopper was making.
   const MAX_AGE_MS = 30 * 60 * 1000;
@@ -188,13 +194,13 @@
       }
 
       // Nothing sent this shopper here, so where they came from is where they
-      // were. It never displaces a target a purchase surface recorded, and it
-      // is only written for a shopper the page proves is signed out - a
-      // customer who opens the login page for some other reason is not bounced
-      // back out of it.
-      if (readPending() || !document.querySelector(SIGNED_OUT_MARKUP)) return;
-      const previous = referrerTarget();
-      if (previous) store(previous);
+      // were, and the front page if even that is unknown. Neither displaces a
+      // target a purchase surface recorded, and neither is written unless the
+      // page proves the shopper is signed out - a customer who opens the login
+      // page for some other reason is not bounced back out of it.
+      const pending = readPending();
+      if ((pending && pending !== HOME) || !document.querySelector(SIGNED_OUT_MARKUP)) return;
+      store(referrerTarget() || HOME);
       return;
     }
 

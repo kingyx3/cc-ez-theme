@@ -146,7 +146,9 @@ EasyStore ignores `redirect_uri`. It signs the customer in through its own flow 
 - the referrer must be same-origin and pass the same target rules as everything else, which refuses any `/account` page — so once the platform's own steps have posted and the referrer names one of them, it is ignored;
 - it is only recorded for a shopper the page proves is signed out, by the header's `[data-customer-authenticated="false"]`. A customer who opens the login page for some other reason is not bounced back out of it.
 
-With no referrer at all — a typed URL, or a referrer policy that strips it — nothing is recorded and the platform's landing page stands, as before.
+**With no referrer either** — a typed URL, a bookmark, a referrer policy that strips it, or one pointing off-site — the shop's front page `/` is recorded instead. A list of past orders is not somewhere to shop from. It is the least specific target there is, so it is also the one target a page the shopper actually came from may still replace while they are signing in; nothing else may.
+
+Because the default is recorded during the sign-in rather than decided on arrival, a customer who simply opens their order history has nothing recorded and is left exactly where they asked to be.
 
 **The landing page must not be seen on the way past.** The module is deferred, so it runs at `DOMContentLoaded` — a paint too late, and the order history was visible for a moment before the product appeared. `snippets/login-redirect-boot.liquid` is included in the layout's `<head>`, immediately after the character set and before anything the platform injects, so a shopper coming back is sent on before the body is parsed. It is inline because an external script early enough to beat the paint would block parsing on every page of the store to serve one.
 

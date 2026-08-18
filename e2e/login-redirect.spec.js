@@ -38,6 +38,7 @@ const BOOT = BOOT_LIQUID.slice(
 const ORIGIN = 'https://cc-theme.test';
 const ELSEWHERE = 'https://cc-other.test';
 const COLLECTION = '/collections/all';
+const HOME = '/';
 const PRODUCT = '/products/the-hobbit-omega-booster-pack';
 const LOGIN = '/account/login';
 const ORDER_HISTORY = '/account/orders';
@@ -275,11 +276,13 @@ test.describe('returning a shopper to the page they were buying from', () => {
     await page.goto(`${ELSEWHERE}/somewhere`);
     await page.click('a');
     await page.waitForURL((url) => url.pathname === LOGIN);
-    expect(await store.pending()).toBeNull();
+    // The other site is refused, so what is recorded is the front page.
+    expect(await store.pending()).not.toContain(ELSEWHERE);
+    expect(await store.pending()).toContain('"/"');
 
     authenticated = true;
     await store.visit(ORDER_HISTORY);
-    expect(await store.settle()).toBe(ORDER_HISTORY);
+    expect(await store.settle()).toBe(HOME);
   });
 
   test('a customer who opens the login page is not bounced back out of it', async ({ page }) => {
@@ -291,6 +294,57 @@ test.describe('returning a shopper to the page they were buying from', () => {
     await page.goto(`${ORIGIN}${LOGIN}`, { referer: `${ORIGIN}${COLLECTION}` });
     expect(await store.pending()).toBeNull();
     expect(await store.settle()).toBe(LOGIN);
+  });
+
+  test('signing in with nowhere to go back to lands on the front page', async ({ page }) => {
+    // Opened the login page directly - typed, bookmarked, or with the referrer
+    // stripped. The order history is not somewhere to shop from; the shop is.
+    let authenticated = false;
+    const store = await serve(page, () => authenticated);
+
+    await store.visit(LOGIN);
+    expect(await store.pending()).toContain('"/"');
+
+    authenticated = true;
+    await store.visit(ORDER_HISTORY);
+    expect(await store.settle()).toBe(HOME);
+  });
+
+  test('the page they came from beats the front page', async ({ page }) => {
+    let authenticated = false;
+    const store = await serve(page, () => authenticated);
+
+    // The front page is recorded first, by opening the login page directly, and
+    // is the one target a real page is still allowed to replace.
+    await store.visit(LOGIN);
+    expect(await store.pending()).toContain('"/"');
+    await store.visit(COLLECTION);
+    await store.followLoginLink();
+
+    authenticated = true;
+    await store.visit(ORDER_HISTORY);
+    expect(await store.settle()).toBe(COLLECTION);
+  });
+
+  test('a customer who came for their order history is left on it', async ({ page }) => {
+    // No sign-in happened in this tab, so nothing was recorded and nothing
+    // moves them off the page they asked for.
+    const store = await serve(page, true, null, true);
+
+    await store.visit(ORDER_HISTORY);
+    expect(await store.settle()).toBe(ORDER_HISTORY);
+    expect(await store.pending()).toBeNull();
+  });
+
+  test('the front page is reached before the landing page paints', async ({ page }) => {
+    let authenticated = false;
+    const store = await serve(page, () => authenticated, null, true);
+
+    await store.visit(LOGIN);
+    authenticated = true;
+    await store.visit(ORDER_HISTORY);
+    expect(await store.settle()).toBe(HOME);
+    expect(await store.pending()).toBeNull();
   });
 
   test('a stale target is dropped rather than followed', async ({ page }) => {
@@ -319,9 +373,13 @@ test.describe('returning a shopper to the page they were buying from', () => {
       '/account/logout',
     ]) {
       await store.visit(`${LOGIN}?redirect_uri=${encodeURIComponent(hostile)}`);
-      expect(await store.pending(), `${hostile} must not be recorded`).toBeNull();
+      // Refused, so the front page is recorded in its place - never the
+      // parameter, and never an account page.
+      expect(await store.pending(), `${hostile} must not be recorded`).toContain('"/"');
+      expect(await store.pending(), `${hostile} must not be recorded`).not.toContain('evil.example');
+
       await store.visit(ORDER_HISTORY);
-      expect(await store.settle(), `${hostile} must not be followed`).toBe(ORDER_HISTORY);
+      expect(await store.settle(), `${hostile} must not be followed`).toBe(HOME);
     }
   });
 
