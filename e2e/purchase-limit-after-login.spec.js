@@ -5,7 +5,7 @@
  * click does not survive the round trip through EasyStore's login. If the
  * customer's allowance is already spent, the page they come back to used to say
  * nothing about it: the button looked ready and only a second press produced
- * "Customer purchase limit reached". So the attempt is recorded when the
+ * "Limit reached: 2 units per customer". So the attempt is recorded when the
  * shopper is sent away and answered when they return, and what has to be true
  * of it is a sequence of real page loads.
  *
@@ -31,8 +31,8 @@ const CART = '/cart';
 const ORDER_HISTORY = '/account/orders';
 const INTENT_KEY = 'cc:pending-purchase-intent';
 
-const SPENT = 'Customer purchase limit reached. You have already purchased 2 units of the 2 units allowed per customer across orders.';
-const CART_SPENT = 'Customer purchase limit reached. You have already purchased 2 units of the 2 units allowed, so remove this product before checkout.';
+const SPENT = 'Limit reached: 2 units per customer. You have already ordered 2.';
+const CART_SPENT = 'Limit reached: 2 units per customer. You have already ordered 2, so remove this item to check out.';
 
 /** Mirrors what `customer-order-limit-rule.liquid` publishes for one product. */
 const published = (scenario) => {
@@ -344,9 +344,9 @@ test.describe('answering the purchase attempt that signing in interrupted', () =
     await store.settle();
 
     expect(await store.quantity()).toEqual({ value: '2', changes: 1 });
-    expect(await store.productError()).toBe(
-      'Customer purchase limit exceeded. You can add up to 2 units more. The limit is 2 units per customer across orders.'
-    );
+    // Nothing has been ordered in this scenario, so the ceiling and what may be
+    // added are the same number and the copy states it once.
+    expect(await store.productError()).toBe('Limit: 2 units per customer.');
   });
 
   test('a quantity that was always allowed comes back as it was', async ({ page }) => {
