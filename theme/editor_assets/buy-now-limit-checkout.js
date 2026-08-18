@@ -98,7 +98,11 @@
     if (
       limits
       && limits.loginRequiredForHandle(productHandle(form))
-      && limits.redirectToLogin()
+      && limits.redirectToLogin({
+        handle: productHandle(form),
+        quantity: form.querySelector('[name="quantity"]')?.value,
+        surface: 'buy-now',
+      })
     ) {
       event.preventDefault();
       event.stopImmediatePropagation();

@@ -70,7 +70,11 @@
       if (
         limits
         && limits.loginRequiredForHandle(this.button.dataset.productHandle)
-        && limits.redirectToLogin()
+        && limits.redirectToLogin({
+          handle: this.button.dataset.productHandle,
+          quantity: this.button.dataset.quantity,
+          surface: 'listing',
+        })
       ) {
         this.setLoading(false);
         return;
