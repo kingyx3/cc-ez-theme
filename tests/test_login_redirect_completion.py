@@ -107,12 +107,54 @@ class LoginRedirectRefusesUnsafeTargetsTests(unittest.TestCase):
         module = code_only(read(f"assets/{MODULE}"))
         login = read("templates/customers/login.liquid")
 
-        # Writing into EasyStore's account forms is what once broke signup, so
-        # this module reads the URL and navigates, and touches no form at all.
-        for forbidden in ("form", ".value =", "submit(", "dispatchEvent"):
+        # Writing into EasyStore's account forms and its one-time-code cells is
+        # what once broke signup outright. This module names them in a selector
+        # and asks whether they are on the page; it writes nothing, submits
+        # nothing, dispatches nothing, and listens to nothing but the document's
+        # own ready event.
+        for forbidden in (".value =", ".submit(", "dispatchEvent", "MutationObserver"):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, module)
+        self.assertEqual(module.count("document.addEventListener"), 1)
+        self.assertIn("document.addEventListener('DOMContentLoaded', start);", module)
+        # Every form and cell reference lives in that one selector list.
+        self.assertEqual(module.count("form[action"), 2)
+        self.assertEqual(module.count(".otp-input"), 1)
+        self.assertEqual(module.count("document.querySelector(AUTHENTICATING_MARKUP)"), 1)
         self.assertIn('<form id="form-login" action="/account/login" method="post">', login)
+
+    def test_a_page_still_asking_for_a_step_is_never_left(self) -> None:
+        module = code_only(read(f"assets/{MODULE}"))
+
+        # Reported from the live store: EasyStore counts a shopper who has
+        # passed the mobile-number step as a customer, so the signed-in markers
+        # are all present while the one-time code is still outstanding. Reading
+        # them there threw the shopper to the product page unauthenticated.
+        self.assertIn(
+            "  const stillAuthenticating = () => (\n"
+            "    AUTH_PATH.test(path()) || Boolean(document.querySelector(AUTHENTICATING_MARKUP))\n"
+            "  );",
+            module,
+        )
+        # The step is checked before the markers, and returns without leaving.
+        self.assertIn(
+            "    if (stillAuthenticating()) {\n"
+            "      if (requested) store(requested);\n"
+            "      return;\n"
+            "    }\n"
+            "\n"
+            "    if (!signedIn()) return;",
+            module,
+        )
+        self.assertLess(
+            module.index("stillAuthenticating()"),
+            module.index("if (!signedIn()) return;"),
+        )
+        # The markup half matters on its own: the OTP step renders no form, and
+        # the platform owns its URL, so neither signal can carry the check alone.
+        for marker in ("#otp-form", ".otp-input", 'input[name="customer[password]"]'):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, module)
 
 
 class LoginRedirectMatchesWhatThePurchaseSurfacesSendTests(unittest.TestCase):

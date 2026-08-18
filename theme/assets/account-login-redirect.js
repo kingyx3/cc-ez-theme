@@ -21,6 +21,17 @@
  * to it and no value is written into it. Theme scripts writing into EasyStore's
  * account forms is what once broke signup outright, and a shopper landing on
  * the right page one paint later is not worth that risk.
+ *
+ * Being signed in is not the same as having finished signing in. EasyStore
+ * treats a shopper who has passed the mobile-number step as a customer while
+ * the one-time code is still outstanding, so the layout renders
+ * `body.customer-logged-in` and the header renders its signed-in marker on the
+ * OTP step itself. The first deployed version read those markers there and
+ * threw the shopper to the product page after they had typed nothing but their
+ * mobile number, unauthenticated and with the code unconfirmed. A page that is
+ * still asking for a step is therefore never a page to leave, whatever the
+ * markers say, and that is decided from the markup as well as the path: the OTP
+ * step renders no form of its own, and its URL is the platform's to change.
  */
 (() => {
   'use strict';
@@ -38,14 +49,34 @@
 
   // Pages where a shopper is in the middle of authenticating: the theme's own
   // login and register templates, and the platform-rendered steps they hand off
-  // to. A `redirect_uri` is only ever recorded from one of these.
+  // to - `/account/auth` and `/account/auth/send` carry the one-time code.
   const AUTH_PATH = /^\/account\/(login|register|recover|auth|activate|reset)/i;
+
+  // The same step read from the markup, because the path alone cannot be
+  // trusted to name it: EasyStore owns those URLs and has moved this step
+  // before. `#otp-form .otp-input` is the live widget's own markup, captured by
+  // scripts/otp-widget-capture.console.js; the rest are the fields the theme's
+  // own login and register templates render.
+  const AUTHENTICATING_MARKUP = [
+    '#otp-form',
+    '.otp-input',
+    'input[name="customer[password]"]',
+    'input[name="customer[email_or_phone]"]',
+    'form[action^="/account/login"]',
+    'form[action^="/account/auth"]',
+  ].join(', ');
 
   const path = () => String(window.location.pathname || '');
 
   const here = () => `${path()}${String(window.location.search || '')}`;
 
   const signedIn = () => Boolean(document.querySelector(SIGNED_IN_MARKUP));
+
+  // Read before the sign-in markers and allowed to overrule them: a half
+  // authenticated shopper carries every marker a finished one does.
+  const stillAuthenticating = () => (
+    AUTH_PATH.test(path()) || Boolean(document.querySelector(AUTHENTICATING_MARKUP))
+  );
 
   // Only a same-origin path this store serves is ever navigated to. A protocol,
   // a protocol-relative `//host`, a backslash host, or anything carrying control
@@ -103,19 +134,20 @@
 
   const start = () => {
     const requested = requestedTarget();
-    const authenticating = AUTH_PATH.test(path());
 
-    if (!signedIn()) {
-      // Still signing in. A login page that carries a target records it; every
-      // other page, including the OTP step, leaves the recorded one alone.
-      if (authenticating && requested) store(requested);
+    // A step is still outstanding, so this is not a page to leave and not a
+    // moment to trust the signed-in markers. A page carrying a target records
+    // it; every other step, the OTP included, leaves the recorded one alone.
+    if (stillAuthenticating()) {
+      if (requested) store(requested);
       return;
     }
 
-    // Signed in, so the trip is over: the recorded target is consumed here even
-    // when it is not used, and the parameter still counts on an account page in
-    // case the platform forwarded it or storage was unavailable.
-    const target = take() || (authenticating ? requested : '');
+    if (!signedIn()) return;
+
+    // Signed in on a page that is asking for nothing further, so the trip is
+    // over: the recorded target is consumed here even when it is not used.
+    const target = take();
     if (!target || target === here()) return;
 
     // `replace` so Back returns to the product page's history entry rather than

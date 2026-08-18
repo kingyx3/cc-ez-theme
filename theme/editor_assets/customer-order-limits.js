@@ -947,6 +947,25 @@
     customerAuthenticated || Boolean(document.querySelector(SIGNED_IN_MARKUP))
   );
 
+  // A shopper who has passed the mobile-number step but not the one-time code
+  // carries every signed-in marker a finished customer does, so a step still on
+  // the page overrules them. `#otp-form .otp-input` is the platform widget's own
+  // markup; the rest are the fields the theme's login and register templates
+  // render. The path is checked too, but never on its own: EasyStore owns those
+  // URLs, and the OTP step renders no form to recognise it by.
+  const AUTHENTICATING_MARKUP = [
+    '#otp-form',
+    '.otp-input',
+    'input[name="customer[password]"]',
+    'input[name="customer[email_or_phone]"]',
+    'form[action^="/account/login"]',
+    'form[action^="/account/auth"]',
+  ].join(', ');
+
+  const stillAuthenticating = () => (
+    onAccountPage() || Boolean(document.querySelector(AUTHENTICATING_MARKUP))
+  );
+
   const addToCartFormFor = (handle) => {
     const normalized = normalizeHandle(handle);
     return Array.from(document.querySelectorAll('product-form form')).find(
@@ -982,8 +1001,10 @@
   const applyPurchaseIntent = () => {
     // EasyStore lands a freshly signed-in customer on its own account page, and
     // account-login-redirect.js is about to move them off it, so the attempt is
-    // answered on the page they actually return to rather than in passing.
-    if (onAccountPage() || !shopperSignedIn()) return;
+    // answered on the page they actually return to rather than in passing. A
+    // page still asking for a one-time code is not that page either: the
+    // shopper counts as a customer there while the code is outstanding.
+    if (stillAuthenticating() || !shopperSignedIn()) return;
     const intent = takePurchaseIntent();
     if (!intent) return;
 
