@@ -170,6 +170,69 @@ For a guest, no limit rule contributes a quantity maximum, disables a purchase o
 
 The redirect is scoped to the product being bought. A limited product sitting in the cart never diverts Add to Cart or Buy Now for a different product; only the cart's own checkout controls consider the whole cart.
 
+## Coming back after signing in
+
+EasyStore ignores `redirect_uri`. It signs the customer in through its own flow — the login POST, then the OTP step it renders at `/account/auth` — and then lands them on the account area, which is why a shopper who clicked Buy Now arrived at their **order history** instead of the product they were buying. No theme setting changes where the platform lands them, so `assets/account-login-redirect.js` completes the trip from the theme side:
+
+1. on a login, register, or recovery page, a guest's `redirect_uri` is recorded in `sessionStorage` under `cc:pending-login-redirect` with a timestamp;
+2. on the first page that proves the shopper is signed in — the account page EasyStore chose — the recorded target is read, removed, and navigated to with `location.replace`, so Back returns to the product rather than to the account page.
+
+**A shopper who opens the login page themselves is remembered too.** Nothing sent them there, so there is no `redirect_uri`, and EasyStore's landing page is the same order history — rarely where they were going. The page they came from is, so `document.referrer` is recorded instead, under three conditions:
+
+- a `redirect_uri` always wins, and a target a purchase surface already recorded is never displaced by it;
+- the referrer must be same-origin and pass the same target rules as everything else, which refuses any `/account` page — so once the platform's own steps have posted and the referrer names one of them, it is ignored;
+- it is only recorded for a shopper the page proves is signed out, by the header's `[data-customer-authenticated="false"]`. A customer who opens the login page for some other reason is not bounced back out of it.
+
+**With no referrer either** — a typed URL, a bookmark, a referrer policy that strips it, or one pointing off-site — the shop's front page `/` is recorded instead. A list of past orders is not somewhere to shop from. It is the least specific target there is, so it is also the one target a page the shopper actually came from may still replace while they are signing in; nothing else may.
+
+Because the default is recorded during the sign-in rather than decided on arrival, a customer who simply opens their order history has nothing recorded and is left exactly where they asked to be.
+
+**The landing page must not be seen on the way past.** The module is deferred, so it runs at `DOMContentLoaded` — a paint too late, and the order history was visible for a moment before the product appeared. `snippets/login-redirect-boot.liquid` is included in the layout's `<head>`, immediately after the character set and before anything the platform injects, so a shopper coming back is sent on before the body is parsed. It is inline because an external script early enough to beat the paint would block parsing on every page of the store to serve one.
+
+Running that early costs it the body: the markup check below cannot run there. So it acts on one page only — an `/account` page that is **not** one of EasyStore's sign-in steps, which is where the platform lands a customer whose sign-in has finished. Every other page is left to the deferred module, which has the markup in front of it. The two share an entry, a half-hour window, and the same refusals; `tests/test_login_redirect_completion.py` pins the copies together, and `e2e/login-redirect.spec.js` runs the snippet's own script the way the layout runs it.
+
+The module loads from `layout/theme.liquid` on every page, because the platform picks the landing page and it need not be an account page.
+
+**Signed in is not the same as finished signing in.** EasyStore counts a shopper who has passed the mobile-number step as a customer while the one-time code is still outstanding, so `body.customer-logged-in` and the header's signed-in marker are both rendered on the OTP step itself. The first deployed version read them there and threw the shopper to the product page having typed nothing but their mobile number — unauthenticated, with the code unconfirmed. A page that is still asking for a step is therefore never a page to leave, whatever the markers say, and that is decided two ways because neither is sufficient alone:
+
+- the path — `/account/login`, `register`, `recover`, `auth` (where the code is confirmed), `activate`, `reset`;
+- the markup — `#otp-form` and `.otp-input`, the platform widget's own cells, plus the password and account fields the theme's login and register templates render. The OTP step renders no form of its own and its URL belongs to EasyStore, so the markup has to carry the check where the path cannot.
+
+Both modules read that markup and nothing more: no value is written into a cell, no event is dispatched, and no listener is attached to one. That line is what the "Customer already exists (phone)" outage was about, and it is not crossed here.
+
+The rest of the safeguards:
+
+- the target is consumed on the first signed-in page load whether or not it is used, so it can never divert a later, unrelated sign-in, and it expires after 30 minutes regardless;
+- only a same-origin path is followed. A protocol, a protocol-relative `//host`, a backslash host, a control character, or an `/account` path is discarded, so the parameter cannot be used to bounce a shopper off the store or back into the sign-in flow;
+- landing on the target already — should the platform ever start honouring the parameter — clears the entry and navigates nowhere;
+- `sessionStorage` being unavailable means the redirect is simply not completed; nothing throws and no purchase path changes.
+
+The platform's login form is deliberately untouched: no field is added to it and no value is written into it. Theme scripts writing into EasyStore's account forms is what broke signup with "Customer already exists (phone)", and landing on the right page one paint later is not worth repeating that.
+
+`e2e/login-redirect.spec.js` runs the module through the real page loads — login page, account landing, product — against pages it serves itself, so it needs no storefront and no store account. `tests/test_login_redirect_completion.py` covers the wiring: both asset trees, the layout include, and the parameter name shared with `customer-order-limits.js` and `cart.js`.
+
+## The attempt that signing in interrupted
+
+The click a guest made does not survive the round trip through the platform's login, so it is recorded when they are sent away and answered when they come back. Without that, a customer whose allowance was already spent on previous orders returned to a page that said nothing about it: the button looked ready, and only pressing it a second time produced "Customer purchase limit reached".
+
+Every surface that redirects a guest names what was being bought — `redirectToLogin({ handle, quantity, surface })` — and the attempt is kept in `sessionStorage` under `cc:pending-purchase-intent` with a timestamp. `surface` is one of `product` (Add to Cart), `buy-now`, `listing` (quick-add), or `cart` (checkout with a limited product in the cart).
+
+On the first page that proves the shopper is signed in, the attempt is read, removed, and answered with the message that click would have produced, on the surface that click came from: the product form's own error for a product page, the listing alert for quick-add, and the cart error for checkout. A shopper who can still buy what they asked for is told nothing.
+
+What the answer is careful about:
+
+- **it waits for history.** Answering before the `/account/orders` pass lands would measure against an allowance that assumes nothing was ever bought — the reverse of the mistake worth making — so it waits for the load to land or to give up (`customer-order-limits:history` or `customer-order-limits:history-unavailable`);
+- **it needs proof of signing in**, not merely the absence of proof of signing out, so an attempt is never answered for someone whose allowance cannot be measured. A guest who abandons the sign-in keeps their attempt until they sign in or it expires after 30 minutes;
+- **it skips `/account` pages and any page still asking for a step.** The first is where EasyStore lands a freshly signed-in customer, and `account-login-redirect.js` is about to move them on; the second is a sign-in that has not finished, where the shopper counts as a customer while the one-time code is outstanding. The answer belongs on the page they actually return to;
+- **it is consumed once**, whether or not it is used, so an attempt answered on one page can never resurface on the next;
+- **Buy Now with the allowance already in the cart says nothing.** That button checks out with what the cart holds rather than failing, so a warning there would contradict what pressing it does.
+
+**The quantity comes back too.** The page is freshly rendered after login, so the field says 1 whatever the shopper chose before they were sent away. Their number is put back, capped at what may still be bought: five asked for with two left becomes 2, and the message says why. A field left at 1 makes them type it again; a field left at 5 cannot be submitted at all. With nothing left to buy there is no quantity worth offering, so the field keeps its 1 beside the message and the disabled button. The restore writes to the product form's own quantity field and emits the same `change` event the theme's plus button emits — a cart line is only ever changed by a request to the store, never by writing into it.
+
+Nothing is bought automatically on the way back. The shopper returns to the page they were on, with the quantity they chose, is told if the purchase cannot go through, and presses the button themselves otherwise.
+
+`e2e/purchase-limit-after-login.spec.js` drives the real module through the real page loads for each surface — product page, listing, cart, and the account page in between — against pages it serves itself, including the account order page the history loader reads. `tests/test_purchase_intent_after_login.py` covers what behaviour cannot see: that every redirecting surface names its attempt, and that the answer stays confined to a shopper whose allowance can be measured.
+
 ## How sign-in state is decided
 
 A wrong redirect breaks buying for real customers, so the storefront redirects only when the page proves the shopper is signed out. Three signals are read, in order:

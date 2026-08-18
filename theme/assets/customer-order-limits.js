@@ -118,8 +118,60 @@
     return `/account/login?redirect_uri=${encodeURIComponent(target)}`;
   };
 
-  const redirectToLogin = () => {
+  // What the shopper was trying to buy when they were sent to sign in. The
+  // click cannot survive the round trip through EasyStore's login, so the
+  // attempt is recorded here and answered on the page they come back to: a
+  // customer whose allowance is already spent would otherwise return to a page
+  // that says nothing about it until they press the button a second time.
+  const INTENT_KEY = 'cc:pending-purchase-intent';
+  // The same window the login redirect keeps its target for, so an attempt and
+  // the trip back from login expire together.
+  const INTENT_MAX_AGE_MS = 1800000;
+
+  // Storage is unavailable in some privacy modes. The attempt is then simply
+  // not replayed, exactly as it is not replayed today.
+  const rememberPurchaseIntent = (intent) => {
+    if (!intent) return;
+    try {
+      window.sessionStorage.setItem(INTENT_KEY, JSON.stringify({
+        handle: normalizeHandle(intent.handle),
+        quantity: Math.max(1, quantity(intent.quantity, 1)),
+        surface: String(intent.surface || 'product'),
+        storedAt: nowMs(),
+      }));
+    } catch (_error) {
+      /* the attempt is not recorded */
+    }
+  };
+
+  // Read once and removed as it is read, so an attempt answered on one page can
+  // never resurface on the next one.
+  const takePurchaseIntent = () => {
+    let raw = null;
+    try {
+      raw = window.sessionStorage.getItem(INTENT_KEY);
+      window.sessionStorage.removeItem(INTENT_KEY);
+    } catch (_error) {
+      return null;
+    }
+    if (!raw) return null;
+    try {
+      const intent = JSON.parse(raw);
+      const storedAt = quantity(intent && intent.storedAt, 0);
+      if (!storedAt || storedAt + INTENT_MAX_AGE_MS < nowMs()) return null;
+      return {
+        handle: normalizeHandle(intent && intent.handle),
+        quantity: Math.max(1, quantity(intent && intent.quantity, 1)),
+        surface: String((intent && intent.surface) || 'product'),
+      };
+    } catch (_error) {
+      return null;
+    }
+  };
+
+  const redirectToLogin = (intent = null) => {
     if (!shopperSignedOut()) return false;
+    rememberPurchaseIntent(intent);
     window.location.assign(loginRedirectUrl());
     return true;
   };
@@ -780,11 +832,11 @@
 
   // Only takes over the event when the shopper is actually being redirected, so
   // an unproven sign-in state leaves the native purchase path untouched.
-  const sendToLogin = (event) => {
+  const sendToLogin = (event, intent = null) => {
     if (!shopperSignedOut()) return false;
     event.preventDefault();
     event.stopImmediatePropagation();
-    return redirectToLogin();
+    return redirectToLogin(intent);
   };
 
   document.addEventListener('click', (event) => {
@@ -794,7 +846,11 @@
     if (listingButton) {
       if (
         loginRequiredForHandle(listingButton.dataset.productHandle)
-        && sendToLogin(event)
+        && sendToLogin(event, {
+          handle: listingButton.dataset.productHandle,
+          quantity: listingButton.dataset.quantity,
+          surface: 'listing',
+        })
       ) return;
       if (historyBlocks(listingButton.dataset.productHandle)) {
         event.preventDefault();
@@ -819,7 +875,14 @@
       const owner = buyNowButton.closest('product-form');
       const form = owner?.querySelector('form');
       const handle = formHandle(form);
-      if (loginRequiredForHandle(handle) && sendToLogin(event)) return;
+      if (
+        loginRequiredForHandle(handle)
+        && sendToLogin(event, {
+          handle,
+          quantity: form?.querySelector('[name="quantity"]')?.value,
+          surface: 'buy-now',
+        })
+      ) return;
       if (historyBlocks(handle)) {
         event.preventDefault();
         event.stopImmediatePropagation();
@@ -850,7 +913,7 @@
 
     const cartForm = event.target.closest('#cart-form');
     if (cartForm && event.target.closest('.cart__ctas')) {
-      if (loginRequiredForCartForm(cartForm) && sendToLogin(event)) return;
+      if (loginRequiredForCartForm(cartForm) && sendToLogin(event, { surface: 'cart' })) return;
       if (historyBlocksCart(cartTotalsFromForm(cartForm))) {
         event.preventDefault();
         event.stopImmediatePropagation();
@@ -874,7 +937,14 @@
 
     if (isAddToCartForm(form)) {
       const handle = formHandle(form);
-      if (loginRequiredForHandle(handle) && sendToLogin(event)) return;
+      if (
+        loginRequiredForHandle(handle)
+        && sendToLogin(event, {
+          handle,
+          quantity: form.querySelector('[name="quantity"]')?.value,
+          surface: 'product',
+        })
+      ) return;
       if (historyBlocks(handle)) {
         event.preventDefault();
         event.stopImmediatePropagation();
@@ -900,7 +970,7 @@
         || submitter.name === 'expresscheckout'
         || submitter.id === 'checkout';
       if (!isCheckout) return;
-      if (loginRequiredForCartForm(form) && sendToLogin(event)) return;
+      if (loginRequiredForCartForm(form) && sendToLogin(event, { surface: 'cart' })) return;
       if (historyBlocksCart(cartTotalsFromForm(form))) {
         event.preventDefault();
         event.stopImmediatePropagation();
@@ -916,6 +986,126 @@
     }
   }, true);
 
+  // --- the attempt that signing in interrupted -------------------------------
+  // Proof of sign-in, not merely the absence of proof of signing out: an
+  // attempt is answered for a customer whose allowance can actually be
+  // measured, and is left untouched for anyone else.
+  const shopperSignedIn = () => (
+    customerAuthenticated || Boolean(document.querySelector(SIGNED_IN_MARKUP))
+  );
+
+  // A shopper who has passed the mobile-number step but not the one-time code
+  // carries every signed-in marker a finished customer does, so a step still on
+  // the page overrules them. `#otp-form .otp-input` is the platform widget's own
+  // markup; the rest are the fields the theme's login and register templates
+  // render. The path is checked too, but never on its own: EasyStore owns those
+  // URLs, and the OTP step renders no form to recognise it by.
+  const AUTHENTICATING_MARKUP = [
+    '#otp-form',
+    '.otp-input',
+    'input[name="customer[password]"]',
+    'input[name="customer[email_or_phone]"]',
+    'form[action^="/account/login"]',
+    'form[action^="/account/auth"]',
+  ].join(', ');
+
+  const stillAuthenticating = () => (
+    onAccountPage() || Boolean(document.querySelector(AUTHENTICATING_MARKUP))
+  );
+
+  const addToCartFormFor = (handle) => {
+    const normalized = normalizeHandle(handle);
+    return Array.from(document.querySelectorAll('product-form form')).find(
+      (form) => isAddToCartForm(form) && formHandle(form) === normalized
+    ) || null;
+  };
+
+  // The page came back from login freshly rendered, so the quantity the shopper
+  // chose is gone and the field says 1. What they asked for is put back, capped
+  // at what may still be bought: a field left at 1 makes them type 5 again, and
+  // a field left at 5 when only 2 remain cannot be submitted at all. With
+  // nothing left to buy there is no quantity worth offering, so the field keeps
+  // its 1 beside the message and the disabled button.
+  const restoreQuantity = (form, intent) => {
+    const input = form && form.querySelector('[name="quantity"]');
+    if (!input) return;
+
+    const requested = Math.max(1, quantity(intent.quantity, 1));
+    const remaining = remainingForHandle(intent.handle);
+    const cap = remaining === null ? requested : remaining;
+    if (cap < 1) return;
+
+    // `max` is whatever the page settled on - the limit, the stock, a store
+    // rule - so it is never exceeded here either.
+    const inputMaximum = quantity(input.getAttribute('max'), 0);
+    const restored = Math.min(requested, cap, inputMaximum > 0 ? inputMaximum : requested);
+    if (restored < 1 || String(restored) === String(input.value)) return;
+
+    input.value = String(restored);
+    // The product form validates on `change`, so the quantity note and the
+    // buttons settle on the restored number rather than on the rendered 1.
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+
+  // The message a click would have produced, on the surface that click came
+  // from. A shopper who can still buy what they asked for is told nothing.
+  const answerPurchaseIntent = (intent) => {
+    if (intent.surface === 'cart') {
+      const violation = cartViolation();
+      if (violation) showCartError(violation.message);
+      return violation;
+    }
+
+    // Done before the message and whether or not there is one: a shopper who
+    // can still buy what they asked for gets their number back too.
+    restoreQuantity(addToCartFormFor(intent.handle), intent);
+
+    const violation = additionViolation(intent.handle, intent.quantity);
+    if (!violation) return null;
+    // Buy Now with the allowance already in the cart means "check out with what
+    // I have" rather than a dead end, which is what the button still does, so
+    // there is nothing to warn the shopper about.
+    if (
+      intent.surface === 'buy-now'
+      && violation.remaining <= 0
+      && cartQuantityForHandle(intent.handle) > 0
+    ) return null;
+    const form = addToCartFormFor(intent.handle);
+    if (form) showProductError(form, violation.message);
+    else showListingError(violation.message);
+    return violation;
+  };
+
+  const applyPurchaseIntent = () => {
+    // EasyStore lands a freshly signed-in customer on its own account page, and
+    // account-login-redirect.js is about to move them off it, so the attempt is
+    // answered on the page they actually return to rather than in passing. A
+    // page still asking for a one-time code is not that page either: the
+    // shopper counts as a customer there while the code is outstanding.
+    if (stillAuthenticating() || !shopperSignedIn()) return;
+    const intent = takePurchaseIntent();
+    if (!intent) return;
+
+    // Measuring before history has landed would measure against an allowance
+    // that assumes nothing was ever bought, which is the reverse of the mistake
+    // worth making, so the answer waits for the load to land or to give up.
+    const waiting = intent.surface === 'cart'
+      ? historyBlocksCart()
+      : historyBlocks(intent.handle);
+    if (!waiting) {
+      answerPurchaseIntent(intent);
+      return;
+    }
+
+    const answer = () => {
+      document.removeEventListener('customer-order-limits:history', answer);
+      document.removeEventListener('customer-order-limits:history-unavailable', answer);
+      answerPurchaseIntent(intent);
+    };
+    document.addEventListener('customer-order-limits:history', answer);
+    document.addEventListener('customer-order-limits:history-unavailable', answer);
+  };
+
   window.CustomerOrderLimits = {
     customerAuthenticated,
     normalizeHandle,
@@ -926,6 +1116,9 @@
     loginRequiredForCartForm,
     loginRedirectUrl,
     redirectToLogin,
+    rememberPurchaseIntent,
+    takePurchaseIntent,
+    applyPurchaseIntent,
     cartTotalsFromForm,
     historyState: () => historyState,
     historyLines: () => appliedHistoryLines.slice(),
@@ -962,4 +1155,6 @@
     // Report the honest state so nothing waits for a load that cannot happen.
     else historyState = 'unavailable';
   }
+
+  applyPurchaseIntent();
 })();

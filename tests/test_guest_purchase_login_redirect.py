@@ -91,22 +91,36 @@ class GuestPurchaseLoginRedirectTests(unittest.TestCase):
         # Callers must be able to fall through to native behaviour when no
         # redirect happened, so both helpers return a boolean and every caller
         # guards its preventDefault on that result.
-        self.assertIn("    return redirectToLogin();\n  };", limits)
-        self.assertIn("if (loginRequiredForHandle(handle) && sendToLogin(event)) return;", limits)
+        self.assertIn("    return redirectToLogin(intent);\n  };", limits)
         self.assertIn(
-            "        loginRequiredForHandle(listingButton.dataset.productHandle)\n"
-            "        && sendToLogin(event)\n"
-            "      ) return;",
+            "        loginRequiredForHandle(handle)\n"
+            "        && sendToLogin(event, {\n"
+            "          handle,\n",
             limits,
         )
-        self.assertIn("if (loginRequiredForCartForm(cartForm) && sendToLogin(event)) return;", limits)
-        self.assertIn("if (loginRequiredForCartForm(form) && sendToLogin(event)) return;", limits)
+        self.assertIn(
+            "        loginRequiredForHandle(listingButton.dataset.productHandle)\n"
+            "        && sendToLogin(event, {\n"
+            "          handle: listingButton.dataset.productHandle,\n",
+            limits,
+        )
+        self.assertIn(
+            "if (loginRequiredForCartForm(cartForm) && sendToLogin(event, { surface: 'cart' })) return;",
+            limits,
+        )
+        self.assertIn(
+            "if (loginRequiredForCartForm(form) && sendToLogin(event, { surface: 'cart' })) return;",
+            limits,
+        )
         for exported in (
             "loginRequiredForHandle,",
             "loginRequiredForCart,",
             "loginRequiredForCartForm,",
             "loginRedirectUrl,",
             "redirectToLogin,",
+            "rememberPurchaseIntent,",
+            "takePurchaseIntent,",
+            "applyPurchaseIntent,",
         ):
             with self.subTest(exported=exported):
                 self.assertIn(exported, limits)
@@ -154,20 +168,25 @@ class GuestPurchaseLoginRedirectTests(unittest.TestCase):
 
         self.assertIn("/account/login?redirect_uri=${encodeURIComponent(target)}", limits)
         self.assertIn("window.location.assign(loginRedirectUrl())", limits)
-        self.assertEqual(limits.count("sendToLogin(event)"), 5)
+        self.assertEqual(limits.count("sendToLogin(event, "), 5)
 
+        # Every surface names what was being bought, so the attempt can be
+        # answered on the page the shopper comes back to.
         self.assertIn(
             "&& limits.loginRequiredForHandle(this.button.dataset.productHandle)\n"
-            "        && limits.redirectToLogin()",
+            "        && limits.redirectToLogin({\n"
+            "          handle: this.button.dataset.productHandle,\n",
             listing,
         )
         self.assertIn(
             "&& limits.loginRequiredForHandle(productHandle(form))\n"
-            "      && limits.redirectToLogin()",
+            "      && limits.redirectToLogin({\n"
+            "        handle: productHandle(form),\n",
             buy_now,
         )
         self.assertIn(
-            "if (api.loginRequiredForCartForm(form) && api.redirectToLogin()) {",
+            "if (api.loginRequiredForCartForm(form) "
+            "&& api.redirectToLogin({ surface: 'cart' })) {",
             cart,
         )
 

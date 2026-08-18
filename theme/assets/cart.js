@@ -25,7 +25,7 @@ document.addEventListener('submit', (event) => {
   const api = customerOrderLimitApi();
   if (!api) return;
 
-  if (api.loginRequiredForCartForm(form) && api.redirectToLogin()) {
+  if (api.loginRequiredForCartForm(form) && api.redirectToLogin({ surface: 'cart' })) {
     event.preventDefault();
     event.stopImmediatePropagation();
     return;

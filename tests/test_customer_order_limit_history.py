@@ -142,8 +142,10 @@ class HistoryPayloadStructureTests(unittest.TestCase):
             limits,
         )
         # A purchase attempted before history is known is held, never measured
-        # against an allowance that assumes nothing was bought.
-        self.assertEqual(limits.count("historyBlocks("), 4)
+        # against an allowance that assumes nothing was bought. The fifth reader
+        # is the attempt that signing in interrupted, which waits for the same
+        # load rather than answering from an empty history.
+        self.assertEqual(limits.count("historyBlocks("), 5)
         self.assertIn("const HISTORY_PENDING_MESSAGE =", limits)
         # Failure must fall open rather than block selling.
         self.assertIn("historyState = 'unavailable';", limits)

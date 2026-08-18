@@ -1,0 +1,70 @@
+{% comment %}
+  Completes the sign-in trip before the landing page paints.
+
+  `assets/account-login-redirect.js` remembers where a shopper was buying from
+  and sends them back there once they are signed in, but it is deferred: it runs
+  at DOMContentLoaded, by which time EasyStore's own landing page - the order
+  history - has already painted. The shopper saw their orders flash past on the
+  way to the product they were buying.
+
+  This runs in the head instead, before the body is parsed, so the trip finishes
+  without that page appearing. Being inline is the point: an external script
+  early enough to beat the paint would block parsing on every page of the store
+  to serve one, and this is around twenty lines.
+
+  The body is not parsed yet, so the markup check that keeps a half-authenticated
+  shopper on the one-time-code step cannot run here. This therefore acts on one
+  page only - an `/account` page that is not one of EasyStore's sign-in steps,
+  which is where it lands a customer whose sign-in has finished. Every other page
+  is left to the deferred module, which reads the markup and decides properly.
+
+  The stored target and its half-hour window belong to that module; both are
+  named here as well, and tests/test_login_redirect_completion.py pins the two
+  copies together.
+{% endcomment %}
+{% if customer %}
+  <script>
+    (function () {
+      'use strict';
+
+      var path = String(window.location.pathname || '');
+      // The landing page, and never a step: /account/auth carries the one-time
+      // code, and a shopper there is a customer to EasyStore but not yet to us.
+      if (!/^\/account(\/|$)/i.test(path)) return;
+      if (/^\/account\/(login|register|recover|auth|activate|reset)/i.test(path)) return;
+
+      var raw = null;
+      try {
+        raw = window.sessionStorage.getItem('cc:pending-login-redirect');
+      } catch (error) {
+        return;
+      }
+      if (!raw) return;
+
+      var pending = null;
+      try {
+        pending = JSON.parse(raw);
+      } catch (error) {
+        return;
+      }
+
+      var storedAt = Number(pending && pending.storedAt);
+      if (!isFinite(storedAt) || new Date().getTime() - storedAt > 1800000) return;
+
+      // The same target rules the module applies on the way in and on the way
+      // out: a same-origin path, never a protocol-relative or backslash host,
+      // and never back into the account area.
+      var target = String((pending && pending.target) || '');
+      if (target.charAt(0) !== '/') return;
+      if (/^\/[\/\\]/.test(target)) return;
+      if (/^\/account(\/|$)/i.test(target)) return;
+
+      try {
+        window.sessionStorage.removeItem('cc:pending-login-redirect');
+      } catch (error) {
+        /* the module clears it on the page this lands on */
+      }
+      window.location.replace(target);
+    })();
+  </script>
+{% endif %}
