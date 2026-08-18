@@ -47,21 +47,16 @@ class HistoryPayloadStructureTests(unittest.TestCase):
         self.assertIn('"customer":', history)
         self.assertIn('"truncated":', history)
         # Cancelled orders and unreadable dates follow the same rules as the
-        # inline pass, and the line cap keeps the payload bounded.
-        # `order.is_cancelled` is an integer on EasyStore, and Liquid treats 0 as
-        # truthy: an unless on the raw value skipped every order and published an
-        # empty payload on a live store whose account page listed the orders.
+        # inline pass, and the line cap keeps the payload bounded. The two passes
+        # share one cancellation snippet so a field name added for one of them
+        # cannot leave the other publishing lines it should have dropped.
         self.assertNotIn("{%- unless order.is_cancelled -%}", history)
+        self.assertNotIn("order.is_cancelled", history)
         self.assertIn(
-            "{%- assign customer_order_limit_history_cancelled = order.is_cancelled"
-            " | default: 0 | append: '' | strip | downcase -%}",
+            "{%- include 'customer-order-limit-cancelled', cancelled_order: order -%}",
             history,
         )
-        self.assertIn(
-            "{%- unless customer_order_limit_history_cancelled == '1'"
-            " or customer_order_limit_history_cancelled == 'true' -%}",
-            history,
-        )
+        self.assertIn("{%- unless customer_order_limit_cancelled -%}", history)
         self.assertIn("order.created_at | date: '%s' | plus: 0", history)
         self.assertIn("order.line_items | default: order.items", history)
         self.assertIn("customer_order_limit_history_count >= 500", history)
@@ -120,6 +115,11 @@ class HistoryPayloadStructureTests(unittest.TestCase):
         self.assertIn("first line read", snippet)
         self.assertIn("out('current tab'", snippet)
         self.assertIn("out('tabs'", snippet)
+        # A cancelled order that still consumes an allowance is a field name the
+        # theme is not reading, and only the store can say which one, so the raw
+        # cancellation fields are printed alongside the count of skipped orders.
+        self.assertIn("out('cancelledOrdersSeen'", snippet)
+        self.assertIn("out('orderStatuses'", snippet)
 
     def test_rules_publish_the_window_start_for_client_filtering(self) -> None:
         rule = self.read("snippets/customer-order-limit-rule.liquid")
@@ -203,6 +203,7 @@ class HistoryPayloadRenderingTests(unittest.TestCase):
             for name in (
                 "customer-order-limit-config",
                 "customer-order-limit-window",
+                "customer-order-limit-cancelled",
                 "customer-order-limit-rule",
                 "customer-order-limit-row",
                 "customer-order-limits",
@@ -285,6 +286,39 @@ class HistoryPayloadRenderingTests(unittest.TestCase):
                 order = self.order(days_ago=3, sku=HANDLE, quantity=2)
                 order["is_cancelled"] = flag
                 self.assertEqual(self.payload([order])["lines"], [])
+
+    def test_the_payload_drops_a_cancellation_under_any_field(self) -> None:
+        # The payload is what a product or cart page counts when the page's own
+        # order objects carry no line items, so it has to drop the same orders the
+        # inline pass drops. Reading only `is_cancelled` published cancelled
+        # orders whose shape spells the flag differently, and those lines then
+        # consumed the customer's allowance on every surface.
+        for fields in (
+            {"cancelled": True},
+            {"cancelled": "1"},
+            {"cancelled_at": NOW - timedelta(days=1)},
+            {"status": "cancelled"},
+            {"financial_status_label": "Cancelled"},
+            {"fulfillment_status_label": "Cancelled"},
+        ):
+            with self.subTest(fields=fields):
+                order = self.order(days_ago=3, sku=HANDLE, quantity=2)
+                del order["is_cancelled"]
+                order.update(fields)
+                self.assertEqual(self.payload([order])["lines"], [])
+
+        for fields in (
+            {"cancelled": False},
+            {"cancelled_at": ""},
+            {"status": "completed"},
+            {"financial_status_label": "Refunded"},
+            {"fulfillment_status_label": "Fulfilled"},
+        ):
+            with self.subTest(fields=fields):
+                order = self.order(days_ago=3, sku=HANDLE, quantity=2)
+                del order["is_cancelled"]
+                order.update(fields)
+                self.assertEqual(len(self.payload([order])["lines"]), 1)
 
     def test_each_line_carries_the_ids_a_store_always_exposes(self) -> None:
         # Order line items are only guaranteed to expose the variant id — the
