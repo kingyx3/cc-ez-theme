@@ -653,14 +653,33 @@
     alert.hideTimer = window.setTimeout(() => { alert.hidden = true; }, 7000);
   };
 
+  // The quantity note is where a limit message belongs on a product form: it
+  // sits with the quantity being corrected, and it is the surface the validator
+  // keeps up to date as the shopper adjusts it. Writing the form-level alert as
+  // well left both showing the same sentence. The alert is the fallback for a
+  // form that has no note.
   const showProductError = (context, message) => {
     const productForm = context?.closest?.('product-form');
+
+    if (
+      productForm?.quantityInput
+      && productForm?.quantityLimitMessage
+      && typeof productForm.showQuantityLimit === 'function'
+    ) {
+      // A blocked purchase click is an interaction, so the validator keeps
+      // showing this rather than clearing it as unsolicited on its next pass.
+      productForm.purchaseLimitInteracted = true;
+      productForm.showQuantityLimit(String(message || 'Purchase limit reached.'), 'error');
+      return;
+    }
+
     const formMessage = productForm?.querySelector('.form__message');
     const formContent = formMessage?.querySelector('.js-error-content');
     if (!formMessage || !formContent) {
       showListingError(message);
       return;
     }
+    formMessage.dataset.purchaseLimitMessage = 'true';
     formContent.textContent = String(message || 'Purchase limit reached.');
     formMessage.classList.remove('hidden');
     formMessage.focus?.();

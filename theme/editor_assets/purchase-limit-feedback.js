@@ -390,6 +390,7 @@
 
       const cleanMessage = stripMarkup(message);
       if (!this.lastRejectedQuantityContext && !isLimitMessage(cleanMessage)) {
+        container.dataset.purchaseLimitMessage = 'false';
         content.textContent = cleanMessage;
         container.classList.remove('hidden');
         return;
@@ -400,7 +401,16 @@
         currentQuantity: this.getCurrentCartQuantity(),
         requestedQuantity: this.quantityInput ? this.quantityInput.value : 1,
       };
-      content.textContent = format({ ...context, rawMessage: cleanMessage });
+      const text = format({ ...context, rawMessage: cleanMessage });
+
+      // The store's own rejection stays in the alert. Routing it to the quantity
+      // note instead lost it outright: `setSubmitting` revalidates immediately
+      // afterwards, and a quantity that no longer breaches the rejected maximum
+      // clears the note, leaving the shopper with no message at all. If that
+      // revalidation does raise the note, it hides this alert on its way in, so
+      // the two still never show the same sentence together.
+      container.dataset.purchaseLimitMessage = 'true';
+      content.textContent = text;
       container.classList.remove('hidden');
     };
 

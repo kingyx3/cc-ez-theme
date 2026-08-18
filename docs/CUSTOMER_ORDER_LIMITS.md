@@ -139,6 +139,18 @@ Every message is one short lead naming the ceiling, followed by at most one clau
 
 Two rules decide what follows the ceiling. **Past orders are always accounted for**, because they are the one quantity a shopper cannot see on the page raising the message — told only "you can add 1 more unit (3 units per customer)" after ordering 2, they are left to work out where the other 2 went. **A number is never stated twice**: when nothing has been consumed the ceiling and what may be added are the same figure, so the message names it once.
 
+### One message per form
+
+A product form has two places a limit message can land: the note under the quantity picker (`[data-quantity-limit-message]`) and the alert under the buttons (`.form__message`). They sit a few centimetres apart, so a message written to both reads as the page saying it twice — which is what typing an over-limit quantity and then clicking **Buy Now** did. Add to Cart hid the fault: the validator sets `max` on the quantity input, so the browser's own constraint validation blocks that submit before any theme code runs. Buy Now is a `type="button"`, so nothing blocked it, and the delegated guard wrote the alert beside the note that was already showing.
+
+The note owns limit copy:
+
+- a blocked purchase attempt writes the note when the form has one, and falls back to the alert when it does not (a listing card, for instance);
+- showing the note hides an alert that holds limit copy;
+- whoever writes the alert records whether what it wrote was limit copy, in `data-purchase-limit-message`. Reading the alert's wording instead does not work — the copy often names no limit at all ("You can add 2 more units (2 units per order)."), so the note appeared beside an alert it was meant to replace.
+
+A rejection from the store is the exception and stays in the alert. `setSubmitting` revalidates immediately after it renders, and a quantity that no longer breaches the rejected maximum clears the note — routing it there lost the message entirely. If that revalidation does raise the note, it hides the alert on its way in, so the two still never show the same sentence at once.
+
 The server-rendered Liquid in `customer-order-limit-rule.liquid` mirrors these branches, including the case where an allowance spent entirely on past orders leaves nothing to reduce to — that one asks for the item to be removed rather than telling a shopper to "reduce this item to 0 to check out".
 
 The shared formatter in `purchase-limit-feedback.js` phrases store-raised limits the same way, varying only the ceiling phrase: `only 5 units in stock`, `4 units per order`, `3 units for this promotion`. A limit that already phrased its own copy is quoted verbatim rather than rebuilt, so the product page, listing and cart agree.

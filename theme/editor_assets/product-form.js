@@ -235,6 +235,16 @@ if (!customElements.get('product-form')) {
       this.quantityLimitMessage.classList.add(`quantity-limit-message--${state}`);
       this.quantityInput.setAttribute('aria-invalid', state === 'error' ? 'true' : 'false');
       if (wrapper) wrapper.classList.toggle('quantity-limit-exceeded', state === 'error');
+
+      // A form has two places a limit message could land: this note, under the
+      // quantity picker, and the alert under the buttons. On desktop they sit a
+      // few centimetres apart, so the same sentence in both reads as the page
+      // saying it twice. The note owns limit copy, so an alert already holding
+      // some steps aside. Any other error there is left alone.
+      const alertBox = this.form && this.form.querySelector('.form__message');
+      if (alertBox && alertBox.dataset.purchaseLimitMessage === 'true') {
+        this.hideErrorMsg();
+      }
     }
 
     clearQuantityLimit() {
@@ -505,7 +515,9 @@ if (!customElements.get('product-form')) {
     }
 
     renderErrorMsg(html) {
-      this.form.querySelector('.form__message').classList.remove('hidden');
+      const container = this.form.querySelector('.form__message');
+      container.dataset.purchaseLimitMessage = this.isQuantityLimitError(html) ? 'true' : 'false';
+      container.classList.remove('hidden');
       this.form.querySelector('.js-error-content').innerHTML = html;
     }
 

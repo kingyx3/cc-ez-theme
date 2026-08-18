@@ -108,7 +108,10 @@ class ContextualPurchaseLimitFeedbackTests(unittest.TestCase):
         self.assertIn("mode: 'reached'", helper)
         self.assertIn("const shouldShow = focusInvalid", helper)
         self.assertIn("this.purchaseLimitInteracted === true", helper)
-        self.assertIn("content.textContent = format", helper)
+        # The alert still renders the formatted message, but only for a form
+        # that has no quantity note to put it in.
+        self.assertIn("const text = format({ ...context, rawMessage: cleanMessage });", helper)
+        self.assertIn("content.textContent = text;", helper)
         self.assertIn("this.showQuantityLimit(", helper)
         self.assertIn("this.clearQuantityLimit();", helper)
         self.assertNotIn("quantity === limit.maximum", helper)
