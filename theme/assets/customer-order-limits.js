@@ -973,6 +973,33 @@
     ) || null;
   };
 
+  // The page came back from login freshly rendered, so the quantity the shopper
+  // chose is gone and the field says 1. What they asked for is put back, capped
+  // at what may still be bought: a field left at 1 makes them type 5 again, and
+  // a field left at 5 when only 2 remain cannot be submitted at all. With
+  // nothing left to buy there is no quantity worth offering, so the field keeps
+  // its 1 beside the message and the disabled button.
+  const restoreQuantity = (form, intent) => {
+    const input = form && form.querySelector('[name="quantity"]');
+    if (!input) return;
+
+    const requested = Math.max(1, quantity(intent.quantity, 1));
+    const remaining = remainingForHandle(intent.handle);
+    const cap = remaining === null ? requested : remaining;
+    if (cap < 1) return;
+
+    // `max` is whatever the page settled on - the limit, the stock, a store
+    // rule - so it is never exceeded here either.
+    const inputMaximum = quantity(input.getAttribute('max'), 0);
+    const restored = Math.min(requested, cap, inputMaximum > 0 ? inputMaximum : requested);
+    if (restored < 1 || String(restored) === String(input.value)) return;
+
+    input.value = String(restored);
+    // The product form validates on `change`, so the quantity note and the
+    // buttons settle on the restored number rather than on the rendered 1.
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+
   // The message a click would have produced, on the surface that click came
   // from. A shopper who can still buy what they asked for is told nothing.
   const answerPurchaseIntent = (intent) => {
@@ -981,6 +1008,10 @@
       if (violation) showCartError(violation.message);
       return violation;
     }
+
+    // Done before the message and whether or not there is one: a shopper who
+    // can still buy what they asked for gets their number back too.
+    restoreQuantity(addToCartFormFor(intent.handle), intent);
 
     const violation = additionViolation(intent.handle, intent.quantity);
     if (!violation) return null;

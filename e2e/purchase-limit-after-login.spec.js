@@ -81,7 +81,8 @@ const PRODUCT_BODY = `
   <product-form data-product-handle="${HANDLE}">
     <form action="/cart/add" method="post">
       <input type="hidden" name="id" value="101">
-      <input type="number" name="quantity" value="1">
+      <input type="number" name="quantity" value="1"
+        onchange="window.__quantityChanges = (window.__quantityChanges || 0) + 1">
       <div class="form__message hidden" tabindex="-1"><span class="js-error-content"></span></div>
       <button type="submit" name="add">Add to cart</button>
       <button type="button" data-buy-now>Buy it now</button>
@@ -160,6 +161,11 @@ async function storefront(page, overrides = {}) {
       const alert = document.querySelector('[data-customer-order-limit-alert]');
       return alert && !alert.hidden ? alert.textContent : '';
     }),
+    quantity: () => page.evaluate(() => {
+      const input = document.querySelector('[name="quantity"]');
+      return input ? { value: input.value, changes: window.__quantityChanges || 0 } : null;
+    }),
+    chooseQuantity: (value) => page.fill('[name="quantity"]', String(value)),
     cartError: () => page.evaluate(() => {
       const wrapper = document.querySelector('.cart_form__error');
       return wrapper && !wrapper.classList.contains('hidden')
@@ -320,6 +326,62 @@ test.describe('answering the purchase attempt that signing in interrupted', () =
 
     expect(await store.productError()).toBe('');
     expect(await store.intent()).toBeNull();
+  });
+
+  test('the quantity comes back capped at what may still be bought', async ({ page }) => {
+    // Five asked for, two left. Coming back to a field saying 1 makes the
+    // shopper type it again, and a field saying 5 cannot be submitted at all.
+    const store = await storefront(page);
+
+    await store.visit(PRODUCT);
+    await store.chooseQuantity(5);
+    await page.click('[data-buy-now]');
+    await page.waitForURL((url) => url.pathname === '/account/login');
+    expect(JSON.parse(await store.intent())).toMatchObject({ quantity: 5 });
+
+    store.signIn(0);
+    await store.visit(PRODUCT);
+    await store.settle();
+
+    expect(await store.quantity()).toEqual({ value: '2', changes: 1 });
+    expect(await store.productError()).toBe(
+      'Customer purchase limit exceeded. You can add up to 2 units more. The limit is 2 units per customer across orders.'
+    );
+  });
+
+  test('a quantity that was always allowed comes back as it was', async ({ page }) => {
+    const store = await storefront(page);
+
+    await store.visit(PRODUCT);
+    await store.chooseQuantity(2);
+    await page.click('[data-buy-now]');
+    await page.waitForURL((url) => url.pathname === '/account/login');
+
+    store.signIn(0);
+    await store.visit(PRODUCT);
+    await store.settle();
+
+    // Nothing to warn about, and the shopper's own number is back in the field.
+    expect(await store.quantity()).toEqual({ value: '2', changes: 1 });
+    expect(await store.productError()).toBe('');
+  });
+
+  test('with the allowance spent the field is left alone', async ({ page }) => {
+    const store = await storefront(page);
+
+    await store.visit(PRODUCT);
+    await store.chooseQuantity(5);
+    await page.click('[data-buy-now]');
+    await page.waitForURL((url) => url.pathname === '/account/login');
+
+    store.signIn(2);
+    await store.visit(PRODUCT);
+    await store.settle();
+
+    // No quantity is buyable, so offering one would be a lie. The message and
+    // the disabled button are the answer.
+    expect(await store.quantity()).toEqual({ value: '1', changes: 0 });
+    expect(await store.productError()).toBe(SPENT);
   });
 
   test('a guest who comes back without signing in keeps the attempt', async ({ page }) => {
