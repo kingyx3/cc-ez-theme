@@ -71,10 +71,10 @@ jobs:
     name: Functional / ${{ matrix.project }}
     needs: preflight
     runs-on: ubuntu-latest
-    # Browser downloads and OS dependency installation are network-bound and can
-    # exceed ten minutes on hosted runners. Keep enough headroom for the actual
-    # storefront assertions rather than cancelling a green test before it runs.
-    timeout-minutes: 30
+    # Playwright's upstream GitHub Actions example uses a 60-minute job budget.
+    # Browser downloads plus Linux OS dependencies are network-bound on hosted
+    # runners, so keep that headroom rather than cancelling before tests execute.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -134,7 +134,7 @@ jobs:
     name: Login redirect regression
     needs: validate
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 60
 
     steps:
       - name: Check out repository
@@ -171,7 +171,7 @@ jobs:
     name: Purchase limit after login regression
     needs: validate
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 60
 
     steps:
       - name: Check out repository
@@ -208,7 +208,7 @@ jobs:
     name: OTP autofill regression
     needs: validate
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 60
 
     steps:
       - name: Check out repository
@@ -241,7 +241,7 @@ jobs:
     name: Accessibility / chromium-desktop
     needs: preflight
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 60
 
     steps:
       - name: Check out repository
