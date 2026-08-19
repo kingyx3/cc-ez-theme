@@ -35,6 +35,7 @@ The integration is deliberately fail-closed where an automatic choice could merg
 - **Customer identity preflight is read-only.** Before any Product, Contact, Order, or Line Item write, `scripts/easystore_hubspot_preflight.py` scans EasyStore customers and the relevant HubSpot Contacts. If more than one EasyStore customer owns the same normalized mobile, or an EasyStore mobile already maps to multiple HubSpot Contacts, the entire run stops before writes.
 - **Product SKU ambiguity stops the Product stage before writes.** Duplicate EasyStore SKUs or multiple HubSpot Products with the same SKU are not guessed through.
 - **Orders validate catalog references before order writes.** Every EasyStore merchandise line must resolve to a HubSpot Product before the order stage starts mutating Orders or Line Items.
+- **HubSpot batch writes reject partial success.** Product and Contact batches send `objectWriteTraceId` values and require a `COMPLETE` response, zero item errors, and one returned result per submitted input. A successful HTTP status alone is not treated as a successful sync.
 - **Stale synchronized order lines are reconciled only after the upsert succeeds.** `scripts/easystore_hubspot_reconcile.py` builds a complete reconciliation plan first, then archives product-backed HubSpot Line Items that no longer exist on their EasyStore order. Standalone/manual HubSpot line items without `hs_product_id` are preserved.
 - **Transient remote failures retry.** HTTP 429 and 5xx responses use bounded backoff; persistent API errors fail the run and surface in Actions.
 - **Production runs never overlap.** The workflow concurrency group serializes scheduled/manual production executions.
@@ -44,9 +45,11 @@ The integration is deliberately fail-closed where an automatic choice could merg
 Changes to the CRM workflow, sync scripts, CRM tests, or this document trigger the `Validate CRM sync` job on pull requests. That job requires no secrets and performs:
 
 1. Python 3.13 bytecode compilation of every CRM sync script.
-2. `crm_tests/test_crm_sync.py`, covering mobile normalization, duplicate-identity detection, SKU fallback, product-backed line construction, fail-closed catalog matching, stale-line reconciliation, and order field mapping.
+2. `crm_tests/test_crm_sync.py`, covering mobile normalization, duplicate-identity detection, SKU fallback, product-backed line construction, fail-closed catalog matching, stale-line reconciliation, order field mapping, and HubSpot partial-batch error handling.
 
 The credentialed `sync` job is explicitly skipped for `pull_request` events.
+
+The repository's browser E2E workflow is also a PR gate. Browser-installing jobs use timeout budgets that leave headroom for Playwright's network-bound browser/dependency installation so the actual regression tests are not cancelled before they execute.
 
 ## Products and variants
 
@@ -171,6 +174,8 @@ The buyer is resolved with the same normalized-mobile rule as Customer synchroni
 EasyStore orders are paged from `/api/3.0/orders.json`. If a list record does not include `line_items`, the sync retrieves `/api/3.0/orders/<order_id>.json` before processing it.
 
 All product references are validated before order/line-item writes, and the stale-line archive plan is fully built before any archive request is sent. This reduces the blast radius of incomplete source reads or catalog mismatches.
+
+HubSpot Product and Contact batch responses are inspected at the item level. The sync fails if HubSpot reports `numErrors`, returns an `errors` array, returns a non-`COMPLETE` batch status, or returns fewer/more result objects than inputs. Each submitted batch input carries an `objectWriteTraceId` so any HubSpot item-level error is attributable to a specific write.
 
 ## First-production-run checklist
 
