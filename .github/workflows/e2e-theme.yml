@@ -71,7 +71,10 @@ jobs:
     name: Functional / ${{ matrix.project }}
     needs: preflight
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Browser downloads and OS dependency installation are network-bound and can
+    # exceed ten minutes on hosted runners. Keep enough headroom for the actual
+    # storefront assertions rather than cancelling a green test before it runs.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -131,7 +134,7 @@ jobs:
     name: Login redirect regression
     needs: validate
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
 
     steps:
       - name: Check out repository
@@ -168,7 +171,7 @@ jobs:
     name: Purchase limit after login regression
     needs: validate
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
 
     steps:
       - name: Check out repository
@@ -205,7 +208,7 @@ jobs:
     name: OTP autofill regression
     needs: validate
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
 
     steps:
       - name: Check out repository
@@ -238,7 +241,7 @@ jobs:
     name: Accessibility / chromium-desktop
     needs: preflight
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - name: Check out repository
