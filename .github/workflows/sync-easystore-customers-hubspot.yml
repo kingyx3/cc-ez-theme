@@ -1,0 +1,81 @@
+name: Sync EasyStore customers to HubSpot
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+      timezone: "Asia/Singapore"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: easystore-hubspot-customer-sync
+  cancel-in-progress: false
+
+env:
+  EASYSTORE_STORE_DOMAIN: ${{ vars.EASYSTORE_STORE_DOMAIN || 'cardboardcollective.easy.co' }}
+  CUSTOMER_SYNC_DEFAULT_DIAL_CODE: ${{ vars.CUSTOMER_SYNC_DEFAULT_DIAL_CODE || '65' }}
+
+jobs:
+  sync:
+    name: Upsert customers by normalized mobile number
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Validate sync script
+        run: python -m py_compile scripts/easystore_hubspot_sync.py
+
+      - name: Check CRM sync credentials
+        env:
+          EASYSTORE_ACCESS_TOKEN: ${{ secrets.EASYSTORE_ACCESS_TOKEN }}
+          HUBSPOT_ACCESS_TOKEN: ${{ secrets.HUBSPOT_ACCESS_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${EASYSTORE_ACCESS_TOKEN}" ]]; then
+            echo "::error::EASYSTORE_ACCESS_TOKEN is required. Use an EasyStore Public API token with read_customers scope."
+            exit 1
+          fi
+          if [[ -z "${HUBSPOT_ACCESS_TOKEN}" ]]; then
+            echo "::error::HUBSPOT_ACCESS_TOKEN is required with crm.objects.contacts.read and crm.objects.contacts.write scopes."
+            exit 1
+          fi
+
+      - name: Pull EasyStore customers and upsert HubSpot contacts
+        env:
+          EASYSTORE_ACCESS_TOKEN: ${{ secrets.EASYSTORE_ACCESS_TOKEN }}
+          HUBSPOT_ACCESS_TOKEN: ${{ secrets.HUBSPOT_ACCESS_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/easystore_hubspot_sync.py | tee customer-sync-summary.json
+
+      - name: Publish run summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "### EasyStore → HubSpot customer sync"
+            echo
+            echo "- Schedule: 00:00, 06:00, 12:00, 18:00 Asia/Singapore"
+            echo "- Identity key: normalized mobile number"
+            echo "- Store: \`${EASYSTORE_STORE_DOMAIN}\`"
+            echo
+            if [[ -s customer-sync-summary.json ]]; then
+              echo '```json'
+              cat customer-sync-summary.json
+              echo '```'
+            else
+              echo "No sync summary was produced; inspect the failed step above."
+            fi
+          } >> "${GITHUB_STEP_SUMMARY}"
