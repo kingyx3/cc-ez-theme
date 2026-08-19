@@ -50,7 +50,7 @@ jobs:
             exit 1
           fi
           if [[ -z "${HUBSPOT_ACCESS_TOKEN}" ]]; then
-            echo "::error::HUBSPOT_ACCESS_TOKEN is required with product/contact/order/line-item read+write scopes and crm.schemas.orders.write."
+            echo "::error::HUBSPOT_ACCESS_TOKEN is required with product/contact/order/line-item read+write scopes and crm.schemas.orders.read/write."
             exit 1
           fi
 
