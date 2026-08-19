@@ -27,6 +27,7 @@ env:
 
 jobs:
   validate:
+    # Credential-free gate that must pass on the same PR head as browser E2E.
     name: Validate CRM sync
     runs-on: ubuntu-latest
     timeout-minutes: 10
