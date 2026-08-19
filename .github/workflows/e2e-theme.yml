@@ -102,8 +102,24 @@ jobs:
       - name: Install E2E dependencies
         run: npm install --no-audit --no-fund
 
+      # `--with-deps` shells out to apt-get, and the hosted runners' Ubuntu
+      # package mirrors occasionally stall mid-fetch. Left unbounded, that stall
+      # eats the whole job budget and the check is reported as cancelled instead
+      # of failing, so bound each attempt and retry once.
       - name: Install Playwright browser
-        run: npx playwright install --with-deps "${{ matrix.browser }}"
+        timeout-minutes: 18
+        run: |
+          set -euo pipefail
+          for attempt in 1 2; do
+            if timeout --kill-after=30s 8m \
+                npx playwright install --with-deps "${{ matrix.browser }}"; then
+              exit 0
+            fi
+            echo "::warning::Playwright browser install attempt ${attempt} did not finish."
+            sleep 15
+          done
+          echo "::error::Playwright browser install did not finish after two attempts."
+          exit 1
 
       - name: Run storefront E2E
         run: npx playwright test e2e/storefront.spec.js --project="${{ matrix.project }}"
@@ -148,8 +164,24 @@ jobs:
       - name: Install E2E dependencies
         run: npm install --no-audit --no-fund
 
+      # `--with-deps` shells out to apt-get, and the hosted runners' Ubuntu
+      # package mirrors occasionally stall mid-fetch. Left unbounded, that stall
+      # eats the whole job budget and the check is reported as cancelled instead
+      # of failing, so bound each attempt and retry once.
       - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+        timeout-minutes: 18
+        run: |
+          set -euo pipefail
+          for attempt in 1 2; do
+            if timeout --kill-after=30s 8m \
+                npx playwright install --with-deps chromium; then
+              exit 0
+            fi
+            echo "::warning::Playwright browser install attempt ${attempt} did not finish."
+            sleep 15
+          done
+          echo "::error::Playwright browser install did not finish after two attempts."
+          exit 1
 
       - name: Run login redirect regression suite
         run: npx playwright test e2e/login-redirect.spec.js --project=chromium-desktop
@@ -185,8 +217,24 @@ jobs:
       - name: Install E2E dependencies
         run: npm install --no-audit --no-fund
 
+      # `--with-deps` shells out to apt-get, and the hosted runners' Ubuntu
+      # package mirrors occasionally stall mid-fetch. Left unbounded, that stall
+      # eats the whole job budget and the check is reported as cancelled instead
+      # of failing, so bound each attempt and retry once.
       - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+        timeout-minutes: 18
+        run: |
+          set -euo pipefail
+          for attempt in 1 2; do
+            if timeout --kill-after=30s 8m \
+                npx playwright install --with-deps chromium; then
+              exit 0
+            fi
+            echo "::warning::Playwright browser install attempt ${attempt} did not finish."
+            sleep 15
+          done
+          echo "::error::Playwright browser install did not finish after two attempts."
+          exit 1
 
       - name: Run purchase limit after login suite
         run: npx playwright test e2e/purchase-limit-after-login.spec.js --project=chromium-desktop
@@ -222,8 +270,24 @@ jobs:
       - name: Install E2E dependencies
         run: npm install --no-audit --no-fund
 
+      # `--with-deps` shells out to apt-get, and the hosted runners' Ubuntu
+      # package mirrors occasionally stall mid-fetch. Left unbounded, that stall
+      # eats the whole job budget and the check is reported as cancelled instead
+      # of failing, so bound each attempt and retry once.
       - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+        timeout-minutes: 18
+        run: |
+          set -euo pipefail
+          for attempt in 1 2; do
+            if timeout --kill-after=30s 8m \
+                npx playwright install --with-deps chromium; then
+              exit 0
+            fi
+            echo "::warning::Playwright browser install attempt ${attempt} did not finish."
+            sleep 15
+          done
+          echo "::error::Playwright browser install did not finish after two attempts."
+          exit 1
 
       - name: Run OTP autofill regression suite
         run: npx playwright test e2e/otp-autofill.spec.js --project=chromium-desktop
@@ -255,8 +319,24 @@ jobs:
       - name: Install E2E dependencies
         run: npm install --no-audit --no-fund
 
+      # `--with-deps` shells out to apt-get, and the hosted runners' Ubuntu
+      # package mirrors occasionally stall mid-fetch. Left unbounded, that stall
+      # eats the whole job budget and the check is reported as cancelled instead
+      # of failing, so bound each attempt and retry once.
       - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+        timeout-minutes: 18
+        run: |
+          set -euo pipefail
+          for attempt in 1 2; do
+            if timeout --kill-after=30s 8m \
+                npx playwright install --with-deps chromium; then
+              exit 0
+            fi
+            echo "::warning::Playwright browser install attempt ${attempt} did not finish."
+            sleep 15
+          done
+          echo "::error::Playwright browser install did not finish after two attempts."
+          exit 1
 
       - name: Run Axe accessibility suite
         run: npx playwright test e2e/accessibility.spec.js --project=chromium-desktop

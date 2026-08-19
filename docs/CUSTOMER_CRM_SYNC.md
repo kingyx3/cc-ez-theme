@@ -49,7 +49,9 @@ Changes to the CRM workflow, sync scripts, CRM tests, or this document trigger t
 
 The credentialed `sync` job is explicitly skipped for `pull_request` events.
 
-The repository's browser E2E workflow is also a PR gate. Browser-installing jobs use timeout budgets that leave headroom for Playwright's network-bound browser/dependency installation so the actual regression tests are not cancelled before they execute.
+This job is the coverage gate for the CRM sync scripts. `.coveragerc` omits `scripts/easystore_hubspot_*.py` from the theme suite's 100% line-and-branch requirement, because `tests/` exercises the theme packaging and validation tooling and never imports the CRM scripts. Adding a CRM script to `scripts/` therefore does not silently lower the theme gate, and the CRM scripts stay gated by compilation plus `crm_tests/` here.
+
+The repository's browser E2E workflow is also a PR gate. Browser-installing jobs use timeout budgets that leave headroom for Playwright's network-bound browser/dependency installation so the actual regression tests are not cancelled before they execute. Each `playwright install --with-deps` invocation is additionally bounded and retried once: the flag shells out to `apt-get`, and a stalled Ubuntu mirror would otherwise consume the whole job budget and report the check as cancelled instead of failing.
 
 ## Products and variants
 
