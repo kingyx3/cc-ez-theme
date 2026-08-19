@@ -19,9 +19,9 @@ env:
 
 jobs:
   sync:
-    name: Upsert EasyStore products and customers
+    name: Upsert EasyStore products, customers and orders
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
       - name: Check out repository
@@ -36,6 +36,7 @@ jobs:
         run: |
           python -m py_compile scripts/easystore_hubspot_products.py
           python -m py_compile scripts/easystore_hubspot_sync.py
+          python -m py_compile scripts/easystore_hubspot_orders.py
 
       - name: Check CRM sync credentials
         env:
@@ -45,11 +46,11 @@ jobs:
         run: |
           set -euo pipefail
           if [[ -z "${EASYSTORE_ACCESS_TOKEN}" ]]; then
-            echo "::error::EASYSTORE_ACCESS_TOKEN is required with EasyStore read_products and read_customers scopes."
+            echo "::error::EASYSTORE_ACCESS_TOKEN is required with EasyStore read_products, read_customers and read_orders scopes."
             exit 1
           fi
           if [[ -z "${HUBSPOT_ACCESS_TOKEN}" ]]; then
-            echo "::error::HUBSPOT_ACCESS_TOKEN is required with crm.objects.products.read/write and crm.objects.contacts.read/write scopes."
+            echo "::error::HUBSPOT_ACCESS_TOKEN is required with product/contact/order/line-item read+write scopes and crm.schemas.orders.write."
             exit 1
           fi
 
@@ -71,6 +72,15 @@ jobs:
           set -euo pipefail
           python scripts/easystore_hubspot_sync.py | tee customer-sync-summary.json
 
+      - name: Pull EasyStore orders and upsert HubSpot orders and line items
+        env:
+          EASYSTORE_ACCESS_TOKEN: ${{ secrets.EASYSTORE_ACCESS_TOKEN }}
+          HUBSPOT_ACCESS_TOKEN: ${{ secrets.HUBSPOT_ACCESS_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/easystore_hubspot_orders.py | tee order-sync-summary.json
+
       - name: Publish run summary
         if: always()
         shell: bash
@@ -81,6 +91,8 @@ jobs:
             echo "- Schedule: 00:00, 06:00, 12:00, 18:00 Asia/Singapore"
             echo "- Products: one HubSpot Product per EasyStore variant, keyed by SKU"
             echo "- Customers: keyed by normalized mobile number"
+            echo "- Orders: keyed by immutable EasyStore order ID"
+            echo "- Order lines: HubSpot Line Items backed by the matching HubSpot Product"
             echo "- Store: \`${EASYSTORE_STORE_DOMAIN}\`"
             echo
             echo "#### Products"
@@ -99,5 +111,14 @@ jobs:
               echo '```'
             else
               echo "No customer sync summary was produced; inspect the failed step above."
+            fi
+            echo
+            echo "#### Orders and line items"
+            if [[ -s order-sync-summary.json ]]; then
+              echo '```json'
+              cat order-sync-summary.json
+              echo '```'
+            else
+              echo "No order sync summary was produced; inspect the failed step above."
             fi
           } >> "${GITHUB_STEP_SUMMARY}"
