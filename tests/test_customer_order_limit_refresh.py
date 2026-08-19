@@ -125,19 +125,17 @@ class CustomerOrderLimitRefreshTests(unittest.TestCase):
             row,
         )
         # Cancelled orders stay excluded, and the single-pass loops are intact.
-        # The flag is an integer on EasyStore, so it is compared by value: Liquid
-        # treats 0 as truthy and an unless on the raw value skipped every order.
+        # Which field carries the cancellation is decided in one snippet, because
+        # EasyStore exposes it as `is_cancelled` on one order shape and
+        # `cancelled` on another: a check spelled out here read one of them and
+        # counted cancelled orders against the allowance.
         self.assertNotIn("{% unless order.is_cancelled %}", row)
+        self.assertNotIn("order.is_cancelled", row)
         self.assertIn(
-            "{% assign customer_order_limit_row_cancelled = order.is_cancelled"
-            " | default: 0 | append: '' | strip | downcase %}",
+            "{% include 'customer-order-limit-cancelled', cancelled_order: order %}",
             row,
         )
-        self.assertIn(
-            "{% unless customer_order_limit_row_cancelled == '1'"
-            " or customer_order_limit_row_cancelled == 'true' %}",
-            row,
-        )
+        self.assertIn("{% unless customer_order_limit_cancelled %}", row)
         self.assertEqual(row.count("{% for order in customer_order_limit_row_orders %}"), 1)
         self.assertEqual(row.count("{% for line_item in customer_order_limit_row_lines %}"), 1)
 

@@ -29,6 +29,11 @@
   out('lineItemsSeen', d.lineItemsSeen ?? 'not in this build');
   out('identifiers', JSON.stringify(d.identifiers ?? 'not in this build'));
   out('ordersSeen', d.ordersSeen ?? 'not in this build');
+  // A cancelled order must not consume an allowance. If one still counts, the
+  // store spells the flag under a field customer-order-limit-cancelled.liquid
+  // does not read yet — orderStatuses shows the raw values to add.
+  out('cancelledOrdersSeen', d.cancelledOrdersSeen ?? 'not in this build');
+  out('orderStatuses', d.orderStatuses ?? 'not in this build');
   out('historyState', state());
 
   if (hasHistoryLoader && (state() === 'unknown' || state() === 'pending')) {

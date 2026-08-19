@@ -79,7 +79,35 @@ Booleans published by these snippets are read by value, not by identity: EasySto
 
 The same applies inside Liquid. `order.is_cancelled` is an **integer** on EasyStore — `templates/customers/orders.liquid` compares it with `== 1` — and Liquid treats `0` as truthy, so `{%- raw -%}{% unless order.is_cancelled %}{%- endraw -%}` skipped *every* order and counted zero units for every customer, while the account page visibly listed their orders. Order flags are forced to strings and compared by value. Tests fixture these flags as integers for the same reason: Python booleans in the fixtures made the bug invisible.
 
-`window.customerOrderLimitsV2.diagnostics` reports what the history pass could actually read: `ordersSeen`, `lineItemsSeen`, and an `identifiers` sample in `handle/sku×quantity` form. It is produced by `customer-order-limits.liquid` before any row runs, so it describes the order history itself rather than any one limit. `ordersSeen: 0` for a signed-in customer with orders means the storefront cannot see order history at all; a populated sample whose values never match a configured row means the identifiers differ from what is configured.
+`window.customerOrderLimitsV2.diagnostics` reports what the history pass could actually read: `ordersSeen`, `cancelledOrdersSeen`, `lineItemsSeen`, an `identifiers` sample in `handle/sku×quantity` form, and an `orderStatuses` sample of the raw cancellation fields each order exposed. It is produced by `customer-order-limits.liquid` before any row runs, so it describes the order history itself rather than any one limit. `ordersSeen: 0` for a signed-in customer with orders means the storefront cannot see order history at all; a populated sample whose values never match a configured row means the identifiers differ from what is configured.
+
+## Cancelled orders
+
+A cancelled order must not consume an allowance, and `snippets/customer-order-limit-cancelled.liquid` is the only place that decides whether an order is cancelled. Both counting passes — the inline one in `customer-order-limit-row.liquid` and the published payload in `customer-order-limit-history.liquid` — include it, along with the diagnostics pass, so all three agree.
+
+One field is not enough. EasyStore does not expose cancellation under a single name, and this theme's own pages prove it: `templates/customers/orders.liquid` and `templates/customers/account.liquid` read `order.is_cancelled` as an integer (`== 1`), while `templates/customers/order.liquid` reads `order.cancelled`, both as a boolean and against `0`. The order objects a product or cart page receives are not the ones the account templates render, so a pass reading only `is_cancelled` saw nil on a shape carrying `cancelled`, treated the order as live, and counted a cancelled order against the customer's limit. The snippet therefore reads every known spelling:
+
+| Field | Cancelled when |
+| --- | --- |
+| `is_cancelled` | `1` or `true` |
+| `cancelled` | `1` or `true` |
+| `cancelled_at` | any readable value |
+| `status`, `order_status` | `cancelled` or `canceled` |
+| `financial_status_label`, `financial_status` | `cancelled` or `canceled` |
+| `fulfillment_status_label`, `fulfillment_status` | `cancelled` or `canceled` |
+
+Each pass includes the snippet with the order it is counting — `{% raw %}{% include 'customer-order-limit-cancelled', cancelled_order: order %}{% endraw %}` — and the snippet falls back to the `order` loop variable already in scope, since `include` shares the caller's scope on EasyStore. Whether the platform also binds an object passed as a parameter is therefore not something this fix depends on.
+
+Only a positive signal cancels an order. A missing, blank, `0` or `false` field says nothing, so an order whose shape carries none of these fields still counts and the limit stays enforced — an unreadable order is never a free allowance. A **refund** is deliberately not a cancellation: the order was placed, and whether a refund frees an allowance is a merchant decision rather than a field name. Say so if refunded orders should stop counting too, and it becomes one more row in that table.
+
+To confirm on a live store, sign in as a customer with a cancelled order and read the diagnostics in the console:
+
+```js
+window.customerOrderLimitsV2.diagnostics.cancelledOrdersSeen  // orders left out as cancelled
+window.customerOrderLimitsV2.diagnostics.orderStatuses        // the raw fields each order exposed
+```
+
+`orderStatuses` prefixes each sampled order with `counted` or `skipped` and then lists every field above as the store rendered it. A cancelled order that reads `counted` names the field this theme is not yet reading — add it to the snippet, and both passes pick it up. `scripts/limit-check.console.js` prints both values.
 
 ## When a page cannot see order history
 

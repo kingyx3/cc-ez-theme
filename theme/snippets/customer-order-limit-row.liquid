@@ -45,13 +45,12 @@
     {% assign customer_order_limit_row_orders = customer.orders | default: customer.recent_orders %}
     {% for order in customer_order_limit_row_orders %}
       {% comment %}
-        `order.is_cancelled` is an integer on EasyStore, not a boolean: this
-        theme's own order list compares it with `== 1`. Liquid treats 0 as
-        truthy, so an unless on the raw value skipped every order and counted
-        zero units for every customer. The value is compared as a string.
+        Cancelled orders never count. Which field carries the cancellation
+        depends on the order shape EasyStore hands this page, so the decision
+        lives in one snippet rather than being spelled out again here.
       {% endcomment %}
-      {% assign customer_order_limit_row_cancelled = order.is_cancelled | default: 0 | append: '' | strip | downcase %}
-      {% unless customer_order_limit_row_cancelled == '1' or customer_order_limit_row_cancelled == 'true' %}
+      {% include 'customer-order-limit-cancelled', cancelled_order: order %}
+      {% unless customer_order_limit_cancelled %}
         {% comment %}
           An order with no readable date counts as current, so an unexpected date
           format keeps the limit enforced instead of silently clearing it.

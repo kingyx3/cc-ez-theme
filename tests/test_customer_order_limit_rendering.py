@@ -83,6 +83,7 @@ class CustomerOrderLimitRenderingTests(unittest.TestCase):
             name: (SNIPPETS / f"{name}.liquid").read_text(encoding="utf-8")
             for name in (
                 "customer-order-limit-window",
+                "customer-order-limit-cancelled",
                 "customer-order-limit-rule",
                 "customer-order-limit-row",
                 "customer-order-limits",
@@ -233,6 +234,121 @@ class CustomerOrderLimitRenderingTests(unittest.TestCase):
 
         self.assertEqual(rule["purchased"], 0)
         self.assertEqual(rule["remaining"], 1)
+
+    def test_a_cancellation_counts_under_every_field_easystore_exposes(self) -> None:
+        # The reported failure: cancelled orders still consumed the allowance.
+        # `is_cancelled` was the only field read, and it is only the spelling the
+        # account order list uses — the order detail page reads `order.cancelled`,
+        # so an order shape carrying that one looked live and was counted. Each
+        # field is proved on its own, with `is_cancelled` absent, because the
+        # order objects a product page receives are not the ones that carry it.
+        cancellations: tuple[dict, ...] = (
+            {"cancelled": True},
+            {"cancelled": 1},
+            {"cancelled": "1"},
+            {"cancelled": "true"},
+            {"cancelled_at": (NOW - timedelta(days=1)).strftime(STAMP)},
+            {"status": "cancelled"},
+            {"status": "canceled"},
+            {"order_status": "cancelled"},
+            {"financial_status_label": "Cancelled"},
+            {"financial_status": "cancelled"},
+            {"fulfillment_status_label": "Cancelled"},
+            {"fulfillment_status": "cancelled"},
+        )
+        for fields in cancellations:
+            with self.subTest(fields=fields):
+                order = self.order(days_ago=5, handle=LOWER, sku=HANDLE)
+                del order["is_cancelled"]
+                order.update(fields)
+                rule = self.rule(self.render(orders=[order]))
+                self.assertEqual(rule["purchased"], 0)
+                self.assertEqual(rule["remaining"], 1)
+
+    def test_a_live_order_still_counts_under_every_other_status(self) -> None:
+        # The other half of the same change: broadening the fields read must not
+        # start reading a live order as cancelled. A refund is deliberately not a
+        # cancellation — the order was placed, and whether it frees an allowance
+        # is the merchant's call — and the falsy shapes say nothing at all.
+        live: tuple[dict, ...] = (
+            {"cancelled": False},
+            {"cancelled": 0},
+            {"cancelled": ""},
+            {"cancelled_at": ""},
+            {"cancelled_at": None},
+            {"status": "to_pay"},
+            {"status": "to_receive"},
+            {"status": "completed"},
+            {"financial_status_label": "Paid"},
+            {"financial_status_label": "Refunded"},
+            {"fulfillment_status_label": "Fulfilled"},
+            {"fulfillment_status_label": "Returned"},
+        )
+        for fields in live:
+            with self.subTest(fields=fields):
+                order = self.order(days_ago=5, handle=LOWER, sku=HANDLE)
+                del order["is_cancelled"]
+                order.update(fields)
+                self.assertEqual(self.rule(self.render(orders=[order]))["purchased"], 1)
+
+    def test_an_order_exposing_no_cancellation_field_still_counts(self) -> None:
+        # An unreadable order is never a free allowance: with no field to read,
+        # the order counts and the limit stays enforced.
+        order = self.order(days_ago=5, handle=LOWER)
+        del order["is_cancelled"]
+
+        self.assertEqual(self.rule(self.render(orders=[order]))["purchased"], 1)
+
+    def test_the_cancellation_snippet_reads_the_order_in_scope_too(self) -> None:
+        # `include` shares the caller's scope on EasyStore, and whether it also
+        # binds an object passed as a parameter is the platform's business. The
+        # snippet is therefore rendered here the way an engine that ignored the
+        # parameter would render it — no input, only the loop variable in scope —
+        # because that shape must still recognise a cancelled order rather than
+        # silently counting every one of them.
+        files = {
+            "customer-order-limit-cancelled": (
+                SNIPPETS / "customer-order-limit-cancelled.liquid"
+            ).read_text(encoding="utf-8"),
+            "caller": (
+                "{% for order in orders %}"
+                "{% include 'customer-order-limit-cancelled' %}"
+                "[{{ customer_order_limit_cancelled }}]"
+                "{% endfor %}"
+            ),
+        }
+        environment = Environment(loader=DictLoader(files))
+        environment.filters["json"] = json.dumps
+
+        rendered = environment.get_template("caller").render(orders=[
+            {"is_cancelled": 0},
+            {"is_cancelled": 1},
+            {"cancelled": True},
+            {"status": "cancelled"},
+            {},
+        ])
+        decisions = re.findall(r"\[(true|false)\]", rendered)
+
+        self.assertEqual(decisions, ["false", "true", "true", "true", "false"])
+
+    def test_diagnostics_report_what_the_cancellation_pass_decided(self) -> None:
+        # A cancelled order that still counts is a field name this theme is not
+        # reading, and the raw values are the only way to tell which one from a
+        # live store rather than from a guess.
+        output = self.render(orders=[
+            self.order(days_ago=5, handle=LOWER),
+            self.order(days_ago=4, handle=LOWER, cancelled=1),
+            dict(self.order(days_ago=3, handle=LOWER), status="cancelled"),
+        ])
+        diagnostics = self.diagnostics(output)
+
+        self.assertEqual(diagnostics["ordersSeen"], 1)
+        self.assertEqual(diagnostics["cancelledOrdersSeen"], 2)
+        self.assertEqual(diagnostics["lineItemsSeen"], 1)
+        self.assertEqual(self.rule(output)["purchased"], 1)
+        self.assertIn("counted is_cancelled=0", diagnostics["orderStatuses"])
+        self.assertIn("skipped is_cancelled=1", diagnostics["orderStatuses"])
+        self.assertIn("status=cancelled", diagnostics["orderStatuses"])
 
     def test_other_products_are_untouched(self) -> None:
         output = self.render(
@@ -476,6 +592,7 @@ class CustomerOrderLimitRenderingTests(unittest.TestCase):
             name: (SNIPPETS / f"{name}.liquid").read_text(encoding="utf-8")
             for name in (
                 "customer-order-limit-window",
+                "customer-order-limit-cancelled",
                 "customer-order-limit-rule",
                 "customer-order-limit-row",
                 "customer-order-limit-config",

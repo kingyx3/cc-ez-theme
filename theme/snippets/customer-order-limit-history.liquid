@@ -26,13 +26,11 @@
     {%- assign customer_order_limit_history_orders = customer.orders | default: customer.recent_orders -%}
     {%- for order in customer_order_limit_history_orders -%}
       {%- comment -%}
-        `order.is_cancelled` is an integer here, not a boolean: this theme's own
-        order list compares it with `== 1`. Liquid treats 0 as truthy, so
-        an unless on the raw value skipped every order and published an empty
-        payload while the page itself listed the customer's orders.
+        A cancelled order is left out of the payload, decided by the same snippet
+        the inline pass uses so both agree on what counts.
       {%- endcomment -%}
-      {%- assign customer_order_limit_history_cancelled = order.is_cancelled | default: 0 | append: '' | strip | downcase -%}
-      {%- unless customer_order_limit_history_cancelled == '1' or customer_order_limit_history_cancelled == 'true' -%}
+      {%- include 'customer-order-limit-cancelled', cancelled_order: order -%}
+      {%- unless customer_order_limit_cancelled -%}
         {%- assign customer_order_limit_history_epoch = order.created_at | date: '%s' | plus: 0 -%}
         {%- if customer_order_limit_history_epoch == 0 -%}
           {%- assign customer_order_limit_history_epoch = order.processed_at | date: '%s' | plus: 0 -%}
