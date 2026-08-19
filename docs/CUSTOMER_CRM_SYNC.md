@@ -19,6 +19,7 @@ The workflow runs in dependency order: **Products → Customers → Orders + Lin
   - `crm.objects.orders.write`
   - `crm.objects.line_items.read`
   - `crm.objects.line_items.write`
+  - `crm.schemas.orders.read`
   - `crm.schemas.orders.write`
 
 The existing `EASYSTORE_ADMIN_TOKEN` used by theme deployment is intentionally not reused. EasyStore's documented Public API authenticates with the `EasyStore-Access-Token` header, so this sync has its own least-privilege read credential.
