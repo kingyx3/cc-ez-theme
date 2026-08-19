@@ -43,7 +43,7 @@
   {% endcomment %}
   {% capture customer_order_limit_rule_message %}
     {% if customer_order_limit_rule_login_required %}
-      Sign in to buy this item. Limit: {{ customer_order_limit_rule_maximum }} per customer.
+      Sign in to buy this item. Maximum {{ customer_order_limit_rule_maximum }} per customer.
     {% elsif customer_order_limit_rule_cart_exceeded %}
       {% if customer_order_limit_rule_allowed_cart_quantity == 0 %}
         Limit reached: {{ customer_order_limit_rule_maximum }} per customer. You have already ordered {{ customer_order_limit_rule_purchased }}, so remove this item to check out.
@@ -63,11 +63,11 @@
         Limit reached: {{ customer_order_limit_rule_maximum }} per customer.
       {% endif %}
     {% elsif customer_order_limit_rule_purchased > 0 %}
-      You can add {{ customer_order_limit_rule_remaining }} more ({{ customer_order_limit_rule_maximum }} per customer, {{ customer_order_limit_rule_purchased }} already ordered).
+      Maximum {{ customer_order_limit_rule_remaining }} ({{ customer_order_limit_rule_maximum }} per customer, {{ customer_order_limit_rule_purchased }} already ordered).
     {% elsif customer_order_limit_rule_cart_quantity > 0 %}
-      You can add {{ customer_order_limit_rule_remaining }} more ({{ customer_order_limit_rule_maximum }} per customer).
+      Maximum {{ customer_order_limit_rule_remaining }} ({{ customer_order_limit_rule_maximum }} per customer).
     {% else %}
-      Limit: {{ customer_order_limit_rule_maximum }} per customer.
+      Maximum {{ customer_order_limit_rule_maximum }} per customer.
     {% endif %}
   {% endcapture %}
   <script>

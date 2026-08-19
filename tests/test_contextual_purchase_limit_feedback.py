@@ -34,9 +34,10 @@ class ContextualPurchaseLimitFeedbackTests(unittest.TestCase):
         self.assertIn("container.textContent", storefront)
         self.assertIn("const extractMaximum", storefront)
         self.assertIn("only\\s+(?:has\\s+)?(?:left\\s+)?", storefront)
-        self.assertIn("Limit reached: ${clause}.", storefront)
-        self.assertIn("You can add ${moreUnits(remaining)} (${clause}).", storefront)
+        self.assertIn("Limit reached: ${limit.clause}.", storefront)
+        self.assertIn("Maximum ${unitLabel(remaining)} (${limit.short}).", storefront)
         self.assertIn("This item cannot be added right now.", storefront)
+        self.assertNotIn("You can add", storefront)
         self.assertIn("Math.max(0, totalMaximum - currentQuantity)", storefront)
         self.assertNotIn("would bring your cart to", storefront)
         self.assertNotIn("Remove an item before adding more.", storefront)
@@ -49,11 +50,15 @@ class ContextualPurchaseLimitFeedbackTests(unittest.TestCase):
             THEME_ROOT / "assets" / "purchase-limit-feedback.js"
         ).read_text(encoding="utf-8")
 
-        self.assertIn("const limitClause = (reason, maximum) => {", storefront)
+        # One ceiling, three sentence positions, spelled out together per reason:
+        # after "Limit reached:", inside a parenthetical, and on its own.
+        self.assertIn("const ceiling = (reason, maximum) => {", storefront)
         self.assertIn("${unitLabel(maximum)} per customer", storefront)
         self.assertIn("only ${unitLabel(maximum)} in stock", storefront)
+        self.assertIn("sentence: `Maximum ${unitLabel(maximum)} per customer.`", storefront)
+        self.assertIn("sentence: `Only ${unitLabel(maximum)} left.`", storefront)
         self.assertIn(
-            "Limit reached: ${clause}. You have ${current} in your cart.",
+            "Limit reached: ${limit.clause}. You have ${current} in your cart.",
             storefront,
         )
         # One lead, one clause. The copy this replaced restated the ceiling in a

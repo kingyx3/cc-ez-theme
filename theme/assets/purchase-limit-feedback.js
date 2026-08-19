@@ -13,8 +13,6 @@
 
   const unitLabel = (quantity) => `${quantity} unit${quantity === 1 ? '' : 's'}`;
 
-  const moreUnits = (quantity) => `${quantity} more unit${quantity === 1 ? '' : 's'}`;
-
   const stripMarkup = (value) => {
     const container = document.createElement('div');
     container.innerHTML = String(value == null ? '' : value);
@@ -97,23 +95,48 @@
     );
   };
 
-  // A short phrase naming the ceiling, never an equation and never a clause the
-  // copy has to build a sentence around. It reads the same after "Limit
-  // reached:" and inside a parenthetical, so one phrase covers every message.
-  const limitClause = (reason, maximum) => {
+  // One ceiling, three sentence positions, so each reason spells all three out
+  // together rather than being reassembled at each use: `clause` follows "Limit
+  // reached:", `short` sits in a parenthetical where the noun is already in the
+  // sentence, and `sentence` states the ceiling on its own.
+  const ceiling = (reason, maximum) => {
     switch (reason.key) {
       case 'inventory':
-        return `only ${unitLabel(maximum)} in stock`;
+        return {
+          clause: `only ${unitLabel(maximum)} in stock`,
+          short: `only ${maximum} left`,
+          sentence: `Only ${unitLabel(maximum)} left.`,
+        };
       case 'customer':
-        return `${unitLabel(maximum)} per customer`;
+        return {
+          clause: `${unitLabel(maximum)} per customer`,
+          short: `${maximum} per customer`,
+          sentence: `Maximum ${unitLabel(maximum)} per customer.`,
+        };
       case 'promotion':
-        return `${unitLabel(maximum)} for this promotion`;
+        return {
+          clause: `${unitLabel(maximum)} for this promotion`,
+          short: `${maximum} for this promotion`,
+          sentence: `Maximum ${unitLabel(maximum)} for this promotion.`,
+        };
       case 'store':
-        return `${unitLabel(maximum)} for this store`;
+        return {
+          clause: `${unitLabel(maximum)} for this store`,
+          short: `${maximum} for this store`,
+          sentence: `Maximum ${unitLabel(maximum)} for this store.`,
+        };
       case 'order':
-        return `${unitLabel(maximum)} per order`;
+        return {
+          clause: `${unitLabel(maximum)} per order`,
+          short: `${maximum} per order`,
+          sentence: `Maximum ${unitLabel(maximum)} per order.`,
+        };
       default:
-        return unitLabel(maximum);
+        return {
+          clause: unitLabel(maximum),
+          short: String(maximum),
+          sentence: `Maximum ${unitLabel(maximum)}.`,
+        };
     }
   };
 
@@ -142,22 +165,27 @@
       }
 
       const remaining = Math.max(0, parsedMaximum - current);
-      const clause = limitClause(inferredReason, parsedMaximum);
+      const limit = ceiling(inferredReason, parsedMaximum);
 
       // Nothing left to add, whether the shopper is at the ceiling or asked for
       // more than it allows. One message covers both: the ceiling, and what the
       // cart already holds of it.
       if (mode === 'reached' || remaining === 0) {
         return current > 0
-          ? `Limit reached: ${clause}. You have ${current} in your cart.`
-          : `Limit reached: ${clause}.`;
+          ? `Limit reached: ${limit.clause}. You have ${current} in your cart.`
+          : `Limit reached: ${limit.clause}.`;
       }
 
+      // A cap, not an action. This lands under the quantity picker, where "you
+      // can add 2 more units" read as add-to-cart and invited the 2 to be
+      // measured against the field rather than against the cart.
       if (requested > remaining) {
-        return `You can add ${moreUnits(remaining)} (${clause}).`;
+        return current > 0
+          ? `Maximum ${unitLabel(remaining)} (${limit.short}).`
+          : limit.sentence;
       }
 
-      return `Unable to add this item (${clause}).`;
+      return `Unable to add this item (${limit.short}).`;
     }
 
     if (cleanMessage) return cleanMessage;

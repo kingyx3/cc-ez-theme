@@ -346,7 +346,7 @@ test.describe('answering the purchase attempt that signing in interrupted', () =
     expect(await store.quantity()).toEqual({ value: '2', changes: 1 });
     // Nothing has been ordered in this scenario, so the ceiling and what may be
     // added are the same number and the copy states it once.
-    expect(await store.productError()).toBe('Limit: 2 units per customer.');
+    expect(await store.productError()).toBe('Maximum 2 units per customer.');
   });
 
   test('a quantity that was always allowed comes back as it was', async ({ page }) => {

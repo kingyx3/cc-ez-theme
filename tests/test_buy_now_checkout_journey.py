@@ -59,7 +59,7 @@ class BuyNowCheckoutJourneyTests(unittest.TestCase):
         self.assertIn("const messageFor = (rule, requestedQuantity, remaining) => {", limits)
         self.assertIn("const cartMessageFor = (rule, allowed) => {", limits)
         self.assertIn("You have ${cartQuantity} in your cart.", limits)
-        self.assertIn("You can add ${moreUnits(remaining)}.", limits)
+        self.assertIn("Maximum ${unitLabel(remaining)}.", limits)
         self.assertIn("Reduce this item to ${unitLabel(allowed)} to check out", limits)
         self.assertIn("Remove this item to check out.", limits)
         self.assertIn("Limit reached: ${unitLabel(maximum)} per customer.", limits)

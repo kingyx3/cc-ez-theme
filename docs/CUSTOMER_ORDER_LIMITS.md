@@ -65,7 +65,7 @@ A row with no refresh configured must leave the window inert. Comparisons in `cu
 
 Renewal is evaluated when the page renders, so it takes effect on the next page load after the timestamp passes.
 
-The date is never shown to shoppers. It is store configuration, not something a customer needs to reason about, so storefront copy states the ceiling only — "Limit reached: 1 unit per customer." Each rule still publishes `refreshAt`, `limitWindowLabel` and `windowStart`, so the configuration can be verified in the browser console and the client-side history filter knows which orders to count.
+The date is never shown to shoppers. It is store configuration, not something a customer needs to reason about, so storefront copy states the ceiling only — "Maximum 1 unit per customer." Each rule still publishes `refreshAt`, `limitWindowLabel` and `windowStart`, so the configuration can be verified in the browser console and the client-side history filter knows which orders to count.
 
 To renew a limit, set the timestamp rather than clearing the maximum: clearing the maximum disables the limit entirely, while a refresh keeps the limit enforced for purchases made from that date onwards.
 
@@ -130,12 +130,14 @@ Every message is one short lead naming the ceiling, followed by at most one clau
 | Nothing left, all of it in the cart | `Limit reached: 2 units per customer. You have 2 in your cart.` |
 | Nothing left, all of it on past orders | `Limit reached: 2 units per customer. You have already ordered 2.` |
 | Nothing left, neither | `Limit reached: 1 unit per customer.` |
-| Room left, some of it spent on orders | `You can add 1 more unit (3 units per customer, 2 already ordered).` |
-| Room left, only the cart holding any | `You can add 1 more unit (3 units per customer).` |
-| Room left, nothing consumed at all | `Limit: 3 units per customer.` |
+| Room left, some of it spent on orders | `Maximum 1 unit (3 per customer, 2 already ordered).` |
+| Room left, only the cart holding any | `Maximum 1 unit (3 per customer).` |
+| Room left, nothing consumed at all | `Maximum 3 units per customer.` |
 | Cart blocks checkout, none allowed | `Limit reached: 3 units per customer. You have already ordered 3, so remove this item to check out.` |
-| Cart blocks checkout, orders took some | `Reduce this item to 1 unit to check out (3 units per customer, 2 already ordered).` |
+| Cart blocks checkout, orders took some | `Reduce this item to 1 unit to check out (3 per customer, 2 already ordered).` |
 | Cart blocks checkout, nothing ordered | `Reduce this item to 3 units to check out.` |
+
+A message with room left states a **cap, not an action**. "You can add 2 more units" was wrong on both counts: it lands under the quantity picker, where a shopper is choosing a number rather than adding anything, so "add" read as add-to-cart — and "2 more" invited them to measure the 2 against the field they were looking at (5 + 2 = 7) instead of against their orders and cart. "Maximum 2 units" is the same number stated as what it is. The cart keeps "Reduce this item to 2 units to check out", because reducing is exactly what the cart asks for.
 
 Two rules decide what follows the ceiling. **Past orders are always accounted for**, because they are the one quantity a shopper cannot see on the page raising the message — told only "you can add 1 more unit (3 units per customer)" after ordering 2, they are left to work out where the other 2 went. **A number is never stated twice**: when nothing has been consumed the ceiling and what may be added are the same figure, so the message names it once.
 
@@ -159,7 +161,7 @@ The shared formatter in `purchase-limit-feedback.js` phrases store-raised limits
 
 This replaced copy that spent three sentences on one number — "Customer purchase limit reached. You have already purchased 2 units of the 2 units allowed per customer across orders." — where the ceiling, the tally and the rule were each stated in full and the shopper had to read to the end to learn they could not buy.
 
-The rule reports two different numbers and they must not be confused. `maximum` is what may still be added — net of the cart and of past orders — while `totalMaximum` is the configured ceiling. `contextual: true` marks the pair, and any reader that measures the cart itself must skip its own subtraction for such a limit. Quoting `maximum` as the ceiling is what produced "2 units in cart + 2 units selected = 0 units maximum" on a product limited to 2 per person: nothing was left to add, and that nothing was printed as the limit. The shared formatter now names a ceiling as a short phrase — "2 units per customer", "only 3 units in stock" — and the product page repeats the validator's own sentence verbatim rather than rebuilding one, so it agrees with the cart and listing and keeps what it says about earlier orders.
+The rule reports two different numbers and they must not be confused. `maximum` is what may still be added — net of the cart and of past orders — while `totalMaximum` is the configured ceiling. `contextual: true` marks the pair, and any reader that measures the cart itself must skip its own subtraction for such a limit. Quoting `maximum` as the ceiling is what produced "2 units in cart + 2 units selected = 0 units maximum" on a product limited to 2 per person: nothing was left to add, and that nothing was printed as the limit. The shared formatter spells each ceiling out in the three positions a sentence needs it — after "Limit reached:", inside a parenthetical, and standing alone — and the product page repeats the validator's own sentence verbatim rather than rebuilding one, so it agrees with the cart and listing and keeps what it says about earlier orders.
 
 ## Signed-out shoppers
 

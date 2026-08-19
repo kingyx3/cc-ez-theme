@@ -37,7 +37,8 @@ class CustomerOrderLimitCopyTests(unittest.TestCase):
         limits = self.read("assets/customer-order-limits.js")
 
         self.assertIn("const unitLabel = (value) => {", limits)
-        self.assertIn("const moreUnits = (value) => {", limits)
+        # `moreUnits` existed only for the "you can add N more" phrasing.
+        self.assertNotIn("moreUnits", limits)
         self.assertIn("Limit reached: ${unitLabel(maximum)} per customer.", limits)
         self.assertIn(
             "${limitReached} You have ${purchased} ordered and ${cartQuantity} in your cart.",
@@ -46,6 +47,9 @@ class CustomerOrderLimitCopyTests(unittest.TestCase):
         self.assertIn("${limitReached} You have ${cartQuantity} in your cart.", limits)
         self.assertIn("${limitReached} You have already ordered ${purchased}.", limits)
         self.assertNotIn("0 units maximum", limits)
+        # "You can add N more" read as add-to-cart on the quantity picker, and
+        # invited the N to be measured against the field rather than the cart.
+        self.assertNotIn("You can add", limits)
         self.assertNotIn("in cart +", limits)
         # The ceiling is named once, by the lead. Restating it as a trailing
         # sentence is what made every message three sentences long.
@@ -58,18 +62,18 @@ class CustomerOrderLimitCopyTests(unittest.TestCase):
         limits = self.read("assets/customer-order-limits.js")
 
         self.assertIn(
-            "You can add ${moreUnits(remaining)}"
-            " (${unitLabel(maximum)} per customer, ${purchased} already ordered).",
+            "Maximum ${unitLabel(remaining)}"
+            " (${maximum} per customer, ${purchased} already ordered).",
             limits,
         )
         self.assertIn(
             "Reduce this item to ${unitLabel(allowed)} to check out"
-            " (${perCustomer}, ${purchased} already ordered).",
+            " (${maximum} per customer, ${purchased} already ordered).",
             limits,
         )
-        # With nothing consumed the ceiling and what may be added are the same
-        # number, so it is stated once rather than twice.
-        self.assertIn("return `Limit: ${unitLabel(maximum)} per customer.`;", limits)
+        # With nothing consumed the cap and the ceiling are the same number, so
+        # it is stated once rather than twice.
+        self.assertIn("return `Maximum ${unitLabel(maximum)} per customer.`;", limits)
         self.assertIn("return `Reduce this item to ${unitLabel(allowed)} to check out.`;", limits)
 
         # The equation copy this guard was written for lived in the shared

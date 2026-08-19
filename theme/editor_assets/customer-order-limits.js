@@ -33,11 +33,6 @@
     return `${count} unit${count === 1 ? '' : 's'}`;
   };
 
-  const moreUnits = (value) => {
-    const count = quantity(value, 0);
-    return `${count} more unit${count === 1 ? '' : 's'}`;
-  };
-
   // A refresh date is store configuration, not something a shopper needs to
   // reason about, so no message names it. The resolved window still travels on
   // the rule as `refreshAt` and `limitWindowLabel` for console verification.
@@ -253,23 +248,25 @@
       return limitReached;
     }
 
-    // Room left, so the message says how much — and why it is less than the
-    // ceiling. Past orders are the part a shopper cannot see: told only "you
-    // can add 1 more unit (3 units per customer)" after ordering 2, they are
-    // left to work out where the other 2 went. The cart needs no such account,
-    // being visible on the page that raised the message.
+    // Room left, so the message states the cap — and why it is below the
+    // ceiling. It states a cap rather than an action because the surface it
+    // appears on is the quantity picker: "you can add 2 more units" read as
+    // add-to-cart while the shopper was only choosing a number, and invited
+    // them to measure the 2 against the field they were looking at instead of
+    // against their orders and cart. Past orders are the part they cannot see,
+    // so those are named; the cart is on the page already.
     if (requestedQuantity > remaining) {
       if (purchased > 0) {
-        return `You can add ${moreUnits(remaining)} (${unitLabel(maximum)} per customer, ${purchased} already ordered).`;
+        return `Maximum ${unitLabel(remaining)} (${maximum} per customer, ${purchased} already ordered).`;
       }
       if (cartQuantity > 0) {
-        return `You can add ${moreUnits(remaining)} (${unitLabel(maximum)} per customer).`;
+        return `Maximum ${unitLabel(remaining)} (${maximum} per customer).`;
       }
-      // Nothing consumed, so the ceiling and what may be added are the same
-      // number. Stating it twice reads as a stutter.
-      return `Limit: ${unitLabel(maximum)} per customer.`;
+      // Nothing consumed, so the cap and the ceiling are the same number and
+      // one mention carries both.
+      return `Maximum ${unitLabel(maximum)} per customer.`;
     }
-    return `You can add ${moreUnits(remaining)}.`;
+    return `Maximum ${unitLabel(remaining)}.`;
   };
 
   const cartMessageFor = (rule, allowed) => {
@@ -284,7 +281,7 @@
       return `Limit reached: ${perCustomer}. Remove this item to check out.`;
     }
     if (purchased > 0) {
-      return `Reduce this item to ${unitLabel(allowed)} to check out (${perCustomer}, ${purchased} already ordered).`;
+      return `Reduce this item to ${unitLabel(allowed)} to check out (${maximum} per customer, ${purchased} already ordered).`;
     }
     // With nothing ordered the target is the ceiling, so naming it again adds
     // no information.

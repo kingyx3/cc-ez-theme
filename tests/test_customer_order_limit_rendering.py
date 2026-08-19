@@ -315,7 +315,7 @@ class CustomerOrderLimitRenderingTests(unittest.TestCase):
         # may be added are then the same number — stating it twice reads as a
         # stutter, so it is stated once.
         untouched = self.rule(self.render(maximum=3))
-        self.assertEqual(untouched["message"].strip(), "Limit: 3 per customer.")
+        self.assertEqual(untouched["message"].strip(), "Maximum 3 per customer.")
 
     # --- refresh windows ----------------------------------------------------
 
