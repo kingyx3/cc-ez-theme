@@ -221,14 +221,66 @@ def chunked(items: list[Any], size: int = BATCH_SIZE) -> Iterable[list[Any]]:
         yield items[start : start + size]
 
 
+def assert_batch_success(
+    document: Any,
+    *,
+    action: str,
+    expected_count: int,
+) -> None:
+    """Reject HubSpot batch responses that contain partial or pending failures."""
+
+    if not isinstance(document, dict):
+        raise SyncError(f"HubSpot product batch {action} returned an invalid response")
+
+    errors = document.get("errors")
+    try:
+        num_errors = int(document.get("numErrors") or 0)
+    except (TypeError, ValueError):
+        num_errors = 1
+
+    if num_errors or (isinstance(errors, list) and errors):
+        detail = json.dumps(errors[:3], ensure_ascii=False) if isinstance(errors, list) else repr(errors)
+        raise SyncError(
+            f"HubSpot product batch {action} reported {num_errors or 'one or more'} "
+            f"item errors: {detail[:1500]}"
+        )
+
+    status = str(document.get("status") or "").upper()
+    if status and status != "COMPLETE":
+        raise SyncError(
+            f"HubSpot product batch {action} did not complete synchronously: {status}"
+        )
+
+    results = document.get("results")
+    if not isinstance(results, list) or len(results) != expected_count:
+        actual = len(results) if isinstance(results, list) else "missing"
+        raise SyncError(
+            f"HubSpot product batch {action} returned {actual} results for "
+            f"{expected_count} inputs"
+        )
+
+
 def _batch_write(access_token: str, action: str, inputs: list[dict[str, Any]]) -> None:
     headers = {"Authorization": f"Bearer {access_token}"}
-    for batch in chunked(inputs):
-        _http_json(
+    for batch_number, batch in enumerate(chunked(inputs), start=1):
+        traced: list[dict[str, Any]] = []
+        for item_number, item in enumerate(batch, start=1):
+            traced_item = dict(item)
+            traced_item["objectWriteTraceId"] = (
+                f"products-{action}-{batch_number}-{item_number}"
+            )
+            traced.append(traced_item)
+
+        response = _http_json(
             f"{HUBSPOT_PRODUCTS_URL}/batch/{action}",
             method="POST",
             headers=headers,
-            payload={"inputs": batch},
+            payload={"inputs": traced},
+        )
+        assert_batch_success(
+            response,
+            action=action,
+            expected_count=len(traced),
         )
 
 
