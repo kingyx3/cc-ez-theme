@@ -2,6 +2,14 @@
 branch = True
 source = scripts
 
+# The EasyStore -> HubSpot CRM sync scripts are not part of the theme package
+# and are not exercised by tests/. They have their own gate: the "Validate CRM
+# sync" job in .github/workflows/sync-easystore-customers-hubspot.yml compiles
+# them and runs crm_tests/ on every change that touches them. Measuring them
+# here would only lower the theme suite's 100% requirement.
+omit =
+    scripts/easystore_hubspot_*.py
+
 [report]
 fail_under = 100
 show_missing = True

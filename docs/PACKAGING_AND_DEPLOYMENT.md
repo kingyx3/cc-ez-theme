@@ -93,6 +93,11 @@ The coverage configuration enforces 100% line and branch coverage for the
 packaging and validation code. This tests the repository tooling, not every
 possible EasyStore runtime condition.
 
+`.coveragerc` omits `scripts/easystore_hubspot_*.py`. Those CRM sync scripts
+ship no theme code and are not imported by `tests/`; they are compiled and
+tested by the `Validate CRM sync` job instead. See
+`docs/CUSTOMER_CRM_SYNC.md`.
+
 ## 6. Build the upload ZIP
 
 ```bash
