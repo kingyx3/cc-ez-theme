@@ -64,6 +64,61 @@ class ProductMappingTests(unittest.TestCase):
         )
 
 
+class HubSpotBatchResponseTests(unittest.TestCase):
+    def test_product_batch_requires_all_results(self) -> None:
+        response = {
+            "status": "COMPLETE",
+            "numErrors": 0,
+            "errors": [],
+            "results": [{"id": "1"}],
+        }
+        with self.assertRaises(products.SyncError):
+            products.assert_batch_success(
+                response,
+                action="create",
+                expected_count=2,
+            )
+
+    def test_product_batch_rejects_item_errors_on_successful_http_response(self) -> None:
+        response = {
+            "status": "COMPLETE",
+            "numErrors": 1,
+            "errors": [{"message": "bad SKU"}],
+            "results": [{"id": "1"}],
+        }
+        with self.assertRaises(products.SyncError):
+            products.assert_batch_success(
+                response,
+                action="create",
+                expected_count=2,
+            )
+
+    def test_contact_batch_accepts_complete_full_result_set(self) -> None:
+        customers.assert_batch_success(
+            {
+                "status": "COMPLETE",
+                "numErrors": 0,
+                "errors": [],
+                "results": [{"id": "1"}, {"id": "2"}],
+            },
+            action="update",
+            expected_count=2,
+        )
+
+    def test_contact_batch_rejects_pending_response(self) -> None:
+        with self.assertRaises(customers.SyncError):
+            customers.assert_batch_success(
+                {
+                    "status": "PENDING",
+                    "numErrors": 0,
+                    "errors": [],
+                    "results": [],
+                },
+                action="create",
+                expected_count=1,
+            )
+
+
 class OrderLineMappingTests(unittest.TestCase):
     def test_line_sku_falls_back_to_product_and_variant_ids(self) -> None:
         self.assertEqual(
