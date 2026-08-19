@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""Fail before CRM writes when mobile-number identity is ambiguous.
+"""Fail before CRM writes when API access or mobile identity is unsafe.
 
 Customer mobile number is the authoritative Contact identity for this integration.
-A duplicate normalized mobile in EasyStore or multiple existing HubSpot Contacts
-for an EasyStore mobile therefore makes automatic ownership unsafe. This preflight
-performs only reads and fails the workflow before Product, Contact, Order, or Line
-Item writes begin.
+Before any Product, Contact, Order, or Line Item mutation, this preflight verifies
+that the configured tokens can read every API surface used by the production sync
+and then checks that mobile ownership is unambiguous.
 """
 
 from __future__ import annotations
@@ -15,8 +14,18 @@ import json
 import os
 import sys
 from collections import defaultdict
-from typing import Any
+from typing import Any, Iterable
 
+from easystore_hubspot_orders import (
+    HUBSPOT_BASE,
+    HUBSPOT_LINE_ITEMS_URL,
+    HUBSPOT_ORDERS_URL,
+    HUBSPOT_PRODUCTS_URL,
+    _http_json,
+    iter_easystore_orders,
+    iter_hubspot_objects,
+)
+from easystore_hubspot_products import iter_easystore_products
 from easystore_hubspot_sync import (
     SyncError,
     _nonempty,
@@ -39,6 +48,59 @@ def _sample(duplicates: dict[str, set[str]], limit: int = 10) -> str:
     )
 
 
+def _probe(iterator: Iterable[Any]) -> None:
+    """Execute the iterator's first API page without requiring any records."""
+
+    next(iter(iterator), None)
+
+
+def check_api_access(
+    *,
+    store_domain: str,
+    easystore_access_token: str,
+    hubspot_access_token: str,
+) -> None:
+    """Verify every read-side route/scope used later before mutations begin."""
+
+    # EasyStore: trigger the first page for all three required Public API scopes.
+    _probe(iter_easystore_products(store_domain, easystore_access_token))
+    _probe(iter_easystore_orders(store_domain, easystore_access_token))
+
+    # HubSpot: prove that the Product, Order and Line Item object routes/scopes
+    # are readable. Contacts are scanned fully by check_identity immediately
+    # afterwards, so a separate Contact probe would only duplicate a request.
+    _probe(
+        iter_hubspot_objects(
+            HUBSPOT_PRODUCTS_URL,
+            hubspot_access_token,
+            "hs_sku",
+        )
+    )
+    _probe(
+        iter_hubspot_objects(
+            HUBSPOT_ORDERS_URL,
+            hubspot_access_token,
+            "hs_order_name",
+        )
+    )
+    _probe(
+        iter_hubspot_objects(
+            HUBSPOT_LINE_ITEMS_URL,
+            hubspot_access_token,
+            "hs_sku,hs_product_id",
+        )
+    )
+
+    # The order stage may create its unique EasyStore ID property on first run.
+    # This read validates the Order schema route and crm.schemas.orders.read
+    # before Product/Contact mutations. The write scope is exercised only if the
+    # property actually needs to be created.
+    _http_json(
+        f"{HUBSPOT_BASE}/crm/v3/properties/order/groups",
+        headers={"Authorization": f"Bearer {hubspot_access_token}"},
+    )
+
+
 def check_identity(
     *,
     store_domain: str,
@@ -46,6 +108,12 @@ def check_identity(
     hubspot_access_token: str,
     fallback_dial_code: str,
 ) -> dict[str, int]:
+    check_api_access(
+        store_domain=store_domain,
+        easystore_access_token=easystore_access_token,
+        hubspot_access_token=hubspot_access_token,
+    )
+
     easystore_owners: dict[str, set[str]] = defaultdict(set)
     easystore_customers = 0
     skipped_without_mobile = 0
@@ -103,6 +171,7 @@ def check_identity(
         )
 
     return {
+        "api_surfaces_readable": 1,
         "easystore_customers_scanned": easystore_customers,
         "unique_mobile_customers": len(easystore_owners),
         "hubspot_contacts_scanned": hubspot_contacts,
