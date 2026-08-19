@@ -21,11 +21,15 @@ from easystore_hubspot_orders import (
     HUBSPOT_LINE_ITEMS_URL,
     HUBSPOT_ORDERS_URL,
     HUBSPOT_PRODUCTS_URL,
+    SyncError as OrderSyncError,
     _http_json,
     iter_easystore_orders,
     iter_hubspot_objects,
 )
-from easystore_hubspot_products import iter_easystore_products
+from easystore_hubspot_products import (
+    SyncError as ProductSyncError,
+    iter_easystore_products,
+)
 from easystore_hubspot_sync import (
     SyncError,
     _nonempty,
@@ -33,6 +37,9 @@ from easystore_hubspot_sync import (
     iter_hubspot_contacts,
     normalize_mobile,
 )
+
+
+PREFLIGHT_ERRORS = (SyncError, OrderSyncError, ProductSyncError)
 
 
 def ambiguous_owners(owners: dict[str, set[str]]) -> dict[str, set[str]]:
@@ -209,7 +216,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.fallback_dial_code, "CUSTOMER_SYNC_DEFAULT_DIAL_CODE"
             ),
         )
-    except SyncError as error:
+    except PREFLIGHT_ERRORS as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 1
 
