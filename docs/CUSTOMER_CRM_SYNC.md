@@ -1,8 +1,10 @@
 # EasyStore CRM sync
 
-`.github/workflows/sync-easystore-customers-hubspot.yml` independently syncs EasyStore commerce/CRM data into HubSpot at **00:00, 06:00, 12:00 and 18:00 Singapore time** and can also be run manually with `workflow_dispatch`.
+`.github/workflows/sync-easystore-customers-hubspot.yml` independently synchronizes EasyStore commerce/CRM data into HubSpot at **00:00, 06:00, 12:00 and 18:00 Singapore time** and can also be run manually with `workflow_dispatch`.
 
-The workflow runs in dependency order: **Products → Customers → Orders + Line Items**. Products establish catalog identity first, customers establish contact identity second, and the order stage then links purchases to both.
+The production workflow runs in dependency order: **identity preflight → Products → Customers → Orders + Line Items → reconciliation**. Pull requests run only the credential-free validation job; they never call EasyStore or HubSpot with production credentials.
+
+> GitHub Actions schedules are best-effort rather than a real-time scheduler. The workflow is configured for the four requested Singapore clock times, but GitHub may start scheduled runs late during platform load. Concurrency prevents two production sync runs from overlapping.
 
 ## Required repository secrets
 
@@ -22,19 +24,41 @@ The workflow runs in dependency order: **Products → Customers → Orders + Lin
   - `crm.schemas.orders.read`
   - `crm.schemas.orders.write`
 
-The existing `EASYSTORE_ADMIN_TOKEN` used by theme deployment is intentionally not reused. EasyStore's documented Public API authenticates with the `EasyStore-Access-Token` header, so this sync has its own least-privilege read credential.
+Optional repository variable `CUSTOMER_SYNC_DEFAULT_DIAL_CODE` defaults to Singapore `65`.
+
+The existing `EASYSTORE_ADMIN_TOKEN` used by theme deployment is intentionally not reused. EasyStore's Public API uses the `EasyStore-Access-Token` header, so the CRM sync has its own least-privilege read credential.
+
+## Production safety model
+
+The integration is deliberately fail-closed where an automatic choice could merge the wrong identity or catalog record:
+
+- **Customer identity preflight is read-only.** Before any Product, Contact, Order, or Line Item write, `scripts/easystore_hubspot_preflight.py` scans EasyStore customers and the relevant HubSpot Contacts. If more than one EasyStore customer owns the same normalized mobile, or an EasyStore mobile already maps to multiple HubSpot Contacts, the entire run stops before writes.
+- **Product SKU ambiguity stops the Product stage before writes.** Duplicate EasyStore SKUs or multiple HubSpot Products with the same SKU are not guessed through.
+- **Orders validate catalog references before order writes.** Every EasyStore merchandise line must resolve to a HubSpot Product before the order stage starts mutating Orders or Line Items.
+- **Stale synchronized order lines are reconciled only after the upsert succeeds.** `scripts/easystore_hubspot_reconcile.py` builds a complete reconciliation plan first, then archives product-backed HubSpot Line Items that no longer exist on their EasyStore order. Standalone/manual HubSpot line items without `hs_product_id` are preserved.
+- **Transient remote failures retry.** HTTP 429 and 5xx responses use bounded backoff; persistent API errors fail the run and surface in Actions.
+- **Production runs never overlap.** The workflow concurrency group serializes scheduled/manual production executions.
+
+## Pull-request CI
+
+Changes to the CRM workflow, sync scripts, CRM tests, or this document trigger the `Validate CRM sync` job on pull requests. That job requires no secrets and performs:
+
+1. Python 3.13 bytecode compilation of every CRM sync script.
+2. `crm_tests/test_crm_sync.py`, covering mobile normalization, duplicate-identity detection, SKU fallback, product-backed line construction, fail-closed catalog matching, stale-line reconciliation, and order field mapping.
+
+The credentialed `sync` job is explicitly skipped for `pull_request` events.
 
 ## Products and variants
 
 `scripts/easystore_hubspot_products.py` synchronizes the EasyStore catalog into HubSpot's native Product library.
 
-An **EasyStore variant maps to one HubSpot Product record**. This is deliberate: an EasyStore parent product can have multiple variants with separate SKUs and prices, while a HubSpot Product represents one SKU/unit-price combination. It also lets each EasyStore order line reference the exact HubSpot Product record for the purchased variant.
+An **EasyStore variant maps to one HubSpot Product record**. An EasyStore parent can have variants with separate SKUs and prices, while a HubSpot Product represents one catalog SKU/unit-price combination. Variant-level records also let each order line reference the exact purchased Product.
 
 Product identity is HubSpot `hs_sku`:
 
 - if the EasyStore variant has a SKU, that value is used;
 - if the EasyStore variant has no SKU, the sync generates the stable value `ES-<product_id>-<variant_id>`;
-- if EasyStore contains duplicate non-blank SKUs, or HubSpot already contains multiple Products with the same SKU, the sync stops before writing products rather than guessing which record owns the SKU.
+- duplicate EasyStore SKUs or duplicate HubSpot Product SKUs stop the stage rather than choosing an owner.
 
 Fields synchronized are:
 
@@ -46,21 +70,25 @@ Fields synchronized are:
 | parent `description` / `body_html` | `description` |
 | variant `cost_price` | `hs_cost_of_goods_sold` |
 
-EasyStore products are paged from `/api/3.0/products.json`. If a product-list response does not include variants, the sync retrieves them from `/api/3.0/products/<product_id>/variants.json`. HubSpot products are scanned in pages of 100 and then created/updated using HubSpot batch endpoints.
+EasyStore products are paged from `/api/3.0/products.json`. If a product-list response does not include variants, the sync retrieves `/api/3.0/products/<product_id>/variants.json`. HubSpot Products are scanned in pages and then created/updated through batch endpoints.
+
+The sync intentionally does **not** delete HubSpot Products that disappear from the current EasyStore catalog, because historical Orders and Line Items may still refer to those products.
 
 ## Customer identity and normalization
 
 The normalized mobile number is the only CRM Contact identity key. Email is synchronized as contact data but is never used to decide which HubSpot record belongs to an EasyStore customer.
 
-`scripts/easystore_hubspot_sync.py` normalizes EasyStore `phone` values to an E.164-style `+<country code><subscriber>` value. It uses the customer's EasyStore ISO `country_code` when available and otherwise falls back to repository variable `CUSTOMER_SYNC_DEFAULT_DIAL_CODE`, which defaults to Singapore `65`.
+`scripts/easystore_hubspot_sync.py` normalizes EasyStore `phone` values to a conservative E.164-style `+<country code><subscriber>` value. It uses the customer's EasyStore ISO `country_code` when available and otherwise falls back to `CUSTOMER_SYNC_DEFAULT_DIAL_CODE`.
 
-The normalized value is written to both HubSpot `mobilephone` and `phone`. Existing HubSpot contacts are scanned and normalized the same way before matching, so harmless formatting differences do not create a second contact.
+The normalized value is written to both HubSpot `mobilephone` and `phone`. Existing HubSpot Contacts are normalized with the same function before matching, so formatting differences do not create a second Contact.
 
-If multiple EasyStore customer records share a normalized mobile number, the most recently updated record wins for that run. If multiple HubSpot contacts already share the same normalized number, the contact sync does not guess and reports the conflict.
+Duplicate ownership is **not** resolved by "latest record wins" in production. The preflight stops the entire run before writes when two distinct EasyStore customer IDs normalize to the same mobile or when one EasyStore mobile maps to multiple HubSpot Contacts. Those duplicates must be reconciled deliberately because mobile number is the authoritative identity.
+
+Customers without a usable mobile number are skipped and counted; they cannot be safely assigned a CRM identity under this model.
 
 ## Customer fields synchronized
 
-The contact sync uses HubSpot standard contact properties only:
+The Contact sync uses HubSpot standard properties only:
 
 | EasyStore | HubSpot Contact |
 | --- | --- |
@@ -75,30 +103,30 @@ The contact sync uses HubSpot standard contact properties only:
 | `primary_address.country` or customer `country` | `country` |
 | `primary_address.company` | `company` |
 
-HubSpot email uniqueness is respected without turning email into an identity key. If an EasyStore email is already owned by another HubSpot contact, the sync still updates/creates the phone-identified contact but omits that conflicting email and logs a warning.
+HubSpot email uniqueness is respected without turning email into identity. If an EasyStore email is already owned by a different HubSpot Contact, the phone-identified Contact is still synchronized but that conflicting email value is omitted and logged.
 
 ## Orders and product-backed line items
 
-`scripts/easystore_hubspot_orders.py` synchronizes EasyStore orders after Products and Customers have completed successfully.
+`scripts/easystore_hubspot_orders.py` runs only after Product and Contact synchronization succeeds.
 
 The commerce model is:
 
 1. **EasyStore Customer → HubSpot Contact**, keyed by normalized mobile number.
 2. **EasyStore Variant → HubSpot Product**, keyed by SKU.
 3. **EasyStore Order → HubSpot Order**, keyed by immutable EasyStore order ID.
-4. **EasyStore order item → HubSpot Line Item**, backed by the matching HubSpot Product through `hs_product_id`.
-5. **HubSpot Order → Contact** association, so purchase history is attached to the customer.
-6. **HubSpot Order → Line Item** association, so the order contains the purchased catalog items.
+4. **EasyStore order item → HubSpot Line Item**, backed by the matching Product through `hs_product_id`.
+5. **HubSpot Order → Contact** association.
+6. **HubSpot Order → Line Item** association.
 
-Products themselves are not associated directly to Orders in HubSpot; the product-backed Line Item is the transaction-specific instance that joins catalog data to an order.
+Products themselves are catalog records; the product-backed Line Item is the transaction-specific instance joining the catalog to an Order.
 
 ### Order identity and idempotency
 
-On the first order-sync run, the script creates a HubSpot Order property group named `easystore_sync` and a unique text property named `easystore_order_id`. The immutable EasyStore order ID is stored there and used to find the same HubSpot Order on every later six-hour run.
+On the first production order-sync run, the script creates a HubSpot Order property group named `easystore_sync` and a unique text property named `easystore_order_id`. The immutable EasyStore order ID is stored there and used to resolve the same HubSpot Order on later runs.
 
-If the property already exists but is not configured as unique, the sync stops rather than creating duplicate order identity.
+If the property already exists but is not configured as unique, the sync stops rather than creating ambiguous order identity.
 
-Order fields currently mapped to HubSpot standard Order properties include:
+Order fields currently mapped include:
 
 | EasyStore | HubSpot Order |
 | --- | --- |
@@ -106,7 +134,7 @@ Order fields currently mapped to HubSpot standard Order properties include:
 | `name` / `order_number` / `ref_number` | `hs_order_name` |
 | `currency` / `currency_code` | `hs_currency_code` |
 | store domain | `hs_source_store` |
-| `fulfillment_status_label` / `fulfillment_status` | `hs_fulfillment_status` |
+| fulfillment status | `hs_fulfillment_status` |
 | shipping address street | `hs_shipping_address_street` |
 | shipping address city | `hs_shipping_address_city` |
 | shipping address zip/postal code | `hs_shipping_address_postal_code` |
@@ -115,13 +143,11 @@ Order fields currently mapped to HubSpot standard Order properties include:
 
 ### Product-backed line items
 
-Before any order/line-item writes, the order stage validates every EasyStore order line against the HubSpot Product library. A line must resolve by its real SKU, or by the same deterministic `ES-<product_id>-<variant_id>` key used by the product sync for SKU-less variants.
+A line must resolve by its real SKU, or by the same deterministic `ES-<product_id>-<variant_id>` key used for SKU-less variants. If it cannot resolve to a HubSpot Product, the order stage fails instead of creating a standalone line item.
 
-If an order line cannot resolve to a HubSpot Product, the order stage fails instead of silently creating a standalone line item. This guarantees every synchronized EasyStore merchandise line is product-backed.
+Within an Order, HubSpot Line Items are matched by `hs_sku`. Reruns update quantity, price, name, and currency rather than creating duplicates. If an existing synchronized line points at the wrong Product ID, it is recreated with the correct product backing.
 
-Within an order, existing HubSpot Line Items are matched by `hs_sku`. Reruns update quantity, price, name and currency rather than creating duplicates. If an existing line is backed by the wrong HubSpot Product ID, it is recreated and re-associated to the Order using the correct product backing.
-
-The HubSpot Line Item fields synchronized are:
+Fields synchronized are:
 
 | EasyStore order line | HubSpot Line Item |
 | --- | --- |
@@ -132,14 +158,29 @@ The HubSpot Line Item fields synchronized are:
 | unit price | `price` |
 | order currency | `hs_line_item_currency_code` |
 
-If EasyStore repeats the same SKU more than once in one order at the same unit price, quantities are combined into one HubSpot Line Item for that product. Repeated SKU lines with different unit prices fail rather than being merged ambiguously.
+If EasyStore repeats the same SKU in one Order at the same unit price, quantities are combined. Repeated SKU lines with different unit prices fail instead of being merged ambiguously.
+
+After the main order upsert, reconciliation archives synchronized product-backed lines whose SKU has been removed from the EasyStore Order. Manual/standalone HubSpot line items are not archived by this integration.
 
 ### Order-to-contact matching
 
-The order stage resolves the buyer using the same normalized-mobile rule as the customer sync. It checks customer data first and falls back to billing/shipping phone fields. A unique HubSpot Contact match is associated to the Order. Missing mobile numbers or ambiguous duplicate HubSpot contacts are counted and skipped rather than attaching the purchase to the wrong person.
+The buyer is resolved with the same normalized-mobile rule as Customer synchronization, checking customer data first and then billing/shipping phone fields. Because the workflow preflight has already ruled out duplicate CRM ownership, a unique Contact can be associated safely. Orders without a usable mobile remain unassociated and are counted in the run summary.
 
 ## API behavior
 
 EasyStore orders are paged from `/api/3.0/orders.json`. If a list record does not include `line_items`, the sync retrieves `/api/3.0/orders/<order_id>.json` before processing it.
 
-HTTP 429 and 5xx responses are retried with bounded backoff. A remote API error fails the run. The order stage validates all EasyStore order lines against HubSpot Products before it starts writing orders or line items, preventing partially imported orders caused by missing catalog identity.
+All product references are validated before order/line-item writes, and the stale-line archive plan is fully built before any archive request is sent. This reduces the blast radius of incomplete source reads or catalog mismatches.
+
+## First-production-run checklist
+
+Before merging/enabling the scheduled sync:
+
+1. Configure `EASYSTORE_ACCESS_TOKEN` and `HUBSPOT_ACCESS_TOKEN` with exactly the scopes above.
+2. Confirm `CUSTOMER_SYNC_DEFAULT_DIAL_CODE` if the store's default is not Singapore.
+3. Reconcile any known duplicate customer mobile numbers in EasyStore or HubSpot; otherwise preflight will intentionally fail.
+4. Prefer a manual run first and review all five Actions summary sections: Preflight, Products, Customers, Orders and Line Items, Reconciliation.
+5. Spot-check several HubSpot Contacts, Products, Orders, and associated Line Items against EasyStore, including a multi-variant product and an order with more than one line.
+6. For a full sandbox rehearsal before production, EasyStore supports development stores populated with Products, Variants, Customers, and Orders.
+
+A green pull-request validation proves the deterministic mapping and fail-closed logic without credentials. A real API smoke test is still required to validate the specific EasyStore/HubSpot account configuration, scopes, existing CRM schema, and live data shape.
