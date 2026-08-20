@@ -6,6 +6,13 @@ indexed by both ``mobilephone`` and ``phone`` after applying the same
 normalization rules used for EasyStore. A unique match is updated; no match is
 created; ambiguous HubSpot matches are left untouched and make the run fail.
 
+Customers with no mobile number recorded are filtered out before any write:
+blank, unusable and placeholder values (``0000000`` and friends) all count as
+"not recorded", so they are never created or updated as HubSpot contacts.
+
+Having an EasyStore account makes a contact a ``lead``. The order sync promotes
+buyers to ``customer`` afterwards, and neither stage is ever written backwards.
+
 Only Python's standard library is used so the scheduled workflow has no runtime
 package dependency.
 """
@@ -30,6 +37,23 @@ BATCH_SIZE = 100
 EASYSTORE_PAGE_SIZE = 50
 PHONE_MIN_DIGITS = 7
 PHONE_MAX_DIGITS = 15
+LIFECYCLE_PROPERTY = "lifecyclestage"
+LIFECYCLE_LEAD = "lead"
+
+# HubSpot refuses to move a contact backwards through the default lifecycle
+# pipeline, so a stage is only written when it is a genuine step forward. A stage
+# outside this ordering belongs to a custom pipeline and is never overwritten.
+# Having an EasyStore account makes a contact a lead; the order sync promotes
+# buyers to "customer" afterwards, and that promotion is never undone here.
+LIFECYCLE_STAGE_RANKS = {
+    "subscriber": 1,
+    "lead": 2,
+    "marketingqualifiedlead": 3,
+    "salesqualifiedlead": 4,
+    "opportunity": 5,
+    "customer": 6,
+    "evangelist": 7,
+}
 
 # Enough coverage for the store's common APAC customer base plus the markets
 # most often seen in the CRM. International numbers that already carry a
@@ -84,6 +108,9 @@ def normalize_mobile(
     digits = _digits(raw)
     if not digits:
         return None
+    if len(set(digits)) == 1:
+        # Placeholders such as 0000000 are not a recorded mobile number.
+        return None
 
     if raw.startswith("+"):
         international = digits
@@ -111,11 +138,50 @@ def normalize_mobile(
     return f"+{international}"
 
 
+def customer_mobile(
+    customer: dict[str, Any],
+    fallback_dial_code: str = "65",
+) -> str | None:
+    """Return an EasyStore customer's CRM mobile identity, or ``None``.
+
+    This is the single definition of the contact filter: a customer with no
+    usable recorded mobile number is left out of the CRM entirely, because
+    mobile is the identity key and such a record can neither be matched to an
+    existing HubSpot Contact nor safely created as a new one.
+    """
+
+    return normalize_mobile(
+        customer.get("phone"),
+        customer.get("country_code"),
+        fallback_dial_code,
+    )
+
+
 def _nonempty(value: Any) -> str | None:
     if value is None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def lifecycle_stage_write(current: Any, target: str = LIFECYCLE_LEAD) -> str | None:
+    """Return the lifecycle stage to write, or ``None`` to leave HubSpot alone.
+
+    A contact keeps the furthest stage it has already reached, so a buyer already
+    marked ``customer`` is not demoted back to ``lead`` by a later contact sync,
+    and a stage from a custom pipeline is never overwritten.
+    """
+
+    existing = _nonempty(current)
+    if existing is None:
+        return target
+
+    current_rank = LIFECYCLE_STAGE_RANKS.get(existing.casefold())
+    if current_rank is None:
+        return None
+    if current_rank >= LIFECYCLE_STAGE_RANKS[target]:
+        return None
+    return target
 
 
 def customer_properties(customer: dict[str, Any], mobile: str) -> dict[str, str]:
@@ -277,7 +343,7 @@ def iter_hubspot_contacts(access_token: str) -> Iterator[dict[str, Any]]:
     while True:
         params = {
             "limit": "100",
-            "properties": "email,phone,mobilephone",
+            "properties": f"email,phone,mobilephone,{LIFECYCLE_PROPERTY}",
             "archived": "false",
         }
         if after is not None:
@@ -404,6 +470,7 @@ def sync(
 
     hubspot_phone_ids: dict[str, set[str]] = defaultdict(set)
     hubspot_email_ids: dict[str, set[str]] = defaultdict(set)
+    hubspot_lifecycle: dict[str, str] = {}
     hubspot_contacts = 0
 
     for contact in iter_hubspot_contacts(hubspot_access_token):
@@ -425,6 +492,10 @@ def sync(
         if email:
             hubspot_email_ids[email.casefold()].add(contact_id)
 
+        stage = _nonempty(properties.get(LIFECYCLE_PROPERTY))
+        if stage is not None:
+            hubspot_lifecycle[contact_id] = stage
+
     easystore_by_phone: dict[str, dict[str, Any]] = {}
     easystore_total = 0
     skipped_without_phone = 0
@@ -432,12 +503,9 @@ def sync(
 
     for customer in iter_easystore_customers(store_domain, easystore_access_token):
         easystore_total += 1
-        normalized = normalize_mobile(
-            customer.get("phone"),
-            customer.get("country_code"),
-            fallback_dial_code,
-        )
+        normalized = customer_mobile(customer, fallback_dial_code)
         if normalized is None:
+            # Filtered out: no mobile number recorded, so no CRM identity.
             skipped_without_phone += 1
             continue
         if normalized in easystore_by_phone:
@@ -451,6 +519,7 @@ def sync(
     updates: list[dict[str, Any]] = []
     ambiguous_hubspot_phones = 0
     email_conflicts = 0
+    lifecycle_assignments = 0
 
     for mobile, customer in easystore_by_phone.items():
         matching_ids = hubspot_phone_ids.get(mobile, set())
@@ -481,6 +550,17 @@ def sync(
                     file=sys.stderr,
                 )
 
+        # An EasyStore account is a lead. Contacts that already sit further along
+        # the pipeline, e.g. buyers promoted to "customer" by the order sync,
+        # keep the stage they reached.
+        stage = lifecycle_stage_write(
+            hubspot_lifecycle.get(target_id) if target_id is not None else None,
+            LIFECYCLE_LEAD,
+        )
+        if stage is not None:
+            properties[LIFECYCLE_PROPERTY] = stage
+            lifecycle_assignments += 1
+
         if target_id is None:
             creates.append({"properties": properties})
         else:
@@ -499,6 +579,7 @@ def sync(
         "duplicate_easystore_mobile_records": duplicate_easystore_phones,
         "ambiguous_hubspot_mobile_numbers": ambiguous_hubspot_phones,
         "email_conflicts_omitted": email_conflicts,
+        "lifecycle_stage_leads_assigned": lifecycle_assignments,
     }
     return summary
 

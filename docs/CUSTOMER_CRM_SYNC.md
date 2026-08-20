@@ -42,16 +42,26 @@ The integration is deliberately fail-closed where an automatic choice could merg
 
 ## Pull-request CI
 
+CI is bifurcated between this repository's two independent products. A pull request that only touches CRM sync sources runs the CRM gate and no theme jobs; a pull request that only touches the theme runs the theme jobs and not this one:
+
+| Change | Workflow gate |
+| --- | --- |
+| `scripts/easystore_hubspot_*.py`, `crm_tests/**`, `docs/CUSTOMER_CRM_SYNC.md`, the CRM workflow | `Validate CRM sync` |
+| `theme/**`, `tests/**`, `scripts/theme_ci.py`, `scripts/easystore_publish.py`, `requirements-dev.txt`, `.coveragerc`, the packaging workflow | `Package EasyStore theme` (push) |
+| `theme/**`, `e2e/**`, `package.json`, `playwright.config.js`, the E2E workflow | `EasyStore browser E2E` (pull request) |
+
+A change that spans both products triggers both sets of gates, and either workflow can still be started by hand with `workflow_dispatch`.
+
 Changes to the CRM workflow, sync scripts, CRM tests, or this document trigger the `Validate CRM sync` job on pull requests. That job requires no secrets and performs:
 
 1. Python 3.13 bytecode compilation of every CRM sync script.
-2. `crm_tests/test_crm_sync.py`, covering mobile normalization, duplicate-identity detection, SKU fallback, product-backed line construction, fail-closed catalog matching, stale-line reconciliation, order field mapping, and HubSpot partial-batch error handling.
+2. `crm_tests/test_crm_sync.py`, covering mobile normalization, the no-mobile contact filter, duplicate-identity detection, SKU fallback, product-backed line construction, fail-closed catalog matching, stale-line reconciliation, order field mapping, order commerce-field resolution and provisioning, timestamp and amount normalization, lifecycle-stage transitions, and HubSpot partial-batch error handling.
 
 The credentialed `sync` job is explicitly skipped for `pull_request` events.
 
 This job is the coverage gate for the CRM sync scripts. `.coveragerc` omits `scripts/easystore_hubspot_*.py` from the theme suite's 100% line-and-branch requirement, because `tests/` exercises the theme packaging and validation tooling and never imports the CRM scripts. Adding a CRM script to `scripts/` therefore does not silently lower the theme gate, and the CRM scripts stay gated by compilation plus `crm_tests/` here.
 
-The repository's browser E2E workflow is also a PR gate. Browser-installing jobs use timeout budgets that leave headroom for Playwright's network-bound browser/dependency installation so the actual regression tests are not cancelled before they execute. Each `playwright install --with-deps` invocation is additionally bounded and retried once: the flag shells out to `apt-get`, and a stalled Ubuntu mirror would otherwise consume the whole job budget and report the check as cancelled instead of failing.
+The repository's browser E2E workflow is the PR gate for theme changes; it does not run for a CRM-only pull request, because no CRM change can alter the storefront it drives. Its browser-installing jobs use timeout budgets that leave headroom for Playwright's network-bound browser/dependency installation so the actual regression tests are not cancelled before they execute. Each `playwright install --with-deps` invocation is additionally bounded and retried once: the flag shells out to `apt-get`, and a stalled Ubuntu mirror would otherwise consume the whole job budget and report the check as cancelled instead of failing.
 
 ## Products and variants
 
@@ -89,7 +99,7 @@ The normalized value is written to both HubSpot `mobilephone` and `phone`. Exist
 
 Duplicate ownership is **not** resolved by "latest record wins" in production. The preflight stops the entire run before writes when two distinct EasyStore customer IDs normalize to the same mobile or when one EasyStore mobile maps to multiple HubSpot Contacts. Those duplicates must be reconciled deliberately because mobile number is the authoritative identity.
 
-Customers without a usable mobile number are skipped and counted; they cannot be safely assigned a CRM identity under this model.
+Contacts with no mobile number recorded are filtered out before any HubSpot write and counted as `skipped_without_mobile`; they cannot be safely assigned a CRM identity under this model. "Not recorded" covers a blank or missing `phone`, a value with no digits at all (`-`, `n/a`), a value too short or too long to be a real number, and placeholder values whose digits are all the same character (`0000000`, `1111111111`). `easystore_hubspot_sync.customer_mobile` is the single definition of this filter, and the preflight applies the same function, so an excluded contact cannot register as a duplicate-identity conflict either.
 
 ## Customer fields synchronized
 
@@ -107,6 +117,21 @@ The Contact sync uses HubSpot standard properties only:
 | `primary_address.zip` | `zip` |
 | `primary_address.country` or customer `country` | `country` |
 | `primary_address.company` | `company` |
+
+### Lifecycle stage
+
+The CRM sync also maintains the contact's `lifecyclestage`:
+
+- an EasyStore **account** makes the contact a `lead`, assigned by the customer sync;
+- an EasyStore **order** makes its buyer a `customer`, assigned by the order sync once the order resolves to exactly one HubSpot Contact.
+
+HubSpot does not move a contact backwards through the default lifecycle pipeline, so a stage is only written when it is a genuine step forward:
+
+- a contact already at or beyond the target stage keeps the stage it reached — a later customer-sync run never demotes a buyer from `customer` back to `lead`;
+- a stage outside HubSpot's default pipeline (`subscriber`, `lead`, `marketingqualifiedlead`, `salesqualifiedlead`, `opportunity`, `customer`, `evangelist`) belongs to a custom pipeline and is left untouched;
+- an order whose buyer is ambiguous or has no usable mobile promotes nobody, exactly as it associates nobody.
+
+The customer run summary reports `lifecycle_stage_leads_assigned` and the order run summary reports `contacts_promoted_to_customer`.
 
 HubSpot email uniqueness is respected without turning email into identity. If an EasyStore email is already owned by a different HubSpot Contact, the phone-identified Contact is still synchronized but that conflicting email value is omitted and logged.
 
@@ -139,12 +164,60 @@ Order fields currently mapped include:
 | `name` / `order_number` / `ref_number` | `hs_order_name` |
 | `currency` / `currency_code` | `hs_currency_code` |
 | store domain | `hs_source_store` |
-| fulfillment status | `hs_fulfillment_status` |
+| order created timestamp | `hs_order_date` or `easystore_order_created_at` |
+| payment status | `hs_payment_status` or `easystore_payment_status` |
+| shipping/fulfilment status | `hs_fulfillment_status` or `easystore_fulfillment_status` |
+| order total amount | `hs_total_price` or `easystore_total_amount` |
+| order discount amount | `hs_order_discount_amount` or `easystore_discount_amount` |
+| discount codes | `easystore_discount_codes` |
 | shipping address street | `hs_shipping_address_street` |
 | shipping address city | `hs_shipping_address_city` |
 | shipping address zip/postal code | `hs_shipping_address_postal_code` |
 | fulfillment tracking number | `hs_shipping_tracking_number` |
 | fulfillment tracking URL | `hs_shipping_status_url` |
+
+Each commerce value is read from the first EasyStore field that carries it, so
+label and raw variants are both handled:
+
+| Field | EasyStore source, in order of preference |
+| --- | --- |
+| order created timestamp | `created_at`, `created_on`, `processed_at`, `order_date`, `date` |
+| payment status | `payment_status_label`, `payment_status`, `financial_status_label`, `financial_status` |
+| shipping/fulfilment status | `fulfillment_status_label`, `fulfillment_status`, `shipment_status`, `shipping_status` |
+| total amount | `total_price`, `total_amount`, `grand_total`, `total` |
+| discount amount | `total_discount`, `total_discounts`, `discount_amount`, `discount_total` |
+| discount codes | `discount_codes[].code`, then `discount_code` / `coupon_code` |
+
+Timestamps are converted to the epoch milliseconds HubSpot datetime properties
+expect. ISO 8601 values keep the offset EasyStore reports; a value with no offset
+is read as UTC rather than guessed at, and an epoch value is scaled from seconds
+to milliseconds when needed.
+
+Amounts are normalized to a bare decimal for HubSpot number properties: currency
+prefixes and thousands separators are stripped, a value with no parseable amount
+is omitted rather than written as text, and the discount amount is written as a
+positive magnitude whether EasyStore reports it as `12.00` or `-12.00`. Discount
+codes are joined into one comma separated value, de-duplicated in source order.
+A field EasyStore does not report for an order is left untouched in HubSpot
+rather than being cleared.
+
+### Portal-specific order property resolution
+
+HubSpot's native Order schema is not identical between portals: a property can be
+absent, calculated from line items, read-only, or defined as an enumeration that
+would reject EasyStore's free-form labels. Before any order write, the sync reads
+`GET /crm/v3/properties/order` and resolves each commerce field:
+
+1. the preferred native property is used when the portal has it as a writable
+   property of the expected type (`string` or `number`);
+2. otherwise the sync uses an `easystore_*` property in the `easystore_sync`
+   group, creating it on first run, so the value always lands somewhere;
+3. an existing `easystore_*` property of a conflicting type stops the stage
+   instead of producing a rejected write.
+
+The run summary reports `commerce_fields_on_easystore_properties`, and the
+resolved mapping is printed to the step log, so it is visible which HubSpot
+property each field landed in.
 
 ### Product-backed line items
 
@@ -169,7 +242,7 @@ After the main order upsert, reconciliation archives synchronized product-backed
 
 ### Order-to-contact matching
 
-The buyer is resolved with the same normalized-mobile rule as Customer synchronization, checking customer data first and then billing/shipping phone fields. Because the workflow preflight has already ruled out duplicate CRM ownership, a unique Contact can be associated safely. Orders without a usable mobile remain unassociated and are counted in the run summary.
+The buyer is resolved with the same normalized-mobile rule as Customer synchronization, checking customer data first and then billing/shipping phone fields. Because the workflow preflight has already ruled out duplicate CRM ownership, a unique Contact can be associated safely. That same unique Contact is promoted to the `customer` lifecycle stage. Orders without a usable mobile remain unassociated, promote nobody, and are counted in the run summary.
 
 ## API behavior
 

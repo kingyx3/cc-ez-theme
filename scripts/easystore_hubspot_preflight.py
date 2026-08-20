@@ -33,6 +33,7 @@ from easystore_hubspot_products import (
 from easystore_hubspot_sync import (
     SyncError,
     _nonempty,
+    customer_mobile,
     iter_easystore_customers,
     iter_hubspot_contacts,
     normalize_mobile,
@@ -98,13 +99,20 @@ def check_api_access(
         )
     )
 
-    # The order stage may create its unique EasyStore ID property on first run.
-    # This read validates the Order schema route and crm.schemas.orders.read
-    # before Product/Contact mutations. The write scope is exercised only if the
-    # property actually needs to be created.
+    # The order stage may create its unique EasyStore ID property and the
+    # easystore_* commerce properties on first run, and it resolves every
+    # commerce field against the live Order property schema. These reads
+    # validate both schema routes and crm.schemas.orders.read before
+    # Product/Contact mutations. The write scope is exercised only if a property
+    # actually needs to be created.
+    schema_headers = {"Authorization": f"Bearer {hubspot_access_token}"}
     _http_json(
         f"{HUBSPOT_BASE}/crm/v3/properties/order/groups",
-        headers={"Authorization": f"Bearer {hubspot_access_token}"},
+        headers=schema_headers,
+    )
+    _http_json(
+        f"{HUBSPOT_BASE}/crm/v3/properties/order",
+        headers=schema_headers,
     )
 
 
@@ -127,11 +135,9 @@ def check_identity(
 
     for customer in iter_easystore_customers(store_domain, easystore_access_token):
         easystore_customers += 1
-        mobile = normalize_mobile(
-            customer.get("phone"),
-            customer.get("country_code"),
-            fallback_dial_code,
-        )
+        # Same contact filter as the customer sync: customers with no mobile
+        # number recorded never reach HubSpot, so they cannot collide either.
+        mobile = customer_mobile(customer, fallback_dial_code)
         if mobile is None:
             skipped_without_mobile += 1
             continue
