@@ -26,10 +26,19 @@ import re
 import sys
 import time
 from collections import defaultdict
-from typing import Any, Iterable, Iterator
+from typing import Any, Callable, Iterable, Iterator
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+
+from easystore_hubspot_schema import (
+    FieldSpec,
+    apply_fields,
+    describe_mapping,
+    field_values,
+    first_present,
+    resolve_fields,
+)
 
 
 HUBSPOT_BASE_URL = "https://api.hubapi.com/crm/v3/objects/contacts"
@@ -77,6 +86,106 @@ COUNTRY_DIAL_CODES = {
     "US": "1",
     "VN": "84",
 }
+
+
+CONTACT_OBJECT_TYPE = "contacts"
+
+# EasyStore customer facts that HubSpot's standard contact properties have no
+# home for. HubSpot's own equivalents (total_revenue, num_associated_deals) are
+# calculated from HubSpot records rather than writable, so these are provisioned
+# in the easystore_sync group. The stage is optional: a token without the
+# contact schema scopes simply syncs the standard properties.
+CONTACT_FIELDS: tuple[FieldSpec, ...] = (
+    FieldSpec(
+        key="customer_id",
+        sources=("id", "customer_id"),
+        fallback="easystore_customer_id",
+        label="EasyStore Customer ID",
+        description="Immutable EasyStore customer ID for cross-referencing the store.",
+    ),
+    FieldSpec(
+        key="customer_since",
+        sources=("created_at", "created_on", "registered_at"),
+        fallback="easystore_customer_since",
+        label="EasyStore Customer Since",
+        description="Timestamp at which the customer account was created in EasyStore.",
+        kind="datetime",
+    ),
+    FieldSpec(
+        key="orders_count",
+        sources=("orders_count", "order_count", "total_orders"),
+        fallback="easystore_orders_count",
+        label="EasyStore Orders",
+        description="Number of orders the customer has placed in EasyStore.",
+        kind="number",
+    ),
+    FieldSpec(
+        key="total_spent",
+        sources=("total_spent", "total_spend", "lifetime_spend"),
+        fallback="easystore_total_spent",
+        label="EasyStore Total Spent",
+        description="Lifetime amount the customer has spent in EasyStore.",
+        kind="number",
+    ),
+    FieldSpec(
+        key="last_order_at",
+        sources=("last_order_at", "last_order_date", "latest_order_at"),
+        fallback="easystore_last_order_at",
+        label="EasyStore Last Order",
+        description="Timestamp of the customer's most recent EasyStore order.",
+        kind="datetime",
+    ),
+    FieldSpec(
+        key="birthday",
+        sources=("birthday", "birth_date", "date_of_birth", "dob"),
+        native=("date_of_birth",),
+        fallback="easystore_customer_birthday",
+        label="EasyStore Birthday",
+        description="Birthday the customer gave EasyStore.",
+        kind="date",
+    ),
+    FieldSpec(
+        key="gender",
+        sources=("gender", "sex"),
+        native=("gender",),
+        fallback="easystore_customer_gender",
+        label="EasyStore Gender",
+        description="Gender the customer gave EasyStore.",
+    ),
+    FieldSpec(
+        key="tags",
+        fallback="easystore_customer_tags",
+        label="EasyStore Customer Tags",
+        description="Comma separated tags on the EasyStore customer record.",
+    ),
+    FieldSpec(
+        key="note",
+        sources=("note", "notes", "remark"),
+        fallback="easystore_customer_note",
+        label="EasyStore Customer Note",
+        description="Note staff left on the EasyStore customer record.",
+    ),
+)
+
+
+# Where EasyStore reports the customer attributes a merchant defines themselves,
+# e.g. "How did you find us?". Each one becomes its own HubSpot property.
+CUSTOM_ATTRIBUTE_SOURCES = (
+    "custom_fields",
+    "customer_attributes",
+    "attributes",
+    "note_attributes",
+    "metafields",
+    "fields",
+)
+ATTRIBUTE_PROPERTY_PREFIX = "easystore_attr_"
+ATTRIBUTE_KEY_PREFIX = "attribute:"
+# A storefront can accumulate a long tail of one-off attributes. Provisioning a
+# HubSpot property for each without limit would clutter the CRM, so the sync
+# takes the first attributes in alphabetical order and names the rest in the log.
+ATTRIBUTE_LIMIT = 25
+# HubSpot rejects an internal property name longer than 100 characters.
+PROPERTY_NAME_LIMIT = 100
 
 
 class SyncError(RuntimeError):
@@ -184,7 +293,183 @@ def lifecycle_stage_write(current: Any, target: str = LIFECYCLE_LEAD) -> str | N
     return target
 
 
-def customer_properties(customer: dict[str, Any], mobile: str) -> dict[str, str]:
+def _customer_tags(customer: dict[str, Any]) -> str | None:
+    """Return the customer's tags as one comma separated value."""
+
+    tags = customer.get("tags")
+    if isinstance(tags, str):
+        candidates: list[Any] = tags.split(",")
+    elif isinstance(tags, list):
+        candidates = list(tags)
+    else:
+        candidates = []
+
+    collected: list[str] = []
+    for candidate in candidates:
+        tag = (
+            first_present(candidate, ("name", "title", "tag"))
+            if isinstance(candidate, dict)
+            else _nonempty(candidate)
+        )
+        if tag is not None and tag not in collected:
+            collected.append(tag)
+    return ", ".join(collected) if collected else None
+
+
+CONTACT_FIELD_DERIVATIONS: dict[str, Callable[[dict[str, Any]], str | None]] = {
+    "tags": _customer_tags,
+}
+
+
+def _attribute_value(value: Any) -> str | None:
+    """Return one attribute answer as text, however EasyStore shaped it."""
+
+    if isinstance(value, dict):
+        return first_present(value, ("value", "label", "name", "answer"))
+    if isinstance(value, list):
+        answers = [
+            answer
+            for answer in (_attribute_value(item) for item in value)
+            if answer is not None
+        ]
+        return ", ".join(dict.fromkeys(answers)) if answers else None
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return _nonempty(value)
+
+
+def customer_attributes(customer: dict[str, Any]) -> dict[str, str]:
+    """Return the merchant-defined attributes on a customer, keyed by label.
+
+    EasyStore reports these either as a mapping of label to answer or as a list
+    of records carrying a label and a value, so both shapes are read.
+    """
+
+    collected: dict[str, str] = {}
+    for source in CUSTOM_ATTRIBUTE_SOURCES:
+        raw = customer.get(source)
+        entries: list[tuple[Any, Any]] = []
+        if isinstance(raw, dict):
+            entries = list(raw.items())
+        elif isinstance(raw, list):
+            for item in raw:
+                if isinstance(item, dict):
+                    label = first_present(
+                        item,
+                        ("label", "name", "key", "title", "question"),
+                    )
+                    if label is not None:
+                        entries.append((label, item.get("value", item.get("answer"))))
+                    continue
+                # A bare list is a set of answers rather than labelled fields.
+                entries.append((source, item))
+
+        for label, value in entries:
+            label_text = _nonempty(label)
+            answer = _attribute_value(value)
+            if label_text is None or answer is None:
+                continue
+            collected.setdefault(label_text, answer)
+    return collected
+
+
+def attribute_property_name(label: str) -> str | None:
+    """Return the HubSpot property name for an attribute label, or ``None``."""
+
+    slug = re.sub(r"[^a-z0-9]+", "_", label.casefold()).strip("_")
+    if not slug:
+        return None
+    return (ATTRIBUTE_PROPERTY_PREFIX + slug)[:PROPERTY_NAME_LIMIT]
+
+
+def attribute_fields(labels: Iterable[str]) -> tuple[tuple[FieldSpec, ...], list[str]]:
+    """Return a FieldSpec per attribute label, plus the labels left out.
+
+    Labels are taken in alphabetical order so a run is deterministic, and two
+    labels that would share one property name keep the first.
+    """
+
+    fields: list[FieldSpec] = []
+    skipped: list[str] = []
+    claimed: set[str] = set()
+
+    for label in sorted(set(labels)):
+        name = attribute_property_name(label)
+        if name is None or name in claimed or len(fields) >= ATTRIBUTE_LIMIT:
+            skipped.append(label)
+            continue
+        claimed.add(name)
+        fields.append(
+            FieldSpec(
+                key=f"{ATTRIBUTE_KEY_PREFIX}{label}",
+                fallback=name,
+                label=f"EasyStore: {label}",
+                description=f"EasyStore customer attribute {label!r}.",
+            )
+        )
+    return tuple(fields), skipped
+
+
+def customer_field_values(customer: dict[str, Any]) -> dict[str, str]:
+    """Return the extra EasyStore customer facts, keyed by field key.
+
+    Merchant-defined attributes are keyed by their label. Only the ones that
+    resolved to a HubSpot property are written, so an unmapped attribute is
+    simply ignored by :func:`apply_fields`.
+    """
+
+    values = field_values(customer, CONTACT_FIELDS, CONTACT_FIELD_DERIVATIONS)
+    for label, answer in customer_attributes(customer).items():
+        values[f"{ATTRIBUTE_KEY_PREFIX}{label}"] = answer
+    return values
+
+
+def resolve_contact_fields(
+    access_token: str,
+    attribute_labels: Iterable[str] = (),
+) -> dict[str, str]:
+    """Map the extra customer facts and attributes onto HubSpot properties.
+
+    Provisioning contact properties needs the HubSpot contact schema scopes. They
+    are not required to synchronize a contact's standard properties, so a token
+    without them logs a warning and the extras are skipped.
+    """
+
+    discovered, skipped = attribute_fields(attribute_labels)
+    if skipped:
+        print(
+            f"WARNING: {len(skipped)} EasyStore customer attributes were not "
+            "synchronized (attribute limit or duplicate property name): "
+            + ", ".join(skipped),
+            file=sys.stderr,
+        )
+
+    fields = CONTACT_FIELDS + discovered
+    resolved = resolve_fields(
+        http_json=_http_json,
+        access_token=access_token,
+        object_type=CONTACT_OBJECT_TYPE,
+        fields=fields,
+        error=SyncError,
+        optional=True,
+    )
+    if len(resolved) < len(fields):
+        missing = sorted(field.key for field in fields if field.key not in resolved)
+        print(
+            "WARNING: EasyStore customer fields not synchronized because HubSpot "
+            "did not provide a writable property (add crm.schemas.contacts.read "
+            "and crm.schemas.contacts.write to the token to enable them): "
+            + ", ".join(missing),
+            file=sys.stderr,
+        )
+    return resolved
+
+
+def customer_properties(
+    customer: dict[str, Any],
+    mobile: str,
+    field_properties: dict[str, str] | None = None,
+) -> dict[str, str]:
     """Map an EasyStore customer onto HubSpot's standard contact properties."""
 
     properties: dict[str, str] = {
@@ -230,6 +515,9 @@ def customer_properties(customer: dict[str, Any], mobile: str) -> dict[str, str]
         if country is not None:
             properties["country"] = country
 
+    if field_properties:
+        apply_fields(properties, customer_field_values(customer), field_properties)
+
     return properties
 
 
@@ -240,8 +528,13 @@ def _http_json(
     headers: dict[str, str] | None = None,
     payload: Any = None,
     retries: int = 4,
+    allow_statuses: set[int] | None = None,
 ) -> Any:
-    """Issue an HTTP request and decode JSON, retrying throttling/server errors."""
+    """Issue an HTTP request and decode JSON, retrying throttling/server errors.
+
+    ``allow_statuses`` turns the listed HTTP statuses into a ``None`` result
+    instead of an error, which lets optional schema work degrade quietly.
+    """
 
     body = None
     request_headers = {
@@ -263,6 +556,10 @@ def _http_json(
                     return {}
                 return json.loads(raw.decode("utf-8"))
         except HTTPError as error:
+            if allow_statuses and error.code in allow_statuses:
+                error.read()
+                return None
+
             raw_error = error.read().decode("utf-8", errors="replace")
             retryable = error.code == 429 or 500 <= error.code < 600
             if retryable and attempt < retries:
@@ -465,7 +762,7 @@ def sync(
     easystore_access_token: str,
     hubspot_access_token: str,
     fallback_dial_code: str,
-) -> dict[str, int]:
+) -> dict[str, Any]:
     """Perform one complete EasyStore -> HubSpot customer sync."""
 
     hubspot_phone_ids: dict[str, set[str]] = defaultdict(set)
@@ -515,11 +812,32 @@ def sync(
             customer,
         )
 
+    # Which merchant-defined attributes exist is a property of the data, not of
+    # this script, so the HubSpot properties are resolved once the customers that
+    # will actually be written are known.
+    attribute_labels = {
+        label
+        for customer in easystore_by_phone.values()
+        for label in customer_attributes(customer)
+    }
+    contact_field_properties = resolve_contact_fields(
+        hubspot_access_token,
+        attribute_labels,
+    )
+    print(
+        "EasyStore customer fields mapped to HubSpot properties: "
+        + describe_mapping(contact_field_properties),
+        file=sys.stderr,
+    )
+
     creates: list[dict[str, Any]] = []
     updates: list[dict[str, Any]] = []
     ambiguous_hubspot_phones = 0
     email_conflicts = 0
     lifecycle_assignments = 0
+    # How many synchronized customers actually carried each extra fact. A zero
+    # means EasyStore did not report it, not that HubSpot rejected it.
+    field_coverage: dict[str, int] = {field.key: 0 for field in CONTACT_FIELDS}
 
     for mobile, customer in easystore_by_phone.items():
         matching_ids = hubspot_phone_ids.get(mobile, set())
@@ -532,7 +850,9 @@ def sync(
             )
             continue
 
-        properties = customer_properties(customer, mobile)
+        properties = customer_properties(customer, mobile, contact_field_properties)
+        for key in customer_field_values(customer):
+            field_coverage[key] = field_coverage.get(key, 0) + 1
         email = properties.get("email")
         target_id = next(iter(matching_ids), None)
 
@@ -580,6 +900,11 @@ def sync(
         "ambiguous_hubspot_mobile_numbers": ambiguous_hubspot_phones,
         "email_conflicts_omitted": email_conflicts,
         "lifecycle_stage_leads_assigned": lifecycle_assignments,
+        "hubspot_contact_field_properties": dict(
+            sorted(contact_field_properties.items())
+        ),
+        "easystore_customer_attributes_found": len(attribute_labels),
+        "easystore_customer_field_coverage": dict(sorted(field_coverage.items())),
     }
     return summary
 

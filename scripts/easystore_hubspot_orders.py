@@ -34,12 +34,22 @@ import re
 import sys
 import time
 from collections import defaultdict
-from datetime import datetime, timezone
-from decimal import Decimal, InvalidOperation
-from typing import Any, Iterator, NamedTuple
+from typing import Any, Callable, Iterator, NamedTuple
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+
+from easystore_hubspot_schema import (
+    FieldSpec,
+    PROPERTY_GROUP,
+    apply_fields,
+    describe_mapping,
+    ensure_property_group,
+    field_values,
+    first_present,
+    nonempty,
+    resolve_fields,
+)
 
 
 EASYSTORE_PAGE_SIZE = 50
@@ -51,10 +61,11 @@ HUBSPOT_PRODUCTS_URL = f"{HUBSPOT_BASE}/crm/v3/objects/products"
 HUBSPOT_CONTACTS_URL = f"{HUBSPOT_BASE}/crm/v3/objects/contacts"
 ORDER_CONTACT_ASSOCIATION_TYPE_ID = 507
 ORDER_LINE_ITEM_ASSOCIATION_TYPE_ID = 513
+ORDER_OBJECT_TYPE = "order"
+LINE_ITEM_OBJECT_TYPE = "line_items"
 ORDER_EXTERNAL_ID_PROPERTY = "easystore_order_id"
 CONTACT_LIFECYCLE_PROPERTY = "lifecyclestage"
 LIFECYCLE_CUSTOMER = "customer"
-PROPERTY_GROUP = "easystore_sync"
 
 # HubSpot refuses to move a contact backwards through the default lifecycle
 # pipeline, so a stage is only written when it is a genuine step forward. A stage
@@ -69,12 +80,6 @@ LIFECYCLE_STAGE_RANKS = {
     "evangelist": 7,
 }
 
-# HubSpot field types used when provisioning an easystore_* order property.
-PROPERTY_FIELD_TYPES = {
-    "string": "text",
-    "number": "number",
-    "datetime": "date",
-}
 PHONE_MIN_DIGITS = 7
 PHONE_MAX_DIGITS = 15
 
@@ -98,186 +103,13 @@ COUNTRY_DIAL_CODES = {
     "VN": "84",
 }
 
-
-class OrderField(NamedTuple):
-    """A commerce field copied from an EasyStore order onto a HubSpot Order.
-
-    ``native`` lists the HubSpot properties to prefer, most specific first. A
-    native property is only used when the portal's live Order schema has it as a
-    writable property of the expected ``kind``; enumerations and
-    calculated/read-only properties are skipped because EasyStore sends
-    free-form labels that HubSpot would reject. Otherwise the sync provisions
-    ``fallback`` in the ``easystore_sync`` group, so the value always lands.
-    """
-
-    key: str
-    sources: tuple[str, ...]
-    native: tuple[str, ...]
-    fallback: str
-    label: str
-    description: str
-    kind: str = "string"
-    absolute: bool = False
-
-
-ORDER_FIELDS: tuple[OrderField, ...] = (
-    OrderField(
-        key="created_at",
-        sources=("created_at", "created_on", "processed_at", "order_date", "date"),
-        native=("hs_order_date",),
-        fallback="easystore_order_created_at",
-        label="EasyStore Order Created",
-        description="Timestamp at which the order was created in EasyStore.",
-        kind="datetime",
-    ),
-    OrderField(
-        key="payment_status",
-        sources=(
-            "payment_status_label",
-            "payment_status",
-            "financial_status_label",
-            "financial_status",
-        ),
-        native=("hs_payment_status",),
-        fallback="easystore_payment_status",
-        label="EasyStore Payment Status",
-        description="Payment status reported by EasyStore for this order.",
-    ),
-    OrderField(
-        key="fulfillment_status",
-        sources=(
-            "fulfillment_status_label",
-            "fulfillment_status",
-            "shipment_status",
-            "shipping_status",
-        ),
-        native=("hs_fulfillment_status",),
-        fallback="easystore_fulfillment_status",
-        label="EasyStore Fulfilment Status",
-        description="Shipping/fulfilment status reported by EasyStore for this order.",
-    ),
-    OrderField(
-        key="total_amount",
-        sources=("total_price", "total_amount", "grand_total", "total"),
-        native=("hs_total_price",),
-        fallback="easystore_total_amount",
-        label="EasyStore Order Total",
-        description="Total amount charged for the order, in the order currency.",
-        kind="number",
-    ),
-    OrderField(
-        key="discount_amount",
-        sources=(
-            "total_discount",
-            "total_discounts",
-            "discount_amount",
-            "discount_total",
-        ),
-        native=("hs_order_discount_amount", "hs_discount_amount"),
-        fallback="easystore_discount_amount",
-        label="EasyStore Order Discount",
-        description="Total discount applied to the order, in the order currency.",
-        kind="number",
-        absolute=True,
-    ),
-    OrderField(
-        key="discount_codes",
-        # Discount codes are collected from the order's discount collection
-        # rather than a single scalar field, so this entry has no direct sources.
-        sources=(),
-        native=(),
-        fallback="easystore_discount_codes",
-        label="EasyStore Discount Codes",
-        description="Comma separated discount codes applied to the EasyStore order.",
-    ),
-)
-
-# Property names used when the live HubSpot schema has not been resolved, e.g.
-# in unit tests. Production runs always resolve against the portal schema.
-DEFAULT_ORDER_FIELD_PROPERTIES: dict[str, str] = {
-    field.key: field.native[0] if field.native else field.fallback
-    for field in ORDER_FIELDS
-}
-
-_MONEY_PATTERN = re.compile(r"-?\d+(?:\.\d+)?")
-
-
+# HubSpot field types used when provisioning an easystore_* order property.
 class SyncError(RuntimeError):
     """Raised when an API or identity invariant prevents a safe order sync."""
 
 
-def nonempty(value: Any) -> str | None:
-    if value is None:
-        return None
-    text = str(value).strip()
-    return text or None
-
-
 def _digits(value: Any) -> str:
     return re.sub(r"\D", "", str(value or ""))
-
-
-def _first_present(record: dict[str, Any], keys: tuple[str, ...]) -> str | None:
-    """Return the first non-empty value among ``keys``, honouring their order."""
-
-    for key in keys:
-        value = nonempty(record.get(key))
-        if value is not None:
-            return value
-    return None
-
-
-def _money(value: Any, *, absolute: bool = False) -> str | None:
-    """Return a plain decimal string for an EasyStore monetary value.
-
-    EasyStore reports amounts as numbers or as strings that may carry a currency
-    prefix or thousands separators. HubSpot number properties need a bare
-    decimal, so anything without a parseable amount is dropped rather than
-    written as text.
-    """
-
-    if value is None:
-        return None
-    text = str(value).strip().replace(",", "")
-    if not text:
-        return None
-    match = _MONEY_PATTERN.search(text)
-    if match is None:
-        return None
-    try:
-        amount = Decimal(match.group(0))
-    except InvalidOperation:
-        return None
-    if absolute:
-        amount = amount.copy_abs()
-    return str(amount)
-
-
-def _timestamp(value: Any) -> str | None:
-    """Return epoch milliseconds for an EasyStore timestamp, or ``None``.
-
-    HubSpot datetime properties accept epoch milliseconds, so ISO 8601 values
-    are converted. EasyStore sends offsets for store-local timestamps; a value
-    without an offset is read as UTC rather than guessed at.
-    """
-
-    text = nonempty(value)
-    if text is None:
-        return None
-
-    if text.isdigit():
-        epoch = int(text)
-        # Ten digits or fewer is a seconds-precision epoch, otherwise milliseconds.
-        return str(epoch * 1000 if len(text) <= 10 else epoch)
-
-    candidate = text[:-1] + "+00:00" if text[-1:] in {"Z", "z"} else text
-    try:
-        moment = datetime.fromisoformat(candidate)
-    except ValueError:
-        return None
-    if moment.tzinfo is None:
-        moment = moment.replace(tzinfo=timezone.utc)
-    return str(int(moment.timestamp() * 1000))
 
 
 def lifecycle_stage_write(current: Any, target: str) -> str | None:
@@ -449,10 +281,20 @@ def complete_order(
     store_domain: str,
     access_token: str,
     order: dict[str, Any],
+    *,
+    commerce_fields: bool = True,
 ) -> dict[str, Any]:
-    """Return an order carrying line_items, fetching detail when list data is thin."""
+    """Return a complete order, fetching the detail when list data is thin.
 
-    if isinstance(order.get("line_items"), list):
+    ``commerce_fields`` is what the order stage needs: addresses and totals as
+    well as line items. The reconciliation stage only reads line items, so it
+    opts out and keeps its request count unchanged.
+    """
+
+    thin = order_needs_detail(order) if commerce_fields else not isinstance(
+        order.get("line_items"), list
+    )
+    if not thin:
         return order
 
     order_id = nonempty(order.get("id"))
@@ -507,28 +349,13 @@ def iter_hubspot_objects(
         after = str(next_after)
 
 
-def ensure_property_group(access_token: str) -> None:
-    """Create the ``easystore_sync`` Order property group when it is missing."""
-
-    headers = {"Authorization": f"Bearer {access_token}"}
-    group_url = f"{HUBSPOT_BASE}/crm/v3/properties/order/groups/{PROPERTY_GROUP}"
-    group = _http_json(group_url, headers=headers, allow_statuses={404})
-    if group is None:
-        _http_json(
-            f"{HUBSPOT_BASE}/crm/v3/properties/order/groups",
-            method="POST",
-            headers=headers,
-            payload={
-                "name": PROPERTY_GROUP,
-                "label": "EasyStore Sync",
-                "displayOrder": -1,
-            },
-        )
-
-
 def ensure_order_identity_property(access_token: str) -> None:
     headers = {"Authorization": f"Bearer {access_token}"}
-    ensure_property_group(access_token)
+    ensure_property_group(
+        http_json=_http_json,
+        access_token=access_token,
+        object_type=ORDER_OBJECT_TYPE,
+    )
 
     property_url = (
         f"{HUBSPOT_BASE}/crm/v3/properties/order/{ORDER_EXTERNAL_ID_PROPERTY}"
@@ -557,107 +384,6 @@ def ensure_order_identity_property(access_token: str) -> None:
             f"HubSpot property {ORDER_EXTERNAL_ID_PROPERTY!r} exists but is not unique. "
             "Archive/replace it as a unique property before running the order sync."
         )
-
-
-def order_property_schema(access_token: str) -> dict[str, dict[str, Any]]:
-    """Return the portal's Order properties keyed by internal name."""
-
-    document = _http_json(
-        f"{HUBSPOT_BASE}/crm/v3/properties/order",
-        headers={"Authorization": f"Bearer {access_token}"},
-    )
-    results = document.get("results") if isinstance(document, dict) else None
-    if not isinstance(results, list):
-        raise SyncError("HubSpot did not return the Order property schema")
-
-    schema: dict[str, dict[str, Any]] = {}
-    for prop in results:
-        if not isinstance(prop, dict):
-            continue
-        name = nonempty(prop.get("name"))
-        if name is not None:
-            schema[name] = prop
-    return schema
-
-
-def writable_property(prop: Any, kind: str) -> bool:
-    """Report whether a HubSpot property accepts a written value of ``kind``."""
-
-    if not isinstance(prop, dict):
-        return False
-    if bool(prop.get("calculated")) or bool(prop.get("archived")):
-        return False
-    metadata = prop.get("modificationMetadata")
-    if isinstance(metadata, dict) and bool(metadata.get("readOnlyValue")):
-        return False
-    # An enumeration only accepts its own defined options, and EasyStore sends
-    # free-form labels; matching type keeps the write from being rejected.
-    return str(prop.get("type") or "") == kind
-
-
-def select_order_property(
-    field: OrderField,
-    schema: dict[str, dict[str, Any]],
-) -> str | None:
-    """Return the native HubSpot property to use for ``field``, if any fits."""
-
-    for name in field.native:
-        if writable_property(schema.get(name), field.kind):
-            return name
-    return None
-
-
-def ensure_order_field_properties(access_token: str) -> dict[str, str]:
-    """Resolve every commerce field to a writable HubSpot Order property.
-
-    Native properties are preferred. Fields without a usable native property use
-    a provisioned ``easystore_*`` property so a portal-specific Order schema
-    never silently drops synchronized commerce data.
-    """
-
-    schema = order_property_schema(access_token)
-    resolved: dict[str, str] = {}
-    missing: list[OrderField] = []
-
-    for field in ORDER_FIELDS:
-        native = select_order_property(field, schema)
-        if native is not None:
-            resolved[field.key] = native
-            continue
-
-        existing = schema.get(field.fallback)
-        if isinstance(existing, dict):
-            if not writable_property(existing, field.kind):
-                raise SyncError(
-                    f"HubSpot Order property {field.fallback!r} exists but cannot "
-                    f"accept a writable {field.kind} value. Archive or replace it "
-                    "before running the order sync."
-                )
-            resolved[field.key] = field.fallback
-            continue
-
-        missing.append(field)
-
-    if missing:
-        ensure_property_group(access_token)
-    for field in missing:
-        _http_json(
-            f"{HUBSPOT_BASE}/crm/v3/properties/order",
-            method="POST",
-            headers={"Authorization": f"Bearer {access_token}"},
-            payload={
-                "groupName": PROPERTY_GROUP,
-                "name": field.fallback,
-                "label": field.label,
-                "description": field.description,
-                "type": field.kind,
-                "fieldType": PROPERTY_FIELD_TYPES[field.kind],
-                "formField": False,
-            },
-        )
-        resolved[field.key] = field.fallback
-
-    return resolved
 
 
 def hubspot_product_index(access_token: str) -> dict[str, str]:
@@ -760,34 +486,46 @@ def hubspot_order_index(access_token: str) -> dict[str, str]:
 
 
 def _order_address(order: dict[str, Any]) -> dict[str, Any]:
-    for key in ("shipping_address", "billing_address"):
+    """Return the address to ship to, falling back to the billing address."""
+
+    for key in ("shipping_address", "billing_address", "address"):
         value = order.get(key)
         if isinstance(value, dict):
             return value
     return {}
 
 
-def _tracking(order: dict[str, Any]) -> tuple[str | None, str | None]:
+def _billing_address(order: dict[str, Any]) -> dict[str, Any]:
+    value = order.get("billing_address")
+    return value if isinstance(value, dict) else {}
+
+
+def _address_street(address: dict[str, Any]) -> str | None:
+    """Return the street lines of an address as one multi-line value."""
+
+    address1 = first_present(address, ("address1", "address_1", "street", "line1"))
+    address2 = first_present(address, ("address2", "address_2", "unit", "line2"))
+    if address1 and address2:
+        return f"{address1}\n{address2}"
+    return address1 or address2
+
+
+def _fulfillments(order: dict[str, Any]) -> list[dict[str, Any]]:
     fulfillments = order.get("fulfillments")
     if isinstance(fulfillments, dict):
         fulfillments = [fulfillments]
     if not isinstance(fulfillments, list):
         fulfillment = order.get("fulfillment")
         fulfillments = [fulfillment] if isinstance(fulfillment, dict) else []
+    return [item for item in fulfillments if isinstance(item, dict)]
 
+
+def _tracking(order: dict[str, Any]) -> tuple[str | None, str | None]:
     numbers: list[str] = []
     urls: list[str] = []
-    for fulfillment in fulfillments:
-        if not isinstance(fulfillment, dict):
-            continue
-        number = nonempty(
-            fulfillment.get("tracking_number")
-            or fulfillment.get("tracking_no")
-        )
-        url = nonempty(
-            fulfillment.get("tracking_url")
-            or fulfillment.get("tracking_status_url")
-        )
+    for fulfillment in _fulfillments(order):
+        number = first_present(fulfillment, ("tracking_number", "tracking_no"))
+        url = first_present(fulfillment, ("tracking_url", "tracking_status_url"))
         if number and number not in numbers:
             numbers.append(number)
         if url and url not in urls:
@@ -796,6 +534,47 @@ def _tracking(order: dict[str, Any]) -> tuple[str | None, str | None]:
         ", ".join(numbers) if numbers else None,
         urls[0] if urls else None,
     )
+
+
+def _tracking_number(order: dict[str, Any]) -> str | None:
+    return _tracking(order)[0]
+
+
+def _tracking_url(order: dict[str, Any]) -> str | None:
+    return _tracking(order)[1]
+
+
+def _shipping_method(order: dict[str, Any]) -> str | None:
+    """Return the chosen delivery method, however EasyStore reports it."""
+
+    direct = first_present(
+        order,
+        (
+            "shipping_method",
+            "shipping_method_name",
+            "shipping_title",
+            "shipment_method",
+            "delivery_method",
+        ),
+    )
+    if direct is not None:
+        return direct
+
+    lines = order.get("shipping_lines")
+    if isinstance(lines, dict):
+        lines = [lines]
+    if isinstance(lines, list):
+        for line in lines:
+            if not isinstance(line, dict):
+                continue
+            title = first_present(line, ("title", "name", "code", "method"))
+            if title is not None:
+                return title
+
+    line = order.get("shipping_line")
+    if isinstance(line, dict):
+        return first_present(line, ("title", "name", "code", "method"))
+    return None
 
 
 def _discount_codes(order: dict[str, Any]) -> str | None:
@@ -810,13 +589,13 @@ def _discount_codes(order: dict[str, Any]) -> str | None:
     codes: list[str] = []
     for entry in entries:
         if isinstance(entry, dict):
-            code = _first_present(entry, ("code", "discount_code", "title"))
+            code = first_present(entry, ("code", "discount_code", "title"))
         else:
             code = nonempty(entry)
         if code is not None and code not in codes:
             codes.append(code)
 
-    for key in ("discount_code", "coupon_code"):
+    for key in ("discount_code", "coupon_code", "voucher_code"):
         code = nonempty(order.get(key))
         if code is not None and code not in codes:
             codes.append(code)
@@ -824,20 +603,481 @@ def _discount_codes(order: dict[str, Any]) -> str | None:
     return ", ".join(codes) if codes else None
 
 
-def order_field_value(order: dict[str, Any], field: OrderField) -> str | None:
-    """Return the HubSpot-ready value of one commerce field, or ``None``."""
+def _order_note(order: dict[str, Any]) -> str | None:
+    return first_present(order, ("note", "notes", "customer_note", "remark"))
 
-    if field.key == "discount_codes":
-        return _discount_codes(order)
 
-    raw = _first_present(order, field.sources)
-    if raw is None:
+def _tags(record: dict[str, Any], key: str = "tags") -> str | None:
+    """Return a record's tags as one comma separated value."""
+
+    tags = record.get(key)
+    if isinstance(tags, str):
+        candidates: list[Any] = tags.split(",")
+    elif isinstance(tags, list):
+        candidates = list(tags)
+    else:
+        candidates = []
+
+    collected: list[str] = []
+    for candidate in candidates:
+        tag = (
+            first_present(candidate, ("name", "title", "tag"))
+            if isinstance(candidate, dict)
+            else nonempty(candidate)
+        )
+        if tag is not None and tag not in collected:
+            collected.append(tag)
+    return ", ".join(collected) if collected else None
+
+
+def _person_name(record: Any) -> str | None:
+    """Return a person's full name from whichever fields a record carries."""
+
+    if not isinstance(record, dict):
         return None
-    if field.kind == "number":
-        return _money(raw, absolute=field.absolute)
-    if field.kind == "datetime":
-        return _timestamp(raw)
-    return raw
+    whole = first_present(record, ("name", "full_name", "customer_name"))
+    if whole is not None:
+        return whole
+    first = first_present(record, ("first_name", "firstname", "given_name"))
+    last = first_present(record, ("last_name", "lastname", "family_name"))
+    if first and last:
+        return f"{first} {last}"
+    return first or last
+
+
+def _buyer_email(order: dict[str, Any]) -> str | None:
+    """Return the buyer's email, wherever the order records it."""
+
+    customer = order.get("customer")
+    if isinstance(customer, dict):
+        email = first_present(customer, ("email", "email_address"))
+        if email is not None:
+            return email
+
+    email = first_present(order, ("email", "customer_email", "contact_email"))
+    if email is not None:
+        return email
+
+    for key in ("billing_address", "shipping_address"):
+        email = first_present(order.get(key), ("email",))
+        if email is not None:
+            return email
+    return None
+
+
+def _buyer_name(order: dict[str, Any]) -> str | None:
+    # Never read the order's own ``name``: that is the order number, not a person.
+    return (
+        _person_name(order.get("customer"))
+        or first_present(order, ("customer_name", "contact_name", "buyer_name"))
+        or _person_name(order.get("billing_address"))
+        or _person_name(_order_address(order))
+    )
+
+
+def _shipping_recipient(order: dict[str, Any]) -> str | None:
+    return _person_name(_order_address(order))
+
+
+def _shipping_phone(order: dict[str, Any]) -> str | None:
+    """Return the delivery contact number as EasyStore recorded it."""
+
+    return first_present(_order_address(order), ("phone", "phone_number", "mobile"))
+
+
+def _item_count(order: dict[str, Any]) -> str | None:
+    """Return how many units the order covers, counted from its line items."""
+
+    reported = first_present(order, ("item_count", "total_items", "line_items_count"))
+    if reported is not None:
+        return reported
+
+    lines = order.get("line_items")
+    if not isinstance(lines, list) or not lines:
+        return None
+
+    units = 0
+    for line in lines:
+        if not isinstance(line, dict):
+            continue
+        try:
+            units += int(line.get("quantity") or 0)
+        except (TypeError, ValueError):
+            continue
+    return str(units) if units else None
+
+
+# The address components EasyStore may use for each HubSpot address field. Both
+# the shipping and billing sets are built from this one table.
+ADDRESS_COMPONENTS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("city", "city", ("city", "town")),
+    ("state", "state", ("province", "state", "province_code", "state_code")),
+    (
+        "postal_code",
+        "postal_code",
+        ("zip", "postal_code", "postcode", "post_code"),
+    ),
+    ("country", "country", ("country", "country_name", "country_code")),
+)
+
+
+def _address_fields(
+    prefix: str,
+    native_prefix: str,
+) -> tuple[FieldSpec, ...]:
+    """Return the native-only address FieldSpecs for one address role."""
+
+    fields = [
+        FieldSpec(
+            key=f"{prefix}_street",
+            native=(f"{native_prefix}_street",),
+        )
+    ]
+    fields.extend(
+        FieldSpec(key=f"{prefix}_{suffix}", native=(f"{native_prefix}_{native}",))
+        for suffix, native, _sources in ADDRESS_COMPONENTS
+    )
+    return tuple(fields)
+
+
+def _address_derivations(
+    prefix: str,
+    getter: Callable[[dict[str, Any]], dict[str, Any]],
+) -> dict[str, Callable[[dict[str, Any]], str | None]]:
+    derivations: dict[str, Callable[[dict[str, Any]], str | None]] = {
+        f"{prefix}_street": lambda order: _address_street(getter(order)),
+    }
+    for suffix, _native, sources in ADDRESS_COMPONENTS:
+        derivations[f"{prefix}_{suffix}"] = (
+            lambda order, sources=sources: first_present(getter(order), sources)
+        )
+    return derivations
+
+
+# Everything the sync copies from an EasyStore order onto its HubSpot Order,
+# beyond identity, name, currency and source store. Commerce facts declare an
+# easystore_* fallback so the value always lands; shipping details are
+# native-only, because a portal without the matching HubSpot field gains nothing
+# from a duplicate custom property.
+ORDER_FIELDS: tuple[FieldSpec, ...] = (
+    FieldSpec(
+        key="created_at",
+        sources=("created_at", "created_on", "processed_at", "order_date", "date"),
+        native=("hs_order_date",),
+        fallback="easystore_order_created_at",
+        label="EasyStore Order Created",
+        description="Timestamp at which the order was created in EasyStore.",
+        kind="datetime",
+    ),
+    FieldSpec(
+        key="payment_status",
+        sources=(
+            "payment_status_label",
+            "payment_status",
+            "financial_status_label",
+            "financial_status",
+        ),
+        native=("hs_payment_status",),
+        fallback="easystore_payment_status",
+        label="EasyStore Payment Status",
+        description="Payment status reported by EasyStore for this order.",
+    ),
+    FieldSpec(
+        key="fulfillment_status",
+        sources=(
+            "fulfillment_status_label",
+            "fulfillment_status",
+            "shipment_status",
+            "shipping_status",
+        ),
+        native=("hs_fulfillment_status",),
+        fallback="easystore_fulfillment_status",
+        label="EasyStore Fulfilment Status",
+        description="Shipping/fulfilment status reported by EasyStore for this order.",
+    ),
+    FieldSpec(
+        key="total_amount",
+        sources=("total_price", "total_amount", "grand_total", "total"),
+        native=("hs_total_price",),
+        fallback="easystore_total_amount",
+        label="EasyStore Order Total",
+        description="Total amount charged for the order, in the order currency.",
+        kind="number",
+    ),
+    FieldSpec(
+        key="subtotal_amount",
+        sources=(
+            "subtotal_price",
+            "subtotal",
+            "sub_total",
+            "total_line_items_price",
+        ),
+        native=("hs_subtotal_price", "hs_subtotal"),
+        fallback="easystore_subtotal_amount",
+        label="EasyStore Order Subtotal",
+        description="Merchandise subtotal before tax, shipping and discounts.",
+        kind="number",
+    ),
+    FieldSpec(
+        key="tax_amount",
+        sources=("total_tax", "total_taxes", "tax_total", "tax_amount", "tax"),
+        native=("hs_tax", "hs_tax_amount", "hs_total_tax"),
+        fallback="easystore_tax_amount",
+        label="EasyStore Order Tax",
+        description="Total tax charged on the order, in the order currency.",
+        kind="number",
+    ),
+    FieldSpec(
+        key="shipping_amount",
+        sources=(
+            "total_shipping",
+            "total_shipping_price",
+            "shipping_price",
+            "shipping_total",
+            "shipping_fee",
+            "shipping_amount",
+            "shipping_cost",
+        ),
+        native=(
+            "hs_shipping_cost",
+            "hs_shipping_amount",
+            "hs_shipping_price",
+            "hs_total_shipping",
+        ),
+        fallback="easystore_shipping_amount",
+        label="EasyStore Shipping Charge",
+        description="Shipping charged on the order, in the order currency.",
+        kind="number",
+    ),
+    FieldSpec(
+        key="discount_amount",
+        sources=(
+            "total_discount",
+            "total_discounts",
+            "discount_amount",
+            "discount_total",
+        ),
+        native=("hs_order_discount_amount", "hs_discount_amount", "hs_total_discount"),
+        fallback="easystore_discount_amount",
+        label="EasyStore Order Discount",
+        description="Total discount applied to the order, in the order currency.",
+        kind="number",
+        absolute=True,
+    ),
+    FieldSpec(
+        key="refund_amount",
+        sources=(
+            "total_refunded",
+            "refunded_amount",
+            "refund_amount",
+            "total_refund",
+        ),
+        native=(),
+        fallback="easystore_refund_amount",
+        label="EasyStore Order Refunded",
+        description="Amount refunded on the order, in the order currency.",
+        kind="number",
+        absolute=True,
+    ),
+    FieldSpec(
+        key="discount_codes",
+        native=(),
+        fallback="easystore_discount_codes",
+        label="EasyStore Discount Codes",
+        description="Comma separated discount codes applied to the EasyStore order.",
+    ),
+    FieldSpec(
+        key="payment_method",
+        sources=(
+            "payment_method",
+            "payment_method_name",
+            "payment_gateway",
+            "gateway",
+            "payment_type",
+        ),
+        native=("hs_payment_method",),
+        fallback="easystore_payment_method",
+        label="EasyStore Payment Method",
+        description="How the order was paid for, as reported by EasyStore.",
+    ),
+    FieldSpec(
+        key="order_status",
+        sources=("status", "order_status", "state"),
+        native=("hs_order_status",),
+        fallback="easystore_order_status",
+        label="EasyStore Order Status",
+        description="Overall order state in EasyStore, e.g. open, closed or cancelled.",
+    ),
+    FieldSpec(
+        key="paid_at",
+        sources=("paid_at", "payment_date", "paid_on"),
+        native=(),
+        fallback="easystore_order_paid_at",
+        label="EasyStore Order Paid",
+        description="Timestamp at which EasyStore recorded payment for the order.",
+        kind="datetime",
+    ),
+    FieldSpec(
+        key="fulfilled_at",
+        sources=("fulfilled_at", "shipped_at", "fulfillment_date"),
+        native=(),
+        fallback="easystore_order_fulfilled_at",
+        label="EasyStore Order Fulfilled",
+        description="Timestamp at which the order was fulfilled in EasyStore.",
+        kind="datetime",
+    ),
+    FieldSpec(
+        key="cancelled_at",
+        sources=("cancelled_at", "canceled_at", "cancellation_date"),
+        native=(),
+        fallback="easystore_order_cancelled_at",
+        label="EasyStore Order Cancelled",
+        description="Timestamp at which the order was cancelled in EasyStore.",
+        kind="datetime",
+    ),
+    FieldSpec(
+        key="cancel_reason",
+        sources=("cancel_reason", "cancellation_reason", "cancelled_reason"),
+        native=(),
+        fallback="easystore_order_cancel_reason",
+        label="EasyStore Cancellation Reason",
+        description="Reason EasyStore recorded for cancelling the order.",
+    ),
+    FieldSpec(
+        key="channel",
+        sources=("source_name", "sales_channel", "channel", "source"),
+        native=(),
+        fallback="easystore_order_channel",
+        label="EasyStore Order Channel",
+        description="Sales channel the order came through, as reported by EasyStore.",
+    ),
+    FieldSpec(
+        key="item_count",
+        native=(),
+        fallback="easystore_order_item_count",
+        label="EasyStore Order Units",
+        description="Number of units the EasyStore order covers.",
+        kind="number",
+    ),
+    FieldSpec(
+        key="tags",
+        native=(),
+        fallback="easystore_order_tags",
+        label="EasyStore Order Tags",
+        description="Comma separated tags on the EasyStore order.",
+    ),
+    FieldSpec(
+        key="buyer_email",
+        native=(),
+        fallback="easystore_order_email",
+        label="EasyStore Buyer Email",
+        description=(
+            "Email EasyStore recorded for the buyer. Kept on the order so a guest "
+            "order that matches no Contact is still traceable."
+        ),
+    ),
+    FieldSpec(
+        key="buyer_name",
+        native=(),
+        fallback="easystore_order_customer_name",
+        label="EasyStore Buyer Name",
+        description="Name EasyStore recorded for the buyer of this order.",
+    ),
+    FieldSpec(
+        key="buyer_phone",
+        native=(),
+        fallback="easystore_order_phone",
+        label="EasyStore Buyer Mobile",
+        description="Normalized mobile number EasyStore recorded for the buyer.",
+    ),
+    FieldSpec(
+        key="shipping_recipient",
+        native=(),
+        fallback="easystore_shipping_recipient",
+        label="EasyStore Shipping Recipient",
+        description="Name the order is being delivered to.",
+    ),
+    FieldSpec(
+        key="shipping_phone",
+        native=(),
+        fallback="easystore_shipping_phone",
+        label="EasyStore Shipping Phone",
+        description="Contact number recorded on the delivery address.",
+    ),
+    FieldSpec(
+        key="note",
+        native=(),
+        fallback="easystore_order_note",
+        label="EasyStore Order Note",
+        description="Note the shopper or staff left on the EasyStore order.",
+    ),
+    FieldSpec(key="shipping_method", native=("hs_shipping_method",)),
+    FieldSpec(key="tracking_number", native=("hs_shipping_tracking_number",)),
+    FieldSpec(key="tracking_url", native=("hs_shipping_status_url",)),
+    *_address_fields("shipping_address", "hs_shipping_address"),
+    *_address_fields("billing_address", "hs_billing_address"),
+)
+
+ORDER_FIELD_DERIVATIONS: dict[str, Callable[[dict[str, Any]], str | None]] = {
+    "discount_codes": _discount_codes,
+    "note": _order_note,
+    "tags": _tags,
+    "item_count": _item_count,
+    "buyer_email": _buyer_email,
+    "buyer_name": _buyer_name,
+    "shipping_recipient": _shipping_recipient,
+    "shipping_phone": _shipping_phone,
+    "shipping_method": _shipping_method,
+    "tracking_number": _tracking_number,
+    "tracking_url": _tracking_url,
+    **_address_derivations("shipping_address", _order_address),
+    **_address_derivations("billing_address", _billing_address),
+}
+
+# Property names used when the live HubSpot schema has not been resolved, e.g.
+# in unit tests. Production runs always resolve against the portal schema.
+DEFAULT_ORDER_FIELD_PROPERTIES: dict[str, str] = {
+    field.key: field.native[0] if field.native else field.fallback
+    for field in ORDER_FIELDS
+    if field.native or field.fallback
+}
+
+# The order-list endpoint returns a thinner record than the order endpoint. The
+# sources that decide whether a listed order still needs its detail fetched.
+DETAIL_MONEY_SOURCES: tuple[str, ...] = next(
+    field.sources for field in ORDER_FIELDS if field.key == "total_amount"
+)
+
+
+def order_field_values(
+    order: dict[str, Any],
+    fallback_dial_code: str = "65",
+) -> dict[str, str]:
+    """Return every mapped value for an order, keyed by field key."""
+
+    derivations = {
+        **ORDER_FIELD_DERIVATIONS,
+        # The buyer's mobile is normalized with the same rule that resolves the
+        # order's Contact, so both sides of a match read identically.
+        "buyer_phone": lambda item: _order_customer_phone(item, fallback_dial_code),
+    }
+    return field_values(order, ORDER_FIELDS, derivations)
+
+
+def order_needs_detail(order: dict[str, Any]) -> bool:
+    """Report whether a listed order is too thin to map completely.
+
+    EasyStore's order list omits fields the order endpoint returns. Line items
+    were the first symptom; addresses and totals are the same story, so the
+    detail is fetched whenever any of the three is missing rather than only when
+    line items are.
+    """
+
+    if not isinstance(order.get("line_items"), list):
+        return True
+    if not _order_address(order):
+        return True
+    return first_present(order, DETAIL_MONEY_SOURCES) is None
 
 
 def order_properties(
@@ -846,6 +1086,7 @@ def order_properties(
     external_id: str,
     store_domain: str,
     field_properties: dict[str, str] | None = None,
+    fallback_dial_code: str = "65",
 ) -> dict[str, str]:
     name = (
         nonempty(order.get("name"))
@@ -864,36 +1105,11 @@ def order_properties(
     if currency:
         properties["hs_currency_code"] = currency.upper()
 
-    resolved = field_properties or DEFAULT_ORDER_FIELD_PROPERTIES
-    for field in ORDER_FIELDS:
-        target = resolved.get(field.key)
-        if target is None:
-            continue
-        value = order_field_value(order, field)
-        if value is not None:
-            properties[target] = value
-
-    address = _order_address(order)
-    address1 = nonempty(address.get("address1"))
-    address2 = nonempty(address.get("address2"))
-    if address1 and address2:
-        properties["hs_shipping_address_street"] = f"{address1}\n{address2}"
-    elif address1 or address2:
-        properties["hs_shipping_address_street"] = address1 or address2 or ""
-
-    city = nonempty(address.get("city"))
-    if city:
-        properties["hs_shipping_address_city"] = city
-    postal = nonempty(address.get("zip") or address.get("postal_code"))
-    if postal:
-        properties["hs_shipping_address_postal_code"] = postal
-
-    tracking_number, tracking_url = _tracking(order)
-    if tracking_number:
-        properties["hs_shipping_tracking_number"] = tracking_number
-    if tracking_url:
-        properties["hs_shipping_status_url"] = tracking_url
-    return properties
+    return apply_fields(
+        properties,
+        order_field_values(order, fallback_dial_code),
+        field_properties or DEFAULT_ORDER_FIELD_PROPERTIES,
+    )
 
 
 def _order_customer_phone(
@@ -987,9 +1203,65 @@ def _line_price(line: dict[str, Any]) -> str | None:
     return None
 
 
+# Per-line money and variant detail, on top of name, SKU, product, quantity,
+# price and currency. All native-only: HubSpot's own Line Item properties are the
+# ones its order editor reads.
+LINE_ITEM_FIELDS: tuple[FieldSpec, ...] = (
+    FieldSpec(
+        key="discount",
+        sources=("total_discount", "discount", "discount_amount"),
+        native=("discount",),
+        kind="number",
+        absolute=True,
+    ),
+    FieldSpec(
+        key="tax",
+        sources=("total_tax", "tax", "tax_amount"),
+        native=("tax",),
+        kind="number",
+        absolute=True,
+    ),
+    FieldSpec(
+        key="variant",
+        sources=("variant_title", "variant_name", "option_title", "options_label"),
+        native=("description",),
+    ),
+)
+
+
+def resolve_line_item_fields(access_token: str) -> dict[str, str]:
+    """Map per-line detail onto native HubSpot Line Item properties.
+
+    Reading the line item schema needs ``crm.schemas.line_items.read``. Line
+    items themselves sync without it, so a token that cannot read the schema logs
+    the skipped fields and carries on.
+    """
+
+    resolved = resolve_fields(
+        http_json=_http_json,
+        access_token=access_token,
+        object_type=LINE_ITEM_OBJECT_TYPE,
+        fields=LINE_ITEM_FIELDS,
+        error=SyncError,
+        optional=True,
+    )
+    if len(resolved) < len(LINE_ITEM_FIELDS):
+        missing = sorted(
+            field.key for field in LINE_ITEM_FIELDS if field.key not in resolved
+        )
+        print(
+            "WARNING: line item fields not synchronized because HubSpot did not "
+            "provide a writable property (add crm.schemas.line_items.read to the "
+            "token to enable them): " + ", ".join(missing),
+            file=sys.stderr,
+        )
+    return resolved
+
+
 def desired_lines(
     order: dict[str, Any],
     product_by_sku: dict[str, str],
+    field_properties: dict[str, str] | None = None,
 ) -> dict[str, dict[str, str]]:
     lines = order.get("line_items")
     if not isinstance(lines, list):
@@ -1041,6 +1313,12 @@ def desired_lines(
             properties["price"] = price
         if currency:
             properties["hs_line_item_currency_code"] = currency.upper()
+        if field_properties:
+            apply_fields(
+                properties,
+                field_values(line, LINE_ITEM_FIELDS),
+                field_properties,
+            )
         grouped[key] = properties
     return grouped
 
@@ -1230,17 +1508,35 @@ def sync(
     easystore_access_token: str,
     hubspot_access_token: str,
     fallback_dial_code: str,
-) -> dict[str, int]:
+) -> dict[str, Any]:
     ensure_order_identity_property(hubspot_access_token)
-    order_field_properties = ensure_order_field_properties(hubspot_access_token)
+    order_field_properties = resolve_fields(
+        http_json=_http_json,
+        access_token=hubspot_access_token,
+        object_type=ORDER_OBJECT_TYPE,
+        fields=ORDER_FIELDS,
+        error=SyncError,
+    )
+    line_item_field_properties = resolve_line_item_fields(hubspot_access_token)
     print(
-        "Order commerce fields mapped to HubSpot properties: "
-        + ", ".join(
-            f"{key}={order_field_properties[key]}"
-            for key in sorted(order_field_properties)
-        ),
+        "Order fields mapped to HubSpot properties: "
+        + describe_mapping(order_field_properties),
         file=sys.stderr,
     )
+    print(
+        "Line item fields mapped to HubSpot properties: "
+        + describe_mapping(line_item_field_properties),
+        file=sys.stderr,
+    )
+    unmapped = sorted(
+        field.key for field in ORDER_FIELDS if field.key not in order_field_properties
+    )
+    if unmapped:
+        print(
+            "WARNING: this HubSpot portal has no property for: "
+            + ", ".join(unmapped),
+            file=sys.stderr,
+        )
 
     product_by_sku = hubspot_product_index(hubspot_access_token)
     contacts = hubspot_contact_index(
@@ -1252,15 +1548,23 @@ def sync(
     orders: list[tuple[dict[str, Any], str, dict[str, dict[str, str]]]] = []
     easystore_orders = 0
     easystore_lines = 0
+    orders_fetched_in_detail = 0
+    # How many orders actually carried each field. A zero here means EasyStore
+    # did not report that fact, not that HubSpot rejected it.
+    field_coverage: dict[str, int] = {field.key: 0 for field in ORDER_FIELDS}
 
     # Validate every order and product reference before making order/line writes.
     for listed in iter_easystore_orders(store_domain, easystore_access_token):
         easystore_orders += 1
+        if order_needs_detail(listed):
+            orders_fetched_in_detail += 1
         order = complete_order(store_domain, easystore_access_token, listed)
         external_id = nonempty(order.get("id"))
         if external_id is None:
             raise SyncError("EasyStore returned an order without an id")
-        desired = desired_lines(order, product_by_sku)
+        for key in order_field_values(order, fallback_dial_code):
+            field_coverage[key] += 1
+        desired = desired_lines(order, product_by_sku, line_item_field_properties)
         easystore_lines += sum(int(line["quantity"]) for line in desired.values())
         orders.append((order, external_id, desired))
 
@@ -1282,6 +1586,7 @@ def sync(
                 external_id=external_id,
                 store_domain=store_domain,
                 field_properties=order_field_properties,
+                fallback_dial_code=fallback_dial_code,
             ),
         )
         existing_orders[external_id] = hubspot_order_id
@@ -1340,7 +1645,8 @@ def sync(
     custom_order_fields = sum(
         1
         for field in ORDER_FIELDS
-        if order_field_properties.get(field.key) == field.fallback
+        if field.fallback is not None
+        and order_field_properties.get(field.key) == field.fallback
     )
 
     return {
@@ -1355,6 +1661,12 @@ def sync(
         "orders_with_ambiguous_contact_mobile": ambiguous_contact_mobile,
         "commerce_fields_on_easystore_properties": custom_order_fields,
         "contacts_promoted_to_customer": len(promoted_to_customer),
+        "orders_fetched_in_detail": orders_fetched_in_detail,
+        "hubspot_order_field_properties": dict(sorted(order_field_properties.items())),
+        "hubspot_line_item_field_properties": dict(
+            sorted(line_item_field_properties.items())
+        ),
+        "easystore_order_field_coverage": dict(sorted(field_coverage.items())),
     }
 
 

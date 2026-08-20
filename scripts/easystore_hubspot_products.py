@@ -20,14 +20,37 @@ import re
 import sys
 import time
 from collections import defaultdict
-from typing import Any, Iterable, Iterator
+from typing import Any, Callable, Iterable, Iterator
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from easystore_hubspot_schema import (
+    FieldSpec,
+    apply_fields,
+    describe_mapping,
+    field_values,
+    first_present,
+    resolve_fields,
+)
+
 HUBSPOT_PRODUCTS_URL = "https://api.hubapi.com/crm/v3/objects/products"
+PRODUCT_OBJECT_TYPE = "products"
 EASYSTORE_PAGE_SIZE = 50
 BATCH_SIZE = 100
+
+# Catalogue detail beyond name, SKU, price, description and cost. All three are
+# native-only: a HubSpot product card renders these itself, and a portal without
+# them gains nothing from a custom copy.
+PRODUCT_FIELDS: tuple[FieldSpec, ...] = (
+    FieldSpec(key="url", native=("hs_url",)),
+    FieldSpec(key="image", native=("hs_images",)),
+    FieldSpec(
+        key="product_type",
+        sources=("product_type", "type", "category_name"),
+        native=("hs_product_type",),
+    ),
+)
 
 
 class SyncError(RuntimeError):
@@ -48,6 +71,7 @@ def _http_json(
     headers: dict[str, str] | None = None,
     payload: Any = None,
     retries: int = 4,
+    allow_statuses: set[int] | None = None,
 ) -> Any:
     body = None
     request_headers = {
@@ -67,6 +91,10 @@ def _http_json(
                 raw = response.read()
                 return json.loads(raw.decode("utf-8")) if raw else {}
         except HTTPError as error:
+            if allow_statuses and error.code in allow_statuses:
+                error.read()
+                return None
+
             detail = error.read().decode("utf-8", errors="replace")
             retryable = error.code == 429 or 500 <= error.code < 600
             if retryable and attempt < retries:
@@ -191,10 +219,92 @@ def variant_sku(product_id: str, variant: dict[str, Any]) -> tuple[str, bool]:
     return f"ES-{product_id}-{variant_id}", True
 
 
+def _product_url(product: dict[str, Any], store_domain: str | None = None) -> str | None:
+    """Return the storefront URL of a product, building it from a handle if needed."""
+
+    direct = first_present(product, ("url", "permalink", "online_store_url", "link"))
+    if direct is not None:
+        return direct if direct.startswith("http") else None
+
+    handle = first_present(product, ("handle", "slug", "seo_url"))
+    if handle is None or not store_domain:
+        return None
+    domain = store_domain.strip().removeprefix("https://").removeprefix("http://").rstrip("/")
+    return f"https://{domain}/products/{handle.strip('/')}" if domain else None
+
+
+def _product_image(product: dict[str, Any]) -> str | None:
+    """Return one image URL for the product, however EasyStore nests it."""
+
+    image = product.get("image")
+    if isinstance(image, dict):
+        found = first_present(image, ("src", "url", "image_url"))
+        if found is not None:
+            return found
+
+    images = product.get("images")
+    if isinstance(images, dict):
+        images = [images]
+    if isinstance(images, list):
+        for candidate in images:
+            if isinstance(candidate, dict):
+                found = first_present(candidate, ("src", "url", "image_url"))
+            else:
+                found = nonempty(candidate)
+            if found is not None:
+                return found
+
+    return first_present(product, ("image_url", "featured_image", "thumbnail"))
+
+
+def product_field_values(
+    product: dict[str, Any],
+    store_domain: str | None = None,
+) -> dict[str, str]:
+    """Return the catalogue detail fields for a product, keyed by field key."""
+
+    derivations: dict[str, Callable[[dict[str, Any]], str | None]] = {
+        "url": lambda item: _product_url(item, store_domain),
+        "image": _product_image,
+    }
+    return field_values(product, PRODUCT_FIELDS, derivations)
+
+
+def resolve_product_fields(access_token: str) -> dict[str, str]:
+    """Map catalogue detail onto native HubSpot product properties.
+
+    Reading the product schema needs ``crm.schemas.products.read``. It is not
+    needed to synchronize SKU, name, price, description and cost, so a token
+    without it logs a warning and those extra fields are skipped.
+    """
+
+    resolved = resolve_fields(
+        http_json=_http_json,
+        access_token=access_token,
+        object_type=PRODUCT_OBJECT_TYPE,
+        fields=PRODUCT_FIELDS,
+        error=SyncError,
+        optional=True,
+    )
+    if len(resolved) < len(PRODUCT_FIELDS):
+        missing = sorted(
+            field.key for field in PRODUCT_FIELDS if field.key not in resolved
+        )
+        print(
+            "WARNING: catalogue fields not synchronized because HubSpot did not "
+            "provide a writable property (add crm.schemas.products.read to the "
+            "token to enable them): " + ", ".join(missing),
+            file=sys.stderr,
+        )
+    return resolved
+
+
 def variant_properties(
     product: dict[str, Any],
     variant: dict[str, Any],
     sku: str,
+    field_properties: dict[str, str] | None = None,
+    store_domain: str | None = None,
 ) -> dict[str, str]:
     title = nonempty(product.get("title")) or nonempty(product.get("name")) or f"EasyStore product {product.get('id')}"
     variant_name = nonempty(variant.get("name")) or nonempty(variant.get("title"))
@@ -213,6 +323,13 @@ def variant_properties(
     cost = nonempty(variant.get("cost_price"))
     if cost is not None:
         props["hs_cost_of_goods_sold"] = cost
+
+    if field_properties:
+        apply_fields(
+            props,
+            product_field_values(product, store_domain),
+            field_properties,
+        )
     return props
 
 
@@ -289,7 +406,14 @@ def sync(
     store_domain: str,
     easystore_access_token: str,
     hubspot_access_token: str,
-) -> dict[str, int]:
+) -> dict[str, Any]:
+    product_field_properties = resolve_product_fields(hubspot_access_token)
+    print(
+        "Catalogue fields mapped to HubSpot properties: "
+        + describe_mapping(product_field_properties),
+        file=sys.stderr,
+    )
+
     hubspot_by_sku: dict[str, set[str]] = defaultdict(set)
     hubspot_total = 0
     for product in iter_hubspot_products(hubspot_access_token):
@@ -333,6 +457,9 @@ def sync(
     creates: list[dict[str, Any]] = []
     updates: list[dict[str, Any]] = []
     ambiguous_hubspot_skus = 0
+    # How many synchronized variants carried each catalogue field. A zero means
+    # EasyStore did not report it, not that HubSpot rejected it.
+    field_coverage: dict[str, int] = {field.key: 0 for field in PRODUCT_FIELDS}
 
     for key, (product, variant, sku) in easystore_by_sku.items():
         matching = hubspot_by_sku.get(key, set())
@@ -343,7 +470,15 @@ def sync(
                 file=sys.stderr,
             )
             continue
-        properties = variant_properties(product, variant, sku)
+        properties = variant_properties(
+            product,
+            variant,
+            sku,
+            product_field_properties,
+            store_domain,
+        )
+        for field_key in product_field_values(product, store_domain):
+            field_coverage[field_key] += 1
         target_id = next(iter(matching), None)
         if target_id is None:
             creates.append({"properties": properties})
@@ -367,6 +502,10 @@ def sync(
         "synthetic_skus_for_blank_easystore_skus": synthetic_skus,
         "duplicate_easystore_skus": duplicate_easystore_skus,
         "ambiguous_hubspot_skus": ambiguous_hubspot_skus,
+        "hubspot_catalogue_field_properties": dict(
+            sorted(product_field_properties.items())
+        ),
+        "easystore_catalogue_field_coverage": dict(sorted(field_coverage.items())),
     }
 
 
