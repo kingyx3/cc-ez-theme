@@ -4,6 +4,8 @@ on:
   pull_request:
     branches:
       - main
+    # CRM sync sources only. Theme changes are gated by the theme packaging and
+    # browser E2E workflows instead, so neither side spends CI on the other.
     paths:
       - ".github/workflows/sync-easystore-customers-hubspot.yml"
       - "scripts/easystore_hubspot_*.py"

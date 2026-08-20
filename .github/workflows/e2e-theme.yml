@@ -2,6 +2,16 @@ name: EasyStore browser E2E
 
 on:
   pull_request:
+    # The storefront the suite drives is built from the theme, and the suite
+    # itself lives in e2e/. A CRM sync change cannot alter either, so it is
+    # gated by "Validate CRM sync" instead of five browser matrices.
+    paths:
+      - "theme/**"
+      - "e2e/**"
+      - "package.json"
+      - "package-lock.json"
+      - "playwright.config.js"
+      - ".github/workflows/e2e-theme.yml"
   workflow_dispatch:
     inputs:
       base_url:

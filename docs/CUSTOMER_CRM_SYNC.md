@@ -42,6 +42,16 @@ The integration is deliberately fail-closed where an automatic choice could merg
 
 ## Pull-request CI
 
+CI is bifurcated between this repository's two independent products. A pull request that only touches CRM sync sources runs the CRM gate and no theme jobs; a pull request that only touches the theme runs the theme jobs and not this one:
+
+| Change | Workflow gate |
+| --- | --- |
+| `scripts/easystore_hubspot_*.py`, `crm_tests/**`, `docs/CUSTOMER_CRM_SYNC.md`, the CRM workflow | `Validate CRM sync` |
+| `theme/**`, `tests/**`, `scripts/theme_ci.py`, `scripts/easystore_publish.py`, `requirements-dev.txt`, `.coveragerc`, the packaging workflow | `Package EasyStore theme` (push) |
+| `theme/**`, `e2e/**`, `package.json`, `playwright.config.js`, the E2E workflow | `EasyStore browser E2E` (pull request) |
+
+A change that spans both products triggers both sets of gates, and either workflow can still be started by hand with `workflow_dispatch`.
+
 Changes to the CRM workflow, sync scripts, CRM tests, or this document trigger the `Validate CRM sync` job on pull requests. That job requires no secrets and performs:
 
 1. Python 3.13 bytecode compilation of every CRM sync script.
@@ -51,7 +61,7 @@ The credentialed `sync` job is explicitly skipped for `pull_request` events.
 
 This job is the coverage gate for the CRM sync scripts. `.coveragerc` omits `scripts/easystore_hubspot_*.py` from the theme suite's 100% line-and-branch requirement, because `tests/` exercises the theme packaging and validation tooling and never imports the CRM scripts. Adding a CRM script to `scripts/` therefore does not silently lower the theme gate, and the CRM scripts stay gated by compilation plus `crm_tests/` here.
 
-The repository's browser E2E workflow is also a PR gate. Browser-installing jobs use timeout budgets that leave headroom for Playwright's network-bound browser/dependency installation so the actual regression tests are not cancelled before they execute. Each `playwright install --with-deps` invocation is additionally bounded and retried once: the flag shells out to `apt-get`, and a stalled Ubuntu mirror would otherwise consume the whole job budget and report the check as cancelled instead of failing.
+The repository's browser E2E workflow is the PR gate for theme changes; it does not run for a CRM-only pull request, because no CRM change can alter the storefront it drives. Its browser-installing jobs use timeout budgets that leave headroom for Playwright's network-bound browser/dependency installation so the actual regression tests are not cancelled before they execute. Each `playwright install --with-deps` invocation is additionally bounded and retried once: the flag shells out to `apt-get`, and a stalled Ubuntu mirror would otherwise consume the whole job budget and report the check as cancelled instead of failing.
 
 ## Products and variants
 
