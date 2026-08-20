@@ -13,6 +13,15 @@ distinct product SKU within an order becomes one HubSpot Line Item backed by the
 matching HubSpot Product via ``hs_product_id``. Existing order line items are
 matched by SKU so scheduled reruns update rather than duplicate them.
 
+Alongside identity, shipping and tracking, each order carries its commerce state:
+creation timestamp, payment status, fulfilment status, total amount, discount
+amount and discount codes. A buyer resolved to a single HubSpot Contact is also
+promoted to the ``customer`` lifecycle stage, because an order proves a purchase.
+
+HubSpot's native Order schema differs between portals, so the commerce fields are
+resolved against the live schema and fall back to provisioned ``easystore_*``
+properties when the portal has no writable native property of the right shape.
+
 Only Python's standard library is used.
 """
 
@@ -25,7 +34,9 @@ import re
 import sys
 import time
 from collections import defaultdict
-from typing import Any, Iterator
+from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
+from typing import Any, Iterator, NamedTuple
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -41,7 +52,29 @@ HUBSPOT_CONTACTS_URL = f"{HUBSPOT_BASE}/crm/v3/objects/contacts"
 ORDER_CONTACT_ASSOCIATION_TYPE_ID = 507
 ORDER_LINE_ITEM_ASSOCIATION_TYPE_ID = 513
 ORDER_EXTERNAL_ID_PROPERTY = "easystore_order_id"
+CONTACT_LIFECYCLE_PROPERTY = "lifecyclestage"
+LIFECYCLE_CUSTOMER = "customer"
 PROPERTY_GROUP = "easystore_sync"
+
+# HubSpot refuses to move a contact backwards through the default lifecycle
+# pipeline, so a stage is only written when it is a genuine step forward. A stage
+# outside this ordering belongs to a custom pipeline and is never overwritten.
+LIFECYCLE_STAGE_RANKS = {
+    "subscriber": 1,
+    "lead": 2,
+    "marketingqualifiedlead": 3,
+    "salesqualifiedlead": 4,
+    "opportunity": 5,
+    "customer": 6,
+    "evangelist": 7,
+}
+
+# HubSpot field types used when provisioning an easystore_* order property.
+PROPERTY_FIELD_TYPES = {
+    "string": "text",
+    "number": "number",
+    "datetime": "date",
+}
 PHONE_MIN_DIGITS = 7
 PHONE_MAX_DIGITS = 15
 
@@ -66,6 +99,109 @@ COUNTRY_DIAL_CODES = {
 }
 
 
+class OrderField(NamedTuple):
+    """A commerce field copied from an EasyStore order onto a HubSpot Order.
+
+    ``native`` lists the HubSpot properties to prefer, most specific first. A
+    native property is only used when the portal's live Order schema has it as a
+    writable property of the expected ``kind``; enumerations and
+    calculated/read-only properties are skipped because EasyStore sends
+    free-form labels that HubSpot would reject. Otherwise the sync provisions
+    ``fallback`` in the ``easystore_sync`` group, so the value always lands.
+    """
+
+    key: str
+    sources: tuple[str, ...]
+    native: tuple[str, ...]
+    fallback: str
+    label: str
+    description: str
+    kind: str = "string"
+    absolute: bool = False
+
+
+ORDER_FIELDS: tuple[OrderField, ...] = (
+    OrderField(
+        key="created_at",
+        sources=("created_at", "created_on", "processed_at", "order_date", "date"),
+        native=("hs_order_date",),
+        fallback="easystore_order_created_at",
+        label="EasyStore Order Created",
+        description="Timestamp at which the order was created in EasyStore.",
+        kind="datetime",
+    ),
+    OrderField(
+        key="payment_status",
+        sources=(
+            "payment_status_label",
+            "payment_status",
+            "financial_status_label",
+            "financial_status",
+        ),
+        native=("hs_payment_status",),
+        fallback="easystore_payment_status",
+        label="EasyStore Payment Status",
+        description="Payment status reported by EasyStore for this order.",
+    ),
+    OrderField(
+        key="fulfillment_status",
+        sources=(
+            "fulfillment_status_label",
+            "fulfillment_status",
+            "shipment_status",
+            "shipping_status",
+        ),
+        native=("hs_fulfillment_status",),
+        fallback="easystore_fulfillment_status",
+        label="EasyStore Fulfilment Status",
+        description="Shipping/fulfilment status reported by EasyStore for this order.",
+    ),
+    OrderField(
+        key="total_amount",
+        sources=("total_price", "total_amount", "grand_total", "total"),
+        native=("hs_total_price",),
+        fallback="easystore_total_amount",
+        label="EasyStore Order Total",
+        description="Total amount charged for the order, in the order currency.",
+        kind="number",
+    ),
+    OrderField(
+        key="discount_amount",
+        sources=(
+            "total_discount",
+            "total_discounts",
+            "discount_amount",
+            "discount_total",
+        ),
+        native=("hs_order_discount_amount", "hs_discount_amount"),
+        fallback="easystore_discount_amount",
+        label="EasyStore Order Discount",
+        description="Total discount applied to the order, in the order currency.",
+        kind="number",
+        absolute=True,
+    ),
+    OrderField(
+        key="discount_codes",
+        # Discount codes are collected from the order's discount collection
+        # rather than a single scalar field, so this entry has no direct sources.
+        sources=(),
+        native=(),
+        fallback="easystore_discount_codes",
+        label="EasyStore Discount Codes",
+        description="Comma separated discount codes applied to the EasyStore order.",
+    ),
+)
+
+# Property names used when the live HubSpot schema has not been resolved, e.g.
+# in unit tests. Production runs always resolve against the portal schema.
+DEFAULT_ORDER_FIELD_PROPERTIES: dict[str, str] = {
+    field.key: field.native[0] if field.native else field.fallback
+    for field in ORDER_FIELDS
+}
+
+_MONEY_PATTERN = re.compile(r"-?\d+(?:\.\d+)?")
+
+
 class SyncError(RuntimeError):
     """Raised when an API or identity invariant prevents a safe order sync."""
 
@@ -81,6 +217,88 @@ def _digits(value: Any) -> str:
     return re.sub(r"\D", "", str(value or ""))
 
 
+def _first_present(record: dict[str, Any], keys: tuple[str, ...]) -> str | None:
+    """Return the first non-empty value among ``keys``, honouring their order."""
+
+    for key in keys:
+        value = nonempty(record.get(key))
+        if value is not None:
+            return value
+    return None
+
+
+def _money(value: Any, *, absolute: bool = False) -> str | None:
+    """Return a plain decimal string for an EasyStore monetary value.
+
+    EasyStore reports amounts as numbers or as strings that may carry a currency
+    prefix or thousands separators. HubSpot number properties need a bare
+    decimal, so anything without a parseable amount is dropped rather than
+    written as text.
+    """
+
+    if value is None:
+        return None
+    text = str(value).strip().replace(",", "")
+    if not text:
+        return None
+    match = _MONEY_PATTERN.search(text)
+    if match is None:
+        return None
+    try:
+        amount = Decimal(match.group(0))
+    except InvalidOperation:
+        return None
+    if absolute:
+        amount = amount.copy_abs()
+    return str(amount)
+
+
+def _timestamp(value: Any) -> str | None:
+    """Return epoch milliseconds for an EasyStore timestamp, or ``None``.
+
+    HubSpot datetime properties accept epoch milliseconds, so ISO 8601 values
+    are converted. EasyStore sends offsets for store-local timestamps; a value
+    without an offset is read as UTC rather than guessed at.
+    """
+
+    text = nonempty(value)
+    if text is None:
+        return None
+
+    if text.isdigit():
+        epoch = int(text)
+        # Ten digits or fewer is a seconds-precision epoch, otherwise milliseconds.
+        return str(epoch * 1000 if len(text) <= 10 else epoch)
+
+    candidate = text[:-1] + "+00:00" if text[-1:] in {"Z", "z"} else text
+    try:
+        moment = datetime.fromisoformat(candidate)
+    except ValueError:
+        return None
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return str(int(moment.timestamp() * 1000))
+
+
+def lifecycle_stage_write(current: Any, target: str) -> str | None:
+    """Return the lifecycle stage to write, or ``None`` to leave HubSpot alone.
+
+    A contact keeps the furthest stage it has already reached, and a stage from a
+    custom pipeline is never overwritten by this sync.
+    """
+
+    existing = nonempty(current)
+    if existing is None:
+        return target
+
+    current_rank = LIFECYCLE_STAGE_RANKS.get(existing.casefold())
+    if current_rank is None:
+        return None
+    if current_rank >= LIFECYCLE_STAGE_RANKS[target]:
+        return None
+    return target
+
+
 def normalize_mobile(
     value: Any,
     country_code: Any = None,
@@ -92,6 +310,9 @@ def normalize_mobile(
 
     digits = _digits(raw)
     if not digits:
+        return None
+    if len(set(digits)) == 1:
+        # Placeholders such as 0000000 are not a recorded mobile number.
         return None
 
     if raw.startswith("+"):
@@ -286,7 +507,9 @@ def iter_hubspot_objects(
         after = str(next_after)
 
 
-def ensure_order_identity_property(access_token: str) -> None:
+def ensure_property_group(access_token: str) -> None:
+    """Create the ``easystore_sync`` Order property group when it is missing."""
+
     headers = {"Authorization": f"Bearer {access_token}"}
     group_url = f"{HUBSPOT_BASE}/crm/v3/properties/order/groups/{PROPERTY_GROUP}"
     group = _http_json(group_url, headers=headers, allow_statuses={404})
@@ -301,6 +524,11 @@ def ensure_order_identity_property(access_token: str) -> None:
                 "displayOrder": -1,
             },
         )
+
+
+def ensure_order_identity_property(access_token: str) -> None:
+    headers = {"Authorization": f"Bearer {access_token}"}
+    ensure_property_group(access_token)
 
     property_url = (
         f"{HUBSPOT_BASE}/crm/v3/properties/order/{ORDER_EXTERNAL_ID_PROPERTY}"
@@ -331,6 +559,107 @@ def ensure_order_identity_property(access_token: str) -> None:
         )
 
 
+def order_property_schema(access_token: str) -> dict[str, dict[str, Any]]:
+    """Return the portal's Order properties keyed by internal name."""
+
+    document = _http_json(
+        f"{HUBSPOT_BASE}/crm/v3/properties/order",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    results = document.get("results") if isinstance(document, dict) else None
+    if not isinstance(results, list):
+        raise SyncError("HubSpot did not return the Order property schema")
+
+    schema: dict[str, dict[str, Any]] = {}
+    for prop in results:
+        if not isinstance(prop, dict):
+            continue
+        name = nonempty(prop.get("name"))
+        if name is not None:
+            schema[name] = prop
+    return schema
+
+
+def writable_property(prop: Any, kind: str) -> bool:
+    """Report whether a HubSpot property accepts a written value of ``kind``."""
+
+    if not isinstance(prop, dict):
+        return False
+    if bool(prop.get("calculated")) or bool(prop.get("archived")):
+        return False
+    metadata = prop.get("modificationMetadata")
+    if isinstance(metadata, dict) and bool(metadata.get("readOnlyValue")):
+        return False
+    # An enumeration only accepts its own defined options, and EasyStore sends
+    # free-form labels; matching type keeps the write from being rejected.
+    return str(prop.get("type") or "") == kind
+
+
+def select_order_property(
+    field: OrderField,
+    schema: dict[str, dict[str, Any]],
+) -> str | None:
+    """Return the native HubSpot property to use for ``field``, if any fits."""
+
+    for name in field.native:
+        if writable_property(schema.get(name), field.kind):
+            return name
+    return None
+
+
+def ensure_order_field_properties(access_token: str) -> dict[str, str]:
+    """Resolve every commerce field to a writable HubSpot Order property.
+
+    Native properties are preferred. Fields without a usable native property use
+    a provisioned ``easystore_*`` property so a portal-specific Order schema
+    never silently drops synchronized commerce data.
+    """
+
+    schema = order_property_schema(access_token)
+    resolved: dict[str, str] = {}
+    missing: list[OrderField] = []
+
+    for field in ORDER_FIELDS:
+        native = select_order_property(field, schema)
+        if native is not None:
+            resolved[field.key] = native
+            continue
+
+        existing = schema.get(field.fallback)
+        if isinstance(existing, dict):
+            if not writable_property(existing, field.kind):
+                raise SyncError(
+                    f"HubSpot Order property {field.fallback!r} exists but cannot "
+                    f"accept a writable {field.kind} value. Archive or replace it "
+                    "before running the order sync."
+                )
+            resolved[field.key] = field.fallback
+            continue
+
+        missing.append(field)
+
+    if missing:
+        ensure_property_group(access_token)
+    for field in missing:
+        _http_json(
+            f"{HUBSPOT_BASE}/crm/v3/properties/order",
+            method="POST",
+            headers={"Authorization": f"Bearer {access_token}"},
+            payload={
+                "groupName": PROPERTY_GROUP,
+                "name": field.fallback,
+                "label": field.label,
+                "description": field.description,
+                "type": field.kind,
+                "fieldType": PROPERTY_FIELD_TYPES[field.kind],
+                "formField": False,
+            },
+        )
+        resolved[field.key] = field.fallback
+
+    return resolved
+
+
 def hubspot_product_index(access_token: str) -> dict[str, str]:
     by_sku: dict[str, set[str]] = defaultdict(set)
     for product in iter_hubspot_objects(
@@ -359,15 +688,23 @@ def hubspot_product_index(access_token: str) -> dict[str, str]:
     return {sku: next(iter(ids)) for sku, ids in by_sku.items()}
 
 
-def hubspot_contact_phone_index(
+class ContactIndex(NamedTuple):
+    """HubSpot contacts indexed for order association and lifecycle promotion."""
+
+    by_phone: dict[str, set[str]]
+    lifecycle_by_id: dict[str, str]
+
+
+def hubspot_contact_index(
     access_token: str,
     fallback_dial_code: str,
-) -> dict[str, set[str]]:
+) -> ContactIndex:
     by_phone: dict[str, set[str]] = defaultdict(set)
+    lifecycle_by_id: dict[str, str] = {}
     for contact in iter_hubspot_objects(
         HUBSPOT_CONTACTS_URL,
         access_token,
-        "phone,mobilephone",
+        f"phone,mobilephone,{CONTACT_LIFECYCLE_PROPERTY}",
     ):
         contact_id = nonempty(contact.get("id"))
         properties = contact.get("properties")
@@ -380,7 +717,10 @@ def hubspot_contact_phone_index(
             )
             if mobile:
                 by_phone[mobile].add(contact_id)
-    return by_phone
+        stage = nonempty(properties.get(CONTACT_LIFECYCLE_PROPERTY))
+        if stage is not None:
+            lifecycle_by_id[contact_id] = stage
+    return ContactIndex(by_phone=by_phone, lifecycle_by_id=lifecycle_by_id)
 
 
 def hubspot_order_index(access_token: str) -> dict[str, str]:
@@ -458,11 +798,54 @@ def _tracking(order: dict[str, Any]) -> tuple[str | None, str | None]:
     )
 
 
+def _discount_codes(order: dict[str, Any]) -> str | None:
+    """Return the order's discount codes as one comma separated value."""
+
+    entries = order.get("discount_codes")
+    if isinstance(entries, dict):
+        entries = [entries]
+    if not isinstance(entries, list):
+        entries = []
+
+    codes: list[str] = []
+    for entry in entries:
+        if isinstance(entry, dict):
+            code = _first_present(entry, ("code", "discount_code", "title"))
+        else:
+            code = nonempty(entry)
+        if code is not None and code not in codes:
+            codes.append(code)
+
+    for key in ("discount_code", "coupon_code"):
+        code = nonempty(order.get(key))
+        if code is not None and code not in codes:
+            codes.append(code)
+
+    return ", ".join(codes) if codes else None
+
+
+def order_field_value(order: dict[str, Any], field: OrderField) -> str | None:
+    """Return the HubSpot-ready value of one commerce field, or ``None``."""
+
+    if field.key == "discount_codes":
+        return _discount_codes(order)
+
+    raw = _first_present(order, field.sources)
+    if raw is None:
+        return None
+    if field.kind == "number":
+        return _money(raw, absolute=field.absolute)
+    if field.kind == "datetime":
+        return _timestamp(raw)
+    return raw
+
+
 def order_properties(
     order: dict[str, Any],
     *,
     external_id: str,
     store_domain: str,
+    field_properties: dict[str, str] | None = None,
 ) -> dict[str, str]:
     name = (
         nonempty(order.get("name"))
@@ -481,12 +864,14 @@ def order_properties(
     if currency:
         properties["hs_currency_code"] = currency.upper()
 
-    fulfillment = nonempty(
-        order.get("fulfillment_status_label")
-        or order.get("fulfillment_status")
-    )
-    if fulfillment:
-        properties["hs_fulfillment_status"] = fulfillment
+    resolved = field_properties or DEFAULT_ORDER_FIELD_PROPERTIES
+    for field in ORDER_FIELDS:
+        target = resolved.get(field.key)
+        if target is None:
+            continue
+        value = order_field_value(order, field)
+        if value is not None:
+            properties[target] = value
 
     address = _order_address(order)
     address1 = nonempty(address.get("address1"))
@@ -847,9 +1232,18 @@ def sync(
     fallback_dial_code: str,
 ) -> dict[str, int]:
     ensure_order_identity_property(hubspot_access_token)
+    order_field_properties = ensure_order_field_properties(hubspot_access_token)
+    print(
+        "Order commerce fields mapped to HubSpot properties: "
+        + ", ".join(
+            f"{key}={order_field_properties[key]}"
+            for key in sorted(order_field_properties)
+        ),
+        file=sys.stderr,
+    )
 
     product_by_sku = hubspot_product_index(hubspot_access_token)
-    contacts_by_phone = hubspot_contact_phone_index(
+    contacts = hubspot_contact_index(
         hubspot_access_token,
         fallback_dial_code,
     )
@@ -877,6 +1271,7 @@ def sync(
     contact_associations = 0
     orders_without_mobile = 0
     ambiguous_contact_mobile = 0
+    promoted_to_customer: set[str] = set()
 
     for order, external_id, desired in orders:
         hubspot_order_id, created = _upsert_hubspot_order(
@@ -886,6 +1281,7 @@ def sync(
                 order,
                 external_id=external_id,
                 store_domain=store_domain,
+                field_properties=order_field_properties,
             ),
         )
         existing_orders[external_id] = hubspot_order_id
@@ -898,7 +1294,7 @@ def sync(
         if mobile is None:
             orders_without_mobile += 1
         else:
-            matching_contacts = contacts_by_phone.get(mobile, set())
+            matching_contacts = contacts.by_phone.get(mobile, set())
             if len(matching_contacts) == 1:
                 contact_id = next(iter(matching_contacts))
                 _associate_order(
@@ -909,6 +1305,22 @@ def sync(
                     ORDER_CONTACT_ASSOCIATION_TYPE_ID,
                 )
                 contact_associations += 1
+
+                # The order itself is the proof of purchase, so its buyer becomes
+                # a customer regardless of the stage the contact sync assigned.
+                stage = lifecycle_stage_write(
+                    contacts.lifecycle_by_id.get(contact_id),
+                    LIFECYCLE_CUSTOMER,
+                )
+                if stage is not None:
+                    _http_json(
+                        f"{HUBSPOT_CONTACTS_URL}/{contact_id}",
+                        method="PATCH",
+                        headers={"Authorization": f"Bearer {hubspot_access_token}"},
+                        payload={"properties": {CONTACT_LIFECYCLE_PROPERTY: stage}},
+                    )
+                    contacts.lifecycle_by_id[contact_id] = stage
+                    promoted_to_customer.add(contact_id)
             elif len(matching_contacts) > 1:
                 ambiguous_contact_mobile += 1
                 print(
@@ -925,6 +1337,12 @@ def sync(
         created_lines += line_created
         updated_lines += line_updated
 
+    custom_order_fields = sum(
+        1
+        for field in ORDER_FIELDS
+        if order_field_properties.get(field.key) == field.fallback
+    )
+
     return {
         "easystore_orders": easystore_orders,
         "easystore_line_item_units": easystore_lines,
@@ -935,6 +1353,8 @@ def sync(
         "order_contact_associations_ensured": contact_associations,
         "orders_without_usable_mobile": orders_without_mobile,
         "orders_with_ambiguous_contact_mobile": ambiguous_contact_mobile,
+        "commerce_fields_on_easystore_properties": custom_order_fields,
+        "contacts_promoted_to_customer": len(promoted_to_customer),
     }
 
 
