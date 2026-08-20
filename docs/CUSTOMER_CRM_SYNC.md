@@ -103,7 +103,7 @@ portal has them, so the product card renders as HubSpot expects:
 | --- | --- |
 | `url` / `permalink` / `online_store_url` / `link`, else `handle` + store domain | `hs_url` |
 | `image.src`, `images[].src/url`, `image_url`, `featured_image`, `thumbnail` | `hs_images` |
-| `product_type` / `type` / `category_name` | `hs_product_type` |
+| `product_type` / `type` / `category_name` / `category_title`, else a `category` / `categories` / `collection` / `collections` entry | `hs_product_type` |
 
 These are native-only and optional: they need `crm.schemas.products.read` to
 resolve, and a portal without the property simply stores nothing extra.
@@ -291,8 +291,7 @@ raw variants are both handled:
 | discount amount | `total_discount`, `total_discounts`, `discount_amount`, `discount_total` |
 | discount codes | `discount_codes[].code`, then `discount_code` / `coupon_code` / `voucher_code` |
 | refunded amount | `total_refunded`, `refunded_amount`, `refund_amount`, `total_refund` |
-| payment method | `payment_method`, `payment_method_name`, `payment_gateway`, `gateway`, `payment_type` |
-| order status | `status`, `order_status`, `state` |
+| order status | `status`, `order_status`, `order_status_label`, `status_label`, `state`, `order_state`, `state_label` |
 | paid timestamp | `paid_at`, `payment_date`, `paid_on` |
 | fulfilled timestamp | `fulfilled_at`, `shipped_at`, `fulfillment_date` |
 | cancelled timestamp | `cancelled_at`, `canceled_at`, `cancellation_date` |
@@ -305,7 +304,8 @@ raw variants are both handled:
 | buyer mobile | the same normalized-mobile rule used to resolve the order's Contact |
 | shipping recipient / phone | the delivery address `name` / `first_name` + `last_name`, and `phone` / `phone_number` / `mobile` |
 | order note | `note`, `notes`, `customer_note`, `remark` |
-| shipping method | `shipping_method`, `shipping_method_name`, `shipping_title`, `shipment_method`, `delivery_method`, then `shipping_lines[].title` |
+| payment method | `payment_method`, `payment_method_name`, `payment_method_title`, `payment_gateway`, `gateway`, `payment_type`, `payment_name`, then `payment` / `payments` / `transactions` / `payment_details` entries |
+| shipping method | `shipping_method`, `shipping_method_name`, `shipping_method_title`, `shipping_title`, `shipment_method`, `delivery_method`, `delivery_option`, `courier`, then `shipping_lines` / `shipment` / `shipments` entries |
 | shipping address | `shipping_address`, else `billing_address`, else `address` |
 | billing address | `billing_address` only |
 | address street | `address1` + `address2` (`address_1`/`address_2`, `street`, `line1`/`line2`) |
@@ -319,12 +319,30 @@ with no separate shipping address is still given one from its billing address,
 because that is where the goods go. The billing fields stay strict, so
 they are only filled from a real `billing_address`.
 
-Because EasyStore's field names are the uncertain half of this mapping, every run
-reports `easystore_order_field_coverage`: how many orders actually supplied each
-field. A zero there means EasyStore did not send that fact under any of the names
-above — not that HubSpot rejected it — which is the signal to add the real name to
-the list. `hubspot_order_field_properties` reports the property each field landed
-in.
+Because EasyStore's field names and HubSpot's property names are the uncertain
+halves of this mapping, every run reports what it saw so the next one can be
+exact:
+
+| Summary key | Answers |
+| --- | --- |
+| `easystore_order_field_coverage` | how many orders supplied each field — a zero means EasyStore did not send that fact under any name the sync knows, not that HubSpot rejected it |
+| `easystore_order_keys_seen`, `easystore_order_address_keys_seen`, `easystore_line_item_keys_seen` | the field names EasyStore actually returns (names only, never values), which is where a zero above gets traced to the real name |
+| `hubspot_order_field_properties` | the property each field landed in |
+| `hubspot_order_property_hints` | for a field that found no native property: the portal's own properties whose name or label looks related, so a value sitting in an `easystore_*` property can be pointed at the native one |
+| `orders_fetched_in_detail` | how many listed orders were too thin to map and had to be re-read |
+
+The Contact and Product stages report the same three kinds of block
+(`easystore_customer_keys_seen`, `hubspot_contact_property_hints`,
+`easystore_product_keys_seen`, `hubspot_variant_keys_seen`,
+`hubspot_product_property_hints`). The Order stage additionally prints the
+portal's full Order property inventory to the step log.
+
+The address is the case worth knowing about. EasyStore's order **list** returns a
+stub address carrying only a country, which is present enough to look like an
+address while saying nothing about where to deliver. A stub therefore does not
+count as an address: an order needs its detail fetched whenever no address states
+a street or a city, and a stub shipping address never hides a real billing
+address. The stub's country still reaches HubSpot.
 
 Timestamps are converted to the epoch milliseconds HubSpot datetime properties
 expect. ISO 8601 values keep the offset EasyStore reports; a value with no offset

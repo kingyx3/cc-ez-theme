@@ -44,6 +44,12 @@ PROPERTY_FIELD_TYPES = {
 
 _MONEY_PATTERN = re.compile(r"-?\d+(?:\.\d+)?")
 
+# Tokens that describe every field rather than any one of them, so they make
+# useless search keywords when looking for a portal's property by name.
+_GENERIC_TOKENS = {"amount", "at", "of", "the", "value"}
+# How many candidate property names to report per unresolved field.
+_HINT_LIMIT = 8
+
 
 class FieldSpec(NamedTuple):
     """One EasyStore fact and the HubSpot property it should land in.
@@ -226,6 +232,52 @@ def select_native(field: FieldSpec, schema: dict[str, dict[str, Any]]) -> str | 
     return None
 
 
+def describe_property(name: str, prop: dict[str, Any]) -> str:
+    """Return a compact ``name:type`` rendering, flagging what cannot be written."""
+
+    kind = str(prop.get("type") or "?")
+    notes = []
+    if bool(prop.get("calculated")):
+        notes.append("calculated")
+    metadata = prop.get("modificationMetadata")
+    if isinstance(metadata, dict) and bool(metadata.get("readOnlyValue")):
+        notes.append("read-only")
+    return f"{name}:{kind}" + (f"[{','.join(notes)}]" if notes else "")
+
+
+def field_keywords(field: FieldSpec) -> set[str]:
+    """Return the words worth searching a portal's schema for."""
+
+    tokens = {token for token in field.key.split("_") if token}
+    return {token for token in tokens if token not in _GENERIC_TOKENS} or tokens
+
+
+def matching_properties(
+    schema: dict[str, dict[str, Any]],
+    keywords: Iterable[str],
+    *,
+    limit: int = _HINT_LIMIT,
+) -> list[str]:
+    """Return portal properties whose name or label mentions any keyword.
+
+    This is the answer to "the value landed in a custom property, so what is the
+    native one called here?" — the portal names it rather than the sync guessing.
+    """
+
+    wanted = {keyword.casefold() for keyword in keywords}
+    found: list[str] = []
+    for name in sorted(schema):
+        if name.startswith(PROPERTY_GROUP.split("_")[0] + "_"):
+            continue  # Skip this sync's own easystore_* properties.
+        prop = schema[name]
+        haystack = f"{name} {prop.get('label') or ''}".casefold()
+        if any(keyword in haystack for keyword in wanted):
+            found.append(describe_property(name, prop))
+        if len(found) >= limit:
+            break
+    return found
+
+
 def property_schema(
     *,
     http_json: Callable[..., Any],
@@ -301,6 +353,7 @@ def resolve_fields(
     fields: Iterable[FieldSpec],
     error: type[Exception],
     optional: bool = False,
+    report: dict[str, Any] | None = None,
 ) -> dict[str, str]:
     """Map every field key onto the HubSpot property that will carry it.
 
@@ -308,6 +361,12 @@ def resolve_fields(
     result, so a caller writes only what the portal can actually store. With
     ``optional`` set, a portal that will not disclose its schema yields an empty
     mapping instead of failing the stage.
+
+    Pass ``report`` to collect diagnostics: ``inventory`` lists every property the
+    portal has, and ``hints`` names the properties that look related to each field
+    that did not find a native home. A value landing in an ``easystore_*``
+    property is usually a native property this sync does not know the name of, and
+    these hints are how that name gets found.
     """
 
     fields = tuple(fields)
@@ -321,14 +380,23 @@ def resolve_fields(
     if schema is None:
         return {}
 
+    if report is not None:
+        report["inventory"] = [
+            describe_property(name, schema[name]) for name in sorted(schema)
+        ]
+
     resolved: dict[str, str] = {}
     missing: list[FieldSpec] = []
+    unresolved: list[FieldSpec] = []
 
     for field in fields:
         native = select_native(field, schema)
         if native is not None:
             resolved[field.key] = native
             continue
+
+        # No native property fitted, so this field is a naming question.
+        unresolved.append(field)
         if field.fallback is None:
             continue
 
@@ -352,6 +420,13 @@ def resolve_fields(
             object_type=object_type,
             optional=optional,
         )
+    if report is not None:
+        report["hints"] = {
+            field.key: hints
+            for field in unresolved
+            if (hints := matching_properties(schema, field_keywords(field)))
+        }
+
     for field in missing:
         created = http_json(
             f"{HUBSPOT_BASE}/crm/v3/properties/{object_type}",
@@ -375,6 +450,17 @@ def resolve_fields(
         resolved[field.key] = field.fallback
 
     return resolved
+
+
+def observed_keys(seen: set[str], record: Any) -> None:
+    """Record which keys a source record carried, for run diagnostics.
+
+    Only key names are collected, never values, so the summary stays free of
+    customer data while still answering "what does EasyStore actually send?".
+    """
+
+    if isinstance(record, dict):
+        seen.update(str(key) for key in record)
 
 
 def describe_mapping(field_properties: dict[str, str]) -> str:

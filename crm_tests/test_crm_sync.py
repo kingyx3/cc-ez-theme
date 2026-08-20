@@ -316,6 +316,39 @@ class PropertyResolutionTests(unittest.TestCase):
             with self.subTest(field=field.key):
                 self.assertIsNone(schema.select_native(field, {}))
 
+    def test_property_descriptions_flag_what_cannot_be_written(self) -> None:
+        self.assertEqual(
+            schema.describe_property("hs_total_price", {"type": "number"}),
+            "hs_total_price:number",
+        )
+        self.assertEqual(
+            schema.describe_property(
+                "hs_total_price",
+                {"type": "number", "calculated": True},
+            ),
+            "hs_total_price:number[calculated]",
+        )
+        self.assertEqual(
+            schema.describe_property(
+                "hs_createdate",
+                {"type": "datetime", "modificationMetadata": {"readOnlyValue": True}},
+            ),
+            "hs_createdate:datetime[read-only]",
+        )
+
+    def test_keywords_drop_words_that_describe_every_field(self) -> None:
+        field = schema.FieldSpec(key="discount_amount")
+        self.assertEqual(schema.field_keywords(field), {"discount"})
+
+    def test_the_portal_is_asked_to_name_its_own_property(self) -> None:
+        portal = {
+            "hs_discount_total": {"type": "number", "label": "Discount"},
+            "hs_total_price": {"type": "number", "label": "Total amount"},
+            "easystore_discount_amount": {"type": "number", "label": "EasyStore"},
+        }
+        hints = schema.matching_properties(portal, {"discount"})
+        self.assertEqual(hints, ["hs_discount_total:number"])
+
     def test_money_values_are_normalized_for_hubspot_numbers(self) -> None:
         self.assertEqual(schema.money_value("SGD 1,234.50"), "1234.50")
         self.assertEqual(schema.money_value(0), "0")
@@ -574,6 +607,51 @@ class OrderCommerceFieldTests(unittest.TestCase):
             "9",
         )
         self.assertIsNone(orders._item_count({"line_items": []}))
+
+    def test_a_country_only_address_does_not_count_as_an_address(self) -> None:
+        # Exactly what EasyStore's order list returned in production: line items
+        # and a total present, address present but carrying only a country.
+        stub = {
+            "id": 1,
+            "line_items": [],
+            "total_price": "10.00",
+            "shipping_address": {"country": "Singapore", "country_code": "SG"},
+        }
+        self.assertTrue(orders.order_needs_detail(stub))
+        # The country still reaches HubSpot; it just is not a delivery address.
+        mapped = orders.order_properties(
+            stub,
+            external_id="1",
+            store_domain="cardboardcollective.easy.co",
+        )
+        self.assertEqual(mapped["hs_shipping_address_country"], "Singapore")
+        self.assertNotIn("hs_shipping_address_street", mapped)
+
+    def test_a_stub_shipping_address_never_hides_a_real_billing_address(self) -> None:
+        self.assertEqual(
+            orders._order_address(
+                {
+                    "shipping_address": {"country": "SG"},
+                    "billing_address": {"address1": "2 Other Road", "city": "JB"},
+                }
+            ),
+            {"address1": "2 Other Road", "city": "JB"},
+        )
+
+    def test_payment_and_shipping_method_read_nested_collections(self) -> None:
+        self.assertEqual(
+            orders._payment_method({"transactions": [{"gateway": "Stripe"}]}),
+            "Stripe",
+        )
+        self.assertEqual(
+            orders._payment_method({"payment": {"method": "PayNow"}}),
+            "PayNow",
+        )
+        self.assertIsNone(orders._payment_method({}))
+        self.assertEqual(
+            orders._shipping_method({"shipment": {"courier": "J&T"}}),
+            "J&T",
+        )
 
     def test_thin_listed_orders_are_fetched_in_detail(self) -> None:
         complete = {
@@ -953,6 +1031,27 @@ class CatalogueFieldTests(unittest.TestCase):
         )
         self.assertIsNone(products._product_url({"handle": "hobbit"}))
 
+    def test_product_type_falls_back_to_the_easystore_category(self) -> None:
+        self.assertEqual(
+            products._product_type({"product_type": "Trading cards"}),
+            "Trading cards",
+        )
+        self.assertEqual(
+            products._product_type({"categories": [{"name": "Trading cards"}]}),
+            "Trading cards",
+        )
+        self.assertEqual(
+            products._product_type({"category": {"title": "Board games"}}),
+            "Board games",
+        )
+        self.assertIsNone(products._product_type({}))
+
+    def test_observed_keys_collects_names_and_never_values(self) -> None:
+        seen: set[str] = set()
+        schema.observed_keys(seen, {"id": 1, "email": "buyer@example.com"})
+        schema.observed_keys(seen, None)
+        self.assertEqual(seen, {"id", "email"})
+
     def test_product_image_is_found_wherever_easystore_nests_it(self) -> None:
         self.assertEqual(
             products._product_image({"image": {"src": "https://img.example/a.png"}}),
@@ -1124,6 +1223,31 @@ class FieldProvisioningTests(unittest.TestCase):
         fake_http_json, _calls = self._fake_api([], forbidden=True)
         with self.assertRaises(orders.SyncError):
             self._resolve(fake_http_json)
+
+    def test_the_report_carries_the_inventory_and_naming_hints(self) -> None:
+        fake_http_json, _calls = self._fake_api(
+            [
+                {"name": "hs_fulfillment_status", "type": "string"},
+                # The portal's discount property under a name the sync does not
+                # know: this is what the hints exist to surface.
+                {
+                    "name": "hs_order_level_discount",
+                    "type": "number",
+                    "label": "Discount",
+                },
+            ]
+        )
+        report: dict[str, object] = {}
+        resolved = self._resolve(fake_http_json, report=report)
+
+        self.assertEqual(resolved["discount_amount"], "easystore_discount_amount")
+        self.assertIn("hs_order_level_discount:number", report["inventory"])
+        self.assertEqual(
+            report["hints"]["discount_amount"],
+            ["hs_order_level_discount:number"],
+        )
+        # A field that resolved natively needs no hint.
+        self.assertNotIn("fulfillment_status", report["hints"])
 
     def test_an_optional_stage_skips_fields_when_the_schema_is_forbidden(self) -> None:
         fake_http_json, calls = self._fake_api([], forbidden=True)
