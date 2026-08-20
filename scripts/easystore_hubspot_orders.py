@@ -48,6 +48,7 @@ from easystore_hubspot_schema import (
     field_values,
     first_present,
     nonempty,
+    observed_keys,
     resolve_fields,
 )
 
@@ -485,10 +486,37 @@ def hubspot_order_index(access_token: str) -> dict[str, str]:
     }
 
 
-def _order_address(order: dict[str, Any]) -> dict[str, Any]:
-    """Return the address to ship to, falling back to the billing address."""
+ADDRESS_KEYS = ("shipping_address", "billing_address", "address")
 
-    for key in ("shipping_address", "billing_address", "address"):
+
+def _usable_address(address: Any) -> bool:
+    """Report whether an address says where to deliver, not just which country.
+
+    EasyStore's order list returns a stub address carrying only a country, which
+    is present enough to look like an address and useless for delivery.
+    """
+
+    if not isinstance(address, dict):
+        return False
+    return (
+        first_present(address, ("address1", "address_1", "street", "line1")) is not None
+        or first_present(address, ("city", "town")) is not None
+    )
+
+
+def _order_address(order: dict[str, Any]) -> dict[str, Any]:
+    """Return the address to ship to, falling back to the billing address.
+
+    A stub is never preferred over a real address: the first candidate that says
+    where to deliver wins, and only if none does is a stub returned so its country
+    still reaches the CRM.
+    """
+
+    for key in ADDRESS_KEYS:
+        value = order.get(key)
+        if _usable_address(value):
+            return value
+    for key in ADDRESS_KEYS:
         value = order.get(key)
         if isinstance(value, dict):
             return value
@@ -544,6 +572,37 @@ def _tracking_url(order: dict[str, Any]) -> str | None:
     return _tracking(order)[1]
 
 
+def _from_collection(
+    order: dict[str, Any],
+    keys: tuple[str, ...],
+    labels: tuple[str, ...],
+) -> str | None:
+    """Read a value out of whichever nested record or list EasyStore used.
+
+    EasyStore reports several facts either as a scalar, as a single nested object,
+    or as a list of them (shipping lines, payments, fulfilments), so all three
+    shapes are searched before giving up.
+    """
+
+    for key in keys:
+        value = order.get(key)
+        if isinstance(value, dict):
+            found = first_present(value, labels)
+            if found is not None:
+                return found
+        elif isinstance(value, list):
+            for item in value:
+                if isinstance(item, dict):
+                    found = first_present(item, labels)
+                    if found is not None:
+                        return found
+                else:
+                    found = nonempty(item)
+                    if found is not None:
+                        return found
+    return None
+
+
 def _shipping_method(order: dict[str, Any]) -> str | None:
     """Return the chosen delivery method, however EasyStore reports it."""
 
@@ -552,29 +611,47 @@ def _shipping_method(order: dict[str, Any]) -> str | None:
         (
             "shipping_method",
             "shipping_method_name",
+            "shipping_method_title",
             "shipping_title",
             "shipment_method",
             "delivery_method",
+            "delivery_option",
+            "courier",
         ),
     )
     if direct is not None:
         return direct
 
-    lines = order.get("shipping_lines")
-    if isinstance(lines, dict):
-        lines = [lines]
-    if isinstance(lines, list):
-        for line in lines:
-            if not isinstance(line, dict):
-                continue
-            title = first_present(line, ("title", "name", "code", "method"))
-            if title is not None:
-                return title
+    return _from_collection(
+        order,
+        ("shipping_lines", "shipping_line", "shipment", "shipments", "shipping"),
+        ("title", "name", "method", "code", "courier", "provider"),
+    )
 
-    line = order.get("shipping_line")
-    if isinstance(line, dict):
-        return first_present(line, ("title", "name", "code", "method"))
-    return None
+
+def _payment_method(order: dict[str, Any]) -> str | None:
+    """Return how the order was paid for, however EasyStore reports it."""
+
+    direct = first_present(
+        order,
+        (
+            "payment_method",
+            "payment_method_name",
+            "payment_method_title",
+            "payment_gateway",
+            "gateway",
+            "payment_type",
+            "payment_name",
+        ),
+    )
+    if direct is not None:
+        return direct
+
+    return _from_collection(
+        order,
+        ("payment", "payments", "transactions", "payment_details"),
+        ("method", "name", "title", "gateway", "type", "provider"),
+    )
 
 
 def _discount_codes(order: dict[str, Any]) -> str | None:
@@ -857,7 +934,15 @@ ORDER_FIELDS: tuple[FieldSpec, ...] = (
             "discount_amount",
             "discount_total",
         ),
-        native=("hs_order_discount_amount", "hs_discount_amount", "hs_total_discount"),
+        native=(
+            "hs_order_discount_amount",
+            "hs_discount_amount",
+            "hs_total_discount",
+            "hs_total_discount_amount",
+            "hs_discount_total",
+            "hs_order_discount",
+            "hs_discount",
+        ),
         fallback="easystore_discount_amount",
         label="EasyStore Order Discount",
         description="Total discount applied to the order, in the order currency.",
@@ -888,13 +973,6 @@ ORDER_FIELDS: tuple[FieldSpec, ...] = (
     ),
     FieldSpec(
         key="payment_method",
-        sources=(
-            "payment_method",
-            "payment_method_name",
-            "payment_gateway",
-            "gateway",
-            "payment_type",
-        ),
         native=("hs_payment_method",),
         fallback="easystore_payment_method",
         label="EasyStore Payment Method",
@@ -902,7 +980,15 @@ ORDER_FIELDS: tuple[FieldSpec, ...] = (
     ),
     FieldSpec(
         key="order_status",
-        sources=("status", "order_status", "state"),
+        sources=(
+            "status",
+            "order_status",
+            "order_status_label",
+            "status_label",
+            "state",
+            "order_state",
+            "state_label",
+        ),
         native=("hs_order_status",),
         fallback="easystore_order_status",
         label="EasyStore Order Status",
@@ -1028,6 +1114,7 @@ ORDER_FIELD_DERIVATIONS: dict[str, Callable[[dict[str, Any]], str | None]] = {
     "shipping_recipient": _shipping_recipient,
     "shipping_phone": _shipping_phone,
     "shipping_method": _shipping_method,
+    "payment_method": _payment_method,
     "tracking_number": _tracking_number,
     "tracking_url": _tracking_url,
     **_address_derivations("shipping_address", _order_address),
@@ -1071,11 +1158,16 @@ def order_needs_detail(order: dict[str, Any]) -> bool:
     were the first symptom; addresses and totals are the same story, so the
     detail is fetched whenever any of the three is missing rather than only when
     line items are.
+
+    The list's address is the subtle case: it arrives as a stub carrying only a
+    country, so an order needs its detail whenever no address states a street or
+    a city.
     """
 
     if not isinstance(order.get("line_items"), list):
         return True
-    if not _order_address(order):
+    # A country-only stub is not a delivery address, so it does not count as one.
+    if not _usable_address(_order_address(order)):
         return True
     return first_present(order, DETAIL_MONEY_SOURCES) is None
 
@@ -1510,12 +1602,19 @@ def sync(
     fallback_dial_code: str,
 ) -> dict[str, Any]:
     ensure_order_identity_property(hubspot_access_token)
+    schema_report: dict[str, Any] = {}
     order_field_properties = resolve_fields(
         http_json=_http_json,
         access_token=hubspot_access_token,
         object_type=ORDER_OBJECT_TYPE,
         fields=ORDER_FIELDS,
         error=SyncError,
+        report=schema_report,
+    )
+    print(
+        "HubSpot Order properties in this portal: "
+        + ", ".join(schema_report.get("inventory", [])),
+        file=sys.stderr,
     )
     line_item_field_properties = resolve_line_item_fields(hubspot_access_token)
     print(
@@ -1552,6 +1651,11 @@ def sync(
     # How many orders actually carried each field. A zero here means EasyStore
     # did not report that fact, not that HubSpot rejected it.
     field_coverage: dict[str, int] = {field.key: 0 for field in ORDER_FIELDS}
+    # Which keys EasyStore actually sends, so a zero above can be traced to the
+    # real field name instead of guessed at. Names only, never values.
+    order_keys: set[str] = set()
+    address_keys: set[str] = set()
+    line_keys: set[str] = set()
 
     # Validate every order and product reference before making order/line writes.
     for listed in iter_easystore_orders(store_domain, easystore_access_token):
@@ -1564,6 +1668,11 @@ def sync(
             raise SyncError("EasyStore returned an order without an id")
         for key in order_field_values(order, fallback_dial_code):
             field_coverage[key] += 1
+        observed_keys(order_keys, order)
+        observed_keys(address_keys, _order_address(order))
+        observed_keys(address_keys, _billing_address(order))
+        for line in order.get("line_items") or ():
+            observed_keys(line_keys, line)
         desired = desired_lines(order, product_by_sku, line_item_field_properties)
         easystore_lines += sum(int(line["quantity"]) for line in desired.values())
         orders.append((order, external_id, desired))
@@ -1662,6 +1771,10 @@ def sync(
         "commerce_fields_on_easystore_properties": custom_order_fields,
         "contacts_promoted_to_customer": len(promoted_to_customer),
         "orders_fetched_in_detail": orders_fetched_in_detail,
+        "easystore_order_keys_seen": sorted(order_keys),
+        "easystore_order_address_keys_seen": sorted(address_keys),
+        "easystore_line_item_keys_seen": sorted(line_keys),
+        "hubspot_order_property_hints": schema_report.get("hints", {}),
         "hubspot_order_field_properties": dict(sorted(order_field_properties.items())),
         "hubspot_line_item_field_properties": dict(
             sorted(line_item_field_properties.items())

@@ -31,6 +31,7 @@ from easystore_hubspot_schema import (
     describe_mapping,
     field_values,
     first_present,
+    observed_keys,
     resolve_fields,
 )
 
@@ -47,7 +48,7 @@ PRODUCT_FIELDS: tuple[FieldSpec, ...] = (
     FieldSpec(key="image", native=("hs_images",)),
     FieldSpec(
         key="product_type",
-        sources=("product_type", "type", "category_name"),
+        sources=("product_type", "type", "category_name", "category_title"),
         native=("hs_product_type",),
     ),
 )
@@ -257,6 +258,34 @@ def _product_image(product: dict[str, Any]) -> str | None:
     return first_present(product, ("image_url", "featured_image", "thumbnail"))
 
 
+def _product_type(product: dict[str, Any]) -> str | None:
+    """Return the product's type, or the category EasyStore filed it under."""
+
+    direct = first_present(
+        product,
+        ("product_type", "type", "category_name", "category_title"),
+    )
+    if direct is not None:
+        return direct
+
+    for key in ("category", "categories", "collection", "collections"):
+        value = product.get(key)
+        if isinstance(value, dict):
+            found = first_present(value, ("name", "title", "label"))
+            if found is not None:
+                return found
+        elif isinstance(value, list):
+            for item in value:
+                found = (
+                    first_present(item, ("name", "title", "label"))
+                    if isinstance(item, dict)
+                    else nonempty(item)
+                )
+                if found is not None:
+                    return found
+    return None
+
+
 def product_field_values(
     product: dict[str, Any],
     store_domain: str | None = None,
@@ -266,11 +295,15 @@ def product_field_values(
     derivations: dict[str, Callable[[dict[str, Any]], str | None]] = {
         "url": lambda item: _product_url(item, store_domain),
         "image": _product_image,
+        "product_type": _product_type,
     }
     return field_values(product, PRODUCT_FIELDS, derivations)
 
 
-def resolve_product_fields(access_token: str) -> dict[str, str]:
+def resolve_product_fields(
+    access_token: str,
+    report: dict[str, Any] | None = None,
+) -> dict[str, str]:
     """Map catalogue detail onto native HubSpot product properties.
 
     Reading the product schema needs ``crm.schemas.products.read``. It is not
@@ -285,6 +318,7 @@ def resolve_product_fields(access_token: str) -> dict[str, str]:
         fields=PRODUCT_FIELDS,
         error=SyncError,
         optional=True,
+        report=report,
     )
     if len(resolved) < len(PRODUCT_FIELDS):
         missing = sorted(
@@ -407,7 +441,11 @@ def sync(
     easystore_access_token: str,
     hubspot_access_token: str,
 ) -> dict[str, Any]:
-    product_field_properties = resolve_product_fields(hubspot_access_token)
+    schema_report: dict[str, Any] = {}
+    product_field_properties = resolve_product_fields(
+        hubspot_access_token,
+        schema_report,
+    )
     print(
         "Catalogue fields mapped to HubSpot properties: "
         + describe_mapping(product_field_properties),
@@ -427,6 +465,8 @@ def sync(
             hubspot_by_sku[sku.casefold()].add(product_id)
 
     easystore_by_sku: dict[str, tuple[dict[str, Any], dict[str, Any], str]] = {}
+    product_keys: set[str] = set()
+    variant_keys: set[str] = set()
     easystore_products = 0
     easystore_variants = 0
     synthetic_skus = 0
@@ -434,11 +474,13 @@ def sync(
 
     for product in iter_easystore_products(store_domain, easystore_access_token):
         easystore_products += 1
+        observed_keys(product_keys, product)
         product_id = nonempty(product.get("id"))
         if product_id is None:
             continue
         for variant in product_variants(store_domain, easystore_access_token, product):
             easystore_variants += 1
+            observed_keys(variant_keys, variant)
             sku, synthetic = variant_sku(product_id, variant)
             if synthetic:
                 synthetic_skus += 1
@@ -506,6 +548,9 @@ def sync(
             sorted(product_field_properties.items())
         ),
         "easystore_catalogue_field_coverage": dict(sorted(field_coverage.items())),
+        "easystore_product_keys_seen": sorted(product_keys),
+        "easystore_variant_keys_seen": sorted(variant_keys),
+        "hubspot_product_property_hints": schema_report.get("hints", {}),
     }
 
 

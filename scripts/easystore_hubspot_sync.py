@@ -37,6 +37,7 @@ from easystore_hubspot_schema import (
     describe_mapping,
     field_values,
     first_present,
+    observed_keys,
     resolve_fields,
 )
 
@@ -427,6 +428,7 @@ def customer_field_values(customer: dict[str, Any]) -> dict[str, str]:
 def resolve_contact_fields(
     access_token: str,
     attribute_labels: Iterable[str] = (),
+    report: dict[str, Any] | None = None,
 ) -> dict[str, str]:
     """Map the extra customer facts and attributes onto HubSpot properties.
 
@@ -452,6 +454,7 @@ def resolve_contact_fields(
         fields=fields,
         error=SyncError,
         optional=True,
+        report=report,
     )
     if len(resolved) < len(fields):
         missing = sorted(field.key for field in fields if field.key not in resolved)
@@ -794,12 +797,18 @@ def sync(
             hubspot_lifecycle[contact_id] = stage
 
     easystore_by_phone: dict[str, dict[str, Any]] = {}
+    customer_keys: set[str] = set()
+    address_keys: set[str] = set()
     easystore_total = 0
     skipped_without_phone = 0
     duplicate_easystore_phones = 0
 
     for customer in iter_easystore_customers(store_domain, easystore_access_token):
         easystore_total += 1
+        # Names only, never values: enough to trace a zero in the coverage block
+        # back to the real EasyStore field name.
+        observed_keys(customer_keys, customer)
+        observed_keys(address_keys, customer.get("primary_address"))
         normalized = customer_mobile(customer, fallback_dial_code)
         if normalized is None:
             # Filtered out: no mobile number recorded, so no CRM identity.
@@ -820,9 +829,11 @@ def sync(
         for customer in easystore_by_phone.values()
         for label in customer_attributes(customer)
     }
+    schema_report: dict[str, Any] = {}
     contact_field_properties = resolve_contact_fields(
         hubspot_access_token,
         attribute_labels,
+        schema_report,
     )
     print(
         "EasyStore customer fields mapped to HubSpot properties: "
@@ -904,6 +915,9 @@ def sync(
             sorted(contact_field_properties.items())
         ),
         "easystore_customer_attributes_found": len(attribute_labels),
+        "easystore_customer_keys_seen": sorted(customer_keys),
+        "easystore_customer_address_keys_seen": sorted(address_keys),
+        "hubspot_contact_property_hints": schema_report.get("hints", {}),
         "easystore_customer_field_coverage": dict(sorted(field_coverage.items())),
     }
     return summary
