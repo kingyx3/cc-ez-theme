@@ -71,7 +71,14 @@ def reconcile(
     # and this stage leaves HubSpot unchanged.
     for listed in iter_easystore_orders(store_domain, easystore_access_token):
         orders_scanned += 1
-        order = complete_order(store_domain, easystore_access_token, listed)
+        # Only line items matter here, so skip the detail fetch that the order
+        # stage needs for addresses and totals.
+        order = complete_order(
+            store_domain,
+            easystore_access_token,
+            listed,
+            commerce_fields=False,
+        )
         external_id = nonempty(order.get("id"))
         if external_id is None:
             raise SyncError("EasyStore returned an order without an id")

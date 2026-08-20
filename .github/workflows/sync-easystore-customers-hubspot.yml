@@ -45,6 +45,7 @@ jobs:
 
       - name: Compile CRM sync scripts
         run: |
+          python -m py_compile scripts/easystore_hubspot_schema.py
           python -m py_compile scripts/easystore_hubspot_products.py
           python -m py_compile scripts/easystore_hubspot_sync.py
           python -m py_compile scripts/easystore_hubspot_orders.py

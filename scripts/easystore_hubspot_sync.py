@@ -26,10 +26,19 @@ import re
 import sys
 import time
 from collections import defaultdict
-from typing import Any, Iterable, Iterator
+from typing import Any, Callable, Iterable, Iterator
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+
+from easystore_hubspot_schema import (
+    FieldSpec,
+    apply_fields,
+    describe_mapping,
+    field_values,
+    first_present,
+    resolve_fields,
+)
 
 
 HUBSPOT_BASE_URL = "https://api.hubapi.com/crm/v3/objects/contacts"
@@ -77,6 +86,54 @@ COUNTRY_DIAL_CODES = {
     "US": "1",
     "VN": "84",
 }
+
+
+CONTACT_OBJECT_TYPE = "contacts"
+
+# EasyStore customer facts that HubSpot's standard contact properties have no
+# home for. HubSpot's own equivalents (total_revenue, num_associated_deals) are
+# calculated from HubSpot records rather than writable, so these are provisioned
+# in the easystore_sync group. The stage is optional: a token without the
+# contact schema scopes simply syncs the standard properties.
+CONTACT_FIELDS: tuple[FieldSpec, ...] = (
+    FieldSpec(
+        key="customer_id",
+        sources=("id", "customer_id"),
+        fallback="easystore_customer_id",
+        label="EasyStore Customer ID",
+        description="Immutable EasyStore customer ID for cross-referencing the store.",
+    ),
+    FieldSpec(
+        key="customer_since",
+        sources=("created_at", "created_on", "registered_at"),
+        fallback="easystore_customer_since",
+        label="EasyStore Customer Since",
+        description="Timestamp at which the customer account was created in EasyStore.",
+        kind="datetime",
+    ),
+    FieldSpec(
+        key="orders_count",
+        sources=("orders_count", "order_count", "total_orders"),
+        fallback="easystore_orders_count",
+        label="EasyStore Orders",
+        description="Number of orders the customer has placed in EasyStore.",
+        kind="number",
+    ),
+    FieldSpec(
+        key="total_spent",
+        sources=("total_spent", "total_spend", "lifetime_spend"),
+        fallback="easystore_total_spent",
+        label="EasyStore Total Spent",
+        description="Lifetime amount the customer has spent in EasyStore.",
+        kind="number",
+    ),
+    FieldSpec(
+        key="tags",
+        fallback="easystore_customer_tags",
+        label="EasyStore Customer Tags",
+        description="Comma separated tags on the EasyStore customer record.",
+    ),
+)
 
 
 class SyncError(RuntimeError):
@@ -184,7 +241,75 @@ def lifecycle_stage_write(current: Any, target: str = LIFECYCLE_LEAD) -> str | N
     return target
 
 
-def customer_properties(customer: dict[str, Any], mobile: str) -> dict[str, str]:
+def _customer_tags(customer: dict[str, Any]) -> str | None:
+    """Return the customer's tags as one comma separated value."""
+
+    tags = customer.get("tags")
+    if isinstance(tags, str):
+        candidates: list[Any] = tags.split(",")
+    elif isinstance(tags, list):
+        candidates = list(tags)
+    else:
+        candidates = []
+
+    collected: list[str] = []
+    for candidate in candidates:
+        tag = (
+            first_present(candidate, ("name", "title", "tag"))
+            if isinstance(candidate, dict)
+            else _nonempty(candidate)
+        )
+        if tag is not None and tag not in collected:
+            collected.append(tag)
+    return ", ".join(collected) if collected else None
+
+
+CONTACT_FIELD_DERIVATIONS: dict[str, Callable[[dict[str, Any]], str | None]] = {
+    "tags": _customer_tags,
+}
+
+
+def customer_field_values(customer: dict[str, Any]) -> dict[str, str]:
+    """Return the extra EasyStore customer facts, keyed by field key."""
+
+    return field_values(customer, CONTACT_FIELDS, CONTACT_FIELD_DERIVATIONS)
+
+
+def resolve_contact_fields(access_token: str) -> dict[str, str]:
+    """Map the extra customer facts onto HubSpot contact properties.
+
+    Provisioning contact properties needs the HubSpot contact schema scopes. They
+    are not required to synchronize a contact's standard properties, so a token
+    without them logs a warning and the extras are skipped.
+    """
+
+    resolved = resolve_fields(
+        http_json=_http_json,
+        access_token=access_token,
+        object_type=CONTACT_OBJECT_TYPE,
+        fields=CONTACT_FIELDS,
+        error=SyncError,
+        optional=True,
+    )
+    if len(resolved) < len(CONTACT_FIELDS):
+        missing = sorted(
+            field.key for field in CONTACT_FIELDS if field.key not in resolved
+        )
+        print(
+            "WARNING: EasyStore customer fields not synchronized because HubSpot "
+            "did not provide a writable property (add crm.schemas.contacts.read "
+            "and crm.schemas.contacts.write to the token to enable them): "
+            + ", ".join(missing),
+            file=sys.stderr,
+        )
+    return resolved
+
+
+def customer_properties(
+    customer: dict[str, Any],
+    mobile: str,
+    field_properties: dict[str, str] | None = None,
+) -> dict[str, str]:
     """Map an EasyStore customer onto HubSpot's standard contact properties."""
 
     properties: dict[str, str] = {
@@ -230,6 +355,9 @@ def customer_properties(customer: dict[str, Any], mobile: str) -> dict[str, str]
         if country is not None:
             properties["country"] = country
 
+    if field_properties:
+        apply_fields(properties, customer_field_values(customer), field_properties)
+
     return properties
 
 
@@ -240,8 +368,13 @@ def _http_json(
     headers: dict[str, str] | None = None,
     payload: Any = None,
     retries: int = 4,
+    allow_statuses: set[int] | None = None,
 ) -> Any:
-    """Issue an HTTP request and decode JSON, retrying throttling/server errors."""
+    """Issue an HTTP request and decode JSON, retrying throttling/server errors.
+
+    ``allow_statuses`` turns the listed HTTP statuses into a ``None`` result
+    instead of an error, which lets optional schema work degrade quietly.
+    """
 
     body = None
     request_headers = {
@@ -263,6 +396,10 @@ def _http_json(
                     return {}
                 return json.loads(raw.decode("utf-8"))
         except HTTPError as error:
+            if allow_statuses and error.code in allow_statuses:
+                error.read()
+                return None
+
             raw_error = error.read().decode("utf-8", errors="replace")
             retryable = error.code == 429 or 500 <= error.code < 600
             if retryable and attempt < retries:
@@ -465,8 +602,15 @@ def sync(
     easystore_access_token: str,
     hubspot_access_token: str,
     fallback_dial_code: str,
-) -> dict[str, int]:
+) -> dict[str, Any]:
     """Perform one complete EasyStore -> HubSpot customer sync."""
+
+    contact_field_properties = resolve_contact_fields(hubspot_access_token)
+    print(
+        "EasyStore customer fields mapped to HubSpot properties: "
+        + describe_mapping(contact_field_properties),
+        file=sys.stderr,
+    )
 
     hubspot_phone_ids: dict[str, set[str]] = defaultdict(set)
     hubspot_email_ids: dict[str, set[str]] = defaultdict(set)
@@ -520,6 +664,9 @@ def sync(
     ambiguous_hubspot_phones = 0
     email_conflicts = 0
     lifecycle_assignments = 0
+    # How many synchronized customers actually carried each extra fact. A zero
+    # means EasyStore did not report it, not that HubSpot rejected it.
+    field_coverage: dict[str, int] = {field.key: 0 for field in CONTACT_FIELDS}
 
     for mobile, customer in easystore_by_phone.items():
         matching_ids = hubspot_phone_ids.get(mobile, set())
@@ -532,7 +679,9 @@ def sync(
             )
             continue
 
-        properties = customer_properties(customer, mobile)
+        properties = customer_properties(customer, mobile, contact_field_properties)
+        for key in customer_field_values(customer):
+            field_coverage[key] += 1
         email = properties.get("email")
         target_id = next(iter(matching_ids), None)
 
@@ -580,6 +729,10 @@ def sync(
         "ambiguous_hubspot_mobile_numbers": ambiguous_hubspot_phones,
         "email_conflicts_omitted": email_conflicts,
         "lifecycle_stage_leads_assigned": lifecycle_assignments,
+        "hubspot_contact_field_properties": dict(
+            sorted(contact_field_properties.items())
+        ),
+        "easystore_customer_field_coverage": dict(sorted(field_coverage.items())),
     }
     return summary
 
