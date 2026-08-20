@@ -1,0 +1,168 @@
+name: Sync EasyStore CRM data to HubSpot
+
+on:
+  pull_request:
+    branches:
+      - main
+    # CRM sync sources only. Theme changes are gated by the theme packaging and
+    # browser E2E workflows instead, so neither side spends CI on the other.
+    paths:
+      - ".github/workflows/sync-easystore-customers-hubspot.yml"
+      - "scripts/easystore_hubspot_*.py"
+      - "crm_tests/**"
+      - "docs/CUSTOMER_CRM_SYNC.md"
+  schedule:
+    - cron: "0 */6 * * *"
+      timezone: "Asia/Singapore"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: easystore-hubspot-crm-sync-${{ github.event_name == 'pull_request' && github.event.pull_request.number || 'production' }}
+  cancel-in-progress: false
+
+env:
+  EASYSTORE_STORE_DOMAIN: ${{ vars.EASYSTORE_STORE_DOMAIN || 'cardboardcollective.easy.co' }}
+  CUSTOMER_SYNC_DEFAULT_DIAL_CODE: ${{ vars.CUSTOMER_SYNC_DEFAULT_DIAL_CODE || '65' }}
+
+jobs:
+  validate:
+    # Credential-free gate that must pass on the same PR head as browser E2E.
+    name: Validate CRM sync
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Compile CRM sync scripts
+        run: |
+          python -m py_compile scripts/easystore_hubspot_products.py
+          python -m py_compile scripts/easystore_hubspot_sync.py
+          python -m py_compile scripts/easystore_hubspot_orders.py
+          python -m py_compile scripts/easystore_hubspot_preflight.py
+          python -m py_compile scripts/easystore_hubspot_reconcile.py
+
+      - name: Run CRM sync unit tests
+        run: python -m unittest discover -s crm_tests -v
+
+  sync:
+    name: Upsert EasyStore products, customers and orders
+    if: github.event_name != 'pull_request'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Check CRM sync credentials
+        env:
+          EASYSTORE_ACCESS_TOKEN: ${{ secrets.EASYSTORE_ACCESS_TOKEN }}
+          HUBSPOT_ACCESS_TOKEN: ${{ secrets.HUBSPOT_ACCESS_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${EASYSTORE_ACCESS_TOKEN}" ]]; then
+            echo "::error::EASYSTORE_ACCESS_TOKEN is required with EasyStore read_products, read_customers and read_orders scopes."
+            exit 1
+          fi
+          if [[ -z "${HUBSPOT_ACCESS_TOKEN}" ]]; then
+            echo "::error::HUBSPOT_ACCESS_TOKEN is required with product/contact/order/line-item read+write scopes and crm.schemas.orders.read/write."
+            exit 1
+          fi
+
+      - name: Preflight customer mobile identity
+        env:
+          EASYSTORE_ACCESS_TOKEN: ${{ secrets.EASYSTORE_ACCESS_TOKEN }}
+          HUBSPOT_ACCESS_TOKEN: ${{ secrets.HUBSPOT_ACCESS_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/easystore_hubspot_preflight.py | tee preflight-summary.json
+
+      - name: Pull EasyStore products and upsert HubSpot products
+        env:
+          EASYSTORE_ACCESS_TOKEN: ${{ secrets.EASYSTORE_ACCESS_TOKEN }}
+          HUBSPOT_ACCESS_TOKEN: ${{ secrets.HUBSPOT_ACCESS_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/easystore_hubspot_products.py | tee product-sync-summary.json
+
+      - name: Pull EasyStore customers and upsert HubSpot contacts
+        env:
+          EASYSTORE_ACCESS_TOKEN: ${{ secrets.EASYSTORE_ACCESS_TOKEN }}
+          HUBSPOT_ACCESS_TOKEN: ${{ secrets.HUBSPOT_ACCESS_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/easystore_hubspot_sync.py | tee customer-sync-summary.json
+
+      - name: Pull EasyStore orders and upsert HubSpot orders and line items
+        env:
+          EASYSTORE_ACCESS_TOKEN: ${{ secrets.EASYSTORE_ACCESS_TOKEN }}
+          HUBSPOT_ACCESS_TOKEN: ${{ secrets.HUBSPOT_ACCESS_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/easystore_hubspot_orders.py | tee order-sync-summary.json
+
+      - name: Reconcile removed EasyStore order lines
+        env:
+          EASYSTORE_ACCESS_TOKEN: ${{ secrets.EASYSTORE_ACCESS_TOKEN }}
+          HUBSPOT_ACCESS_TOKEN: ${{ secrets.HUBSPOT_ACCESS_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/easystore_hubspot_reconcile.py | tee reconcile-summary.json
+
+      - name: Publish run summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "### EasyStore → HubSpot CRM sync"
+            echo
+            echo "- Schedule: 00:00, 06:00, 12:00, 18:00 Asia/Singapore"
+            echo "- Products: one HubSpot Product per EasyStore variant, keyed by SKU"
+            echo "- Customers: keyed by normalized mobile number; ambiguous ownership fails before writes"
+            echo "- Contacts without a recorded mobile number are filtered out of the CRM"
+            echo "- Lifecycle: an account makes a lead, an order makes a customer; stages never move backwards"
+            echo "- Orders: keyed by immutable EasyStore order ID, with created timestamp, payment/fulfilment status, total and discounts"
+            echo "- Order lines: product-backed HubSpot Line Items, with stale synced lines reconciled"
+            echo "- Store: \`${EASYSTORE_STORE_DOMAIN}\`"
+            echo
+            for entry in \
+              "Preflight|preflight-summary.json" \
+              "Products|product-sync-summary.json" \
+              "Customers|customer-sync-summary.json" \
+              "Orders and line items|order-sync-summary.json" \
+              "Reconciliation|reconcile-summary.json"; do
+              title="${entry%%|*}"
+              file="${entry#*|}"
+              echo "#### ${title}"
+              if [[ -s "${file}" ]]; then
+                echo '```json'
+                cat "${file}"
+                echo '```'
+              else
+                echo "No summary was produced; inspect the relevant step above."
+              fi
+              echo
+            done
+          } >> "${GITHUB_STEP_SUMMARY}"

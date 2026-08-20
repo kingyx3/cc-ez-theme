@@ -4,6 +4,17 @@ on:
   push:
     branches:
       - "**"
+    # Theme sources and the tooling, tests and dependencies that gate them.
+    # CRM sync changes have their own workflow and must not repackage, import
+    # or republish the storefront theme.
+    paths:
+      - "theme/**"
+      - "tests/**"
+      - "scripts/theme_ci.py"
+      - "scripts/easystore_publish.py"
+      - "requirements-dev.txt"
+      - ".coveragerc"
+      - ".github/workflows/package-theme.yml"
   workflow_dispatch:
 
 permissions:

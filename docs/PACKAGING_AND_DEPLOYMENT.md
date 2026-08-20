@@ -93,6 +93,11 @@ The coverage configuration enforces 100% line and branch coverage for the
 packaging and validation code. This tests the repository tooling, not every
 possible EasyStore runtime condition.
 
+`.coveragerc` omits `scripts/easystore_hubspot_*.py`. Those CRM sync scripts
+ship no theme code and are not imported by `tests/`; they are compiled and
+tested by the `Validate CRM sync` job instead. See
+`docs/CUSTOMER_CRM_SYNC.md`.
+
 ## 6. Build the upload ZIP
 
 ```bash
@@ -138,7 +143,14 @@ The archive must not contain:
 
 ## 8. GitHub Actions behavior
 
-The `Package EasyStore theme` workflow runs on pushes to every branch and through manual workflow dispatch.
+The `Package EasyStore theme` workflow runs on pushes to every branch and through manual workflow dispatch, but only for pushes that touch the theme or the tooling that gates it:
+
+- `theme/**` — the theme itself;
+- `tests/**`, `.coveragerc`, `requirements-dev.txt` — the suite and dependencies that must pass before packaging;
+- `scripts/theme_ci.py`, `scripts/easystore_publish.py` — the validation/packaging and publish tooling the jobs run;
+- `.github/workflows/package-theme.yml` — the workflow itself.
+
+CI is bifurcated between the two independent products in this repository: the theme and the EasyStore→HubSpot CRM sync. A push that only changes CRM sync sources (`scripts/easystore_hubspot_*.py`, `crm_tests/**`, `docs/CUSTOMER_CRM_SYNC.md`) does not repackage, import, or republish the storefront theme — it is gated by `Validate CRM sync` instead. Use `workflow_dispatch` to package or deploy the current theme from a commit that changed nothing theme-related.
 
 Its jobs are chained in this order:
 
