@@ -90,6 +90,25 @@ class PurchaseLimitSingleMessageTests(unittest.TestCase):
 
         self.assertIn("if (cartConfirmed) this.purchaseLimitInteracted = false;", product)
 
+    def test_the_quantity_cap_never_falls_below_the_field_minimum(self) -> None:
+        # The field is `min="1"`, so `max="0"` on a spent allowance is an
+        # impossible range: Chromium refused the submit with "Minimum value (1)
+        # must be less than the maximum value (0)." — a developer's sentence
+        # shown to a shopper — and blocked it before any theme code ran, so the
+        # limit copy never appeared at all on the commonest path there is,
+        # clicking Add to Cart with the allowance already used up.
+        for relative in ("assets/product-form.js", "assets/purchase-limit-feedback.js"):
+            with self.subTest(relative=relative):
+                source = self.read(relative)
+                self.assertIn(
+                    "this.quantityInput.setAttribute('max', String(Math.max(1, limit.maximum)));",
+                    source,
+                )
+                self.assertNotIn(
+                    "this.quantityInput.setAttribute('max', String(limit.maximum));",
+                    source,
+                )
+
     def test_storefront_and_editor_copies_match(self) -> None:
         for name in (
             "product-form.js",

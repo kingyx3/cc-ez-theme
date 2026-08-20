@@ -364,7 +364,13 @@
         return true;
       }
 
-      this.quantityInput.setAttribute('max', String(limit.maximum));
+      // Never below the field's own minimum. `max="0"` against `min="1"` is an
+      // impossible range, so the browser refused the submit with "Minimum value
+      // (1) must be less than the maximum value (0)." — a developer's sentence,
+      // shown to a shopper, in place of ours, which never got to run. Held at 1,
+      // the field stays valid, the submit reaches the purchase guard, and the
+      // guard answers with the limit copy.
+      this.quantityInput.setAttribute('max', String(Math.max(1, limit.maximum)));
       const context = {
         rawMessage: limit.message || '',
         currentQuantity: limit.currentQuantity,

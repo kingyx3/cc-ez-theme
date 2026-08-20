@@ -169,6 +169,12 @@ A message with room left states a **cap, not an action**. "You can add 2 more un
 
 Two rules decide what follows the ceiling. **Past orders are always accounted for**, because they are the one quantity a shopper cannot see on the page raising the message — told only "you can add 1 more unit (3 units per customer)" after ordering 2, they are left to work out where the other 2 went. **A number is never stated twice**: when nothing has been consumed the ceiling and what may be added are the same figure, so the message names it once.
 
+### The quantity field's own validity
+
+The quantity input is `min="1"`, so the cap written to it is held at 1 even when nothing may be added. `max="0"` is an impossible range against that minimum: the browser refused the submit itself with "Minimum value (1) must be less than the maximum value (0)." — a developer's sentence, shown to a shopper — and it refused *before* any theme code ran, so the limit copy never appeared. That was the commonest path there is: a customer whose allowance is spent, clicking Add to Cart. Held at 1 the field stays valid, the submit reaches the purchase guard, and the guard answers with "Limit reached: 3 units per customer. You have already ordered 3."
+
+The cap the shopper is actually held to does not depend on the attribute: the delegated guard measures the request against the allowance and blocks it regardless of what the field permits.
+
 ### One message per form
 
 A product form has two places a limit message can land: the note under the quantity picker (`[data-quantity-limit-message]`) and the alert under the buttons (`.form__message`). They sit a few centimetres apart, so a message written to both reads as the page saying it twice — which is what typing an over-limit quantity and then clicking **Buy Now** did. Add to Cart hid the fault: the validator sets `max` on the quantity input, so the browser's own constraint validation blocks that submit before any theme code runs. Buy Now is a `type="button"`, so nothing blocked it, and the delegated guard wrote the alert beside the note that was already showing.
