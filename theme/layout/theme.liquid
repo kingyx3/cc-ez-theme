@@ -193,9 +193,9 @@
   {% include 'currencies' %}
 
   {% capture quickview_error_label %}{% include 'translation-fallback', translation_key: 'products.product.quickview_error', fallback: 'Product details could not be loaded. Please try again.' %}{% endcapture %}
-  {% capture quantity_exceeded_label %}{% include 'translation-fallback', translation_key: 'products.product.quantity_exceeded', fallback: 'You selected __QUANTITY__. The maximum allowed is __MAXIMUM__ due to __REASON__.' %}{% endcapture %}
-  {% capture quantity_maximum_label %}{% include 'translation-fallback', translation_key: 'products.product.quantity_maximum', fallback: 'Maximum allowed: __MAXIMUM__ due to __REASON__.' %}{% endcapture %}
-  {% capture add_limit_error_label %}{% include 'translation-fallback', translation_key: 'products.product.add_limit_error', fallback: 'This item could not be added because it may exceed a customer, store, or stock limit.' %}{% endcapture %}
+  {% capture quantity_exceeded_label %}{% include 'translation-fallback', translation_key: 'products.product.quantity_exceeded', fallback: 'Limit reached: __MAXIMUM__ due to __REASON__.' %}{% endcapture %}
+  {% capture quantity_maximum_label %}{% include 'translation-fallback', translation_key: 'products.product.quantity_maximum', fallback: 'Limit: __MAXIMUM__ due to __REASON__.' %}{% endcapture %}
+  {% capture add_limit_error_label %}{% include 'translation-fallback', translation_key: 'products.product.add_limit_error', fallback: 'This item cannot be added right now.' %}{% endcapture %}
   {% capture low_inventory_label %}{% include 'translation-fallback', translation_key: 'products.product.low_inventory', fallback: 'Only __COUNT__ left' %}{% endcapture %}
   {% capture inventory_limit_label %}{% include 'translation-fallback', translation_key: 'products.product.inventory_limit', fallback: 'available inventory' %}{% endcapture %}
   {% capture purchase_limit_label %}{% include 'translation-fallback', translation_key: 'products.product.purchase_limit', fallback: 'a purchase limit' %}{% endcapture %}

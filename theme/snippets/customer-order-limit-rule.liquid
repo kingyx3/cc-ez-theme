@@ -35,15 +35,39 @@
     {% assign customer_order_limit_rule_cart_exceeded = true %}
   {% endif %}
 
+  {% comment %}
+    Mirrors messageFor and cartMessageFor in customer-order-limits.js, which
+    replace this the moment the script runs. An allowance spent entirely on past
+    orders leaves nothing to reduce to, so that case says remove rather than
+    telling a shopper to "reduce this item to 0".
+  {% endcomment %}
   {% capture customer_order_limit_rule_message %}
     {% if customer_order_limit_rule_login_required %}
-      Sign in to purchase this limited item. The limit is {{ customer_order_limit_rule_maximum }} per customer across orders.
+      Sign in to buy this item. Maximum {{ customer_order_limit_rule_maximum }} per customer.
     {% elsif customer_order_limit_rule_cart_exceeded %}
-      Your cart contains {{ customer_order_limit_rule_cart_quantity }} units, but only {{ customer_order_limit_rule_allowed_cart_quantity }} are available after previous orders. Reduce the quantity before checkout.
+      {% if customer_order_limit_rule_allowed_cart_quantity == 0 %}
+        Limit reached: {{ customer_order_limit_rule_maximum }} per customer. You have already ordered {{ customer_order_limit_rule_purchased }}, so remove this item to check out.
+      {% elsif customer_order_limit_rule_purchased > 0 %}
+        Reduce this item to {{ customer_order_limit_rule_allowed_cart_quantity }} to check out ({{ customer_order_limit_rule_maximum }} per customer, {{ customer_order_limit_rule_purchased }} already ordered).
+      {% else %}
+        Reduce this item to {{ customer_order_limit_rule_allowed_cart_quantity }} to check out.
+      {% endif %}
     {% elsif customer_order_limit_rule_remaining == 0 %}
-      Customer purchase limit reached. You have purchased or added {{ customer_order_limit_rule_maximum }} of {{ customer_order_limit_rule_maximum }} allowed units.
+      {% if customer_order_limit_rule_purchased > 0 and customer_order_limit_rule_cart_quantity > 0 %}
+        Limit reached: {{ customer_order_limit_rule_maximum }} per customer. You have {{ customer_order_limit_rule_purchased }} ordered and {{ customer_order_limit_rule_cart_quantity }} in your cart.
+      {% elsif customer_order_limit_rule_cart_quantity > 0 %}
+        Limit reached: {{ customer_order_limit_rule_maximum }} per customer. You have {{ customer_order_limit_rule_cart_quantity }} in your cart.
+      {% elsif customer_order_limit_rule_purchased > 0 %}
+        Limit reached: {{ customer_order_limit_rule_maximum }} per customer. You have already ordered {{ customer_order_limit_rule_purchased }}.
+      {% else %}
+        Limit reached: {{ customer_order_limit_rule_maximum }} per customer.
+      {% endif %}
+    {% elsif customer_order_limit_rule_purchased > 0 %}
+      Maximum {{ customer_order_limit_rule_remaining }} ({{ customer_order_limit_rule_maximum }} per customer, {{ customer_order_limit_rule_purchased }} already ordered).
+    {% elsif customer_order_limit_rule_cart_quantity > 0 %}
+      Maximum {{ customer_order_limit_rule_remaining }} ({{ customer_order_limit_rule_maximum }} per customer).
     {% else %}
-      You can add up to {{ customer_order_limit_rule_remaining }} more. The limit is {{ customer_order_limit_rule_maximum }} per customer across orders.
+      Maximum {{ customer_order_limit_rule_maximum }} per customer.
     {% endif %}
   {% endcapture %}
   <script>

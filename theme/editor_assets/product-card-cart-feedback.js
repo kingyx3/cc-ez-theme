@@ -50,7 +50,7 @@
   function fallbackError() {
     return window.purchaseStrings && window.purchaseStrings.addLimitError
       ? window.purchaseStrings.addLimitError
-      : 'This item could not be added because the available quantity or purchase limit was reached.';
+      : 'This item cannot be added right now.';
   }
 
   function enhanceListingCartButton() {

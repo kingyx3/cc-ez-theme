@@ -34,11 +34,10 @@ class ContextualPurchaseLimitFeedbackTests(unittest.TestCase):
         self.assertIn("container.textContent", storefront)
         self.assertIn("const extractMaximum", storefront)
         self.assertIn("only\\s+(?:has\\s+)?(?:left\\s+)?", storefront)
-        self.assertIn("Stock limit reached.", storefront)
-        self.assertIn("Purchase limit reached.", storefront)
-        self.assertIn("Quantity limit exceeded.", storefront)
-        self.assertIn("Maximum quantity reached.", storefront)
-        self.assertIn("You can add up to", storefront)
+        self.assertIn("Limit reached: ${limit.clause}.", storefront)
+        self.assertIn("Maximum ${unitLabel(remaining)} (${limit.short}).", storefront)
+        self.assertIn("This item cannot be added right now.", storefront)
+        self.assertNotIn("You can add", storefront)
         self.assertIn("Math.max(0, totalMaximum - currentQuantity)", storefront)
         self.assertNotIn("would bring your cart to", storefront)
         self.assertNotIn("Remove an item before adding more.", storefront)
@@ -46,23 +45,26 @@ class ContextualPurchaseLimitFeedbackTests(unittest.TestCase):
     def test_limit_copy_states_the_ceiling_instead_of_an_equation(self) -> None:
         # "2 units in cart + 2 units selected = 0 units maximum" read as broken
         # arithmetic and quoted the remaining allowance as though it were the
-        # limit. Copy now names the ceiling in a sentence.
+        # limit. Copy now names the ceiling as a short phrase.
         storefront = (
             THEME_ROOT / "assets" / "purchase-limit-feedback.js"
         ).read_text(encoding="utf-8")
 
-        self.assertIn("const limitClause = (reason, maximum) => {", storefront)
-        self.assertIn("the limit is ${unitLabel(maximum)} per customer", storefront)
+        # One ceiling, three sentence positions, spelled out together per reason:
+        # after "Limit reached:", inside a parenthetical, and on its own.
+        self.assertIn("const ceiling = (reason, maximum) => {", storefront)
+        self.assertIn("${unitLabel(maximum)} per customer", storefront)
+        self.assertIn("only ${unitLabel(maximum)} in stock", storefront)
+        self.assertIn("sentence: `Maximum ${unitLabel(maximum)} per customer.`", storefront)
+        self.assertIn("sentence: `Only ${unitLabel(maximum)} left.`", storefront)
         self.assertIn(
-            "only ${unitLabel(maximum)} ${maximum === 1 ? 'is' : 'are'} available",
+            "Limit reached: ${limit.clause}. You have ${current} in your cart.",
             storefront,
         )
-        self.assertIn(
-            "Maximum quantity reached. You already have ${unitLabel(current)}"
-            " in your cart, and ${clause}.",
-            storefront,
-        )
-        self.assertIn("cannot add more of this item.", storefront)
+        # One lead, one clause. The copy this replaced restated the ceiling in a
+        # second sentence of its own after already naming it.
+        self.assertNotIn("the limit is ${", storefront)
+        self.assertNotIn("cannot add more of this item.", storefront)
         self.assertNotIn("in cart +", storefront)
         self.assertNotIn("selected = ${", storefront)
         self.assertNotIn("units maximum", storefront)
@@ -111,7 +113,10 @@ class ContextualPurchaseLimitFeedbackTests(unittest.TestCase):
         self.assertIn("mode: 'reached'", helper)
         self.assertIn("const shouldShow = focusInvalid", helper)
         self.assertIn("this.purchaseLimitInteracted === true", helper)
-        self.assertIn("content.textContent = format", helper)
+        # The alert still renders the formatted message, but only for a form
+        # that has no quantity note to put it in.
+        self.assertIn("const text = format({ ...context, rawMessage: cleanMessage });", helper)
+        self.assertIn("content.textContent = text;", helper)
         self.assertIn("this.showQuantityLimit(", helper)
         self.assertIn("this.clearQuantityLimit();", helper)
         self.assertNotIn("quantity === limit.maximum", helper)

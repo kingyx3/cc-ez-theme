@@ -95,26 +95,50 @@
     );
   };
 
-  // A whole clause rather than a noun phrase: the copy states what the ceiling
-  // is, so it never has to be glued into an equation to make sense.
-  const limitClause = (reason, maximum) => {
+  // One ceiling, three sentence positions, so each reason spells all three out
+  // together rather than being reassembled at each use: `clause` follows "Limit
+  // reached:", `short` sits in a parenthetical where the noun is already in the
+  // sentence, and `sentence` states the ceiling on its own.
+  const ceiling = (reason, maximum) => {
     switch (reason.key) {
       case 'inventory':
-        return `only ${unitLabel(maximum)} ${maximum === 1 ? 'is' : 'are'} available`;
+        return {
+          clause: `only ${unitLabel(maximum)} in stock`,
+          short: `only ${maximum} left`,
+          sentence: `Only ${unitLabel(maximum)} left.`,
+        };
       case 'customer':
-        return `the limit is ${unitLabel(maximum)} per customer`;
+        return {
+          clause: `${unitLabel(maximum)} per customer`,
+          short: `${maximum} per customer`,
+          sentence: `Maximum ${unitLabel(maximum)} per customer.`,
+        };
       case 'promotion':
-        return `the limit is ${unitLabel(maximum)} for this promotion`;
+        return {
+          clause: `${unitLabel(maximum)} for this promotion`,
+          short: `${maximum} for this promotion`,
+          sentence: `Maximum ${unitLabel(maximum)} for this promotion.`,
+        };
       case 'store':
-        return `the limit is ${unitLabel(maximum)} for this store`;
+        return {
+          clause: `${unitLabel(maximum)} for this store`,
+          short: `${maximum} for this store`,
+          sentence: `Maximum ${unitLabel(maximum)} for this store.`,
+        };
       case 'order':
-        return `the limit is ${unitLabel(maximum)} per order`;
+        return {
+          clause: `${unitLabel(maximum)} per order`,
+          short: `${maximum} per order`,
+          sentence: `Maximum ${unitLabel(maximum)} per order.`,
+        };
       default:
-        return `the limit is ${unitLabel(maximum)}`;
+        return {
+          clause: unitLabel(maximum),
+          short: String(maximum),
+          sentence: `Maximum ${unitLabel(maximum)}.`,
+        };
     }
   };
-
-  const sentence = (clause) => `${clause.charAt(0).toUpperCase()}${clause.slice(1)}`;
 
   const format = ({
     rawMessage = '',
@@ -136,42 +160,39 @@
       // something. Say plainly that nothing more can be added.
       if (parsedMaximum <= 0) {
         return current > 0
-          ? `Maximum quantity reached. You already have ${unitLabel(current)} in your cart and cannot add more of this item.`
-          : 'Maximum quantity reached. This item cannot be added right now.';
+          ? `Limit reached. You have ${unitLabel(current)} in your cart.`
+          : 'This item cannot be added right now.';
       }
 
       const remaining = Math.max(0, parsedMaximum - current);
-      const clause = limitClause(inferredReason, parsedMaximum);
+      const limit = ceiling(inferredReason, parsedMaximum);
 
-      if (mode === 'reached') {
-        if (current > 0) {
-          return `Maximum quantity reached. You already have ${unitLabel(current)} in your cart, and ${clause}.`;
-        }
-        return `Maximum quantity reached. ${sentence(clause)}.`;
+      // Nothing left to add, whether the shopper is at the ceiling or asked for
+      // more than it allows. One message covers both: the ceiling, and what the
+      // cart already holds of it.
+      if (mode === 'reached' || remaining === 0) {
+        return current > 0
+          ? `Limit reached: ${limit.clause}. You have ${current} in your cart.`
+          : `Limit reached: ${limit.clause}.`;
       }
 
-      if (current > 0 && remaining === 0) {
-        if (inferredReason.key === 'inventory') {
-          return `Stock limit reached. You already have ${unitLabel(current)} in your cart, and ${clause}.`;
-        }
-        return `Purchase limit reached. You already have ${unitLabel(current)} in your cart, and ${clause}.`;
-      }
-
+      // A cap, not an action. This lands under the quantity picker, where "you
+      // can add 2 more units" read as add-to-cart and invited the 2 to be
+      // measured against the field rather than against the cart.
       if (requested > remaining) {
-        if (remaining > 0) {
-          return `Quantity limit exceeded. You can add up to ${unitLabel(remaining)} more because ${clause}.`;
-        }
-        return `Quantity limit exceeded. ${sentence(clause)}.`;
+        return current > 0
+          ? `Maximum ${unitLabel(remaining)} (${limit.short}).`
+          : limit.sentence;
       }
 
-      return `Unable to add this item. ${sentence(clause)}.`;
+      return `Unable to add this item (${limit.short}).`;
     }
 
     if (cleanMessage) return cleanMessage;
 
     return window.purchaseStrings && window.purchaseStrings.addLimitError
       ? stripMarkup(window.purchaseStrings.addLimitError)
-      : 'Unable to add this item because a quantity limit was reached.';
+      : 'This item cannot be added right now.';
   };
 
   // A limit that phrased its own copy already knows what the cart holds and what
@@ -270,6 +291,20 @@
 
       plusButton.dataset.purchaseLimitMaximum = maximum == null ? '' : String(maximum);
 
+      // What the field held before `quantity-input` stepped it. Recorded from a
+      // capture listener on the wrapper, which runs ahead of the button's own
+      // listeners wherever inside the button the click landed.
+      const stepper = this.quantityInput.closest('quantity-input');
+      if (stepper && stepper.dataset.purchaseLimitStepBound !== 'true') {
+        stepper.dataset.purchaseLimitStepBound = 'true';
+        stepper.addEventListener('click', (event) => {
+          if (!event.target?.closest?.('[name="plus"]')) return;
+          stepper.dataset.purchaseLimitQuantityBefore = String(
+            Math.max(1, Number.parseInt(this.quantityInput.value, 10) || 1)
+          );
+        }, { capture: true });
+      }
+
       if (plusButton.dataset.purchaseLimitFeedbackBound === 'true') return;
       plusButton.dataset.purchaseLimitFeedbackBound = 'true';
       plusButton.addEventListener('click', () => {
@@ -283,6 +318,15 @@
         );
 
         if (!Number.isFinite(allowedMaximum) || selectedQuantity < allowedMaximum) return;
+
+        // The step landed, so the shopper has exactly what they asked for and is
+        // at the ceiling rather than past it. Selecting the last unit you are
+        // allowed to buy is not a limit to be told about; only a refused step is.
+        const before = Number.parseInt(
+          stepper && stepper.dataset.purchaseLimitQuantityBefore,
+          10
+        );
+        if (Number.isFinite(before) && selectedQuantity !== before) return;
 
         const limit = this.getQuantityLimit();
         if (!limit) return;
@@ -320,7 +364,13 @@
         return true;
       }
 
-      this.quantityInput.setAttribute('max', String(limit.maximum));
+      // Never below the field's own minimum. `max="0"` against `min="1"` is an
+      // impossible range, so the browser refused the submit with "Minimum value
+      // (1) must be less than the maximum value (0)." — a developer's sentence,
+      // shown to a shopper, in place of ours, which never got to run. Held at 1,
+      // the field stays valid, the submit reaches the purchase guard, and the
+      // guard answers with the limit copy.
+      this.quantityInput.setAttribute('max', String(Math.max(1, limit.maximum)));
       const context = {
         rawMessage: limit.message || '',
         currentQuantity: limit.currentQuantity,
@@ -397,6 +447,7 @@
 
       const cleanMessage = stripMarkup(message);
       if (!this.lastRejectedQuantityContext && !isLimitMessage(cleanMessage)) {
+        container.dataset.purchaseLimitMessage = 'false';
         content.textContent = cleanMessage;
         container.classList.remove('hidden');
         return;
@@ -407,7 +458,16 @@
         currentQuantity: this.getCurrentCartQuantity(),
         requestedQuantity: this.quantityInput ? this.quantityInput.value : 1,
       };
-      content.textContent = format({ ...context, rawMessage: cleanMessage });
+      const text = format({ ...context, rawMessage: cleanMessage });
+
+      // The store's own rejection stays in the alert. Routing it to the quantity
+      // note instead lost it outright: `setSubmitting` revalidates immediately
+      // afterwards, and a quantity that no longer breaches the rejected maximum
+      // clears the note, leaving the shopper with no message at all. If that
+      // revalidation does raise the note, it hides this alert on its way in, so
+      // the two still never show the same sentence together.
+      container.dataset.purchaseLimitMessage = 'true';
+      content.textContent = text;
       container.classList.remove('hidden');
     };
 

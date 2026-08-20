@@ -235,6 +235,16 @@ if (!customElements.get('product-form')) {
       this.quantityLimitMessage.classList.add(`quantity-limit-message--${state}`);
       this.quantityInput.setAttribute('aria-invalid', state === 'error' ? 'true' : 'false');
       if (wrapper) wrapper.classList.toggle('quantity-limit-exceeded', state === 'error');
+
+      // A form has two places a limit message could land: this note, under the
+      // quantity picker, and the alert under the buttons. On desktop they sit a
+      // few centimetres apart, so the same sentence in both reads as the page
+      // saying it twice. The note owns limit copy, so an alert already holding
+      // some steps aside. Any other error there is left alone.
+      const alertBox = this.form && this.form.querySelector('.form__message');
+      if (alertBox && alertBox.dataset.purchaseLimitMessage === 'true') {
+        this.hideErrorMsg();
+      }
     }
 
     clearQuantityLimit() {
@@ -266,7 +276,13 @@ if (!customElements.get('product-form')) {
         return true;
       }
 
-      this.quantityInput.setAttribute('max', String(limit.maximum));
+      // Never below the field's own minimum. `max="0"` against `min="1"` is an
+      // impossible range, so the browser refused the submit with "Minimum value
+      // (1) must be less than the maximum value (0)." — a developer's sentence,
+      // shown to a shopper, in place of ours, which never got to run. Held at 1,
+      // the field stays valid, the submit reaches the purchase guard, and the
+      // guard answers with the limit copy.
+      this.quantityInput.setAttribute('max', String(Math.max(1, limit.maximum)));
 
       if (quantity > limit.maximum) {
         const message = limit.message
@@ -413,6 +429,13 @@ if (!customElements.get('product-form')) {
           );
         }
 
+        // The addition landed, so the shopper is owed no warning. The field
+        // keeps the quantity they just bought while the allowance behind it has
+        // shrunk by that much, and revalidating on that stale number told
+        // someone who had successfully added 2 of 3 that they could "add 1 more
+        // unit". Their request was met; the next one starts the question again.
+        if (cartConfirmed) this.purchaseLimitInteracted = false;
+
         if (buyNow && !cartConfirmed) {
           this.openBuyNowLimitModal(
             window.purchaseStrings.addLimitError
@@ -505,7 +528,9 @@ if (!customElements.get('product-form')) {
     }
 
     renderErrorMsg(html) {
-      this.form.querySelector('.form__message').classList.remove('hidden');
+      const container = this.form.querySelector('.form__message');
+      container.dataset.purchaseLimitMessage = this.isQuantityLimitError(html) ? 'true' : 'false';
+      container.classList.remove('hidden');
       this.form.querySelector('.js-error-content').innerHTML = html;
     }
 

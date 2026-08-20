@@ -37,23 +37,44 @@ class CustomerOrderLimitCopyTests(unittest.TestCase):
         limits = self.read("assets/customer-order-limits.js")
 
         self.assertIn("const unitLabel = (value) => {", limits)
+        # `moreUnits` existed only for the "you can add N more" phrasing.
+        self.assertNotIn("moreUnits", limits)
+        self.assertIn("Limit reached: ${unitLabel(maximum)} per customer.", limits)
         self.assertIn(
-            "Maximum quantity reached. You have already purchased ${unitLabel(purchased)}"
-            " and have ${unitLabel(cartQuantity)} in your cart.",
+            "${limitReached} You have ${purchased} ordered and ${cartQuantity} in your cart.",
             limits,
         )
-        self.assertIn(
-            "Maximum quantity reached. You already have ${unitLabel(cartQuantity)} in your cart.",
-            limits,
-        )
-        self.assertIn(
-            "Customer purchase limit reached. You have already purchased ${unitLabel(purchased)}"
-            " of the ${unitLabel(maximum)} allowed per customer across orders",
-            limits,
-        )
-        self.assertIn("The limit is ${unitLabel(maximum)} per customer across orders", limits)
+        self.assertIn("${limitReached} You have ${cartQuantity} in your cart.", limits)
+        self.assertIn("${limitReached} You have already ordered ${purchased}.", limits)
         self.assertNotIn("0 units maximum", limits)
+        # "You can add N more" read as add-to-cart on the quantity picker, and
+        # invited the N to be measured against the field rather than the cart.
+        self.assertNotIn("You can add", limits)
         self.assertNotIn("in cart +", limits)
+        # The ceiling is named once, by the lead. Restating it as a trailing
+        # sentence is what made every message three sentences long.
+        self.assertNotIn("The limit is ${", limits)
+
+    def test_copy_accounts_for_orders_whenever_an_allowance_is_partly_spent(self) -> None:
+        # A shopper can see their own cart on the page that raised the message.
+        # They cannot see what earlier orders used, so a remaining allowance
+        # that is short of the ceiling has to say why.
+        limits = self.read("assets/customer-order-limits.js")
+
+        self.assertIn(
+            "Maximum ${unitLabel(remaining)}"
+            " (${maximum} per customer, ${purchased} already ordered).",
+            limits,
+        )
+        self.assertIn(
+            "Reduce this item to ${unitLabel(allowed)} to check out"
+            " (${maximum} per customer, ${purchased} already ordered).",
+            limits,
+        )
+        # With nothing consumed the cap and the ceiling are the same number, so
+        # it is stated once rather than twice.
+        self.assertIn("return `Maximum ${unitLabel(maximum)} per customer.`;", limits)
+        self.assertIn("return `Reduce this item to ${unitLabel(allowed)} to check out.`;", limits)
 
         # The equation copy this guard was written for lived in the shared
         # formatter, not here, so it survived. Guard the file it came from.

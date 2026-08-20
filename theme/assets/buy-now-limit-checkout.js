@@ -82,7 +82,7 @@
 
     return String(
       strings.addLimitError
-      || 'The item was not added because a purchase limit was reached.'
+      || 'This item cannot be added right now.'
     );
   };
 
