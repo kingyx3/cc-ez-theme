@@ -38,6 +38,7 @@ PROPERTY_GROUP_LABEL = "EasyStore Sync"
 PROPERTY_FIELD_TYPES = {
     "string": "text",
     "number": "number",
+    "date": "date",
     "datetime": "date",
 }
 
@@ -136,6 +137,22 @@ def timestamp_value(value: Any) -> str | None:
     return str(int(moment.timestamp() * 1000))
 
 
+def date_value(value: Any) -> str | None:
+    """Return UTC midnight epoch milliseconds for a calendar date, or ``None``.
+
+    HubSpot date properties store a day, not an instant, and reject a value that
+    is not midnight UTC. A value that does not parse as a date is dropped rather
+    than rounded to today.
+    """
+
+    stamp = timestamp_value(value)
+    if stamp is None:
+        return None
+    moment = datetime.fromtimestamp(int(stamp) / 1000, tz=timezone.utc)
+    midnight = moment.replace(hour=0, minute=0, second=0, microsecond=0)
+    return str(int(midnight.timestamp() * 1000))
+
+
 def field_value(
     record: dict[str, Any],
     field: FieldSpec,
@@ -151,6 +168,8 @@ def field_value(
         return money_value(raw, absolute=field.absolute)
     if field.kind == "datetime":
         return timestamp_value(raw)
+    if field.kind == "date":
+        return date_value(raw)
     return raw
 
 

@@ -200,6 +200,44 @@ class OrderLineMappingTests(unittest.TestCase):
             orders.desired_lines(order, {})
 
 
+class LineItemDetailTests(unittest.TestCase):
+    def _order(self) -> dict[str, object]:
+        return {
+            "id": 99,
+            "currency": "SGD",
+            "line_items": [
+                {
+                    "sku": "ABC",
+                    "title": "Alpha",
+                    "quantity": 1,
+                    "price": "12.50",
+                    "total_discount": "-2.50",
+                    "total_tax": "0.75",
+                    "variant_title": "English",
+                }
+            ],
+        }
+
+    def test_per_line_detail_is_written_when_resolved(self) -> None:
+        desired = orders.desired_lines(
+            self._order(),
+            {"abc": "777"},
+            {"discount": "discount", "tax": "tax", "variant": "description"},
+        )
+        self.assertEqual(desired["abc"]["discount"], "2.50")
+        self.assertEqual(desired["abc"]["tax"], "0.75")
+        self.assertEqual(desired["abc"]["description"], "English")
+
+    def test_per_line_detail_is_omitted_without_a_resolved_property(self) -> None:
+        desired = orders.desired_lines(self._order(), {"abc": "777"})
+        self.assertNotIn("discount", desired["abc"])
+        self.assertNotIn("tax", desired["abc"])
+        self.assertNotIn("description", desired["abc"])
+        # The core line item mapping is unchanged.
+        self.assertEqual(desired["abc"]["hs_product_id"], "777")
+        self.assertEqual(desired["abc"]["price"], "12.50")
+
+
 class ReconciliationTests(unittest.TestCase):
     def test_only_stale_product_backed_lines_are_archived(self) -> None:
         existing = {
@@ -298,6 +336,14 @@ class PropertyResolutionTests(unittest.TestCase):
     def test_epoch_timestamps_are_scaled_to_milliseconds(self) -> None:
         self.assertEqual(schema.timestamp_value("1777602030"), "1777602030000")
         self.assertEqual(schema.timestamp_value("1777602030000"), "1777602030000")
+
+    def test_dates_are_truncated_to_utc_midnight(self) -> None:
+        self.assertEqual(schema.date_value("1993-04-20"), "735264000000")
+        self.assertEqual(
+            schema.date_value("1993-04-20T15:30:00+08:00"),
+            "735264000000",
+        )
+        self.assertIsNone(schema.date_value("20/04/1993"))
 
     def test_unparseable_timestamp_is_omitted(self) -> None:
         self.assertIsNone(schema.timestamp_value("last Tuesday"))
@@ -448,6 +494,87 @@ class OrderCommerceFieldTests(unittest.TestCase):
                     mapped,
                 )
 
+    def test_order_state_and_payment_detail_are_mapped(self) -> None:
+        mapped = orders.order_properties(
+            {
+                "status": "cancelled",
+                "payment_method": "Stripe",
+                "paid_at": "2026-05-01T02:20:30Z",
+                "fulfilled_at": "2026-05-02T02:20:30Z",
+                "cancelled_at": "2026-05-03T02:20:30Z",
+                "cancel_reason": "Customer changed their mind",
+                "total_refunded": "-261.00",
+                "source_name": "web",
+                "tags": ["preorder", "gift", "preorder"],
+            },
+            external_id="1004",
+            store_domain="cardboardcollective.easy.co",
+        )
+        self.assertEqual(mapped["hs_order_status"], "cancelled")
+        self.assertEqual(mapped["hs_payment_method"], "Stripe")
+        self.assertEqual(mapped["easystore_order_paid_at"], "1777602030000")
+        self.assertEqual(mapped["easystore_order_fulfilled_at"], "1777688430000")
+        self.assertEqual(mapped["easystore_order_cancelled_at"], "1777774830000")
+        self.assertEqual(
+            mapped["easystore_order_cancel_reason"],
+            "Customer changed their mind",
+        )
+        self.assertEqual(mapped["easystore_refund_amount"], "261.00")
+        self.assertEqual(mapped["easystore_order_channel"], "web")
+        self.assertEqual(mapped["easystore_order_tags"], "preorder, gift")
+
+    def test_buyer_and_recipient_detail_stay_on_the_order(self) -> None:
+        mapped = orders.order_properties(
+            {
+                "customer": {
+                    "first_name": "Jeremy",
+                    "last_name": "Ho",
+                    "email": "buyer@example.com",
+                    "phone": "9123 4567",
+                    "country_code": "SG",
+                },
+                "shipping_address": {
+                    "name": "Reception Desk",
+                    "phone": "6555 0000",
+                    "address1": "1 Example Road",
+                },
+                "line_items": [{"quantity": 2}, {"quantity": 3}],
+            },
+            external_id="1005",
+            store_domain="cardboardcollective.easy.co",
+        )
+        self.assertEqual(mapped["easystore_order_email"], "buyer@example.com")
+        self.assertEqual(mapped["easystore_order_customer_name"], "Jeremy Ho")
+        self.assertEqual(mapped["easystore_order_phone"], "+6591234567")
+        self.assertEqual(mapped["easystore_shipping_recipient"], "Reception Desk")
+        self.assertEqual(mapped["easystore_shipping_phone"], "6555 0000")
+        self.assertEqual(mapped["easystore_order_item_count"], "5")
+
+    def test_an_order_number_is_never_mistaken_for_a_buyer_name(self) -> None:
+        self.assertIsNone(orders._buyer_name({"name": "#1003"}))
+        self.assertEqual(
+            orders._buyer_name({"name": "#1003", "customer_name": "Jeremy Ho"}),
+            "Jeremy Ho",
+        )
+
+    def test_buyer_email_falls_back_through_the_order_and_addresses(self) -> None:
+        self.assertEqual(
+            orders._buyer_email({"customer": {}, "email": "order@example.com"}),
+            "order@example.com",
+        )
+        self.assertEqual(
+            orders._buyer_email({"billing_address": {"email": "billing@example.com"}}),
+            "billing@example.com",
+        )
+        self.assertIsNone(orders._buyer_email({}))
+
+    def test_reported_item_count_wins_over_counting_lines(self) -> None:
+        self.assertEqual(
+            orders._item_count({"item_count": 9, "line_items": [{"quantity": 1}]}),
+            "9",
+        )
+        self.assertIsNone(orders._item_count({"line_items": []}))
+
     def test_thin_listed_orders_are_fetched_in_detail(self) -> None:
         complete = {
             "id": 1,
@@ -587,8 +714,12 @@ class CustomerSyncBatchTests(unittest.TestCase):
         self.assertEqual(
             summary["easystore_customer_field_coverage"],
             {
+                "birthday": 0,
                 "customer_id": 3,
                 "customer_since": 1,
+                "gender": 0,
+                "last_order_at": 0,
+                "note": 0,
                 "orders_count": 1,
                 "tags": 1,
                 "total_spent": 1,
@@ -641,11 +772,171 @@ class CustomerFieldTests(unittest.TestCase):
 
     def test_customer_extras_are_read_from_easystore_aliases(self) -> None:
         values = customers.customer_field_values(
-            {"id": 7, "order_count": 2, "total_spend": "SGD 1,000.00"}
+            {
+                "id": 7,
+                "order_count": 2,
+                "total_spend": "SGD 1,000.00",
+                "last_order_at": "2026-05-01T02:20:30Z",
+                "note": "Collects the deluxe sets",
+            }
         )
         self.assertEqual(values["customer_id"], "7")
         self.assertEqual(values["orders_count"], "2")
         self.assertEqual(values["total_spent"], "1000.00")
+        self.assertEqual(values["last_order_at"], "1777602030000")
+        self.assertEqual(values["note"], "Collects the deluxe sets")
+
+
+class CustomerAttributeTests(unittest.TestCase):
+    def test_attributes_are_read_from_both_easystore_shapes(self) -> None:
+        self.assertEqual(
+            customers.customer_attributes(
+                {
+                    "custom_fields": [
+                        {"label": "How did you find us?", "value": "Instagram"},
+                        {"name": "Favourite set", "value": ["Hobbit", "LOTR"]},
+                        {"value": "no label so no property"},
+                    ],
+                    "attributes": {"Newsletter frequency": "Weekly"},
+                }
+            ),
+            {
+                "How did you find us?": "Instagram",
+                "Favourite set": "Hobbit, LOTR",
+                "Newsletter frequency": "Weekly",
+            },
+        )
+
+    def test_blank_answers_are_not_attributes(self) -> None:
+        self.assertEqual(
+            customers.customer_attributes(
+                {"custom_fields": [{"label": "Referral", "value": "  "}]}
+            ),
+            {},
+        )
+        self.assertEqual(customers.customer_attributes({}), {})
+
+    def test_attribute_property_names_are_slugged(self) -> None:
+        self.assertEqual(
+            customers.attribute_property_name("How did you find us?"),
+            "easystore_attr_how_did_you_find_us",
+        )
+        self.assertIsNone(customers.attribute_property_name("???"))
+        self.assertLessEqual(
+            len(customers.attribute_property_name("x" * 200)),
+            customers.PROPERTY_NAME_LIMIT,
+        )
+
+    def test_attribute_fields_are_alphabetical_and_deduplicated(self) -> None:
+        fields, skipped = customers.attribute_fields(
+            ["Referral source", "referral source!", "Birthday month"]
+        )
+        self.assertEqual(
+            [field.fallback for field in fields],
+            ["easystore_attr_birthday_month", "easystore_attr_referral_source"],
+        )
+        # The second label slugs to a name already claimed by the first.
+        self.assertEqual(skipped, ["referral source!"])
+
+    def test_the_attribute_limit_is_reported_not_silent(self) -> None:
+        labels = [f"Question {index:03d}" for index in range(40)]
+        fields, skipped = customers.attribute_fields(labels)
+        self.assertEqual(len(fields), customers.ATTRIBUTE_LIMIT)
+        self.assertEqual(len(skipped), 40 - customers.ATTRIBUTE_LIMIT)
+
+    def test_birthday_and_gender_are_mapped(self) -> None:
+        values = customers.customer_field_values(
+            {"birthday": "1993-04-20", "gender": "male"}
+        )
+        # HubSpot date properties hold UTC midnight, not an instant.
+        self.assertEqual(values["birthday"], "735264000000")
+        self.assertEqual(values["gender"], "male")
+
+    def test_an_unparseable_birthday_is_dropped(self) -> None:
+        self.assertNotIn(
+            "birthday",
+            customers.customer_field_values({"birthday": "20/04/1993"}),
+        )
+
+    def test_attributes_reach_hubspot_through_resolved_properties(self) -> None:
+        customer = {
+            "id": 42,
+            "phone": "9123 4567",
+            "country_code": "SG",
+            "custom_fields": [{"label": "How did you find us?", "value": "Instagram"}],
+        }
+        fields, _skipped = customers.attribute_fields(
+            customers.customer_attributes(customer)
+        )
+        mapping = {field.key: field.fallback for field in fields}
+        properties = customers.customer_properties(customer, "+6591234567", mapping)
+        self.assertEqual(
+            properties["easystore_attr_how_did_you_find_us"],
+            "Instagram",
+        )
+
+    def test_a_run_provisions_a_property_for_each_discovered_attribute(self) -> None:
+        easystore = [
+            {
+                "id": 1,
+                "phone": "9123 4567",
+                "country_code": "SG",
+                "custom_fields": [
+                    {"label": "How did you find us?", "value": "Instagram"}
+                ],
+            }
+        ]
+        created: list[str] = []
+
+        def fake_http_json(
+            url,
+            *,
+            method="GET",
+            headers=None,
+            payload=None,
+            allow_statuses=None,
+            **kwargs,
+        ):
+            if method == "POST" and isinstance(payload, dict) and "name" in payload:
+                created.append(payload["name"])
+                return {"name": payload["name"]}
+            if url.endswith("/crm/v3/properties/contacts") and method == "GET":
+                return {"results": []}
+            if "/properties/contacts/groups/" in url:
+                return {"name": schema.PROPERTY_GROUP}
+            return {}
+
+        written: list[dict] = []
+        with mock.patch.object(
+            customers, "iter_easystore_customers", lambda *a, **k: iter(easystore)
+        ), mock.patch.object(
+            customers, "iter_hubspot_contacts", lambda *a, **k: iter(())
+        ), mock.patch.object(
+            customers, "_http_json", fake_http_json
+        ), mock.patch.object(
+            customers,
+            "_batch_write",
+            lambda token, action, inputs: written.extend(inputs),
+        ):
+            summary = customers.sync(
+                store_domain="cardboardcollective.easy.co",
+                easystore_access_token="es",
+                hubspot_access_token="hs",
+                fallback_dial_code="65",
+            )
+
+        self.assertIn("easystore_attr_how_did_you_find_us", created)
+        self.assertEqual(
+            written[0]["properties"]["easystore_attr_how_did_you_find_us"],
+            "Instagram",
+        )
+        self.assertEqual(summary["easystore_customer_attributes_found"], 1)
+        self.assertEqual(
+            summary["easystore_customer_field_coverage"][
+                "attribute:How did you find us?"
+            ],
+            1,
+        )
 
 
 class CatalogueFieldTests(unittest.TestCase):
@@ -788,20 +1079,25 @@ class FieldProvisioningTests(unittest.TestCase):
         # Native-only fields the portal lacks are skipped, not duplicated.
         self.assertNotIn("shipping_address_street", resolved)
         self.assertNotIn("tracking_number", resolved)
+        created = self._created(calls)
+        # Every commerce fact without a usable native property is provisioned,
+        # in declaration order, and nothing else is.
         self.assertEqual(
-            self._created(calls),
+            created,
             [
-                "easystore_order_created_at",
-                "easystore_payment_status",
-                "easystore_total_amount",
-                "easystore_subtotal_amount",
-                "easystore_tax_amount",
-                "easystore_shipping_amount",
-                "easystore_discount_amount",
-                "easystore_discount_codes",
-                "easystore_order_note",
+                field.fallback
+                for field in orders.ORDER_FIELDS
+                if field.fallback is not None
+                and field.key not in {"fulfillment_status"}
             ],
         )
+        self.assertIn("easystore_total_amount", created)
+        self.assertNotIn("easystore_fulfillment_status", created)
+        # Native-only fields never provision a custom property.
+        for field in orders.ORDER_FIELDS:
+            if field.fallback is None:
+                with self.subTest(field=field.key):
+                    self.assertNotIn(field.key + "_property", created)
 
     def test_existing_easystore_property_is_reused_without_recreating(self) -> None:
         fake_http_json, calls = self._fake_api(

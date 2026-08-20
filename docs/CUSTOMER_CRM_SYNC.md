@@ -29,10 +29,11 @@ The production workflow runs in dependency order: **identity preflight → Produ
   - `crm.schemas.contacts.read`
   - `crm.schemas.contacts.write`
   - `crm.schemas.products.read`
+  - `crm.schemas.line_items.read`
 
-  Those two stages degrade rather than fail: without the scopes, the Contact and
-  Product syncs log which extra fields they skipped and carry on synchronizing
-  everything that uses standard HubSpot properties.
+  Those stages degrade rather than fail: without the scopes, the Contact, Product
+  and Line Item mappings log which extra fields they skipped and carry on
+  synchronizing everything that uses standard HubSpot properties.
 
 Optional repository variable `CUSTOMER_SYNC_DEFAULT_DIAL_CODE` defaults to Singapore `65`.
 
@@ -154,11 +155,50 @@ These are therefore provisioned in the `easystore_sync` group:
 | `created_at` / `created_on` / `registered_at` | `easystore_customer_since` |
 | `orders_count` / `order_count` / `total_orders` | `easystore_orders_count` |
 | `total_spent` / `total_spend` / `lifetime_spend` | `easystore_total_spent` |
+| `last_order_at` / `last_order_date` / `latest_order_at` | `easystore_last_order_at` |
+| `birthday` / `birth_date` / `date_of_birth` / `dob` | `date_of_birth` or `easystore_customer_birthday` |
+| `gender` / `sex` | `gender` or `easystore_customer_gender` |
 | `tags` | `easystore_customer_tags` |
+| `note` / `notes` / `remark` | `easystore_customer_note` |
 
 Tags are normalized from a list, a comma separated string, or a list of objects
-into one comma separated value. `easystore_customer_field_coverage` in the run
-summary reports how many synchronized customers carried each fact.
+into one comma separated value. A birthday is stored as a HubSpot date, which
+holds a day rather than an instant, so it is truncated to UTC midnight; a value
+that does not parse as a date is dropped rather than rounded to today.
+`easystore_customer_field_coverage` in the run summary reports how many
+synchronized customers carried each fact.
+
+### Merchant-defined customer attributes
+
+A store's own customer questions — "How did you find us?" and anything else
+defined in EasyStore — are synchronized without being named in this repository.
+The Contact stage reads them from whichever collection EasyStore uses
+(`custom_fields`, `customer_attributes`, `attributes`, `note_attributes`,
+`metafields`, `fields`), in either the mapping shape (`{label: answer}`) or the
+record shape (`{"label": ..., "value": ...}`), and a multi-answer value is joined
+into one comma separated string.
+
+Each distinct label becomes its own HubSpot property named
+`easystore_attr_<slug>` with the original label as its HubSpot label, provisioned
+on first sight:
+
+| EasyStore attribute label | HubSpot Contact property |
+| --- | --- |
+| How did you find us? | `easystore_attr_how_did_you_find_us` |
+| Favourite set | `easystore_attr_favourite_set` |
+
+Because the set of attributes is a property of the store's data rather than of
+this script, it is discovered from the customers that will actually be written
+and resolved once per run, after the customer scan. Two guardrails keep a long
+tail of one-off attributes from cluttering the CRM: labels are taken in
+alphabetical order up to 25 per run, and two labels that would collide on one
+property name keep the first. Anything left out is named in the step log rather
+than dropped silently, and `easystore_customer_attributes_found` reports how many
+distinct labels the run saw.
+
+Birthday, gender and free-form attribute answers are personal data the store
+already holds. They are copied as EasyStore recorded them, without inference: the
+sync never derives a birthday from an order date or a gender from a name.
 
 Marketing consent is deliberately **not** copied. A subscription state belongs to
 the system that captured it, and re-deriving it from a storefront flag is exactly
@@ -219,7 +259,17 @@ Order fields currently mapped include:
 | shipping charge | `hs_shipping_cost` / `hs_shipping_amount` / `hs_shipping_price` / `hs_total_shipping` or `easystore_shipping_amount` |
 | order discount amount | `hs_order_discount_amount` / `hs_discount_amount` / `hs_total_discount` or `easystore_discount_amount` |
 | discount codes | `easystore_discount_codes` |
+| refunded amount | `easystore_refund_amount` |
+| payment method | `hs_payment_method` or `easystore_payment_method` |
+| order status | `hs_order_status` or `easystore_order_status` |
+| paid / fulfilled / cancelled timestamps | `easystore_order_paid_at`, `easystore_order_fulfilled_at`, `easystore_order_cancelled_at` |
+| cancellation reason | `easystore_order_cancel_reason` |
+| sales channel | `easystore_order_channel` |
+| units on the order | `easystore_order_item_count` |
+| order tags | `easystore_order_tags` |
+| buyer email / name / mobile | `easystore_order_email`, `easystore_order_customer_name`, `easystore_order_phone` |
 | order note | `easystore_order_note` |
+| shipping recipient / phone | `easystore_shipping_recipient`, `easystore_shipping_phone` |
 | shipping method | `hs_shipping_method` |
 | shipping address street/city/state/postal code/country | `hs_shipping_address_street` / `_city` / `_state` / `_postal_code` / `_country` |
 | billing address street/city/state/postal code/country | `hs_billing_address_street` / `_city` / `_state` / `_postal_code` / `_country` |
@@ -240,6 +290,20 @@ raw variants are both handled:
 | shipping charge | `total_shipping`, `total_shipping_price`, `shipping_price`, `shipping_total`, `shipping_fee`, `shipping_amount`, `shipping_cost` |
 | discount amount | `total_discount`, `total_discounts`, `discount_amount`, `discount_total` |
 | discount codes | `discount_codes[].code`, then `discount_code` / `coupon_code` / `voucher_code` |
+| refunded amount | `total_refunded`, `refunded_amount`, `refund_amount`, `total_refund` |
+| payment method | `payment_method`, `payment_method_name`, `payment_gateway`, `gateway`, `payment_type` |
+| order status | `status`, `order_status`, `state` |
+| paid timestamp | `paid_at`, `payment_date`, `paid_on` |
+| fulfilled timestamp | `fulfilled_at`, `shipped_at`, `fulfillment_date` |
+| cancelled timestamp | `cancelled_at`, `canceled_at`, `cancellation_date` |
+| cancellation reason | `cancel_reason`, `cancellation_reason`, `cancelled_reason` |
+| sales channel | `source_name`, `sales_channel`, `channel`, `source` |
+| units on the order | `item_count`, `total_items`, `line_items_count`, else the sum of line item quantities |
+| order tags | `tags` (list, comma string, or list of objects) |
+| buyer email | `customer.email`, then order `email` / `customer_email` / `contact_email`, then an address `email` |
+| buyer name | `customer` name fields, then `customer_name` / `contact_name` / `buyer_name`, then an address name — never the order's own `name`, which is the order number |
+| buyer mobile | the same normalized-mobile rule used to resolve the order's Contact |
+| shipping recipient / phone | the delivery address `name` / `first_name` + `last_name`, and `phone` / `phone_number` / `mobile` |
 | order note | `note`, `notes`, `customer_note`, `remark` |
 | shipping method | `shipping_method`, `shipping_method_name`, `shipping_title`, `shipment_method`, `delivery_method`, then `shipping_lines[].title` |
 | shipping address | `shipping_address`, else `billing_address`, else `address` |
@@ -249,8 +313,10 @@ raw variants are both handled:
 | address postal code | `zip`, `postal_code`, `postcode`, `post_code` |
 | address country | `country`, `country_name`, `country_code` |
 
-An order with no separate shipping address is still given one from its billing
-address, because that is where the goods go. The billing fields stay strict, so
+Buyer email, name and mobile are kept on the Order as well as on the Contact, so
+a guest order that resolves to no Contact is still traceable to a person. An order
+with no separate shipping address is still given one from its billing address,
+because that is where the goods go. The billing fields stay strict, so
 they are only filled from a real `billing_address`.
 
 Because EasyStore's field names are the uncertain half of this mapping, every run
@@ -300,9 +366,10 @@ summary (`hubspot_order_field_properties`, `hubspot_contact_field_properties`,
 `commerce_fields_on_easystore_properties` for the order stage. Fields the portal
 cannot store at all are logged as a warning naming each one.
 
-The Order stage treats this as required, because order identity depends on the
-same schema route. The Contact and Product stages treat it as optional: a token
-without `crm.schemas.contacts.*` / `crm.schemas.products.read` logs the fields it
+The Order object stage treats this as required, because order identity depends on
+the same schema route. The Contact, Product and Line Item mappings treat it as
+optional: a token without `crm.schemas.contacts.*`,
+`crm.schemas.products.read` or `crm.schemas.line_items.read` logs the fields it
 skipped and still synchronizes every standard property.
 
 ### Product-backed line items
@@ -321,6 +388,14 @@ Fields synchronized are:
 | quantity | `quantity` |
 | unit price | `price` |
 | order currency | `hs_line_item_currency_code` |
+| line discount (`total_discount` / `discount` / `discount_amount`) | `discount` |
+| line tax (`total_tax` / `tax` / `tax_amount`) | `tax` |
+| variant/option label (`variant_title` / `variant_name` / `option_title` / `options_label`) | `description` |
+
+The last three are native-only and optional: they need
+`crm.schemas.line_items.read` to resolve, and a portal without the property
+stores nothing extra. `hubspot_line_item_field_properties` in the run summary
+reports where they landed.
 
 If EasyStore repeats the same SKU in one Order at the same unit price, quantities are combined. Repeated SKU lines with different unit prices fail instead of being merged ambiguously.
 
