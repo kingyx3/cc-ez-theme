@@ -761,7 +761,7 @@ class CustomerSyncBatchTests(unittest.TestCase):
         ), mock.patch.object(
             customers, "iter_hubspot_contacts", lambda *a, **k: iter(hubspot)
         ), mock.patch.object(
-            customers, "_http_json", lambda *a, **k: contact_schema
+            customers, "_http_json", _hubspot_only(contact_schema)
         ), mock.patch.object(
             customers, "_batch_write", fake_batch_write
         ):
@@ -834,7 +834,7 @@ class CustomerSyncBatchTests(unittest.TestCase):
         ), mock.patch.object(
             customers, "iter_hubspot_contacts", lambda *a, **k: iter(hubspot)
         ), mock.patch.object(
-            customers, "_http_json", lambda *a, **k: contact_schema
+            customers, "_http_json", _hubspot_only(contact_schema)
         ), mock.patch.object(
             customers,
             "_batch_write",
@@ -871,7 +871,7 @@ class CustomerSyncBatchTests(unittest.TestCase):
         ), mock.patch.object(
             customers, "iter_hubspot_contacts", lambda *a, **k: iter(hubspot)
         ), mock.patch.object(
-            customers, "_http_json", lambda *a, **k: contact_schema
+            customers, "_http_json", _hubspot_only(contact_schema)
         ), mock.patch.object(
             customers,
             "_batch_write",
@@ -915,6 +915,43 @@ class CustomerSyncBatchTests(unittest.TestCase):
         self.assertEqual(summary["hubspot_contact_field_properties"], {})
 
 
+class CustomerDetailTests(unittest.TestCase):
+    def test_a_list_record_missing_the_fields_is_fetched_in_detail(self) -> None:
+        # Key presence decides, not a value: a customer legitimately has no
+        # birthday, and re-fetching them forever would cost a request each run.
+        self.assertTrue(customers.customer_needs_detail({"id": 1, "email": "a@b.c"}))
+        self.assertTrue(customers.customer_needs_detail({"id": 1, "birthdate": "1993-04-20"}))
+        self.assertFalse(
+            customers.customer_needs_detail(
+                {"id": 1, "birthdate": "", "attributes": []}
+            )
+        )
+
+    def test_the_detail_record_replaces_the_thin_one(self) -> None:
+        detail = {
+            "customer": {
+                "id": 1,
+                "birthdate": "1993-04-20",
+                "attributes": [{"customer_attribute_setting_id": 7, "value": "Instagram"}],
+            }
+        }
+        with mock.patch.object(customers, "_http_json", lambda *a, **k: detail):
+            completed = customers.complete_customer(
+                "shop.example",
+                "token",
+                {"id": 1, "email": "a@b.c"},
+            )
+        self.assertEqual(completed["birthdate"], "1993-04-20")
+
+    def test_a_customer_that_cannot_be_fetched_is_used_as_listed(self) -> None:
+        listed = {"id": 1, "email": "a@b.c"}
+        with mock.patch.object(customers, "_http_json", lambda *a, **k: None):
+            self.assertIs(
+                customers.complete_customer("shop.example", "token", listed),
+                listed,
+            )
+
+
 class CustomerFieldTests(unittest.TestCase):
     def test_tags_are_normalized_from_lists_strings_and_objects(self) -> None:
         self.assertEqual(
@@ -946,6 +983,20 @@ class CustomerFieldTests(unittest.TestCase):
         self.assertEqual(values["total_spent"], "1000.00")
         self.assertEqual(values["last_order_at"], "1777602030000")
         self.assertEqual(values["note"], "Collects the deluxe sets")
+
+
+def _hubspot_only(schema_document: dict) -> object:
+    """Answer HubSpot schema reads only, so EasyStore routes stay unmocked.
+
+    The contact stage now reads EasyStore's customer detail and attribute
+    settings through the same helper, and answering those with a HubSpot payload
+    would make a test pass for the wrong reason.
+    """
+
+    def fake_http_json(url, *args, **kwargs):
+        return schema_document if "api.hubapi.com" in url else None
+
+    return fake_http_json
 
 
 class BirthdayTests(unittest.TestCase):
@@ -984,6 +1035,19 @@ class BirthdayTests(unittest.TestCase):
             customers.customer_birthday({"birthday": "1993-04-20"}),
             "1993-04-20",
         )
+
+    def test_the_real_date_of_birth_field_wins_over_the_occurrence(self) -> None:
+        # EasyStore's storefront reads and writes customer.birthdate for a date of
+        # birth (theme/templates/customers/account.liquid), while `birthday` comes
+        # back as the next occurrence of it.
+        values = customers.customer_field_values(
+            {"birthdate": "1993-04-20", "birthday": "2027-04-20"}
+        )
+        self.assertEqual(values["birthday"], schema.date_value("1993-04-20"))
+        self.assertEqual(values["birthday_day"], "04-20")
+
+    def test_birthdate_is_read_before_every_other_source(self) -> None:
+        self.assertEqual(customers.BIRTHDAY_SOURCES[0], "birthdate")
 
     def test_easystore_reports_the_next_occurrence_not_the_birth_year(self) -> None:
         # A January birthday, reported in August, comes back dated next year.
@@ -1190,6 +1254,51 @@ class CustomerAttributeTests(unittest.TestCase):
                 "Newsletter frequency": "Weekly",
             },
         )
+
+    def test_an_answer_keyed_by_setting_id_is_still_synchronized(self) -> None:
+        # EasyStore answers carry the id of the shop attribute setting, not its
+        # question: {"customer_attribute_setting_id": 7, "value": "Instagram"}.
+        customer = {"attributes": [{"customer_attribute_setting_id": 7, "value": "Instagram"}]}
+        self.assertEqual(
+            customers.customer_attributes(customer),
+            {"setting 7": "Instagram"},
+        )
+        self.assertEqual(
+            customers.attribute_property_name("setting 7"),
+            "easystore_attr_setting_7",
+        )
+
+    def test_the_shop_wording_names_the_property_when_it_is_known(self) -> None:
+        customer = {"attributes": [{"customer_attribute_setting_id": 7, "value": "Instagram"}]}
+        self.assertEqual(
+            customers.customer_attributes(customer, {"7": "How did you find us?"}),
+            {"How did you find us?": "Instagram"},
+        )
+
+    def test_attribute_titles_come_from_the_route_that_answers(self) -> None:
+        def fake_http_json(url, *, allow_statuses=None, **kwargs):
+            # Only the second candidate answers, so the loop has to reach it.
+            if url.endswith("/attribute_settings.json"):
+                return {
+                    "attribute_settings": [
+                        {"id": 7, "title": "How did you find us?"},
+                        {"id": 8, "name": "Favourite set"},
+                        {"id": 9},
+                    ]
+                }
+            return None
+
+        with mock.patch.object(customers, "_http_json", fake_http_json):
+            route, titles = customers.fetch_attribute_titles("shop.example", "token")
+
+        self.assertEqual(route, "attribute_settings.json")
+        self.assertEqual(titles, {"7": "How did you find us?", "8": "Favourite set"})
+
+    def test_answers_still_sync_when_no_route_names_them(self) -> None:
+        with mock.patch.object(customers, "_http_json", lambda *a, **k: None):
+            route, titles = customers.fetch_attribute_titles("shop.example", "token")
+        self.assertIsNone(route)
+        self.assertEqual(titles, {})
 
     def test_blank_answers_are_not_attributes(self) -> None:
         self.assertEqual(

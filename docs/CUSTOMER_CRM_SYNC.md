@@ -161,7 +161,7 @@ These are therefore provisioned in the `easystore_sync` group:
 | `orders_count` / `order_count` / `total_orders` | `easystore_orders_count` |
 | `total_spent` / `total_spend` / `lifetime_spend` | `easystore_total_spent` |
 | `last_order_at` / `last_order_date` / `latest_order_at` | `easystore_last_order_at` |
-| `birthday` / `birth_date` / `date_of_birth` / `dob` | `date_of_birth` or `easystore_customer_birthday`, plus `easystore_birthday_day` and `easystore_next_birthday` — see below |
+| `birthdate`, then `birthday` / `birth_date` / `date_of_birth` / `dob` | `date_of_birth` or `easystore_customer_birthday`, plus `easystore_birthday_day` and `easystore_next_birthday` — see below |
 | `gender` / `sex` | `gender` or `easystore_customer_gender` |
 | `tags` | `easystore_customer_tags` |
 | `note` / `notes` / `remark` | `easystore_customer_note` |
@@ -172,10 +172,17 @@ summary reports how many synchronized customers carried each fact.
 
 #### Birthdays
 
-**EasyStore reports a birthday as its next occurrence, not as a date of birth.**
-A January birthday read in August comes back dated next January, which is why the
-first production run filled HubSpot with birthdays in 2027. The year says when
-the birthday next falls; the day and month are the real data.
+EasyStore keeps a real date of birth in **`birthdate`** — the field its own
+storefront reads and writes, rendered by `theme/templates/customers/account.liquid`
+as `<input type="date" value="{{customer.birthdate}}" max="today">` and locked
+when `customer.birthdate_editable` is false. That is the field to read, and it is
+read first.
+
+**`birthday` is a different thing: it comes back as the next occurrence of that
+date.** A January birthday read in August arrives dated next January, which is
+why the first production run filled HubSpot with birthdays in 2027 — the sync was
+reading `birthday` and never read `birthdate` at all. The year of a `birthday`
+value says when the birthday next falls; only the day and month are real.
 
 So the birthday is split into three properties, each holding only what is true:
 
@@ -224,9 +231,20 @@ A store's own customer questions — "How did you find us?" and anything else
 defined in EasyStore — are synchronized without being named in this repository.
 The Contact stage reads them from whichever collection EasyStore uses
 (`custom_fields`, `customer_attributes`, `attributes`, `note_attributes`,
-`metafields`, `fields`), in either the mapping shape (`{label: answer}`) or the
-record shape (`{"label": ..., "value": ...}`), and a multi-answer value is joined
-into one comma separated string.
+`metafields`, `fields`), and a multi-answer value is joined into one comma
+separated string.
+
+**An EasyStore answer does not carry its question.** The storefront's own account
+page shows the shape: `customer.attributes` holds
+`{"customer_attribute_setting_id": 7, "value": "Instagram"}`, and the wording
+lives separately in `shop.attribute_settings`, which the page matches against by
+id. So the stage looks the wording up once per run — trying
+`customer_attribute_settings.json`, `attribute_settings.json`,
+`customer_attributes.json` and `shop.json`, and reporting the route that answers
+as `easystore_attribute_setting_route`. An answer whose question cannot be named
+is still synchronized, under its setting id (`easystore_attr_setting_7`), because
+losing an answer is worse than an ugly property name. A mapping of question to
+answer and a record carrying its own label are both read too.
 
 Each distinct label becomes its own HubSpot property named
 `easystore_attr_<slug>` with the original label as its HubSpot label, provisioned
@@ -526,6 +544,18 @@ Two things this stage refuses to guess:
 - **Whether the portal has a Cart object at all.** Not every HubSpot account
   does. A portal without one reports `hubspot_cart_object: unavailable` and is
   skipped rather than inventing somewhere else to put the data.
+
+### The customer list is thinner than the customer record
+
+Like orders, EasyStore's customer *list* returns less than its customer
+endpoint. The Contact stage therefore fetches `/api/3.0/customers/<id>.json`
+whenever a listed customer carries neither a birthday field nor an attributes
+collection, and reports `customers_fetched_in_detail`.
+
+Key presence is the test, not a value. A customer legitimately has no birthday
+and no answers, so testing values would re-fetch those customers on every run
+forever; a missing *key* is what says the list endpoint does not carry the field
+at all.
 
 ## API behavior
 

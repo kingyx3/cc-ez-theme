@@ -200,6 +200,13 @@ CUSTOM_ATTRIBUTE_SOURCES = (
     "metafields",
     "fields",
 )
+# Where the wording of the shop's own customer questions might live.
+ATTRIBUTE_SETTING_ROUTES = (
+    "customer_attribute_settings.json",
+    "attribute_settings.json",
+    "customer_attributes.json",
+    "shop.json",
+)
 ATTRIBUTE_PROPERTY_PREFIX = "easystore_attr_"
 ATTRIBUTE_KEY_PREFIX = "attribute:"
 # A storefront can accumulate a long tail of one-off attributes. Provisioning a
@@ -315,7 +322,12 @@ def lifecycle_stage_write(current: Any, target: str = LIFECYCLE_LEAD) -> str | N
     return target
 
 
-BIRTHDAY_SOURCES = ("birthday", "birth_date", "date_of_birth", "dob")
+# ``birthdate`` is the field EasyStore's own storefront reads and writes for a
+# date of birth: theme/templates/customers/account.liquid renders it as
+# <input type="date" value="{{customer.birthdate}}" max="today">. ``birthday``
+# is a different thing -- it comes back as the next occurrence of that date, which
+# is why reading it as a birth year filled the CRM with dates in 2027.
+BIRTHDAY_SOURCES = ("birthdate", "birthday", "birth_date", "date_of_birth", "dob")
 # The property this sync provisions for a date of birth. It owns that property,
 # which is what lets it clear a value an earlier run got wrong.
 BIRTHDAY_FALLBACK_PROPERTY = next(
@@ -503,14 +515,27 @@ def _attribute_value(value: Any) -> str | None:
     return _nonempty(value)
 
 
-def customer_attributes(customer: dict[str, Any]) -> dict[str, str]:
+def customer_attributes(
+    customer: dict[str, Any],
+    attribute_titles: dict[str, str] | None = None,
+) -> dict[str, str]:
     """Return the merchant-defined attributes on a customer, keyed by label.
 
-    EasyStore reports these either as a mapping of label to answer or as a list
-    of records carrying a label and a value, so both shapes are read.
+    EasyStore answers carry the id of the shop attribute setting they belong to
+    rather than its question, e.g.
+    ``{"customer_attribute_setting_id": 7, "value": "Instagram"}`` -- the
+    storefront matches them against ``shop.attribute_settings`` to get the
+    wording. ``attribute_titles`` supplies that wording when it is available; an
+    answer whose question is unknown is still synchronized, under its setting id,
+    so no answer is lost to a missing title.
+
+    A mapping of question to answer and a record carrying its own label are both
+    read too, so a differently shaped payload still works.
     """
 
+    titles = attribute_titles or {}
     collected: dict[str, str] = {}
+
     for source in CUSTOM_ATTRIBUTE_SOURCES:
         raw = customer.get(source)
         entries: list[tuple[Any, Any]] = []
@@ -523,6 +548,18 @@ def customer_attributes(customer: dict[str, Any]) -> dict[str, str]:
                         item,
                         ("label", "name", "key", "title", "question"),
                     )
+                    if label is None:
+                        setting_id = first_present(
+                            item,
+                            (
+                                "customer_attribute_setting_id",
+                                "attribute_setting_id",
+                                "setting_id",
+                                "id",
+                            ),
+                        )
+                        if setting_id is not None:
+                            label = titles.get(setting_id) or f"setting {setting_id}"
                     if label is not None:
                         entries.append((label, item.get("value", item.get("answer"))))
                     continue
@@ -536,6 +573,59 @@ def customer_attributes(customer: dict[str, Any]) -> dict[str, str]:
                 continue
             collected.setdefault(label_text, answer)
     return collected
+
+
+def fetch_attribute_titles(
+    store_domain: str,
+    access_token: str,
+) -> tuple[str | None, dict[str, str]]:
+    """Return the route that names the shop's customer questions, and the names.
+
+    EasyStore holds the wording in its shop attribute settings, which the
+    storefront reads as ``shop.attribute_settings``. The API route for those is
+    not reachable from CI, so the candidates are tried and the one that answers is
+    reported. Without it the answers still sync, keyed by setting id.
+    """
+
+    domain = store_domain.strip().removeprefix("https://").removeprefix("http://")
+    domain = domain.rstrip("/")
+    headers = {"EasyStore-Access-Token": access_token}
+
+    for route in ATTRIBUTE_SETTING_ROUTES:
+        document = _http_json(
+            f"https://{domain}/api/3.0/{route}",
+            headers=headers,
+            allow_statuses={403, 404},
+        )
+        if document is None:
+            continue
+
+        settings: list[Any] = []
+        if isinstance(document, list):
+            settings = document
+        elif isinstance(document, dict):
+            for key in (
+                "customer_attribute_settings",
+                "attribute_settings",
+                "data",
+                "results",
+            ):
+                value = document.get(key)
+                if isinstance(value, list):
+                    settings = value
+                    break
+
+        titles: dict[str, str] = {}
+        for setting in settings:
+            if not isinstance(setting, dict):
+                continue
+            setting_id = first_present(setting, ("id", "setting_id"))
+            title = first_present(setting, ("title", "name", "label", "question"))
+            if setting_id is not None and title is not None:
+                titles[setting_id] = title
+        if titles:
+            return route, titles
+    return None, {}
 
 
 def attribute_property_name(label: str) -> str | None:
@@ -575,7 +665,10 @@ def attribute_fields(labels: Iterable[str]) -> tuple[tuple[FieldSpec, ...], list
     return tuple(fields), skipped
 
 
-def customer_field_values(customer: dict[str, Any]) -> dict[str, str]:
+def customer_field_values(
+    customer: dict[str, Any],
+    titles: dict[str, str] | None = None,
+) -> dict[str, str]:
     """Return the extra EasyStore customer facts, keyed by field key.
 
     Merchant-defined attributes are keyed by their label. Only the ones that
@@ -584,7 +677,7 @@ def customer_field_values(customer: dict[str, Any]) -> dict[str, str]:
     """
 
     values = field_values(customer, CONTACT_FIELDS, CONTACT_FIELD_DERIVATIONS)
-    for label, answer in customer_attributes(customer).items():
+    for label, answer in customer_attributes(customer, titles).items():
         values[f"{ATTRIBUTE_KEY_PREFIX}{label}"] = answer
     return values
 
@@ -636,6 +729,7 @@ def customer_properties(
     customer: dict[str, Any],
     mobile: str,
     field_properties: dict[str, str] | None = None,
+    attribute_titles: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """Map an EasyStore customer onto HubSpot's standard contact properties."""
 
@@ -683,7 +777,11 @@ def customer_properties(
             properties["country"] = country
 
     if field_properties:
-        apply_fields(properties, customer_field_values(customer), field_properties)
+        apply_fields(
+            properties,
+            customer_field_values(customer, attribute_titles),
+            field_properties,
+        )
 
     return properties
 
@@ -798,6 +896,52 @@ def iter_easystore_customers(
         if len(customers) < EASYSTORE_PAGE_SIZE:
             break
         page += 1
+
+
+def customer_needs_detail(customer: dict[str, Any]) -> bool:
+    """Report whether the list record omits fields the customer endpoint returns.
+
+    Key presence is the test, not a value: a customer legitimately has no
+    birthday or no answers, and re-fetching them every run would cost a request
+    per customer forever. A missing *key* is what says the list endpoint does not
+    carry the field at all.
+    """
+
+    has_birthday = any(key in customer for key in BIRTHDAY_SOURCES)
+    has_attributes = any(key in customer for key in CUSTOM_ATTRIBUTE_SOURCES)
+    return not (has_birthday and has_attributes)
+
+
+def complete_customer(
+    store_domain: str,
+    access_token: str,
+    customer: dict[str, Any],
+) -> dict[str, Any]:
+    """Return the full customer record, fetching the detail when needed."""
+
+    if not customer_needs_detail(customer):
+        return customer
+
+    customer_id = _nonempty(customer.get("id"))
+    if customer_id is None:
+        return customer
+
+    domain = store_domain.strip().removeprefix("https://").removeprefix("http://")
+    domain = domain.rstrip("/")
+    document = _http_json(
+        f"https://{domain}/api/3.0/customers/{customer_id}.json",
+        headers={"EasyStore-Access-Token": access_token},
+        allow_statuses={403, 404},
+    )
+    if not isinstance(document, dict):
+        return customer
+
+    for key in ("customer", "data"):
+        candidate = document.get(key)
+        if isinstance(candidate, dict):
+            nested = candidate.get("customer")
+            return nested if isinstance(nested, dict) else candidate
+    return document if document else customer
 
 
 def iter_hubspot_contacts(access_token: str) -> Iterator[dict[str, Any]]:
@@ -968,12 +1112,30 @@ def sync(
     birthday_shapes: Counter[str] = Counter()
     birthday_years: Counter[str] = Counter()
     birthdays_in_future = 0
+    customers_fetched_in_detail = 0
     easystore_total = 0
+
+    # The wording of the shop's own customer questions, so an answer lands in a
+    # property a person can read rather than one keyed by a setting id.
+    attribute_route, titles = fetch_attribute_titles(
+        store_domain,
+        easystore_access_token,
+    )
+    if attribute_route is None:
+        print(
+            "WARNING: no EasyStore route named the shop's customer attributes. "
+            "Answers still sync, keyed by setting id. Tried: "
+            + ", ".join(ATTRIBUTE_SETTING_ROUTES),
+            file=sys.stderr,
+        )
     skipped_without_phone = 0
     duplicate_easystore_phones = 0
 
-    for customer in iter_easystore_customers(store_domain, easystore_access_token):
+    for listed in iter_easystore_customers(store_domain, easystore_access_token):
         easystore_total += 1
+        customer = complete_customer(store_domain, easystore_access_token, listed)
+        if customer is not listed:
+            customers_fetched_in_detail += 1
         # Names only, never values: enough to trace a zero in the coverage block
         # back to the real EasyStore field name.
         observed_keys(customer_keys, customer)
@@ -1000,7 +1162,7 @@ def sync(
     attribute_labels = {
         label
         for customer in easystore_by_phone.values()
-        for label in customer_attributes(customer)
+        for label in customer_attributes(customer, titles)
     }
     schema_report: dict[str, Any] = {}
     contact_field_properties = resolve_contact_fields(
@@ -1035,8 +1197,13 @@ def sync(
             )
             continue
 
-        properties = customer_properties(customer, mobile, contact_field_properties)
-        for key in customer_field_values(customer):
+        properties = customer_properties(
+            customer,
+            mobile,
+            contact_field_properties,
+            titles,
+        )
+        for key in customer_field_values(customer, titles):
             field_coverage[key] = field_coverage.get(key, 0) + 1
         email = properties.get("email")
         target_id = next(iter(matching_ids), None)
@@ -1104,6 +1271,9 @@ def sync(
             sorted(contact_field_properties.items())
         ),
         "easystore_customer_attributes_found": len(attribute_labels),
+        "easystore_attribute_setting_route": attribute_route,
+        "easystore_attribute_settings_named": len(titles),
+        "customers_fetched_in_detail": customers_fetched_in_detail,
         "easystore_birthday_shapes": dict(sorted(birthday_shapes.items())),
         "easystore_birthday_years": dict(sorted(birthday_years.items())),
         "birthdays_in_future_ignored": birthdays_in_future,
