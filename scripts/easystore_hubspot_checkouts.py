@@ -114,6 +114,17 @@ class CheckoutSourceUnavailable(SyncError):
 
 
 @dataclass(frozen=True)
+class _CollectionRead:
+    """One page-size pass over the collection, and what it established."""
+
+    records: list[dict[str, Any]]
+    pages_read: int
+    page_parameter_honored: bool
+    ended: bool
+    note: str
+
+
+@dataclass(frozen=True)
 class CheckoutSnapshot:
     records: tuple[dict[str, Any], ...]
     pages_read: int
@@ -287,18 +298,19 @@ def _read_collection(
     domain: str,
     access_token: str,
     page_size: int,
-) -> tuple[list[dict[str, Any]], int, bool, str]:
+) -> _CollectionRead:
     """Read the Checkout collection at one page size.
-
-    Returns the records, how many pages were read, whether ``page`` produced a
-    usable second page, and what ended pagination.
 
     Page 2 of this endpoint is not usable: it has come back identical to page 1,
     and it has hung until it timed out. Neither is a reason to discard the page
     that did arrive - a repeated page proves nothing new, and one unanswered page
     does not unsay the records already in hand. Only page 1 failing means there
-    is nothing to sync. Proving the snapshot complete is
-    :func:`_prove_complete_collection`'s job, and it only ever asks page 1.
+    is nothing to sync.
+
+    ``ended`` says whether the collection demonstrably finished: either a page
+    came back short of the limit it asked for, or one came back *longer* than it,
+    which means ``limit`` is not a cap and this is everything. When it did not,
+    :func:`_prove_complete_collection` asks page 1 for more.
     """
 
     page = 1
@@ -312,20 +324,36 @@ def _read_collection(
         except CheckoutSourceUnavailable:
             if page == 1:
                 raise
-            return (
+            return _CollectionRead(
                 listed_records,
                 pages_read,
+                False,
                 False,
                 f"page {page} did not answer, so pagination stopped at the "
                 f"{len(listed_records)} checkouts page 1 served",
             )
 
         pages_read += 1
+
+        if len(records) > page_size:
+            # Served more than it was asked for, so `limit` is not a cap and this
+            # is the whole collection. Paging on would only ask again.
+            return _CollectionRead(
+                listed_records + records,
+                pages_read,
+                False,
+                True,
+                f"page {page} answered {len(records)} checkouts for limit="
+                f"{page_size}, more than it asked for, so EasyStore is not "
+                "capping the collection",
+            )
+
         signature = _page_signature(records)
         if records and signature in seen_page_signatures:
-            return (
+            return _CollectionRead(
                 listed_records,
                 pages_read,
+                False,
                 False,
                 f"page {page} repeated records already served, so the page "
                 "parameter does nothing on this endpoint",
@@ -335,9 +363,10 @@ def _read_collection(
         listed_records.extend(records)
 
         if len(records) < page_size:
-            return (
+            return _CollectionRead(
                 listed_records,
                 pages_read,
+                True,
                 True,
                 "the collection ended short of the limit it asked for",
             )
@@ -369,8 +398,15 @@ def _prove_complete_collection(
             larger = _collection_get(domain, access_token, 1, candidate)
         except SyncError as error:
             # A rejected or unanswered escalation is not a reason to throw away
-            # a snapshot that did arrive; it only leaves completeness unproven.
+            # a snapshot that did arrive; it only leaves completeness unproven,
+            # unless a smaller limit already over-answered and proved itself.
             attempts.append(f"limit={candidate}: {_short(error)}")
+            if len(records) > limit:
+                return records, limit, True, (
+                    f"limit={candidate} was refused, but limit={limit} had already "
+                    f"answered {len(records)} checkouts - more than it asked for - "
+                    "so EasyStore is not capping the collection"
+                )
             return (
                 records,
                 limit,
@@ -380,6 +416,13 @@ def _prove_complete_collection(
             )
 
         attempts.append(f"limit={candidate}: answered {len(larger)} checkouts")
+        if len(larger) > candidate:
+            # More than was asked for: `limit` is not a cap, so this is the whole
+            # collection however large it turned out to be.
+            return larger, candidate, True, (
+                f"limit={candidate} answered {len(larger)} checkouts, more than it "
+                "asked for, so EasyStore is not capping the collection"
+            )
         if len(larger) < candidate:
             if len(larger) > len(records):
                 return larger, candidate, True, (
@@ -419,15 +462,15 @@ def read_checkout_snapshot(
 
     for page_size in CHECKOUT_PAGE_SIZES:
         try:
-            listed_records, pages_read, page_honored, pagination = _read_collection(
-                domain,
-                access_token,
-                page_size,
-            )
+            read = _read_collection(domain, access_token, page_size)
         except CheckoutSourceUnavailable as error:
             attempts.append(f"limit={page_size}: {_short(error)}")
             continue
 
+        listed_records = read.records
+        pages_read = read.pages_read
+        page_honored = read.page_parameter_honored
+        pagination = read.note
         attempts.append(
             f"limit={page_size}: answered {len(listed_records)} checkouts over "
             f"{pages_read} page(s); {pagination}"
@@ -435,9 +478,9 @@ def read_checkout_snapshot(
 
         complete = True
         completeness = pagination
-        if not page_honored and len(listed_records) >= page_size:
-            # Pagination stopped without proving the collection ended, so ask
-            # page 1 for more in one request rather than trusting page 2 again.
+        if not read.ended:
+            # Pagination stopped without the collection demonstrably ending, so
+            # ask page 1 for more rather than trusting page 2 again.
             listed_records, page_size, complete, completeness = (
                 _prove_complete_collection(
                     domain,
@@ -446,11 +489,6 @@ def read_checkout_snapshot(
                     listed_records,
                     attempts,
                 )
-            )
-        elif not page_honored:
-            completeness = (
-                f"{pagination}, and that page came back short of the limit it "
-                "asked for"
             )
 
         completed: list[dict[str, Any]] = []

@@ -323,3 +323,99 @@ class CartOrderAssociationRegressionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RetiredProductCartLineTests(unittest.TestCase):
+    """A Checkout may reference a variant that has since left the catalogue.
+
+    Open and abandoned Checkouts reach back over the whole catalogue's history,
+    so some name products that can no longer have a HubSpot Product. Production
+    run 32485932896 refused all 1246 of this store's Checkouts over one such
+    line, writing no Carts at all.
+    """
+
+    @staticmethod
+    def _checkout() -> dict:
+        return {
+            "cart_token": "cart-1",
+            "financial_status": "unpaid",
+            "line_items": [
+                {"sku": "LIVE-1", "quantity": 1, "price": "10.00"},
+                {"sku": "ES-16616396-76964637", "quantity": 2, "price": "20.00"},
+            ],
+        }
+
+    def test_an_order_line_without_a_product_still_fails_the_order_stage(self) -> None:
+        with self.assertRaisesRegex(orders.SyncError, "no matching HubSpot Product"):
+            orders.desired_lines(self._checkout(), {"live-1": "p1"})
+
+    def test_a_cart_line_without_a_product_is_skipped_and_reported(self) -> None:
+        unmatched: list[str] = []
+        desired = orders.desired_lines(
+            self._checkout(),
+            {"live-1": "p1"},
+            record="checkout",
+            unmatched_lines=unmatched,
+        )
+
+        self.assertEqual(sorted(desired), ["live-1"])
+        self.assertEqual(unmatched, ["ES-16616396-76964637"])
+
+    def test_a_line_without_any_identity_is_skipped_for_carts_too(self) -> None:
+        unmatched: list[str] = []
+        desired = orders.desired_lines(
+            {"cart_token": "cart-1", "line_items": [{"quantity": 1}]},
+            {},
+            record="checkout",
+            unmatched_lines=unmatched,
+        )
+
+        self.assertEqual(desired, {})
+        self.assertEqual(unmatched, ["<no SKU or product/variant IDs>"])
+
+    def test_error_text_names_the_record_type(self) -> None:
+        with self.assertRaisesRegex(orders.SyncError, "EasyStore checkout 7 line SKU"):
+            orders.desired_lines(
+                {"id": 7, "line_items": [{"sku": "GONE"}]},
+                {},
+                record="checkout",
+            )
+
+    def test_stale_cart_lines_are_kept_when_a_line_could_not_be_mapped(self) -> None:
+        # "Gone from the Checkout" and "product retired" look identical once a
+        # line is missing from `desired`, so deleting on that guess would throw
+        # away a Cart line the shopper really had.
+        existing = {
+            "retired": {
+                "id": "L9",
+                "properties": {"hs_sku": "RETIRED", "hs_product_id": "p9"},
+            }
+        }
+        deletes: list[str] = []
+
+        def fake_http(url, *, method="GET", **kwargs):
+            if method == "DELETE":
+                deletes.append(url)
+            return {"id": "new"}
+
+        with mock.patch.object(carts, "existing_cart_line_items", return_value=existing), \
+             mock.patch.object(carts, "_http_json", fake_http):
+            _, _, removed = carts.sync_cart_line_items(
+                access_token="hs",
+                cart_id="C1",
+                desired={},
+                remove_stale=False,
+            )
+        self.assertEqual(removed, 0)
+        self.assertEqual(deletes, [])
+
+        with mock.patch.object(carts, "existing_cart_line_items", return_value=existing), \
+             mock.patch.object(carts, "_http_json", fake_http):
+            _, _, removed = carts.sync_cart_line_items(
+                access_token="hs",
+                cart_id="C1",
+                desired={},
+                remove_stale=True,
+            )
+        self.assertEqual(removed, 1)
+        self.assertEqual(len(deletes), 1)

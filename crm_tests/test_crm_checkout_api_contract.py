@@ -272,6 +272,46 @@ class IgnoredPageParameterTests(unittest.TestCase):
         self.assertEqual(len(snapshot.records), first)
         self.assertFalse(snapshot.complete)
 
+    def test_an_over_answer_proves_the_limit_is_not_a_cap(self) -> None:
+        # Production run 32485932896: limit=50 served 50, limit=250 served 1246.
+        # Answering past the limit means it is not capping the collection, and
+        # limit=1000 then being refused does not unsay that.
+        from urllib.error import HTTPError
+
+        first = checkouts.CHECKOUT_PAGE_SIZES[0]
+        bigger, biggest = checkouts.CHECKOUT_LIMIT_ESCALATION
+
+        def fake_http(url, **kwargs):
+            if f"limit={biggest}" in url:
+                raise SyncError("failed with HTTP 400") from HTTPError(
+                    url, 400, "Bad Request", {}, None
+                )
+            if f"limit={bigger}" in url:
+                return _page(1246)
+            return _page(first)
+
+        with mock.patch.object(checkouts, "_http_json", fake_http):
+            snapshot = checkouts.read_checkout_snapshot("shop.example", "secret")
+
+        self.assertEqual(len(snapshot.records), 1246)
+        self.assertTrue(snapshot.complete)
+        self.assertIn("not capping the collection", snapshot.completeness)
+
+    def test_page_one_over_answering_ends_pagination_immediately(self) -> None:
+        calls: list[str] = []
+
+        def fake_http(url, **kwargs):
+            calls.append(url)
+            return _page(600)
+
+        with mock.patch.object(checkouts, "_http_json", fake_http):
+            snapshot = checkouts.read_checkout_snapshot("shop.example", "secret")
+
+        self.assertEqual(len(snapshot.records), 600)
+        self.assertTrue(snapshot.complete)
+        self.assertEqual(len(calls), 1)
+        self.assertIn("more than it asked for", snapshot.pagination)
+
     def test_one_short_page_with_page_ignored_is_complete(self) -> None:
         with mock.patch.object(checkouts, "_http_json", return_value=_page(3)):
             snapshot = checkouts.read_checkout_snapshot("shop.example", "secret")
