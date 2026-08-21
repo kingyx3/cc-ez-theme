@@ -136,21 +136,132 @@ class EasyStoreCheckoutCollectionContractTests(unittest.TestCase):
             checkouts.CheckoutSourceUnavailable,
         )
 
-    def test_repeated_page_is_rejected(self) -> None:
-        response = {
-            "checkouts": [
-                {
-                    "id": index,
-                    "cart_token": f"cart-{index}",
-                    "financial_status": "unpaid",
-                    "line_items": [],
-                }
-                for index in range(checkouts.CHECKOUT_PAGE_SIZES[0])
-            ]
-        }
-        with mock.patch.object(checkouts, "_http_json", return_value=response):
-            with self.assertRaisesRegex(SyncError, "repeated a page"):
-                checkouts.read_checkout_snapshot("shop.example", "secret")
+
+def _page(count: int, *, start: int = 0) -> dict[str, object]:
+    return {
+        "checkouts": [
+            {
+                "id": index,
+                "cart_token": f"cart-{index}",
+                "financial_status": "unpaid",
+                "line_items": [],
+            }
+            for index in range(start, start + count)
+        ]
+    }
+
+
+class IgnoredPageParameterTests(unittest.TestCase):
+    """This store's checkouts.json answers but serves page 2 identical to page 1.
+
+    Failing there means never syncing a Cart, and looping on it never
+    terminates, so a repeated page ends pagination and `limit` proves the
+    snapshot instead.
+    """
+
+    def test_a_repeated_page_escalates_the_limit_instead_of_failing(self) -> None:
+        calls: list[str] = []
+        first = checkouts.CHECKOUT_PAGE_SIZES[0]
+        bigger = checkouts.CHECKOUT_LIMIT_ESCALATION[0]
+
+        def fake_http(url, **kwargs):
+            calls.append(url)
+            if f"limit={bigger}" in url:
+                return _page(first + 7)
+            return _page(first)
+
+        with mock.patch.object(checkouts, "_http_json", fake_http):
+            snapshot = checkouts.read_checkout_snapshot("shop.example", "secret")
+
+        self.assertFalse(snapshot.page_parameter_honored)
+        self.assertTrue(snapshot.complete)
+        self.assertEqual(len(snapshot.records), first + 7)
+        self.assertEqual(snapshot.page_size, bigger)
+        self.assertTrue(calls[0].endswith(f"page=1&limit={first}"))
+        self.assertTrue(calls[1].endswith(f"page=2&limit={first}"))
+        self.assertTrue(calls[2].endswith(f"page=1&limit={bigger}"))
+
+    def test_the_same_count_at_a_larger_limit_is_not_claimed_complete(self) -> None:
+        # Either the store holds exactly this many checkouts or the endpoint caps
+        # the limit. Both are consistent with the answer, so neither is claimed.
+        first = checkouts.CHECKOUT_PAGE_SIZES[0]
+
+        with mock.patch.object(checkouts, "_http_json", return_value=_page(first)):
+            snapshot = checkouts.read_checkout_snapshot("shop.example", "secret")
+
+        self.assertFalse(snapshot.page_parameter_honored)
+        self.assertFalse(snapshot.complete)
+        self.assertEqual(len(snapshot.records), first)
+        self.assertIn("capping the limit", snapshot.completeness)
+
+    def test_a_refused_escalation_keeps_the_snapshot_that_arrived(self) -> None:
+        from urllib.error import HTTPError
+
+        first = checkouts.CHECKOUT_PAGE_SIZES[0]
+
+        def fake_http(url, **kwargs):
+            if f"limit={first}" not in url:
+                raise SyncError("failed with HTTP 400: limit too large") from HTTPError(
+                    url, 400, "Bad Request", {}, None
+                )
+            return _page(first)
+
+        with mock.patch.object(checkouts, "_http_json", fake_http):
+            snapshot = checkouts.read_checkout_snapshot("shop.example", "secret")
+
+        self.assertEqual(len(snapshot.records), first)
+        self.assertFalse(snapshot.complete)
+        self.assertIn("refused", snapshot.completeness)
+
+    def test_every_limit_saturating_still_returns_what_arrived(self) -> None:
+        largest = checkouts.CHECKOUT_LIMIT_ESCALATION[-1]
+
+        def fake_http(url, **kwargs):
+            limit = int(url.rsplit("limit=", 1)[1])
+            return _page(limit)
+
+        with mock.patch.object(checkouts, "_http_json", fake_http):
+            snapshot = checkouts.read_checkout_snapshot("shop.example", "secret")
+
+        self.assertEqual(len(snapshot.records), largest)
+        self.assertFalse(snapshot.complete)
+        self.assertIn("saturated", snapshot.completeness)
+
+    def test_one_short_page_with_page_ignored_is_complete(self) -> None:
+        with mock.patch.object(checkouts, "_http_json", return_value=_page(3)):
+            snapshot = checkouts.read_checkout_snapshot("shop.example", "secret")
+
+        self.assertEqual(len(snapshot.records), 3)
+        self.assertTrue(snapshot.complete)
+
+    def test_an_unproven_snapshot_is_annotated_and_still_synchronized(self) -> None:
+        snapshot = checkouts.CheckoutSnapshot(
+            records=({"cart_token": "cart-1", "line_items": []},),
+            pages_read=1,
+            details_fetched=0,
+            complete=False,
+            completeness="limit=1000 came back saturated",
+        )
+        with mock.patch.object(
+            checkouts, "read_checkout_snapshot", return_value=snapshot
+        ), mock.patch.object(
+            checkouts.commerce, "sync", return_value={"hubspot_carts_created": 1}
+        ) as cart_sync, mock.patch.object(
+            checkouts.sys, "stderr", new_callable=mock.MagicMock
+        ) as stderr:
+            summary = checkouts.sync(
+                store_domain="shop.example",
+                easystore_access_token="es",
+                hubspot_access_token="hs",
+                fallback_dial_code="65",
+            )
+
+        cart_sync.assert_called_once()
+        annotation = "".join(str(call.args[0]) for call in stderr.write.call_args_list)
+        self.assertIn("::warning title=EasyStore Checkout snapshot not proven complete::", annotation)
+        self.assertEqual(summary["hubspot_carts_created"], 1)
+        self.assertFalse(summary["easystore_checkout_snapshot_proven_complete"])
+        self.assertIn("saturated", summary["easystore_checkout_snapshot_completeness"])
 
     def test_unknown_response_shape_is_not_treated_as_empty(self) -> None:
         with mock.patch.object(checkouts, "_http_json", return_value={"products": []}):

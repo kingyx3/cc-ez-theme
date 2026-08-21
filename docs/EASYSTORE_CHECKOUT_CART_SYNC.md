@@ -46,6 +46,8 @@ GET /api/3.0/checkouts.json?page=1&limit=50
 EasyStore-Access-Token: <token>
 ```
 
+`page` is still sent because it is one of the two documented parameters and costs nothing when ignored; what changed is that the sync no longer *depends* on it.
+
 The sync does **not** send:
 
 - `sort=id.desc`
@@ -79,19 +81,28 @@ Set `EASYSTORE_CHECKOUTS_REQUIRED=1` (or pass `--require-checkouts`) to make tha
 
 Everything else still fails loudly: an unrecognized response shape, a detail response without `line_items`, a duplicate Cart identity, a bad product reference, and every HubSpot write error.
 
-## Pagination and snapshot safety
+## Pagination: this endpoint ignores `page`
+
+Once the endpoint started answering, it turned out to serve page 2 identical to page 1 — `page` does nothing. Paging therefore cannot prove a full snapshot, so `limit` does it instead: **an answer shorter than the limit it asked for is the whole collection.**
 
 The reader:
 
 1. requests page 1 with the first page size that answers;
-2. continues page-by-page using only `page` + `limit`;
-3. rejects repeated pages so an API that ignores `page` cannot loop forever;
-4. buffers the complete collection before any HubSpot Cart mutation;
+2. continues page-by-page using only `page` + `limit`, stopping either on a short page or on a page whose records repeat one already seen;
+3. when `page` was ignored *and* the one page came back full, re-asks page 1 with a larger `limit` (250, then 1000) until an answer is shorter than its limit;
+4. buffers the collection before any HubSpot Cart mutation;
 5. fetches `GET /api/3.0/checkouts/:cart_token.json` when a list record omits `line_items`;
 6. rejects a detail response that still does not provide `line_items`;
 7. only then passes the Checkout snapshot to the Cart writer.
 
-This prevents partial source data from deleting or reconciling valid HubSpot Cart Line Items.
+Two answers are ambiguous rather than complete, and are reported as such instead of being claimed:
+
+- a larger limit returning **exactly** the count a smaller saturated limit returned — the store may hold that many Checkouts, or the endpoint may be capping `limit`;
+- every limit up to the largest coming back saturated.
+
+Either way the Checkouts that did arrive are still synchronized, `easystore_checkout_snapshot_proven_complete` is `false`, `easystore_checkout_snapshot_completeness` says why, and the run is annotated with `::warning title=EasyStore Checkout snapshot not proven complete::`. A rejected escalation (for instance an HTTP 400 on an over-large `limit`) is recorded the same way and does not fail the step — it only leaves completeness unproven.
+
+Syncing a short snapshot is safe because the Cart writer only touches the Carts in front of it: it reconciles Line Items **within** each Cart it upserts and never deletes a Cart missing from the snapshot. A short snapshot therefore syncs fewer Carts rather than damaging the ones already in HubSpot, and refusing it would mean syncing no Carts at all for as long as `page` is ignored.
 
 ## HubSpot mapping
 
@@ -121,6 +132,8 @@ The existing SKU mapper also supports EasyStore lines without a literal SKU when
 - `easystore_checkout_status` (`available` or `unavailable`)
 - `easystore_checkout_error` and `easystore_checkout_collection_attempts`
 - `easystore_checkout_page_sizes_tried_in_order` and `easystore_checkout_page_size_used`
+- `easystore_checkout_page_parameter_honored`
+- `easystore_checkout_snapshot_proven_complete` and `easystore_checkout_snapshot_completeness`
 - `easystore_checkout_product_style_filters_sent`
 - `easystore_checkout_pages_read`
 - `easystore_checkout_details_fetched`

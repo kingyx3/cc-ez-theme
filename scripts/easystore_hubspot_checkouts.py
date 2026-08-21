@@ -27,9 +27,17 @@ to the Order they became.
 
 Reading the collection is retried with backoff, and the page size falls back from
 the documented maximum to the smallest possible request, because this store has
-served read timeouts on this endpoint. A complete snapshot is buffered and any
-missing line items are hydrated from the documented detail endpoint before
-HubSpot is mutated.
+served read timeouts on this endpoint. The snapshot is buffered and any missing
+line items are hydrated from the documented detail endpoint before HubSpot is
+mutated.
+
+This store's endpoint answers but ignores ``page``: page 2 comes back identical
+to page 1. Paging therefore cannot prove a full snapshot, so ``limit`` does it
+instead - an answer shorter than the limit it asked for is the whole collection.
+When even the largest limit comes back saturated, the Checkouts that did arrive
+are still synchronized and the snapshot is reported as not proven complete: the
+Cart writer only touches the Carts in front of it, so a short snapshot syncs
+fewer Carts rather than damaging the ones already in HubSpot.
 
 If EasyStore cannot serve the Checkout collection at all, that is an outage in
 one upstream endpoint, not a broken CRM sync: Cart and Cart Line Item writes are
@@ -77,6 +85,12 @@ CHECKOUT_PAGE_SIZES = (50, 1)
 CHECKOUT_READ_TIMEOUT_SECONDS = 30
 CHECKOUT_READ_RETRIES = 1
 
+# This endpoint answers but ignores ``page``: page 2 comes back byte-identical to
+# page 1. Paging cannot prove a full snapshot, so ``limit`` does it instead - a
+# request whose answer is shorter than the limit it asked for is the whole
+# collection. These are tried in order once the first page comes back saturated.
+CHECKOUT_LIMIT_ESCALATION = (250, 1000)
+
 
 class CheckoutSourceUnavailable(SyncError):
     """EasyStore could not serve the Checkout collection or a required detail.
@@ -95,6 +109,9 @@ class CheckoutSnapshot:
     details_fetched: int
     page_size: int = CHECKOUT_PAGE_SIZES[0]
     attempts: tuple[str, ...] = ()
+    page_parameter_honored: bool = True
+    complete: bool = True
+    completeness: str = "the collection ended short of the limit it asked for"
 
 
 def _short(error: BaseException) -> str:
@@ -224,25 +241,16 @@ def _complete_checkout(
     return merged, True
 
 
-def _read_collection(
+def _collection_get(
     domain: str,
     access_token: str,
+    page: int,
     page_size: int,
-) -> tuple[list[dict[str, Any]], int]:
-    """Read every Checkout page at one page size, all or nothing.
+) -> list[dict[str, Any]]:
+    """Read one documented Checkout collection request."""
 
-    Pagination is all-or-nothing. Repeated pages are rejected so an endpoint
-    that ignores ``page`` cannot trap the workflow in a loop or expose a partial
-    snapshot to HubSpot.
-    """
-
-    page = 1
-    pages_read = 0
-    listed_records: list[dict[str, Any]] = []
-    seen_page_signatures: set[tuple[str, ...]] = set()
-
-    while True:
-        document = _checkout_get(
+    return _checkout_collection(
+        _checkout_get(
             _collection_url(domain, page, page_size),
             access_token,
             what=(
@@ -251,38 +259,121 @@ def _read_collection(
                 "filters)"
             ),
         )
+    )
 
-        records = _checkout_collection(document)
+
+def _page_signature(records: list[dict[str, Any]]) -> tuple[str, ...]:
+    return tuple(
+        nonempty(record.get("cart_token"))
+        or nonempty(record.get("id"))
+        or f"row:{index}"
+        for index, record in enumerate(records)
+    )
+
+
+def _read_collection(
+    domain: str,
+    access_token: str,
+    page_size: int,
+) -> tuple[list[dict[str, Any]], int, bool]:
+    """Read the Checkout collection at one page size, all or nothing.
+
+    Returns the records, how many pages were read, and whether ``page`` did
+    anything. This store's endpoint ignores it and serves page 2 identical to
+    page 1, so a repeated page ends pagination and is reported as a fact about
+    the endpoint. Failing there instead would mean never syncing a Cart, and
+    looping on it would never terminate; proving the snapshot is complete is
+    :func:`_prove_complete_collection`'s job.
+    """
+
+    page = 1
+    pages_read = 0
+    listed_records: list[dict[str, Any]] = []
+    seen_page_signatures: set[tuple[str, ...]] = set()
+
+    while True:
+        records = _collection_get(domain, access_token, page, page_size)
         pages_read += 1
-        signature = tuple(
-            nonempty(record.get("cart_token"))
-            or nonempty(record.get("id"))
-            or f"row:{index}"
-            for index, record in enumerate(records)
-        )
+        signature = _page_signature(records)
         if records and signature in seen_page_signatures:
-            raise SyncError(
-                "EasyStore Checkout pagination repeated a page; refusing to sync "
-                "an incomplete or looping checkout snapshot"
-            )
+            return listed_records, pages_read, False
         if records:
             seen_page_signatures.add(signature)
         listed_records.extend(records)
 
         if len(records) < page_size:
-            return listed_records, pages_read
+            return listed_records, pages_read, True
         page += 1
+
+
+def _prove_complete_collection(
+    domain: str,
+    access_token: str,
+    page_size: int,
+    records: list[dict[str, Any]],
+    attempts: list[str],
+) -> tuple[list[dict[str, Any]], int, bool, str]:
+    """Ask for a larger limit until the answer is shorter than the request.
+
+    Only reached when ``page`` is ignored and the first page came back full, so
+    there may be more checkouts than the one page holds. A response shorter than
+    the limit it asked for is the whole collection. A response that is still
+    exactly as long as a limit EasyStore has already saturated is ambiguous - the
+    store may hold exactly that many checkouts, or the endpoint may cap the limit
+    - and is reported as unproven rather than claimed as complete.
+    """
+
+    limit = page_size
+    for candidate in CHECKOUT_LIMIT_ESCALATION:
+        if candidate <= limit:
+            continue
+        try:
+            larger = _collection_get(domain, access_token, 1, candidate)
+        except SyncError as error:
+            # A rejected or unanswered escalation is not a reason to throw away
+            # a snapshot that did arrive; it only leaves completeness unproven.
+            attempts.append(f"limit={candidate}: {_short(error)}")
+            return (
+                records,
+                limit,
+                False,
+                f"limit={candidate} was refused, so the {len(records)} checkouts "
+                f"a saturated limit={limit} returned could not be proven complete",
+            )
+
+        attempts.append(f"limit={candidate}: answered {len(larger)} checkouts")
+        if len(larger) < candidate:
+            if len(larger) > len(records):
+                return larger, candidate, True, (
+                    f"limit={candidate} answered {len(larger)} checkouts, short of "
+                    "the limit it asked for"
+                )
+            return larger, candidate, False, (
+                f"limit={candidate} answered the same {len(larger)} checkouts as a "
+                f"saturated limit={limit}, so EasyStore may be capping the limit "
+                "rather than serving the whole collection"
+            )
+        records = larger
+        limit = candidate
+
+    return records, limit, False, (
+        f"every limit up to {limit} came back saturated while page is ignored, so "
+        "the collection is larger than one request can return"
+    )
 
 
 def read_checkout_snapshot(
     store_domain: str,
     access_token: str,
 ) -> CheckoutSnapshot:
-    """Read and hydrate the complete Checkout collection before HubSpot is touched.
+    """Read and hydrate the Checkout collection before HubSpot is touched.
 
     Each documented page size is tried in turn; a size that never answers is
     recorded and the next one starts over from page 1. When none of them answer,
     :class:`CheckoutSourceUnavailable` names every request that was tried.
+
+    The returned snapshot carries what the endpoint revealed about itself: whether
+    ``page`` did anything, and whether the collection was proven complete.
     """
 
     domain = _shop_domain(store_domain)
@@ -290,7 +381,7 @@ def read_checkout_snapshot(
 
     for page_size in CHECKOUT_PAGE_SIZES:
         try:
-            listed_records, pages_read = _read_collection(
+            listed_records, pages_read, page_honored = _read_collection(
                 domain,
                 access_token,
                 page_size,
@@ -299,7 +390,30 @@ def read_checkout_snapshot(
             attempts.append(f"limit={page_size}: {_short(error)}")
             continue
 
-        attempts.append(f"limit={page_size}: answered {len(listed_records)} checkouts")
+        attempts.append(
+            f"limit={page_size}: answered {len(listed_records)} checkouts over "
+            f"{pages_read} page(s), page parameter "
+            + ("honored" if page_honored else "ignored")
+        )
+
+        complete = True
+        completeness = "the collection ended short of the limit it asked for"
+        if not page_honored and len(listed_records) >= page_size:
+            listed_records, page_size, complete, completeness = (
+                _prove_complete_collection(
+                    domain,
+                    access_token,
+                    page_size,
+                    listed_records,
+                    attempts,
+                )
+            )
+        elif not page_honored:
+            completeness = (
+                "page is ignored, but the single page EasyStore serves came back "
+                "short of the limit it asked for"
+            )
+
         completed: list[dict[str, Any]] = []
         details_fetched = 0
         for listed in listed_records:
@@ -313,6 +427,9 @@ def read_checkout_snapshot(
             details_fetched=details_fetched,
             page_size=page_size,
             attempts=tuple(attempts),
+            page_parameter_honored=page_honored,
+            complete=complete,
+            completeness=completeness,
         )
 
     raise CheckoutSourceUnavailable(
@@ -445,6 +562,21 @@ def sync(
         )
         return summary
 
+    # A snapshot EasyStore would not prove complete is still worth writing. The
+    # Cart writer only ever touches the carts in front of it - it reconciles Line
+    # Items within each Cart it upserts and never deletes a Cart that is missing
+    # from the snapshot - so a short snapshot syncs fewer Carts rather than
+    # damaging the ones already in HubSpot. Refusing it would mean syncing no
+    # Carts at all for as long as this endpoint ignores `page`.
+    if not snapshot.complete:
+        print(
+            "::warning title=EasyStore Checkout snapshot not proven complete::"
+            f"Synchronizing the {len(snapshot.records)} Checkouts EasyStore "
+            f"returned. {snapshot.completeness}. Carts absent from this snapshot "
+            "are left untouched, not deleted.",
+            file=sys.stderr,
+        )
+
     # HubSpot Carts represent shopping sessions that may later be purchased or
     # abandoned, so every real Checkout is fed to the Cart writer with its own
     # financial_status preserved as hs_external_status. The abandoned subset is
@@ -467,6 +599,9 @@ def sync(
             "easystore_checkout_status": "available",
             "easystore_checkout_collection_attempts": list(snapshot.attempts),
             "easystore_checkout_page_size_used": snapshot.page_size,
+            "easystore_checkout_page_parameter_honored": snapshot.page_parameter_honored,
+            "easystore_checkout_snapshot_proven_complete": snapshot.complete,
+            "easystore_checkout_snapshot_completeness": snapshot.completeness,
             "easystore_checkout_pages_read": snapshot.pages_read,
             "easystore_checkout_details_fetched": snapshot.details_fetched,
             "easystore_checkouts_buffered": len(snapshot.records),
