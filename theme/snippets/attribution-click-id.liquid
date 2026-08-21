@@ -21,10 +21,12 @@
     comes back through a new link gets a new id - but the attribute records how
     the account was *acquired*, so once EasyStore holds a value nothing here
     overwrites it. That also means the account page cannot blank it on save.
-  * **The field is hidden, never removed.** `register`, `details` and `account`
-    all render every attribute setting from one loop. Hiding this one at runtime
-    keeps those three templates untouched and means an admin who renames or
-    deletes the attribute gets the ordinary field back rather than a broken form.
+  * **The field is hidden, never removed.** `register`, `activate_account`,
+    `details` and `account` each render every attribute setting from the same
+    loop, so a new attribute appears as a visible input on all four. Hiding this
+    one at runtime - by id, from the layout head, on every page - keeps those four
+    templates untouched and means an admin who renames or deletes the attribute
+    gets the ordinary field back rather than a broken form.
   * **A store with no such attribute is left completely alone.** No attribute
     titled "Click ID" means `attribution_click_id_setting` stays blank, and every
     line below no-ops. The id is still captured into the cookie, so nothing is
@@ -138,9 +140,11 @@
       var field = document.getElementById('DetailAttribute' + SETTING_ID);
       if (!field) return;
 
-      // Hidden by the stylesheet above; also hidden here so a store whose
-      // browser lacks :has() still never shows the field, and un-required so a
-      // required attribute cannot block a sign-up on an invisible input.
+      // Hidden by the stylesheet above; also hidden here so a browser lacking
+      // :has() still never shows the field, and un-required so a required
+      // attribute cannot block a sign-up on an invisible input. EasyStore may
+      // enforce `is_required` server-side regardless, which is why the attribute
+      // must not be marked required: an organic shopper has no click id to fill.
       var wrapper = field.closest('.field, .grid__item');
       if (wrapper) {
         wrapper.setAttribute('hidden', 'hidden');

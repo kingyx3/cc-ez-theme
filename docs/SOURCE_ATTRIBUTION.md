@@ -63,20 +63,32 @@ opaque token, and the trusted side owns identity.**
 Only one step is manual, and it must be done in EasyStore admin before anything
 joins.
 
-1. **Create the customer attribute.** EasyStore admin → Settings → Customers →
-   customer attributes. Add a **text** attribute titled exactly **`Click ID`**.
-   Do not mark it required.
+**Deploy the theme first.** EasyStore renders every customer attribute as a
+visible input on four pages - `register`, `activate_account`, `account` and
+`details` - so an attribute created before the theme ships is a text box labelled
+"Click ID" that shoppers are asked to fill in. The snippet is what hides it.
+
+1. **Deploy the theme.** The snippet ships with it and is already included from
+   the layout head, so it runs on all four of those pages.
+
+2. **Create the customer attribute.** EasyStore admin → Settings → Customers →
+   customer attributes. Add a **text** attribute titled exactly **`Click ID`**,
+   and **do not mark it required**.
+
+   - *Text, not dropdown.* The theme fills the input's value; a `<select>` would
+     need a matching option to accept one.
+   - *Not required.* The theme removes the browser-side `required` flag, but
+     EasyStore may still enforce it server-side, and a shopper arriving organically
+     has no click id to fill - a required field would block their sign-up.
 
    The theme matches the title case-insensitively against `Click ID`, `ClickID`,
    `cb_click_id`, `Source click ID` and `Attribution click ID`. Any of those work;
    the first is the one to use.
 
-   The field is hidden on the sign-up, account and details forms, so a shopper
-   never sees it. It is hidden by id, so renaming or deleting the attribute gives
-   the ordinary field back rather than breaking a form.
-
-2. **Deploy the theme.** The snippet ships with it and is already included from
-   the layout head.
+   The field is hidden from shoppers but stays fully visible in EasyStore admin,
+   which is the point: the customer record gains a Click ID. It is hidden by id,
+   so renaming or deleting the attribute gives the ordinary field back rather than
+   breaking a form.
 
 3. **Deploy the Worker**, which happens automatically when
    `cloudflare/attribution-worker/**` reaches `main`. This applies migration
@@ -168,6 +180,9 @@ not this integration's to define.
   share a click id. Reported as `click_ids_shared_by_multiple_contacts`.
 - **A cleared browser loses the link.** Cookie and `localStorage` both go; the
   sign-up is then simply unattributed rather than wrongly attributed.
+- **Hiding the field is the theme's job.** A shopper on a browser with neither
+  `:has()` support nor JavaScript would see the input. That is a very narrow
+  combination, but it is the reason the attribute must never be required.
 - **One storefront domain.** The cookie is set for `cardboard.sg` and its
   subdomains, derived from the Worker's `STORE_URL`. A shopper who reaches the
   store on a different host - the raw `*.easy.co` domain, say - never sees it, and

@@ -112,9 +112,30 @@ class TheAcquisitionIsWrittenOnceTests(unittest.TestCase):
         self.assertIn("field.removeAttribute('required')", source)
 
     def test_the_field_is_hidden_by_id_rather_than_by_position(self) -> None:
-        # `register`, `details` and `account` all render attributes from one
-        # loop over `shop.attribute_settings`; the id is the only stable handle.
+        # Every template renders attributes from the same loop over
+        # `shop.attribute_settings`; the id is the only stable handle.
         self.assertIn("#DetailAttribute{{ attribution_click_id_setting }}", snippet())
+
+    def test_every_template_that_renders_attributes_is_covered(self) -> None:
+        # A new customer attribute appears as a visible input on all of these.
+        # The snippet hides it from the layout head, which reaches every one; a
+        # template added to this list later needs no change, but a template that
+        # renders attributes some other way would.
+        rendering = sorted(
+            path.name
+            for path in (THEME_ROOT / "templates" / "customers").glob("*.liquid")
+            if "shop.attribute_settings" in read(path)
+        )
+        self.assertEqual(
+            rendering,
+            ["account.liquid", "activate_account.liquid", "details.liquid", "register.liquid"],
+        )
+        for name in rendering:
+            self.assertIn(
+                'id="DetailAttribute{{ attribute_setting.id }}"',
+                read(THEME_ROOT / "templates" / "customers" / name),
+                name,
+            )
 
 
 class AStoreWithoutTheAttributeIsUntouchedTests(unittest.TestCase):
