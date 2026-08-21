@@ -39,6 +39,7 @@ from easystore_hubspot_schema import (
     describe_mapping,
     field_values,
     first_present,
+    note_text,
     observed_keys,
     resolve_fields,
 )
@@ -182,10 +183,12 @@ CONTACT_FIELDS: tuple[FieldSpec, ...] = (
     ),
     FieldSpec(
         key="note",
-        sources=("note", "notes", "remark"),
+        # Read through customer_note, because a note arrives as a string, as a
+        # record, or as a list of note records.
         fallback="easystore_customer_note",
         label="EasyStore Customer Note",
         description="Note staff left on the EasyStore customer record.",
+        field_type="textarea",
     ),
 )
 
@@ -328,6 +331,22 @@ def lifecycle_stage_write(current: Any, target: str = LIFECYCLE_LEAD) -> str | N
 # is a different thing -- it comes back as the next occurrence of that date, which
 # is why reading it as a birth year filled the CRM with dates in 2027.
 BIRTHDAY_SOURCES = ("birthdate", "birthday", "birth_date", "date_of_birth", "dob")
+# Where a note staff left on a customer might live. EasyStore calls the shopper's
+# own order message a "remark" (theme/templates/customers/order.liquid), so the
+# same wording is tried here alongside the usual names.
+NOTE_SOURCES = (
+    "note",
+    "notes",
+    "remark",
+    "remarks",
+    "internal_note",
+    "admin_note",
+    "staff_note",
+    "comment",
+    "comments",
+    "memo",
+    "description",
+)
 # The property this sync provisions for a date of birth. It owns that property,
 # which is what lets it clear a value an earlier run got wrong.
 BIRTHDAY_FALLBACK_PROPERTY = next(
@@ -467,6 +486,16 @@ def birthday_diagnostics(customer: dict[str, Any]) -> tuple[list[str], list[str]
     return shapes, years, future
 
 
+def customer_note(customer: dict[str, Any]) -> str | None:
+    """Return the note staff left on a customer, from whichever field holds it."""
+
+    for key in NOTE_SOURCES:
+        found = note_text(customer.get(key))
+        if found is not None:
+            return found
+    return None
+
+
 def _customer_tags(customer: dict[str, Any]) -> str | None:
     """Return the customer's tags as one comma separated value."""
 
@@ -495,6 +524,7 @@ CONTACT_FIELD_DERIVATIONS: dict[str, Callable[[dict[str, Any]], str | None]] = {
     "birthday": customer_birthday,
     "birthday_day": customer_birthday_day,
     "next_birthday": customer_next_birthday,
+    "note": customer_note,
 }
 
 
@@ -909,7 +939,8 @@ def customer_needs_detail(customer: dict[str, Any]) -> bool:
 
     has_birthday = any(key in customer for key in BIRTHDAY_SOURCES)
     has_attributes = any(key in customer for key in CUSTOM_ATTRIBUTE_SOURCES)
-    return not (has_birthday and has_attributes)
+    has_note = any(key in customer for key in NOTE_SOURCES)
+    return not (has_birthday and has_attributes and has_note)
 
 
 def complete_customer(

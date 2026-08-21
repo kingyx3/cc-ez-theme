@@ -72,13 +72,42 @@ class FieldSpec(NamedTuple):
     description: str = ""
     kind: str = "string"
     absolute: bool = False
+    field_type: str | None = None
 
 
 def nonempty(value: Any) -> str | None:
-    if value is None:
+    """Return a scalar value as trimmed text, or ``None``.
+
+    A list or a mapping is never text: ``str([])`` is ``"[]"`` and a list of note
+    records stringifies to a Python repr, either of which would land in the CRM
+    as garbage. A field whose value arrives as a container needs a derivation
+    that knows its shape, so one is reported absent here rather than mangled.
+    """
+
+    if value is None or isinstance(value, (list, tuple, set, dict)):
         return None
     text = str(value).strip()
     return text or None
+
+
+def note_text(value: Any) -> str | None:
+    """Return free text however a storefront wrapped it.
+
+    A note arrives as a string, as a record holding the words, or as a list of
+    note records with their own timestamps. All three are read, and several notes
+    are joined in the order given.
+    """
+
+    if isinstance(value, dict):
+        return first_present(value, ("note", "body", "content", "text", "message", "value"))
+    if isinstance(value, (list, tuple)):
+        notes = [
+            found
+            for found in (note_text(item) for item in value)
+            if found is not None
+        ]
+        return "\n".join(dict.fromkeys(notes)) if notes else None
+    return nonempty(value)
 
 
 def first_present(record: Any, keys: Iterable[str]) -> str | None:
@@ -478,7 +507,7 @@ def resolve_fields(
                 "label": field.label,
                 "description": field.description,
                 "type": field.kind,
-                "fieldType": PROPERTY_FIELD_TYPES[field.kind],
+                "fieldType": field.field_type or PROPERTY_FIELD_TYPES[field.kind],
                 "formField": False,
             },
             # An optional stage may hold the schema read scope without the write

@@ -164,11 +164,24 @@ These are therefore provisioned in the `easystore_sync` group:
 | `birthdate`, then `birthday` / `birth_date` / `date_of_birth` / `dob` | `date_of_birth` or `easystore_customer_birthday`, plus `easystore_birthday_day` and `easystore_next_birthday` — see below |
 | `gender` / `sex` | `gender` or `easystore_customer_gender` |
 | `tags` | `easystore_customer_tags` |
-| `note` / `notes` / `remark` | `easystore_customer_note` |
+| `note` / `notes` / `remark` / `remarks` / `internal_note` / `admin_note` / `staff_note` / `comment` / `comments` / `memo` / `description` | `easystore_customer_note` |
 
 Tags are normalized from a list, a comma separated string, or a list of objects
 into one comma separated value. `easystore_customer_field_coverage` in the run
 summary reports how many synchronized customers carried each fact.
+
+A note is read whether it arrives as a string, as a record holding the words, or
+as a list of note records with their own timestamps; several notes are joined in
+the order given. EasyStore calls a shopper's own order message a *remark* — the
+storefront renders `order.remark` — so that wording is tried for a customer note
+too, alongside the usual names.
+
+**No container is ever written as text.** `str([])` is `"[]"`, and a list of note
+records stringifies to a Python repr; either would have landed in the CRM as the
+note. A value that arrives as a list or a mapping now reads as absent unless the
+field has a derivation that knows its shape, which also means a money field
+arriving as a nested object asks for the record's detail instead of writing
+nonsense.
 
 #### Birthdays
 
@@ -549,8 +562,8 @@ Two things this stage refuses to guess:
 
 Like orders, EasyStore's customer *list* returns less than its customer
 endpoint. The Contact stage therefore fetches `/api/3.0/customers/<id>.json`
-whenever a listed customer carries neither a birthday field nor an attributes
-collection, and reports `customers_fetched_in_detail`.
+whenever a listed customer is missing the birthday, attributes or note fields
+altogether, and reports `customers_fetched_in_detail`.
 
 Key presence is the test, not a value. A customer legitimately has no birthday
 and no answers, so testing values would re-fetch those customers on every run

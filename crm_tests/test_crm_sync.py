@@ -921,9 +921,12 @@ class CustomerDetailTests(unittest.TestCase):
         # birthday, and re-fetching them forever would cost a request each run.
         self.assertTrue(customers.customer_needs_detail({"id": 1, "email": "a@b.c"}))
         self.assertTrue(customers.customer_needs_detail({"id": 1, "birthdate": "1993-04-20"}))
+        self.assertTrue(
+            customers.customer_needs_detail({"id": 1, "birthdate": "", "attributes": []})
+        )
         self.assertFalse(
             customers.customer_needs_detail(
-                {"id": 1, "birthdate": "", "attributes": []}
+                {"id": 1, "birthdate": "", "attributes": [], "note": ""}
             )
         )
 
@@ -950,6 +953,75 @@ class CustomerDetailTests(unittest.TestCase):
                 customers.complete_customer("shop.example", "token", listed),
                 listed,
             )
+
+
+class CustomerNoteTests(unittest.TestCase):
+    def test_a_note_is_read_from_a_string_a_record_or_a_list(self) -> None:
+        self.assertEqual(
+            customers.customer_note({"note": "Collects the deluxe sets"}),
+            "Collects the deluxe sets",
+        )
+        self.assertEqual(
+            customers.customer_note({"note": {"body": "Prefers pickup"}}),
+            "Prefers pickup",
+        )
+        self.assertEqual(
+            customers.customer_note(
+                {
+                    "notes": [
+                        {"note": "Prefers pickup", "created_at": "2026-01-01"},
+                        {"note": "VIP"},
+                    ]
+                }
+            ),
+            "Prefers pickup\nVIP",
+        )
+
+    def test_the_wording_easystore_uses_for_a_remark_is_read_too(self) -> None:
+        # EasyStore calls the shopper's own order message a remark
+        # (theme/templates/customers/order.liquid renders order.remark).
+        for key in ("remark", "remarks", "internal_note", "admin_note", "comment"):
+            with self.subTest(key=key):
+                self.assertEqual(
+                    customers.customer_note({key: "Prefers pickup"}),
+                    "Prefers pickup",
+                )
+
+    def test_an_empty_note_collection_is_absent_not_a_python_repr(self) -> None:
+        # str([]) is "[]", which would have landed in the CRM as the note.
+        self.assertIsNone(customers.customer_note({"notes": []}))
+        self.assertIsNone(customers.customer_note({"note": ""}))
+        self.assertIsNone(customers.customer_note({}))
+
+    def test_no_container_is_ever_written_as_text(self) -> None:
+        # The same guard protects every field, not just notes.
+        self.assertIsNone(schema.nonempty([]))
+        self.assertIsNone(schema.nonempty([{"note": "x"}]))
+        self.assertIsNone(schema.nonempty({}))
+        self.assertIsNone(schema.nonempty({"body": "x"}))
+        self.assertEqual(schema.nonempty(0), "0")
+        self.assertEqual(schema.nonempty(" x "), "x")
+
+    def test_a_thin_money_value_triggers_a_detail_fetch_rather_than_a_repr(self) -> None:
+        # A money field arriving as a nested object used to stringify; now it
+        # reads as absent, which is what asks for the order's detail.
+        self.assertTrue(
+            orders.order_needs_detail(
+                {
+                    "id": 1,
+                    "line_items": [],
+                    "shipping_address": {"city": "Singapore"},
+                    "total_price": {"amount": "10.00"},
+                }
+            )
+        )
+
+    def test_an_order_note_reads_the_same_shapes(self) -> None:
+        self.assertEqual(
+            orders._order_note({"notes": [{"note": "Leave at the door"}]}),
+            "Leave at the door",
+        )
+        self.assertIsNone(orders._order_note({"notes": []}))
 
 
 class CustomerFieldTests(unittest.TestCase):
