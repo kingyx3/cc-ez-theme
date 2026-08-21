@@ -9,10 +9,6 @@
 {% assign collection = collections[collection_id] %}
 {% assign products_to_show = section.settings.products_to_show %}
 
-{% if section.__key != '1667498127486' %}
-  {% assign products_to_show = 3 %}
-{% endif %}
-
 {% assign products_to_display = collection.product_count | default: 0 %}
 
 {% if products_to_display > products_to_show %}
@@ -234,7 +230,7 @@
         "id": "products_to_show",
         "min": 2,
         "max": 20,
-        "step": 2,
+        "step": 1,
         "default": 8,
         "label": {
           "en_US": "Products display",
