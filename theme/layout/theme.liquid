@@ -13,6 +13,13 @@
   {% endcomment %}
   {% include 'login-redirect-boot' %}
 
+  {% comment %}
+    Also in the head, and for the same reason: the Cloudflare click id arrives as
+    a query parameter on the landing page, and it has to be stored before a
+    shopper's first tap can navigate away from the URL that carried it.
+  {% endcomment %}
+  {% include 'attribution-click-id' %}
+
   {% if settings.favicon_img %}
   <link rel="icon" href="{{ settings.favicon_img }}" />
   {% endif %}

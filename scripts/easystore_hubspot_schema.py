@@ -390,24 +390,31 @@ def ensure_property_group(
     access_token: str,
     object_type: str,
     optional: bool = False,
+    group: str = PROPERTY_GROUP,
+    group_label: str = PROPERTY_GROUP_LABEL,
 ) -> None:
-    """Create the ``easystore_sync`` property group when it is missing."""
+    """Create the property group a provisioned field will live in, if missing.
+
+    ``group`` defaults to ``easystore_sync`` because every EasyStore stage writes
+    there. A stage carrying facts from somewhere else names its own group, so a
+    CRM user reading a contact can tell which system reported a value.
+    """
 
     headers = {"Authorization": f"Bearer {access_token}"}
     allowed = {404, 403} if optional else {404}
-    group = http_json(
-        f"{HUBSPOT_BASE}/crm/v3/properties/{object_type}/groups/{PROPERTY_GROUP}",
+    existing = http_json(
+        f"{HUBSPOT_BASE}/crm/v3/properties/{object_type}/groups/{group}",
         headers=headers,
         allow_statuses=allowed,
     )
-    if group is None:
+    if existing is None:
         http_json(
             f"{HUBSPOT_BASE}/crm/v3/properties/{object_type}/groups",
             method="POST",
             headers=headers,
             payload={
-                "name": PROPERTY_GROUP,
-                "label": PROPERTY_GROUP_LABEL,
+                "name": group,
+                "label": group_label,
                 "displayOrder": -1,
             },
             allow_statuses={403} if optional else None,
@@ -423,6 +430,8 @@ def resolve_fields(
     error: type[Exception],
     optional: bool = False,
     report: dict[str, Any] | None = None,
+    group: str = PROPERTY_GROUP,
+    group_label: str = PROPERTY_GROUP_LABEL,
 ) -> dict[str, str]:
     """Map every field key onto the HubSpot property that will carry it.
 
@@ -488,6 +497,8 @@ def resolve_fields(
             access_token=access_token,
             object_type=object_type,
             optional=optional,
+            group=group,
+            group_label=group_label,
         )
     if report is not None:
         report["hints"] = {
@@ -502,7 +513,7 @@ def resolve_fields(
             method="POST",
             headers={"Authorization": f"Bearer {access_token}"},
             payload={
-                "groupName": PROPERTY_GROUP,
+                "groupName": group,
                 "name": field.fallback,
                 "label": field.label,
                 "description": field.description,

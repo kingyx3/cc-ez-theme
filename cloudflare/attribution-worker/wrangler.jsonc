@@ -3,7 +3,10 @@
   "name": "cc-attribution",
   "main": "src/index.js",
   "compatibility_date": "2026-08-21",
-  "workers_dev": true,
+  // The workers.dev hostname is a second, unrouted way to reach a Worker whose
+  // whole job is to mint click rows. Off, so a click can only be recorded
+  // through the cardboard.sg route below.
+  "workers_dev": false,
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1

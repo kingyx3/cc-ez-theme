@@ -2,7 +2,7 @@
 
 `.github/workflows/sync-easystore-customers-hubspot.yml` independently synchronizes EasyStore commerce/CRM data into HubSpot at **00:00, 06:00, 12:00 and 18:00 Singapore time** and can also be run manually with `workflow_dispatch`.
 
-The production workflow runs in dependency order: **identity preflight → Products → Customers → Orders + Line Items → reconciliation → Abandoned checkouts**. Abandoned checkouts run last on purpose: it is the only stage whose EasyStore route is undocumented, so a store that does not serve one cannot cost the run the stages above it. Pull requests run only the credential-free validation job; they never call EasyStore or HubSpot with production credentials.
+The production workflow runs in dependency order: **identity preflight → Products → Customers → source attribution → Orders + Line Items → reconciliation → Abandoned checkouts**. Abandoned checkouts run last on purpose: it is the only stage whose EasyStore route is undocumented, so a store that does not serve one cannot cost the run the stages above it. Pull requests run only the credential-free validation job; they never call EasyStore or HubSpot with production credentials.
 
 > GitHub Actions schedules are best-effort rather than a real-time scheduler. The workflow is configured for the four requested Singapore clock times, but GitHub may start scheduled runs late during platform load. Concurrency prevents two production sync runs from overlapping.
 
@@ -42,6 +42,8 @@ The production workflow runs in dependency order: **identity preflight → Produ
 
 Optional repository variable `CUSTOMER_SYNC_DEFAULT_DIAL_CODE` defaults to Singapore `65`.
 
+The source-attribution stage additionally reads `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` - the same secrets the Worker deployment uses. It only ever reads D1, so a token scoped to D1 read on that one account is enough. Without them that single stage is skipped and the run continues.
+
 The existing `EASYSTORE_ADMIN_TOKEN` used by theme deployment is intentionally not reused. EasyStore's Public API uses the `EasyStore-Access-Token` header, so the CRM sync has its own least-privilege read credential.
 
 ## Production safety model
@@ -62,7 +64,8 @@ CI is bifurcated between this repository's two independent products. A pull requ
 
 | Change | Workflow gate |
 | --- | --- |
-| `scripts/easystore_hubspot_*.py`, `crm_tests/**`, `docs/CUSTOMER_CRM_SYNC.md`, the CRM workflow | `Validate CRM sync` |
+| `scripts/easystore_hubspot_*.py`, `scripts/cloudflare_hubspot_attribution.py`, `crm_tests/**`, `docs/CUSTOMER_CRM_SYNC.md`, `docs/SOURCE_ATTRIBUTION.md`, the CRM workflow | `Validate CRM sync` |
+| `cloudflare/attribution-worker/**`, the Worker workflow | `Validate Worker` (pull request), then deploy on `main` |
 | `theme/**`, `tests/**`, `scripts/theme_ci.py`, `scripts/easystore_publish.py`, `requirements-dev.txt`, `.coveragerc`, the packaging workflow | `Package EasyStore theme` (push) |
 | `theme/**`, `e2e/**`, `package.json`, `playwright.config.js`, the E2E workflow | `EasyStore browser E2E` (pull request) |
 
@@ -71,7 +74,7 @@ A change that spans both products triggers both sets of gates, and either workfl
 Changes to the CRM workflow, sync scripts, CRM tests, or this document trigger the `Validate CRM sync` job on pull requests. That job requires no secrets and performs:
 
 1. Python 3.13 bytecode compilation of every CRM sync script, including the shared `easystore_hubspot_schema.py` property resolver and the abandoned-checkout stage.
-2. `crm_tests/test_crm_sync.py`, covering mobile normalization, the no-mobile contact filter, duplicate-identity detection, SKU fallback, product-backed line construction, fail-closed catalog matching, stale-line reconciliation, order field mapping, order commerce-field resolution and provisioning, timestamp and amount normalization, lifecycle-stage transitions, and HubSpot partial-batch error handling.
+2. `crm_tests/`, covering mobile normalization, the no-mobile contact filter, duplicate-identity detection, SKU fallback, product-backed line construction, fail-closed catalog matching, stale-line reconciliation, order field mapping, order commerce-field resolution and provisioning, timestamp and amount normalization, lifecycle-stage transitions, HubSpot partial-batch error handling, and the Cloudflare click join's click-id validation, contact paging, D1 reads and every refusal above.
 
 The credentialed `sync` job is explicitly skipped for `pull_request` events.
 
@@ -301,6 +304,49 @@ HubSpot does not move a contact backwards through the default lifecycle pipeline
 The customer run summary reports `lifecycle_stage_leads_assigned` and the order run summary reports `contacts_promoted_to_customer`.
 
 HubSpot email uniqueness is respected without turning email into identity. If an EasyStore email is already owned by a different HubSpot Contact, the phone-identified Contact is still synchronized but that conflicting email value is omitted and logged.
+
+## Cloudflare source attribution
+
+`scripts/cloudflare_hubspot_attribution.py` runs after the Contact stage and
+answers the one question the storefront's own data cannot: **which channel
+produced this customer.**
+
+It is the only stage that reads a system other than EasyStore and HubSpot, and the
+only one whose credentials are optional. Given no `CLOUDFLARE_ACCOUNT_ID` and
+`CLOUDFLARE_API_TOKEN`, the workflow logs a notice and skips it; nothing else in
+the run depends on it.
+
+The chain it completes is documented in full in
+[docs/SOURCE_ATTRIBUTION.md](SOURCE_ATTRIBUTION.md), including the one manual
+EasyStore setup step and the limits of the claim. In brief: the `cc-attribution`
+Cloudflare Worker mints an opaque `click_id` per tracked `/go/*` entry and records
+the channel in D1; the storefront carries that id into an EasyStore customer
+attribute at sign-up; the Contact stage above already copies customer attributes
+to HubSpot, so the id arrives as `easystore_attr_click_id`; this stage resolves it
+against D1 and writes the channel onto the contact.
+
+Values land in a **Cloudflare Attribution** property group, deliberately separate
+from `easystore_sync` so a CRM user can tell which system reported a fact:
+`cc_acquisition_click_id`, `_source`, `_medium`, `_campaign`, `_entry_path`,
+`_country`, `_at` and `_automated`. HubSpot's own `hs_analytics_source` family is
+never written: those belong to HubSpot's tracking code and are enumerated against
+HubSpot's channel list.
+
+Four refusals define the stage:
+
+- **An acquisition is written once.** A contact already carrying a different
+  click id is reported as `contacts_with_conflicting_click_id` and left alone.
+- **A click id with no D1 row writes nothing** (`click_ids_not_found_in_d1`).
+- **A value that is not a Worker-minted UUID never reaches a query.** The
+  attribute is filled by a script in a browser, so it is untrusted input and is
+  counted as `contacts_with_unusable_click_id`.
+- **Nothing to join provisions nothing.** With no click ids in the portal the
+  stage creates no HubSpot properties and makes no Cloudflare call, which is the
+  expected state until the EasyStore attribute exists.
+
+`attributed_by_source` and `attributed_by_campaign` in the run summary are the
+reporting output; `contacts_already_attributed` is the normal headline number of a
+healthy scheduled run.
 
 ## Orders and product-backed line items
 
@@ -606,7 +652,7 @@ Before merging/enabling the scheduled sync:
 1. Configure `EASYSTORE_ACCESS_TOKEN` and `HUBSPOT_ACCESS_TOKEN` with exactly the scopes above.
 2. Confirm `CUSTOMER_SYNC_DEFAULT_DIAL_CODE` if the store's default is not Singapore.
 3. Reconcile any known duplicate customer mobile numbers in EasyStore or HubSpot; otherwise preflight will intentionally fail.
-4. Prefer a manual run first and review all six Actions summary sections: Preflight, Products, Customers, Orders and Line Items, Reconciliation, Abandoned checkouts.
+4. Prefer a manual run first and review all seven Actions summary sections: Preflight, Products, Customers, Cloudflare source attribution, Orders and Line Items, Reconciliation, Abandoned checkouts.
 5. Spot-check several HubSpot Contacts, Products, Orders, and associated Line Items against EasyStore, including a multi-variant product and an order with more than one line.
 6. Read the three coverage blocks in the run summary (`easystore_order_field_coverage`, `easystore_customer_field_coverage`, `easystore_catalogue_field_coverage`). Any field sitting at zero is one EasyStore does not report under the names the sync knows; add the real name to that field's `sources` and the value starts landing on the next run.
 7. For a full sandbox rehearsal before production, EasyStore supports development stores populated with Products, Variants, Customers, and Orders.
