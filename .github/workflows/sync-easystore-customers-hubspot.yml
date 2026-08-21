@@ -4,8 +4,6 @@ on:
   pull_request:
     branches:
       - main
-    # CRM sync sources only. Theme changes are gated by the theme packaging and
-    # browser E2E workflows instead, so neither side spends CI on the other.
     paths:
       - ".github/workflows/sync-easystore-customers-hubspot.yml"
       - "scripts/easystore_hubspot_*.py"
@@ -30,7 +28,6 @@ env:
 
 jobs:
   validate:
-    # Credential-free gate that must pass on the same PR head as browser E2E.
     name: Validate CRM sync
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -53,8 +50,7 @@ jobs:
           python -m py_compile scripts/easystore_hubspot_orders.py
           python -m py_compile scripts/easystore_hubspot_carts.py
           python -m py_compile scripts/easystore_hubspot_commerce.py
-          python -m py_compile scripts/easystore_hubspot_commerce_safe.py
-          python -m py_compile scripts/easystore_hubspot_abandoned_checkouts.py
+          python -m py_compile scripts/easystore_hubspot_checkouts.py
           python -m py_compile scripts/easystore_hubspot_preflight.py
           python -m py_compile scripts/easystore_hubspot_reconcile.py
 
@@ -62,7 +58,7 @@ jobs:
         run: python -m unittest discover -s crm_tests -v
 
   sync:
-    name: Upsert EasyStore products, customers and orders
+    name: Upsert EasyStore CRM data
     if: github.event_name != 'pull_request'
     needs: validate
     runs-on: ubuntu-latest
@@ -85,7 +81,7 @@ jobs:
         run: |
           set -euo pipefail
           if [[ -z "${EASYSTORE_ACCESS_TOKEN}" ]]; then
-            echo "::error::EASYSTORE_ACCESS_TOKEN is required with EasyStore read_products, read_customers and read_orders scopes."
+            echo "::error::EASYSTORE_ACCESS_TOKEN is required."
             exit 1
           fi
           if [[ -z "${HUBSPOT_ACCESS_TOKEN}" ]]; then
@@ -138,18 +134,17 @@ jobs:
           set -euo pipefail
           python scripts/easystore_hubspot_reconcile.py | tee reconcile-summary.json
 
-      # EasyStore's Admin calls these Abandoned checkouts. The Public API source
-      # is /api/3.0/checkouts.json; Order data is never used to manufacture Carts.
-      # The reader limits the source to the 90-day recovery window and retries
-      # collection reads with progressively smaller pages before failing visibly.
-      - name: Sync EasyStore abandoned checkouts and cart line items
+      # EasyStore Checkout is the sole Cart data source. The collection request
+      # intentionally sends only page + limit because EasyStore's published
+      # Checkout parameter table contains obvious copied Product filters.
+      - name: Sync EasyStore checkouts to HubSpot carts and cart line items
         env:
           EASYSTORE_ACCESS_TOKEN: ${{ secrets.EASYSTORE_ACCESS_TOKEN }}
           HUBSPOT_ACCESS_TOKEN: ${{ secrets.HUBSPOT_ACCESS_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
-          python scripts/easystore_hubspot_abandoned_checkouts.py | tee cart-sync-summary.json
+          python scripts/easystore_hubspot_checkouts.py | tee cart-sync-summary.json
 
       - name: Publish run summary
         if: always()
@@ -161,14 +156,12 @@ jobs:
             echo "- Schedule: 00:00, 06:00, 12:00, 18:00 Asia/Singapore"
             echo "- Products: one HubSpot Product per EasyStore variant, keyed by SKU"
             echo "- Customers: keyed by normalized mobile number; ambiguous ownership fails before writes"
-            echo "- Customer notes: Customer.note + Customer.note2 only; direct Customer API fields win, with nested Customer object as fallback when omitted"
-            echo "- Order notes: Order.note / Order.remark remain Order-only and never populate Contact notes"
-            echo "- Contacts without a recorded mobile number are filtered out of the CRM"
-            echo "- Lifecycle: an account makes a lead, an order makes a customer; stages never move backwards"
-            echo "- Orders: keyed by immutable EasyStore order ID, with order-specific commerce fields and notes"
-            echo "- Order lines: product-backed HubSpot Line Items, with stale synced lines reconciled"
-            echo "- Carts: sourced only from EasyStore Checkouts (/api/3.0/checkouts.json), limited to recent incomplete/unpaid checkout records and keyed by cart_token"
-            echo "- Cart source safety: Orders never backfill Cart properties or Cart Line Items; an unreadable Checkout source fails the Cart stage instead of reporting a green empty sync"
+            echo "- Customer notes: Customer.note + Customer.note2 only; Order notes remain separate"
+            echo "- Orders: keyed by immutable EasyStore order ID with product-backed Line Items"
+            echo "- Carts: every EasyStore Checkout session is synchronized to a HubSpot Cart using checkout.cart_token"
+            echo "- Abandoned carts: unpaid/open Checkouts are the abandoned subset; paid/completed Checkouts remain Carts with their source status and can associate to Orders"
+            echo "- Checkout list request: /api/3.0/checkouts.json with page + limit only; no sort/date/Product-style filters"
+            echo "- Cart lines: real Checkout line_items become separate product-backed HubSpot Cart Line Items"
             echo "- Store: \`${EASYSTORE_STORE_DOMAIN}\`"
             echo
             for entry in \
@@ -177,7 +170,7 @@ jobs:
               "Customers|customer-sync-summary.json" \
               "Orders and line items|order-sync-summary.json" \
               "Reconciliation|reconcile-summary.json" \
-              "Abandoned checkouts and cart lines|cart-sync-summary.json"; do
+              "Carts / abandoned carts and cart lines|cart-sync-summary.json"; do
               title="${entry%%|*}"
               file="${entry#*|}"
               echo "#### ${title}"
