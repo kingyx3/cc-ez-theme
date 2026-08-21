@@ -39,7 +39,6 @@ export default {
     );
     const clickedAt = Date.now();
     const country = String(request.cf?.country || "");
-    const referrer = request.headers.get("Referer") || "";
 
     if (request.method === "GET") {
       if (env.ANALYTICS) {
@@ -65,7 +64,6 @@ export default {
             campaign,
             path: url.pathname,
             country,
-            referrer,
             clickedAt,
           }).catch((error) => {
             console.error(
@@ -118,9 +116,8 @@ async function recordClick(db, click) {
         campaign,
         path,
         country,
-        referrer,
         clicked_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(click_id) DO NOTHING`,
     )
     .bind(
@@ -130,7 +127,6 @@ async function recordClick(db, click) {
       click.campaign,
       click.path,
       click.country,
-      click.referrer,
       click.clickedAt,
     )
     .run();
