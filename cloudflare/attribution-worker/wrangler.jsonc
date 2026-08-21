@@ -1,0 +1,35 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "cc-attribution",
+  "main": "src/index.js",
+  "compatibility_date": "2026-08-21",
+  "workers_dev": true,
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "routes": [
+    {
+      "pattern": "cardboard.sg/go/*",
+      "zone_name": "cardboard.sg"
+    }
+  ],
+  "vars": {
+    "STORE_URL": "https://cardboard.sg/",
+    "DEFAULT_CAMPAIGN": "always-on"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "cc-attribution",
+      "database_id": "f7377a40-379a-4713-9126-e05636162c84",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "analytics_engine_datasets": [
+    {
+      "binding": "ANALYTICS",
+      "dataset": "cc_source_clicks"
+    }
+  ]
+}
