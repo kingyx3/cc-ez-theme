@@ -9,7 +9,7 @@
 {% assign collection = collections[collection_id] %}
 {% assign products_to_show = section.settings.products_to_show %}
 
-{% if section.__key == '1787270400000' or section.__key == '1684403242688' or section.__key == '1684412368816' or section.__key == '1684412368817' %}
+{% if section.__key != '1667498127486' %}
   {% assign products_to_show = 3 %}
 {% endif %}
 
@@ -205,7 +205,7 @@
         "label": {
           "en_US": "Collection",
           "ja_JP": "コレクション",
-          "ko_KR": "컬렉션",
+          "ko_KR": "コレクション",
           "ms_MY": "Koleksi",
           "th_TH": "คอลเลกชัน",
           "zh_CN": "分类",
@@ -240,7 +240,7 @@
           "en_US": "Products display",
           "ja_JP": "行あたりのコレクション数",
           "ko_KR": "열 별 컬렉션",
-          "ms_MY": "Koleksi setiap baris",
+          "ms_MY": "Koleksi",
           "th_TH": "คอลเลกชันต่อแถว",
           "zh_CN": "商品展示总数",
           "zh_TW": "商品展示總數"
