@@ -11,6 +11,7 @@ on:
       - "scripts/easystore_hubspot_*.py"
       - "crm_tests/**"
       - "docs/CUSTOMER_CRM_SYNC.md"
+      - "docs/EASYSTORE_CHECKOUT_CART_SYNC.md"
   schedule:
     - cron: "0 */6 * * *"
       timezone: "Asia/Singapore"
@@ -52,6 +53,7 @@ jobs:
           python -m py_compile scripts/easystore_hubspot_orders.py
           python -m py_compile scripts/easystore_hubspot_carts.py
           python -m py_compile scripts/easystore_hubspot_commerce.py
+          python -m py_compile scripts/easystore_hubspot_commerce_safe.py
           python -m py_compile scripts/easystore_hubspot_preflight.py
           python -m py_compile scripts/easystore_hubspot_reconcile.py
 
@@ -136,8 +138,9 @@ jobs:
           python scripts/easystore_hubspot_reconcile.py | tee reconcile-summary.json
 
       # Runs after Orders because order.cart_token is the authoritative bridge
-      # from an EasyStore cart to the HubSpot Order created above. Customer notes
-      # are deliberately not handled here; they belong to the Customer stage.
+      # from an EasyStore cart to the HubSpot Order created above. Checkout reads
+      # are an optional capability: if EasyStore's documented endpoint hangs or
+      # is unavailable, Cart writes are skipped without failing the CRM run.
       - name: Sync EasyStore carts and cart line items
         env:
           EASYSTORE_ACCESS_TOKEN: ${{ secrets.EASYSTORE_ACCESS_TOKEN }}
@@ -145,7 +148,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python scripts/easystore_hubspot_commerce.py | tee cart-sync-summary.json
+          python scripts/easystore_hubspot_commerce_safe.py | tee cart-sync-summary.json
 
       - name: Publish run summary
         if: always()
@@ -163,7 +166,8 @@ jobs:
             echo "- Lifecycle: an account makes a lead, an order makes a customer; stages never move backwards"
             echo "- Orders: keyed by immutable EasyStore order ID, with order-specific commerce fields and notes"
             echo "- Order lines: product-backed HubSpot Line Items, with stale synced lines reconciled"
-            echo "- Carts: keyed by EasyStore cart_token, with product-backed Line Items and Cart→Order links via order.cart_token"
+            echo "- Carts: EasyStore Checkouts (/api/3.0/checkouts.json) → HubSpot Carts (/crm/v3/objects/carts), keyed by cart_token"
+            echo "- Cart outage mode: Cart/Line Item upserts pause on incomplete checkout snapshots; existing Cart→Order links still refresh from order.cart_token"
             echo "- Store: \`${EASYSTORE_STORE_DOMAIN}\`"
             echo
             for entry in \
