@@ -39,41 +39,16 @@ Analytics Engine uses the same meanings:
 
 The Analytics Engine dataset is named `cc_source_clicks` and is created automatically on its first successful write.
 
-## Before the first deployment
+## Cloudflare resources
 
-### 1. Add the real D1 database ID
+`wrangler.jsonc` binds:
 
-`wrangler.jsonc` intentionally contains:
+- `DB` → D1 database `cc-attribution`
+- `ANALYTICS` → Analytics Engine dataset `cc_source_clicks`
 
-```text
-REPLACE_WITH_D1_DATABASE_ID
-```
+The production D1 database UUID is committed in `wrangler.jsonc`. It is a resource identifier, not a credential. Cloudflare API credentials must never be committed.
 
-Open the existing `cc-attribution` D1 database in Cloudflare and copy its database UUID, then replace that value. Do not connect Cloudflare Builds until this placeholder is replaced.
-
-### 2. Install dependencies
-
-From this directory:
-
-```bash
-npm install
-```
-
-### 3. Apply the D1 migration
-
-```bash
-npm run d1:migrate:remote
-```
-
-This creates `source_clicks` and its indexes.
-
-### 4. Deploy
-
-```bash
-npm run deploy
-```
-
-The Wrangler config owns the route:
+The Wrangler config also owns the route:
 
 ```text
 cardboard.sg/go/*
@@ -81,20 +56,52 @@ cardboard.sg/go/*
 
 The `cardboard.sg` DNS record must be proxied through Cloudflare for a Worker Route to execute.
 
-## Connect the existing Worker to GitHub
+## GitHub Actions deployment
 
-In Cloudflare:
+`.github/workflows/deploy-cloudflare-attribution-worker.yml` deploys this Worker automatically when relevant files are pushed to `main`. A merged pull request that changes `cloudflare/attribution-worker/**` therefore triggers a production deployment. The workflow can also be run manually with `workflow_dispatch`.
 
-1. Workers & Pages → `cc-attribution`.
-2. Settings → Builds → Connect.
-3. Choose GitHub and repository `kingyx3/cc-ez-theme`.
-4. Production branch: `main`.
-5. Root directory: `cloudflare/attribution-worker`.
-6. Deploy command: `npx wrangler deploy` (the Cloudflare default is fine).
+The deployment job:
 
-The Worker name in Cloudflare must exactly match `name` in `wrangler.jsonc` (`cc-attribution`). If the manually created dashboard Worker has a different name, change the config before connecting Builds.
+1. installs the pinned Wrangler dependency;
+2. validates the Worker JavaScript;
+3. performs a Wrangler dry run;
+4. applies pending remote D1 migrations;
+5. deploys the `cc-attribution` Worker and its route/bindings.
 
-After GitHub is connected, treat `wrangler.jsonc` and `src/index.js` as the source of truth rather than editing the Worker in the dashboard.
+Do not also enable Cloudflare Builds Git deployment for this Worker unless you intentionally want two independent deployment systems. GitHub Actions is the deployment source of truth for this repository.
+
+### Required repository secrets
+
+Add these under GitHub → repository **Settings → Secrets and variables → Actions → Repository secrets**:
+
+- `CLOUDFLARE_ACCOUNT_ID` — the Cloudflare account that owns `cardboard.sg`, the Worker, and the D1 database.
+- `CLOUDFLARE_API_TOKEN` — a scoped Cloudflare API token used only by CI.
+
+The token needs enough access to:
+
+- deploy/edit the Worker script;
+- create/update the Worker route for `cardboard.sg`;
+- apply D1 migrations to `cc-attribution`.
+
+Scope the token to the single Cloudflare account and the `cardboard.sg` zone where possible. D1 migrations write to the database, so the token needs D1 edit/write access in addition to Worker deployment permissions.
+
+## Local commands
+
+From this directory:
+
+```bash
+npm install
+npm run check
+npm run d1:migrate:local
+npm run dev
+```
+
+To intentionally operate against production Cloudflare resources, authenticate Wrangler first and then use:
+
+```bash
+npm run d1:migrate:remote
+npm run deploy
+```
 
 ## Analytics Engine enablement issue
 
