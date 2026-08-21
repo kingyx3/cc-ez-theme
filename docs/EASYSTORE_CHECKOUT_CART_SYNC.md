@@ -31,6 +31,8 @@ HubSpot's Cart object represents a shopping session whose items can later be pur
 - `financial_status=unpaid` (or another still-open source state) is the abandoned / open Cart subset.
 - paid or completed Checkouts still remain HubSpot Carts with their source status and may be associated with the resulting HubSpot Order.
 
+Because EasyStore's own word for that state differs per store, the abandoned subset is also written to the Cart as a plain flag a HubSpot list or report can filter on: `easystore_cart_is_abandoned` is `true` while a Checkout is unpaid and unconverted, and `false` once it has been paid, completed, or turned into an order. A Checkout carrying an order reference, a `completed_at`, or a settled status in `financial_status`, `payment_status`, `status`, `state` or `checkout_status` is not abandoned. That single predicate lives in `scripts/easystore_hubspot_carts.py` and is what both the counters and the Cart property use.
+
 This avoids an empty HubSpot Cart object when the store currently has only converted / paid Checkouts.
 
 ## EasyStore list request
@@ -40,7 +42,7 @@ The published EasyStore documentation names the correct Checkout endpoint, but i
 Because those parameters are not trustworthy as Checkout-specific contract, production intentionally sends only the two generic pagination parameters that are unambiguous:
 
 ```text
-GET /api/3.0/checkouts.json?page=1&limit=1
+GET /api/3.0/checkouts.json?page=1&limit=50
 EasyStore-Access-Token: <token>
 ```
 
@@ -55,13 +57,33 @@ The sync does **not** send:
 - `visibility`
 - or any other Product-style filter copied into the Checkout documentation block.
 
-The page size is deliberately `1` for the production store because previous Checkout collection requests timed out with larger or filtered requests. If this exact minimal request still times out, the workflow fails and reports that fact; it does not switch to Orders, Admin APIs, guessed routes, or a green empty Cart sync.
+Each request is retried once with backoff, so two attempts of 30s each, and the page size falls back from EasyStore's documented maximum of `50` to the smallest possible request of `1`, because this production store has served read timeouts on this endpoint. A page size that never answers is recorded and the next one starts again from page 1, so a snapshot is never stitched together from two of them.
+
+Only a transport-level failure moves on: a timeout, a refused connection, a 429 or a 5xx that survived its retries. An HTTP 4xx is a request or credential problem — most likely a token without checkout scope — and fails the step immediately rather than being retried in a different shape or hidden behind a green run.
+
+The sync never switches to Orders, Admin APIs, or guessed route names to fill Carts.
+
+## When EasyStore cannot serve Checkouts
+
+An unreachable Checkout endpoint is an outage in one upstream endpoint, not a broken CRM sync. Products, Customers, Orders and reconciliation have already been written by the time the Cart stage runs, and failing the step over the outage leaves a red run that says nothing about the data that did land, while hiding the next real failure.
+
+So on an outage the Cart stage:
+
+- skips every Cart and Cart Line Item write, leaving existing HubSpot Carts exactly as they are;
+- still refreshes Cart→Order links from `order.cart_token`, which needs no Checkout read;
+- annotates the run with `::warning title=EasyStore Checkout API unavailable::` naming every request that was tried;
+- reports `easystore_checkout_status: unavailable` with `easystore_checkout_error` in `cart-sync-summary.json`;
+- exits successfully.
+
+Set `EASYSTORE_CHECKOUTS_REQUIRED=1` (or pass `--require-checkouts`) to make that outage fail the step instead. Do that once the endpoint is known to be reliable.
+
+Everything else still fails loudly: an unrecognized response shape, a detail response without `line_items`, a duplicate Cart identity, a bad product reference, and every HubSpot write error.
 
 ## Pagination and snapshot safety
 
 The reader:
 
-1. requests page 1 with `limit=1`;
+1. requests page 1 with the first page size that answers;
 2. continues page-by-page using only `page` + `limit`;
 3. rejects repeated pages so an API that ignores `page` cannot loop forever;
 4. buffers the complete collection before any HubSpot Cart mutation;
@@ -96,13 +118,17 @@ The existing SKU mapper also supports EasyStore lines without a literal SKU when
 - `easystore_checkout_collection_endpoint`
 - `easystore_checkout_detail_endpoint_template`
 - `easystore_checkout_collection_query`
-- `easystore_checkout_page_size`
+- `easystore_checkout_status` (`available` or `unavailable`)
+- `easystore_checkout_error` and `easystore_checkout_collection_attempts`
+- `easystore_checkout_page_sizes_tried_in_order` and `easystore_checkout_page_size_used`
 - `easystore_checkout_product_style_filters_sent`
 - `easystore_checkout_pages_read`
 - `easystore_checkout_details_fetched`
 - `easystore_checkouts_buffered`
 - `easystore_checkouts_abandoned_or_open`
 - `easystore_checkouts_completed_or_paid`
+- `hubspot_cart_abandoned_property`
+- `hubspot_cart_upserts_skipped` and `hubspot_cart_line_item_sync_skipped`
 - `hubspot_carts_created`
 - `hubspot_carts_updated`
 - `hubspot_cart_line_items_created`
