@@ -99,6 +99,8 @@ The reader:
 
 `easystore_checkout_pagination_outcome` records which of the three ended pagination.
 
+An answer **longer** than the limit it asked for also proves the collection: `limit` is not acting as a cap, so EasyStore served everything it has. That is what this store does — `limit=50` returns 50, `limit=250` returns all 1246, and `limit=1000` is refused outright with an HTTP 400. Pagination therefore ends on an over-answer without asking again, and a refused escalation after one does not unsay it.
+
 Two answers are ambiguous rather than complete, and are reported as such instead of being claimed:
 
 - a larger limit returning **exactly** the count a smaller saturated limit returned — the store may hold that many Checkouts, or the endpoint may be capping `limit`;
@@ -107,6 +109,14 @@ Two answers are ambiguous rather than complete, and are reported as such instead
 Either way the Checkouts that did arrive are still synchronized, `easystore_checkout_snapshot_proven_complete` is `false`, `easystore_checkout_snapshot_completeness` says why, and the run is annotated with `::warning title=EasyStore Checkout snapshot not proven complete::`. A rejected escalation (for instance an HTTP 400 on an over-large `limit`) is recorded the same way and does not fail the step — it only leaves completeness unproven.
 
 Syncing a short snapshot is safe because the Cart writer only touches the Carts in front of it: it reconciles Line Items **within** each Cart it upserts and never deletes a Cart missing from the snapshot. A short snapshot therefore syncs fewer Carts rather than damaging the ones already in HubSpot, and refusing it would mean syncing no Carts at all for as long as `page` is ignored.
+
+## Checkout lines whose product is gone
+
+Open and abandoned Checkouts reach back over the whole catalogue's history, so some name variants that have since been deleted or unpublished and can no longer have a HubSpot Product. The Order stage still fails on an unmatched line — an Order's revenue must be product-backed to be worth anything — but the Cart stage skips the line and keeps the Cart. Losing every Cart over one retired variant is a far bigger loss than losing that line, and a Cart with no lines at all still carries its value, its shopper and its recovery URL.
+
+Those lines are reported, not silently dropped: `cart_lines_without_a_hubspot_product`, `carts_with_lines_without_a_hubspot_product`, and up to 25 distinct SKUs in `cart_line_skus_without_a_hubspot_product`. A SKU appearing there for a product that *should* be live means the Product stage missed it.
+
+For a Cart with a skipped line, stale Cart Line Item removal is turned off. Once a line is missing from the desired set for that reason, "gone from the Checkout" and "product retired from the catalogue" look identical, and deleting on that guess would throw away a Cart line the shopper really had.
 
 ## HubSpot mapping
 
@@ -152,6 +162,7 @@ The existing SKU mapper also supports EasyStore lines without a literal SKU when
 - `hubspot_cart_line_items_updated`
 - `cart_contact_associations_ensured`
 - `cart_order_associations_ensured`
+- `cart_lines_without_a_hubspot_product`, `carts_with_lines_without_a_hubspot_product` and `cart_line_skus_without_a_hubspot_product`
 - `cart_source_is_orders`
 
 The expected production values include `easystore_checkout_source: public_api_checkouts`, `easystore_checkout_collection_query: page,limit only`, and `cart_source_is_orders: false`.

@@ -1372,7 +1372,25 @@ def desired_lines(
     order: dict[str, Any],
     product_by_sku: dict[str, str],
     field_properties: dict[str, str] | None = None,
+    *,
+    record: str = "order",
+    unmatched_lines: list[str] | None = None,
 ) -> dict[str, dict[str, str]]:
+    """Return product-backed Line Item properties for one record's lines.
+
+    A line whose product is not in HubSpot fails the stage by default, because an
+    Order's revenue must be product-backed to be worth anything.
+
+    Pass ``unmatched_lines`` to collect those lines instead: the SKU is appended
+    and the line is skipped. That is what the Cart stage needs. A store's open and
+    abandoned Checkouts reach back over the whole catalogue's history, so some
+    reference variants that have since been deleted or unpublished and can no
+    longer have a HubSpot Product. Losing every Cart over one retired variant
+    would be a far bigger loss than losing that line.
+
+    ``record`` only names the record type in error text.
+    """
+
     lines = order.get("line_items")
     if not isinstance(lines, list):
         lines = []
@@ -1385,15 +1403,21 @@ def desired_lines(
 
         sku = _line_sku(line)
         if sku is None:
+            if unmatched_lines is not None:
+                unmatched_lines.append("<no SKU or product/variant IDs>")
+                continue
             raise SyncError(
-                f"EasyStore order {order.get('id')} contains a line item without "
+                f"EasyStore {record} {order.get('id')} contains a line item without "
                 "SKU or product/variant IDs, so it cannot be product-backed."
             )
 
         product_id = product_by_sku.get(sku.casefold())
         if product_id is None:
+            if unmatched_lines is not None:
+                unmatched_lines.append(sku)
+                continue
             raise SyncError(
-                f"EasyStore order {order.get('id')} line SKU {sku!r} has no matching "
+                f"EasyStore {record} {order.get('id')} line SKU {sku!r} has no matching "
                 "HubSpot Product. Product sync must complete successfully first."
             )
 
@@ -1407,7 +1431,7 @@ def desired_lines(
             existing = grouped[key]
             if price is not None and existing.get("price") not in (None, price):
                 raise SyncError(
-                    f"EasyStore order {order.get('id')} repeats SKU {sku!r} with "
+                    f"EasyStore {record} {order.get('id')} repeats SKU {sku!r} with "
                     "different unit prices; refusing to merge ambiguous lines."
                 )
             existing["quantity"] = str(int(existing["quantity"]) + quantity)

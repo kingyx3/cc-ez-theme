@@ -336,8 +336,16 @@ def sync_cart_line_items(
     access_token: str,
     cart_id: str,
     desired: dict[str, dict[str, str]],
+    remove_stale: bool = True,
 ) -> tuple[int, int, int]:
-    """Upsert and reconcile product-backed Line Items for one HubSpot Cart."""
+    """Upsert and reconcile product-backed Line Items for one HubSpot Cart.
+
+    ``remove_stale`` is turned off for a Cart whose source Checkout had a line
+    this sync could not map to a HubSpot Product. Once a line is missing from
+    ``desired`` for that reason, "gone from the Checkout" and "product retired
+    from the catalogue" look identical, and deleting on that guess would throw
+    away a Cart line the shopper really had.
+    """
 
     existing = existing_cart_line_items(access_token, cart_id)
     headers = {"Authorization": f"Bearer {access_token}"}
@@ -417,7 +425,8 @@ def sync_cart_line_items(
         )
         updated += 1
 
-    for key, current in existing.items():
+    stale_candidates = existing.items() if remove_stale else ()
+    for key, current in stale_candidates:
         if key in desired:
             continue
         line_id = nonempty(current.get("id"))
@@ -556,9 +565,11 @@ def sync(
     product_by_sku = hubspot_product_index(hubspot_access_token)
     contacts = hubspot_contact_index(hubspot_access_token, fallback_dial_code)
 
-    validated: list[tuple[dict[str, Any], str, dict[str, dict[str, str]]]] = []
+    validated: list[tuple[dict[str, Any], str, dict[str, dict[str, str]], bool]] = []
     scanned = completed = without_cart_token = 0
     abandoned_carts = converted_carts = 0
+    carts_with_unmatched_lines = unmatched_line_count = 0
+    unmatched_skus: set[str] = set()
     checkout_keys: set[str] = set()
     line_keys: set[str] = set()
     field_coverage = {field.key: 0 for field in cart_mapping.CART_FIELDS}
@@ -593,12 +604,19 @@ def sync(
             if key in field_coverage:
                 field_coverage[key] += 1
 
+        unmatched: list[str] = []
         desired = desired_lines(
             checkout,
             product_by_sku,
             line_item_field_properties,
+            record="checkout",
+            unmatched_lines=unmatched,
         )
-        validated.append((checkout, cart_token, desired))
+        if unmatched:
+            carts_with_unmatched_lines += 1
+            unmatched_line_count += len(unmatched)
+            unmatched_skus.update(unmatched)
+        validated.append((checkout, cart_token, desired, bool(unmatched)))
 
     existing = hubspot_cart_index(hubspot_access_token)
     hubspot_orders = hubspot_order_index(hubspot_access_token)
@@ -606,7 +624,7 @@ def sync(
     contact_links = ambiguous_mobile = 0
     line_created = line_updated = line_removed = 0
 
-    for checkout, cart_token, desired in validated:
+    for checkout, cart_token, desired, had_unmatched in validated:
         existing_id = existing.get(cart_token)
         if existing_id is None:
             existing_id = _legacy_cart_owner(checkout, existing)
@@ -634,6 +652,7 @@ def sync(
             access_token=hubspot_access_token,
             cart_id=cart_id,
             desired=desired,
+            remove_stale=not had_unmatched,
         )
         line_created += c
         line_updated += u
@@ -685,6 +704,9 @@ def sync(
         "cart_contact_associations_ensured": contact_links,
         "cart_order_associations_ensured": order_links,
         "carts_with_ambiguous_contact_mobile": ambiguous_mobile,
+        "cart_lines_without_a_hubspot_product": unmatched_line_count,
+        "carts_with_lines_without_a_hubspot_product": carts_with_unmatched_lines,
+        "cart_line_skus_without_a_hubspot_product": sorted(unmatched_skus)[:25],
         "hubspot_cart_schema_object_type": schema_object_type,
         "hubspot_cart_abandoned_property": cart_field_properties.get("is_abandoned"),
         "hubspot_cart_field_properties": dict(sorted(cart_field_properties.items())),

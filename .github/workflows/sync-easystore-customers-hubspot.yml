@@ -62,7 +62,10 @@ jobs:
     if: github.event_name != 'pull_request'
     needs: validate
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # This store's Checkout collection is 1246 sessions, so the Cart stage writes
+    # thousands of HubSpot requests on a first full run. The concurrency group
+    # above already stops two of these overlapping.
+    timeout-minutes: 90
 
     steps:
       - name: Check out repository
@@ -169,6 +172,7 @@ jobs:
             echo "- Checkout pagination: page 2 is unusable (repeats page 1, or hangs), so a larger limit on page 1 proves the snapshot; the page that answered is kept either way, and a snapshot EasyStore will not prove complete is still synchronized and annotated"
             echo "- Checkout outage: Cart and Cart Line Item writes pause and the run is annotated; existing Cart→Order links still refresh from order.cart_token"
             echo "- Cart lines: real Checkout line_items become separate product-backed HubSpot Cart Line Items"
+            echo "- Retired variants: a Checkout line with no HubSpot Product is skipped and counted, keeping the Cart; the Order stage still fails on one"
             echo "- Store: \`${EASYSTORE_STORE_DOMAIN}\`"
             echo
             for entry in \
