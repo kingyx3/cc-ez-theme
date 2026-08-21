@@ -74,26 +74,30 @@ So on an outage the Cart stage:
 - skips every Cart and Cart Line Item write, leaving existing HubSpot Carts exactly as they are;
 - still refreshes Cart→Order links from `order.cart_token`, which needs no Checkout read;
 - annotates the run with `::warning title=EasyStore Checkout API unavailable::` naming every request that was tried;
-- reports `easystore_checkout_status: unavailable` with `easystore_checkout_error` in `cart-sync-summary.json`;
+- reports `easystore_checkout_status: unavailable` in `cart-sync-summary.json`, with `easystore_checkout_error` and one `easystore_checkout_collection_attempts` line per request tried — the list matters because a single joined message truncates exactly where the useful part is, namely which page and limit failed;
 - exits successfully.
 
 Set `EASYSTORE_CHECKOUTS_REQUIRED=1` (or pass `--require-checkouts`) to make that outage fail the step instead. Do that once the endpoint is known to be reliable.
 
 Everything else still fails loudly: an unrecognized response shape, a detail response without `line_items`, a duplicate Cart identity, a bad product reference, and every HubSpot write error.
 
-## Pagination: this endpoint ignores `page`
+## Pagination: page 2 of this endpoint is not usable
 
-Once the endpoint started answering, it turned out to serve page 2 identical to page 1 — `page` does nothing. Paging therefore cannot prove a full snapshot, so `limit` does it instead: **an answer shorter than the limit it asked for is the whole collection.**
+Once the endpoint started answering, page 2 turned out to be worthless in two different ways: it has come back identical to page 1, and it has hung until it timed out. Paging therefore cannot prove a full snapshot, so `limit` does it instead: **an answer shorter than the limit it asked for is the whole collection**, and the proof only ever asks page 1.
+
+Neither bad page 2 discards the page that did arrive. A repeated page proves nothing new, and one unanswered page does not unsay the records already in hand — throwing them away means syncing no Carts at all. Only **page 1** failing means there is nothing to sync, and that is the outage path below.
 
 The reader:
 
 1. requests page 1 with the first page size that answers;
-2. continues page-by-page using only `page` + `limit`, stopping either on a short page or on a page whose records repeat one already seen;
-3. when `page` was ignored *and* the one page came back full, re-asks page 1 with a larger `limit` (250, then 1000) until an answer is shorter than its limit;
+2. continues page-by-page using only `page` + `limit`, stopping on a short page, on a page whose records repeat one already seen, or on a page that does not answer;
+3. when pagination stopped without the collection ending *and* the pages that arrived came back full, re-asks page 1 with a larger `limit` (250, then 1000) until an answer is shorter than its limit;
 4. buffers the collection before any HubSpot Cart mutation;
 5. fetches `GET /api/3.0/checkouts/:cart_token.json` when a list record omits `line_items`;
 6. rejects a detail response that still does not provide `line_items`;
 7. only then passes the Checkout snapshot to the Cart writer.
+
+`easystore_checkout_pagination_outcome` records which of the three ended pagination.
 
 Two answers are ambiguous rather than complete, and are reported as such instead of being claimed:
 
@@ -132,7 +136,7 @@ The existing SKU mapper also supports EasyStore lines without a literal SKU when
 - `easystore_checkout_status` (`available` or `unavailable`)
 - `easystore_checkout_error` and `easystore_checkout_collection_attempts`
 - `easystore_checkout_page_sizes_tried_in_order` and `easystore_checkout_page_size_used`
-- `easystore_checkout_page_parameter_honored`
+- `easystore_checkout_page_parameter_honored` and `easystore_checkout_pagination_outcome`
 - `easystore_checkout_snapshot_proven_complete` and `easystore_checkout_snapshot_completeness`
 - `easystore_checkout_product_style_filters_sent`
 - `easystore_checkout_pages_read`

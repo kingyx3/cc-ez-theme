@@ -227,6 +227,51 @@ class IgnoredPageParameterTests(unittest.TestCase):
         self.assertFalse(snapshot.complete)
         self.assertIn("saturated", snapshot.completeness)
 
+    def test_a_later_page_timing_out_keeps_the_page_that_answered(self) -> None:
+        # Production run 32483557524: page 1 served 50 checkouts, page 2 hung
+        # until it timed out, and discarding page 1 over it synced no carts.
+        calls: list[str] = []
+        first = checkouts.CHECKOUT_PAGE_SIZES[0]
+        bigger = checkouts.CHECKOUT_LIMIT_ESCALATION[0]
+
+        def fake_http(url, **kwargs):
+            calls.append(url)
+            if "page=2" in url:
+                raise SyncError("The read operation timed out") from TimeoutError()
+            if f"limit={bigger}" in url:
+                return _page(first + 12)
+            return _page(first)
+
+        with mock.patch.object(checkouts, "_http_json", fake_http):
+            snapshot = checkouts.read_checkout_snapshot("shop.example", "secret")
+
+        self.assertEqual(len(snapshot.records), first + 12)
+        self.assertTrue(snapshot.complete)
+        self.assertIn("page 2 did not answer", snapshot.pagination)
+        self.assertTrue(calls[-1].endswith(f"page=1&limit={bigger}"))
+
+    def test_page_one_timing_out_is_still_an_outage(self) -> None:
+        def fake_http(url, **kwargs):
+            raise SyncError("The read operation timed out") from TimeoutError()
+
+        with mock.patch.object(checkouts, "_http_json", fake_http):
+            with self.assertRaises(checkouts.CheckoutSourceUnavailable):
+                checkouts.read_checkout_snapshot("shop.example", "secret")
+
+    def test_a_later_page_timing_out_with_no_bigger_limit_keeps_page_one(self) -> None:
+        first = checkouts.CHECKOUT_PAGE_SIZES[0]
+
+        def fake_http(url, **kwargs):
+            if f"limit={first}" in url and "page=1" in url:
+                return _page(first)
+            raise SyncError("The read operation timed out") from TimeoutError()
+
+        with mock.patch.object(checkouts, "_http_json", fake_http):
+            snapshot = checkouts.read_checkout_snapshot("shop.example", "secret")
+
+        self.assertEqual(len(snapshot.records), first)
+        self.assertFalse(snapshot.complete)
+
     def test_one_short_page_with_page_ignored_is_complete(self) -> None:
         with mock.patch.object(checkouts, "_http_json", return_value=_page(3)):
             snapshot = checkouts.read_checkout_snapshot("shop.example", "secret")
