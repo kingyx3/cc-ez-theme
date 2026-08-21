@@ -166,7 +166,7 @@ jobs:
             echo "- Carts: every EasyStore Checkout session is synchronized to a HubSpot Cart using checkout.cart_token"
             echo "- Abandoned carts: unpaid/open Checkouts are the abandoned subset, flagged on the Cart; paid/completed Checkouts remain Carts with their source status and can associate to Orders"
             echo "- Checkout list request: /api/3.0/checkouts.json with page + limit only; no sort/date/Product-style filters, retried with backoff and falling back to limit=1"
-            echo "- Checkout pagination: the endpoint ignores page, so a larger limit proves the snapshot; a snapshot it will not prove complete is still synchronized and annotated"
+            echo "- Checkout pagination: page 2 is unusable (repeats page 1, or hangs), so a larger limit on page 1 proves the snapshot; the page that answered is kept either way, and a snapshot EasyStore will not prove complete is still synchronized and annotated"
             echo "- Checkout outage: Cart and Cart Line Item writes pause and the run is annotated; existing Cart→Order links still refresh from order.cart_token"
             echo "- Cart lines: real Checkout line_items become separate product-backed HubSpot Cart Line Items"
             echo "- Store: \`${EASYSTORE_STORE_DOMAIN}\`"
