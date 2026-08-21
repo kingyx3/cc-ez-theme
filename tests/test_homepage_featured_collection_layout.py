@@ -19,6 +19,7 @@ class HomepageFeaturedCollectionLayoutTests(unittest.TestCase):
             template,
         )
         for section_id in (
+            "1787270400000",
             "1684403242688",
             "1684412368816",
             "1684412368817",
