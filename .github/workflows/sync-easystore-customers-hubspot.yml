@@ -49,6 +49,7 @@ jobs:
           python -m py_compile scripts/easystore_hubspot_products.py
           python -m py_compile scripts/easystore_hubspot_sync.py
           python -m py_compile scripts/easystore_hubspot_orders.py
+          python -m py_compile scripts/easystore_hubspot_carts.py
           python -m py_compile scripts/easystore_hubspot_preflight.py
           python -m py_compile scripts/easystore_hubspot_reconcile.py
 
@@ -123,6 +124,15 @@ jobs:
           set -euo pipefail
           python scripts/easystore_hubspot_orders.py | tee order-sync-summary.json
 
+      - name: Pull EasyStore abandoned checkouts and upsert HubSpot carts
+        env:
+          EASYSTORE_ACCESS_TOKEN: ${{ secrets.EASYSTORE_ACCESS_TOKEN }}
+          HUBSPOT_ACCESS_TOKEN: ${{ secrets.HUBSPOT_ACCESS_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/easystore_hubspot_carts.py | tee cart-sync-summary.json
+
       - name: Reconcile removed EasyStore order lines
         env:
           EASYSTORE_ACCESS_TOKEN: ${{ secrets.EASYSTORE_ACCESS_TOKEN }}
@@ -146,6 +156,7 @@ jobs:
             echo "- Lifecycle: an account makes a lead, an order makes a customer; stages never move backwards"
             echo "- Orders: keyed by immutable EasyStore order ID, with created timestamp, payment/fulfilment status, total and discounts"
             echo "- Order lines: product-backed HubSpot Line Items, with stale synced lines reconciled"
+            echo "- Abandoned checkouts: HubSpot Carts keyed by EasyStore checkout ID; completed checkouts stay Orders only"
             echo "- Store: \`${EASYSTORE_STORE_DOMAIN}\`"
             echo
             for entry in \
@@ -153,6 +164,7 @@ jobs:
               "Products|product-sync-summary.json" \
               "Customers|customer-sync-summary.json" \
               "Orders and line items|order-sync-summary.json" \
+              "Abandoned checkouts|cart-sync-summary.json" \
               "Reconciliation|reconcile-summary.json"; do
               title="${entry%%|*}"
               file="${entry#*|}"
