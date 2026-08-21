@@ -18,15 +18,10 @@ class HomepageFeaturedCollectionLayoutTests(unittest.TestCase):
             "{% assign products_to_show = section.settings.products_to_show %}",
             template,
         )
-        for section_id in (
-            "1684403242688",
-            "1684412368816",
-            "1684412368817",
-        ):
-            with self.subTest(section_id=section_id):
-                self.assertIn(section_id, template)
-
-        self.assertNotIn("1667498127486", template)
+        self.assertIn(
+            "{% if section.__key != '1667498127486' %}",
+            template,
+        )
         self.assertIn("{% assign products_to_show = 3 %}", template)
         self.assertIn(
             "{% for product in collection.products limit: products_to_show %}",
