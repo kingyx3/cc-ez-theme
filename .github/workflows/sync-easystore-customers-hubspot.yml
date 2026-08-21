@@ -48,8 +48,10 @@ jobs:
           python -m py_compile scripts/easystore_hubspot_schema.py
           python -m py_compile scripts/easystore_hubspot_products.py
           python -m py_compile scripts/easystore_hubspot_sync.py
+          python -m py_compile scripts/easystore_hubspot_customer_sync.py
           python -m py_compile scripts/easystore_hubspot_orders.py
           python -m py_compile scripts/easystore_hubspot_carts.py
+          python -m py_compile scripts/easystore_hubspot_commerce.py
           python -m py_compile scripts/easystore_hubspot_preflight.py
           python -m py_compile scripts/easystore_hubspot_reconcile.py
 
@@ -84,7 +86,7 @@ jobs:
             exit 1
           fi
           if [[ -z "${HUBSPOT_ACCESS_TOKEN}" ]]; then
-            echo "::error::HUBSPOT_ACCESS_TOKEN is required with product/contact/order/line-item read+write scopes and crm.schemas.orders.read/write."
+            echo "::error::HUBSPOT_ACCESS_TOKEN is required with product/contact/order/cart/line-item read+write scopes and CRM schema read/write scopes."
             exit 1
           fi
 
@@ -113,7 +115,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python scripts/easystore_hubspot_sync.py | tee customer-sync-summary.json
+          python scripts/easystore_hubspot_customer_sync.py | tee customer-sync-summary.json
 
       - name: Pull EasyStore orders and upsert HubSpot orders and line items
         env:
@@ -133,17 +135,17 @@ jobs:
           set -euo pipefail
           python scripts/easystore_hubspot_reconcile.py | tee reconcile-summary.json
 
-      # Last on purpose: this is the only stage whose EasyStore route is
-      # undocumented, so a store that does not serve it cannot cost the run
-      # the stages above.
-      - name: Pull EasyStore abandoned checkouts and upsert HubSpot carts
+      # Runs after Orders because order.cart_token is the authoritative bridge
+      # from an EasyStore cart to the HubSpot Order created above. Customer notes
+      # are deliberately not handled here; they belong to the Customer stage.
+      - name: Sync EasyStore carts and cart line items
         env:
           EASYSTORE_ACCESS_TOKEN: ${{ secrets.EASYSTORE_ACCESS_TOKEN }}
           HUBSPOT_ACCESS_TOKEN: ${{ secrets.HUBSPOT_ACCESS_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
-          python scripts/easystore_hubspot_carts.py | tee cart-sync-summary.json
+          python scripts/easystore_hubspot_commerce.py | tee cart-sync-summary.json
 
       - name: Publish run summary
         if: always()
@@ -155,11 +157,13 @@ jobs:
             echo "- Schedule: 00:00, 06:00, 12:00, 18:00 Asia/Singapore"
             echo "- Products: one HubSpot Product per EasyStore variant, keyed by SKU"
             echo "- Customers: keyed by normalized mobile number; ambiguous ownership fails before writes"
+            echo "- Customer notes: Customer.note + Customer.note2 only; direct Customer API fields win, with nested Customer object as fallback when omitted"
+            echo "- Order notes: Order.note / Order.remark remain Order-only and never populate Contact notes"
             echo "- Contacts without a recorded mobile number are filtered out of the CRM"
             echo "- Lifecycle: an account makes a lead, an order makes a customer; stages never move backwards"
-            echo "- Orders: keyed by immutable EasyStore order ID, with created timestamp, payment/fulfilment status, total and discounts"
+            echo "- Orders: keyed by immutable EasyStore order ID, with order-specific commerce fields and notes"
             echo "- Order lines: product-backed HubSpot Line Items, with stale synced lines reconciled"
-            echo "- Abandoned checkouts: HubSpot Carts keyed by EasyStore checkout ID; completed checkouts stay Orders only"
+            echo "- Carts: keyed by EasyStore cart_token, with product-backed Line Items and Cart→Order links via order.cart_token"
             echo "- Store: \`${EASYSTORE_STORE_DOMAIN}\`"
             echo
             for entry in \
@@ -168,7 +172,7 @@ jobs:
               "Customers|customer-sync-summary.json" \
               "Orders and line items|order-sync-summary.json" \
               "Reconciliation|reconcile-summary.json" \
-              "Abandoned checkouts|cart-sync-summary.json"; do
+              "Carts and cart lines|cart-sync-summary.json"; do
               title="${entry%%|*}"
               file="${entry#*|}"
               echo "#### ${title}"
