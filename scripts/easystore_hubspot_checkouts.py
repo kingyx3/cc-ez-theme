@@ -1,28 +1,36 @@
 #!/usr/bin/env python3
-"""Sync EasyStore abandoned checkouts into HubSpot Carts.
+"""Sync EasyStore Checkout sessions into HubSpot Carts.
 
-EasyStore's public API exposes the cart/checkout data used by the Admin
-"Abandoned checkouts" screen through the Checkout resource:
+EasyStore's published Storefront API 3.0 exposes carts through the Checkout
+resource:
 
 * GET /api/3.0/checkouts.json
 * GET /api/3.0/checkouts/:cart_token.json
 
-There is no separate abandoned_checkouts.json endpoint in EasyStore's published
-Public API. This entrypoint therefore reads recent Checkout records, keeps only
-incomplete/unpaid checkouts, and passes those real EasyStore records to the
-strict HubSpot Cart synchronizer.
+``checkout.cart_token`` is the external Cart identity. Checkout line items,
+financial status, totals, currency, addresses, contact details and checkout URL
+are the Cart source of truth. Orders never create Cart properties or Cart Line
+Items; an Order can only be associated after the real Checkout-backed Cart
+exists.
 
-The checkout source is authoritative. Orders are not used to manufacture Cart
-properties or Cart Line Items. A complete recent checkout snapshot is buffered
-before any HubSpot Cart mutation; if EasyStore cannot provide that snapshot the
-Cart stage fails visibly instead of reporting a successful empty sync.
+The current EasyStore documentation page has an obvious copy/paste defect in the
+Checkout list parameter table: it describes product-only filters such as
+``collection_ids``, ``skus``, ``visibility`` and ``published_at_*`` and labels
+the operation "List products". Production therefore sends only the two generic
+pagination parameters that are unambiguous for this endpoint: ``page`` and
+``limit``. In particular, it does not send ``sort`` or ``created_at_min``.
+
+The collection is first read with ``limit=1``. This deliberately favors the
+smallest possible documented request because the production store previously
+timed out on larger / filtered list requests. A complete snapshot is buffered
+and any missing line items are hydrated from the documented detail endpoint
+before HubSpot is mutated.
 """
 
 from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
 import json
 import os
 import sys
@@ -31,6 +39,7 @@ from urllib.parse import quote, urlencode
 
 import easystore_hubspot_commerce as commerce
 from easystore_hubspot_orders import SyncError, _http_json, _shop_domain
+from easystore_hubspot_schema import nonempty
 
 
 EASYSTORE_CHECKOUT_COLLECTION_PATH = "/api/3.0/checkouts.json"
@@ -39,23 +48,12 @@ HUBSPOT_CART_COLLECTION_PATH = "/crm/v3/objects/carts"
 HUBSPOT_CART_SCHEMA_OBJECT_TYPE = "cart"
 HUBSPOT_CART_PROPERTIES_PATH = "/crm/v3/properties/cart"
 
-# EasyStore's merchant UI retains abandoned checkouts for 90 days. Constrain the
-# Public API read to the same useful recovery window instead of asking the
-# checkout endpoint to scan the store's entire history.
-ABANDONED_CHECKOUT_WINDOW_DAYS = 90
-
-# The live store timed out when 50 checkout records were requested at once.
-# Start small and, only when a collection request itself times out/fails, restart
-# the whole snapshot with an even smaller page. This never exposes a partial
-# checkout set to HubSpot.
-CHECKOUT_PAGE_SIZE_CANDIDATES = (10, 5, 1)
-CHECKOUT_READ_TIMEOUT_SECONDS = 15
+# Keep the collection request intentionally minimal. The linked EasyStore docs
+# clearly contain Product endpoint fields in the Checkout parameter table, so we
+# do not rely on those copied filters for production correctness.
+CHECKOUT_PAGE_SIZE = 1
+CHECKOUT_READ_TIMEOUT_SECONDS = 20
 CHECKOUT_READ_RETRIES = 0
-CHECKOUT_SORT = "id.desc"
-
-
-class CheckoutCollectionReadError(SyncError):
-    """Raised only for a failed Checkout collection page read."""
 
 
 @dataclass(frozen=True)
@@ -63,25 +61,10 @@ class CheckoutSnapshot:
     records: tuple[dict[str, Any], ...]
     pages_read: int
     details_fetched: int
-    listed_count: int
-    page_size: int
-    created_at_min: str
-
-
-def checkout_window_start(now: datetime | None = None) -> str:
-    """Return EasyStore's documented timestamp format for the 90-day window."""
-
-    current = now or datetime.now(timezone.utc)
-    if current.tzinfo is None:
-        current = current.replace(tzinfo=timezone.utc)
-    cutoff = current.astimezone(timezone.utc) - timedelta(
-        days=ABANDONED_CHECKOUT_WINDOW_DAYS
-    )
-    return cutoff.strftime("%Y-%m-%d %H:%M:%S")
 
 
 def _checkout_collection(document: Any) -> list[dict[str, Any]]:
-    """Extract a checkout list without turning an unknown response into empty."""
+    """Extract a Checkout collection without treating an unknown shape as empty."""
 
     if isinstance(document, list):
         return [item for item in document if isinstance(item, dict)]
@@ -103,6 +86,8 @@ def _checkout_collection(document: Any) -> list[dict[str, Any]]:
 
 
 def _checkout_detail(document: Any, cart_token: str) -> dict[str, Any]:
+    """Extract one Checkout from the documented detail response shapes."""
+
     if not isinstance(document, dict):
         raise SyncError(
             f"EasyStore checkout {cart_token} detail returned a non-object response"
@@ -134,52 +119,25 @@ def _checkout_get(url: str, access_token: str) -> Any:
     )
 
 
-def _read_collection(
-    domain: str,
-    access_token: str,
-    *,
-    page_size: int,
-    created_at_min: str,
-) -> tuple[list[dict[str, Any]], int]:
-    page = 1
-    pages_read = 0
-    listed: list[dict[str, Any]] = []
-
-    while True:
-        query = urlencode(
-            {
-                "page": page,
-                "limit": page_size,
-                "sort": CHECKOUT_SORT,
-                "created_at_min": created_at_min,
-            }
-        )
-        url = f"https://{domain}{EASYSTORE_CHECKOUT_COLLECTION_PATH}?{query}"
-        try:
-            document = _checkout_get(url, access_token)
-        except SyncError as error:
-            raise CheckoutCollectionReadError(str(error)) from error
-
-        records = _checkout_collection(document)
-        pages_read += 1
-        listed.extend(records)
-        if len(records) < page_size:
-            return listed, pages_read
-        page += 1
+def _collection_url(domain: str, page: int) -> str:
+    query = urlencode({"page": page, "limit": CHECKOUT_PAGE_SIZE})
+    return f"https://{domain}{EASYSTORE_CHECKOUT_COLLECTION_PATH}?{query}"
 
 
-def _complete_abandoned_checkout(
+def _complete_checkout(
     domain: str,
     access_token: str,
     listed: dict[str, Any],
 ) -> tuple[dict[str, Any], bool]:
-    """Hydrate one abandoned checkout when the list record omits line_items."""
+    """Return one Checkout with line_items, hydrating by cart_token if required."""
 
     if isinstance(listed.get("line_items"), list):
         return listed, False
 
     cart_token = commerce.checkout_cart_token(listed)
     if cart_token is None:
+        # The core synchronizer will count this record and skip it because a
+        # HubSpot Cart cannot be safely identified without cart_token.
         return listed, False
 
     path = EASYSTORE_CHECKOUT_DETAIL_PATH.format(
@@ -199,92 +157,70 @@ def _complete_abandoned_checkout(
     return merged, True
 
 
-def _snapshot_with_page_size(
+def read_checkout_snapshot(
     store_domain: str,
     access_token: str,
-    *,
-    page_size: int,
-    created_at_min: str,
 ) -> CheckoutSnapshot:
-    domain = _shop_domain(store_domain)
-    listed, pages_read = _read_collection(
-        domain,
-        access_token,
-        page_size=page_size,
-        created_at_min=created_at_min,
-    )
+    """Read the complete Checkout collection using only page + limit.
 
-    abandoned: list[dict[str, Any]] = []
-    details_fetched = 0
-    for record in listed:
-        # The Checkout resource exposes financial_status. Skip records that are
-        # already visibly paid/completed before spending a detail request.
-        if not commerce.is_abandoned(record):
-            continue
-        checkout, fetched = _complete_abandoned_checkout(
-            domain,
-            access_token,
-            record,
-        )
-        details_fetched += int(fetched)
-        # Detail can reveal completion state that the list record omitted.
-        if commerce.is_abandoned(checkout):
-            abandoned.append(checkout)
-
-    return CheckoutSnapshot(
-        records=tuple(abandoned),
-        pages_read=pages_read,
-        details_fetched=details_fetched,
-        listed_count=len(listed),
-        page_size=page_size,
-        created_at_min=created_at_min,
-    )
-
-
-def read_abandoned_checkout_snapshot(
-    store_domain: str,
-    access_token: str,
-    *,
-    now: datetime | None = None,
-) -> CheckoutSnapshot:
-    """Read a complete recent abandoned-checkout snapshot from EasyStore.
-
-    Collection timeouts retry by restarting from page one with a smaller page
-    size. Detail failures are not hidden: a checkout whose contents cannot be
-    read makes the Cart stage fail before any HubSpot Cart write.
+    Pagination is all-or-nothing. Repeated pages are rejected so an endpoint
+    that ignores ``page`` cannot trap the workflow in a loop or expose a partial
+    snapshot to HubSpot.
     """
 
-    created_at_min = checkout_window_start(now)
-    collection_errors: list[str] = []
-    for page_size in CHECKOUT_PAGE_SIZE_CANDIDATES:
+    domain = _shop_domain(store_domain)
+    page = 1
+    pages_read = 0
+    listed_records: list[dict[str, Any]] = []
+    seen_page_signatures: set[tuple[str, ...]] = set()
+
+    while True:
+        url = _collection_url(domain, page)
         try:
-            return _snapshot_with_page_size(
-                store_domain,
-                access_token,
-                page_size=page_size,
-                created_at_min=created_at_min,
-            )
-        except CheckoutCollectionReadError as error:
-            message = " ".join(str(error).split())[:300]
-            collection_errors.append(f"limit={page_size}: {message}")
-            print(
-                "WARNING: EasyStore checkout collection read failed with "
-                f"limit={page_size}; restarting with a smaller page. {message}",
-                file=sys.stderr,
-            )
+            document = _checkout_get(url, access_token)
+        except SyncError as error:
+            raise SyncError(
+                "EasyStore Checkout collection failed using the minimal documented "
+                f"request (page={page}, limit={CHECKOUT_PAGE_SIZE}, no sort/date/"
+                f"product filters): {error}"
+            ) from error
 
-    raise SyncError(
-        "EasyStore abandoned-checkout API could not be read with any safe page "
-        "size. " + " | ".join(collection_errors)
+        records = _checkout_collection(document)
+        pages_read += 1
+        signature = tuple(
+            nonempty(record.get("cart_token"))
+            or nonempty(record.get("id"))
+            or f"row:{index}"
+            for index, record in enumerate(records)
+        )
+        if records and signature in seen_page_signatures:
+            raise SyncError(
+                "EasyStore Checkout pagination repeated a page; refusing to sync "
+                "an incomplete or looping checkout snapshot"
+            )
+        if records:
+            seen_page_signatures.add(signature)
+        listed_records.extend(records)
+
+        if len(records) < CHECKOUT_PAGE_SIZE:
+            break
+        page += 1
+
+    completed: list[dict[str, Any]] = []
+    details_fetched = 0
+    for listed in listed_records:
+        checkout, fetched = _complete_checkout(domain, access_token, listed)
+        completed.append(checkout)
+        details_fetched += int(fetched)
+
+    return CheckoutSnapshot(
+        records=tuple(completed),
+        pages_read=pages_read,
+        details_fetched=details_fetched,
     )
-
-
-def _install_hubspot_cart_contract() -> None:
-    commerce.CART_SCHEMA_OBJECT_TYPE = HUBSPOT_CART_SCHEMA_OBJECT_TYPE
 
 
 def _validate_hubspot_cart_contract() -> None:
-    _install_hubspot_cart_contract()
     expected = f"{commerce.HUBSPOT_BASE}{HUBSPOT_CART_COLLECTION_PATH}"
     if commerce.HUBSPOT_CARTS_URL != expected:
         raise SyncError(
@@ -300,16 +236,26 @@ def sync(
     hubspot_access_token: str,
     fallback_dial_code: str,
 ) -> dict[str, Any]:
-    """Synchronize only real EasyStore abandoned Checkout records to Carts."""
+    """Synchronize all real EasyStore Checkout sessions into HubSpot Carts."""
 
     _validate_hubspot_cart_contract()
-    snapshot = read_abandoned_checkout_snapshot(
-        store_domain,
-        easystore_access_token,
-    )
+    snapshot = read_checkout_snapshot(store_domain, easystore_access_token)
 
-    original = commerce.iter_documented_checkouts
+    # HubSpot Carts represent shopping sessions that may later be purchased or
+    # abandoned. The legacy core originally skipped paid/completed checkouts.
+    # For this production entrypoint we feed every real Checkout into that same
+    # validated Cart/Line Item writer while preserving each Checkout's raw
+    # financial_status as hs_external_status.
+    original_iterator = commerce.iter_documented_checkouts
+    original_is_abandoned = commerce.is_abandoned
+    original_schema_type = commerce.CART_SCHEMA_OBJECT_TYPE
+
+    abandoned_or_open = sum(1 for item in snapshot.records if original_is_abandoned(item))
+    completed_or_paid = len(snapshot.records) - abandoned_or_open
+
     commerce.iter_documented_checkouts = lambda _store, _token: iter(snapshot.records)
+    commerce.is_abandoned = lambda _checkout: True
+    commerce.CART_SCHEMA_OBJECT_TYPE = HUBSPOT_CART_SCHEMA_OBJECT_TYPE
     try:
         summary = commerce.sync(
             store_domain=store_domain,
@@ -318,32 +264,29 @@ def sync(
             fallback_dial_code=fallback_dial_code,
         )
     finally:
-        commerce.iter_documented_checkouts = original
+        commerce.iter_documented_checkouts = original_iterator
+        commerce.is_abandoned = original_is_abandoned
+        commerce.CART_SCHEMA_OBJECT_TYPE = original_schema_type
 
     domain = _shop_domain(store_domain)
     summary.update(
         {
-            "easystore_abandoned_checkout_source": "checkouts",
+            "easystore_checkout_source": "public_api_checkouts",
             "easystore_checkout_collection_endpoint": (
                 f"https://{domain}{EASYSTORE_CHECKOUT_COLLECTION_PATH}"
             ),
             "easystore_checkout_detail_endpoint_template": (
                 f"https://{domain}/api/3.0/checkouts/:cart_token.json"
             ),
-            "easystore_checkout_window_days": ABANDONED_CHECKOUT_WINDOW_DAYS,
-            "easystore_checkout_created_at_min": snapshot.created_at_min,
-            "easystore_checkout_sort": CHECKOUT_SORT,
-            "easystore_checkout_page_size_used": snapshot.page_size,
-            "easystore_checkout_page_size_candidates": list(
-                CHECKOUT_PAGE_SIZE_CANDIDATES
-            ),
+            "easystore_checkout_collection_query": "page,limit only",
+            "easystore_checkout_page_size": CHECKOUT_PAGE_SIZE,
+            "easystore_checkout_product_style_filters_sent": False,
             "easystore_checkout_pages_read": snapshot.pages_read,
             "easystore_checkout_details_fetched": snapshot.details_fetched,
-            "easystore_checkouts_listed": snapshot.listed_count,
-            "easystore_abandoned_checkouts_buffered": len(snapshot.records),
-            "easystore_checkout_read_timeout_seconds": (
-                CHECKOUT_READ_TIMEOUT_SECONDS
-            ),
+            "easystore_checkouts_buffered": len(snapshot.records),
+            "easystore_checkouts_abandoned_or_open": abandoned_or_open,
+            "easystore_checkouts_completed_or_paid": completed_or_paid,
+            "easystore_checkout_read_timeout_seconds": CHECKOUT_READ_TIMEOUT_SECONDS,
             "hubspot_cart_collection_endpoint": (
                 f"{commerce.HUBSPOT_BASE}{HUBSPOT_CART_COLLECTION_PATH}"
             ),
@@ -351,6 +294,9 @@ def sync(
                 f"{commerce.HUBSPOT_BASE}{HUBSPOT_CART_PROPERTIES_PATH}"
             ),
             "hubspot_cart_schema_object_type": HUBSPOT_CART_SCHEMA_OBJECT_TYPE,
+            "hubspot_cart_source_semantics": (
+                "all EasyStore Checkout sessions; unpaid/open is the abandoned subset"
+            ),
             "cart_source_is_orders": False,
         }
     )
