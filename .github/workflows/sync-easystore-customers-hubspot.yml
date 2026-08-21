@@ -65,7 +65,10 @@ jobs:
     if: github.event_name != 'pull_request'
     needs: validate
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # This store's Checkout collection is 1246 sessions, so the Cart stage writes
+    # thousands of HubSpot requests on a first full run. The concurrency group
+    # above already stops two of these overlapping.
+    timeout-minutes: 90
 
     steps:
       - name: Check out repository
@@ -160,7 +163,12 @@ jobs:
 
       # EasyStore Checkout is the sole Cart data source. The collection request
       # intentionally sends only page + limit because EasyStore's published
-      # Checkout parameter table contains obvious copied Product filters.
+      # Checkout parameter table contains obvious copied Product filters. The
+      # read is retried and falls back to the smallest documented page size; an
+      # endpoint that still never answers annotates the run and leaves existing
+      # HubSpot Carts untouched instead of failing the CRM sync that already
+      # wrote Products, Customers and Orders. Set EASYSTORE_CHECKOUTS_REQUIRED
+      # to 1 to make that outage fail this step instead.
       - name: Sync EasyStore checkouts to HubSpot carts and cart line items
         env:
           EASYSTORE_ACCESS_TOKEN: ${{ secrets.EASYSTORE_ACCESS_TOKEN }}
@@ -184,9 +192,12 @@ jobs:
             echo "- Customer notes: Customer.note + Customer.note2 only; Order notes remain separate"
             echo "- Orders: keyed by immutable EasyStore order ID with product-backed Line Items"
             echo "- Carts: every EasyStore Checkout session is synchronized to a HubSpot Cart using checkout.cart_token"
-            echo "- Abandoned carts: unpaid/open Checkouts are the abandoned subset; paid/completed Checkouts remain Carts with their source status and can associate to Orders"
-            echo "- Checkout list request: /api/3.0/checkouts.json with page + limit only; no sort/date/Product-style filters"
+            echo "- Abandoned carts: unpaid/open Checkouts are the abandoned subset, flagged on the Cart; paid/completed Checkouts remain Carts with their source status and can associate to Orders"
+            echo "- Checkout list request: /api/3.0/checkouts.json with page + limit only; no sort/date/Product-style filters, retried with backoff and falling back to limit=1"
+            echo "- Checkout pagination: page 2 is unusable (repeats page 1, or hangs), so a larger limit on page 1 proves the snapshot; the page that answered is kept either way, and a snapshot EasyStore will not prove complete is still synchronized and annotated"
+            echo "- Checkout outage: Cart and Cart Line Item writes pause and the run is annotated; existing Cart→Order links still refresh from order.cart_token"
             echo "- Cart lines: real Checkout line_items become separate product-backed HubSpot Cart Line Items"
+            echo "- Retired variants: a Checkout line with no HubSpot Product is skipped and counted, keeping the Cart; the Order stage still fails on one"
             echo "- Store: \`${EASYSTORE_STORE_DOMAIN}\`"
             echo
             for entry in \

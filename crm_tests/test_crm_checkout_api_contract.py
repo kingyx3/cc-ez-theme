@@ -3,7 +3,6 @@ from __future__ import annotations
 import sys
 import unittest
 from pathlib import Path
-from types import SimpleNamespace
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -26,10 +25,11 @@ class EasyStoreCheckoutCollectionContractTests(unittest.TestCase):
 
         self.assertEqual(snapshot.records, ())
         self.assertEqual(snapshot.pages_read, 1)
+        self.assertEqual(snapshot.page_size, 50)
         self.assertEqual(len(calls), 1)
         self.assertEqual(
             calls[0]["url"],
-            "https://shop.example/api/3.0/checkouts.json?page=1&limit=1",
+            "https://shop.example/api/3.0/checkouts.json?page=1&limit=50",
         )
         self.assertNotIn("sort=", str(calls[0]["url"]))
         self.assertNotIn("created_at_min", str(calls[0]["url"]))
@@ -38,29 +38,56 @@ class EasyStoreCheckoutCollectionContractTests(unittest.TestCase):
         self.assertEqual(calls[0]["timeout"], checkouts.CHECKOUT_READ_TIMEOUT_SECONDS)
         self.assertEqual(calls[0]["retries"], checkouts.CHECKOUT_READ_RETRIES)
 
-    def test_collection_paginates_one_record_at_a_time(self) -> None:
+    def test_collection_paginates_until_a_short_page(self) -> None:
         calls: list[str] = []
+        page_size = checkouts.CHECKOUT_PAGE_SIZES[0]
+        full_page = [
+            {
+                "id": index,
+                "cart_token": f"cart-{index}",
+                "financial_status": "unpaid",
+                "line_items": [],
+            }
+            for index in range(page_size)
+        ]
 
         def fake_http(url, **kwargs):
             calls.append(url)
             if "page=1" in url:
+                return {"checkouts": full_page}
+            return {
+                "checkouts": [
+                    {
+                        "id": 99,
+                        "cart_token": "cart-99",
+                        "financial_status": "paid",
+                        "line_items": [],
+                    }
+                ]
+            }
+
+        with mock.patch.object(checkouts, "_http_json", fake_http):
+            snapshot = checkouts.read_checkout_snapshot("shop.example", "secret")
+
+        self.assertEqual(len(snapshot.records), page_size + 1)
+        self.assertEqual(snapshot.records[-1]["cart_token"], "cart-99")
+        self.assertEqual(snapshot.pages_read, 2)
+        self.assertTrue(calls[0].endswith(f"page=1&limit={page_size}"))
+        self.assertTrue(calls[1].endswith(f"page=2&limit={page_size}"))
+
+    def test_a_timing_out_page_size_falls_back_to_the_smallest_request(self) -> None:
+        calls: list[str] = []
+
+        def fake_http(url, **kwargs):
+            calls.append(url)
+            if "limit=50" in url:
+                raise SyncError("read timed out") from TimeoutError("timed out")
+            if "page=1" in url:
                 return {
                     "checkouts": [
                         {
-                            "id": 1,
                             "cart_token": "cart-1",
                             "financial_status": "unpaid",
-                            "line_items": [],
-                        }
-                    ]
-                }
-            if "page=2" in url:
-                return {
-                    "checkouts": [
-                        {
-                            "id": 2,
-                            "cart_token": "cart-2",
-                            "financial_status": "paid",
                             "line_items": [],
                         }
                     ]
@@ -70,42 +97,260 @@ class EasyStoreCheckoutCollectionContractTests(unittest.TestCase):
         with mock.patch.object(checkouts, "_http_json", fake_http):
             snapshot = checkouts.read_checkout_snapshot("shop.example", "secret")
 
-        self.assertEqual([item["cart_token"] for item in snapshot.records], ["cart-1", "cart-2"])
-        self.assertEqual(snapshot.pages_read, 3)
-        self.assertTrue(calls[0].endswith("page=1&limit=1"))
-        self.assertTrue(calls[1].endswith("page=2&limit=1"))
-        self.assertTrue(calls[2].endswith("page=3&limit=1"))
+        self.assertEqual([item["cart_token"] for item in snapshot.records], ["cart-1"])
+        self.assertEqual(snapshot.page_size, 1)
+        self.assertTrue(calls[0].endswith("page=1&limit=50"))
+        self.assertTrue(calls[1].endswith("page=1&limit=1"))
+        self.assertIn("limit=50", snapshot.attempts[0])
+        self.assertIn("did not answer", snapshot.attempts[0])
 
-    def test_repeated_page_is_rejected(self) -> None:
-        response = {
-            "checkouts": [
-                {
-                    "id": 1,
-                    "cart_token": "cart-1",
-                    "financial_status": "unpaid",
-                    "line_items": [],
-                }
-            ]
-        }
-        with mock.patch.object(checkouts, "_http_json", return_value=response):
-            with self.assertRaisesRegex(SyncError, "repeated a page"):
+    def test_no_page_size_answering_names_every_attempted_request(self) -> None:
+        def fake_http(url, **kwargs):
+            raise SyncError("The read operation timed out") from TimeoutError()
+
+        with mock.patch.object(checkouts, "_http_json", fake_http):
+            with self.assertRaises(checkouts.CheckoutSourceUnavailable) as raised:
                 checkouts.read_checkout_snapshot("shop.example", "secret")
+
+        message = str(raised.exception)
+        self.assertIn("no sort/date/product filters", message)
+        for page_size in checkouts.CHECKOUT_PAGE_SIZES:
+            self.assertIn(f"limit={page_size}", message)
+
+    def test_a_rejected_request_is_not_treated_as_an_outage(self) -> None:
+        # A 401/403 is a token or scope problem. Falling back to another page
+        # size or degrading to a green run would hide it.
+        from urllib.error import HTTPError
+
+        def fake_http(url, **kwargs):
+            raise SyncError("failed with HTTP 401") from HTTPError(
+                url, 401, "Unauthorized", {}, None
+            )
+
+        with mock.patch.object(checkouts, "_http_json", fake_http):
+            with self.assertRaisesRegex(SyncError, "HTTP 401") as raised:
+                checkouts.read_checkout_snapshot("shop.example", "secret")
+
+        self.assertNotIsInstance(
+            raised.exception,
+            checkouts.CheckoutSourceUnavailable,
+        )
+
+
+def _page(count: int, *, start: int = 0) -> dict[str, object]:
+    return {
+        "checkouts": [
+            {
+                "id": index,
+                "cart_token": f"cart-{index}",
+                "financial_status": "unpaid",
+                "line_items": [],
+            }
+            for index in range(start, start + count)
+        ]
+    }
+
+
+class IgnoredPageParameterTests(unittest.TestCase):
+    """This store's checkouts.json answers but serves page 2 identical to page 1.
+
+    Failing there means never syncing a Cart, and looping on it never
+    terminates, so a repeated page ends pagination and `limit` proves the
+    snapshot instead.
+    """
+
+    def test_a_repeated_page_escalates_the_limit_instead_of_failing(self) -> None:
+        calls: list[str] = []
+        first = checkouts.CHECKOUT_PAGE_SIZES[0]
+        bigger = checkouts.CHECKOUT_LIMIT_ESCALATION[0]
+
+        def fake_http(url, **kwargs):
+            calls.append(url)
+            if f"limit={bigger}" in url:
+                return _page(first + 7)
+            return _page(first)
+
+        with mock.patch.object(checkouts, "_http_json", fake_http):
+            snapshot = checkouts.read_checkout_snapshot("shop.example", "secret")
+
+        self.assertFalse(snapshot.page_parameter_honored)
+        self.assertTrue(snapshot.complete)
+        self.assertEqual(len(snapshot.records), first + 7)
+        self.assertEqual(snapshot.page_size, bigger)
+        self.assertTrue(calls[0].endswith(f"page=1&limit={first}"))
+        self.assertTrue(calls[1].endswith(f"page=2&limit={first}"))
+        self.assertTrue(calls[2].endswith(f"page=1&limit={bigger}"))
+
+    def test_the_same_count_at_a_larger_limit_is_not_claimed_complete(self) -> None:
+        # Either the store holds exactly this many checkouts or the endpoint caps
+        # the limit. Both are consistent with the answer, so neither is claimed.
+        first = checkouts.CHECKOUT_PAGE_SIZES[0]
+
+        with mock.patch.object(checkouts, "_http_json", return_value=_page(first)):
+            snapshot = checkouts.read_checkout_snapshot("shop.example", "secret")
+
+        self.assertFalse(snapshot.page_parameter_honored)
+        self.assertFalse(snapshot.complete)
+        self.assertEqual(len(snapshot.records), first)
+        self.assertIn("capping the limit", snapshot.completeness)
+
+    def test_a_refused_escalation_keeps_the_snapshot_that_arrived(self) -> None:
+        from urllib.error import HTTPError
+
+        first = checkouts.CHECKOUT_PAGE_SIZES[0]
+
+        def fake_http(url, **kwargs):
+            if f"limit={first}" not in url:
+                raise SyncError("failed with HTTP 400: limit too large") from HTTPError(
+                    url, 400, "Bad Request", {}, None
+                )
+            return _page(first)
+
+        with mock.patch.object(checkouts, "_http_json", fake_http):
+            snapshot = checkouts.read_checkout_snapshot("shop.example", "secret")
+
+        self.assertEqual(len(snapshot.records), first)
+        self.assertFalse(snapshot.complete)
+        self.assertIn("refused", snapshot.completeness)
+
+    def test_every_limit_saturating_still_returns_what_arrived(self) -> None:
+        largest = checkouts.CHECKOUT_LIMIT_ESCALATION[-1]
+
+        def fake_http(url, **kwargs):
+            limit = int(url.rsplit("limit=", 1)[1])
+            return _page(limit)
+
+        with mock.patch.object(checkouts, "_http_json", fake_http):
+            snapshot = checkouts.read_checkout_snapshot("shop.example", "secret")
+
+        self.assertEqual(len(snapshot.records), largest)
+        self.assertFalse(snapshot.complete)
+        self.assertIn("saturated", snapshot.completeness)
+
+    def test_a_later_page_timing_out_keeps_the_page_that_answered(self) -> None:
+        # Production run 32483557524: page 1 served 50 checkouts, page 2 hung
+        # until it timed out, and discarding page 1 over it synced no carts.
+        calls: list[str] = []
+        first = checkouts.CHECKOUT_PAGE_SIZES[0]
+        bigger = checkouts.CHECKOUT_LIMIT_ESCALATION[0]
+
+        def fake_http(url, **kwargs):
+            calls.append(url)
+            if "page=2" in url:
+                raise SyncError("The read operation timed out") from TimeoutError()
+            if f"limit={bigger}" in url:
+                return _page(first + 12)
+            return _page(first)
+
+        with mock.patch.object(checkouts, "_http_json", fake_http):
+            snapshot = checkouts.read_checkout_snapshot("shop.example", "secret")
+
+        self.assertEqual(len(snapshot.records), first + 12)
+        self.assertTrue(snapshot.complete)
+        self.assertIn("page 2 did not answer", snapshot.pagination)
+        self.assertTrue(calls[-1].endswith(f"page=1&limit={bigger}"))
+
+    def test_page_one_timing_out_is_still_an_outage(self) -> None:
+        def fake_http(url, **kwargs):
+            raise SyncError("The read operation timed out") from TimeoutError()
+
+        with mock.patch.object(checkouts, "_http_json", fake_http):
+            with self.assertRaises(checkouts.CheckoutSourceUnavailable):
+                checkouts.read_checkout_snapshot("shop.example", "secret")
+
+    def test_a_later_page_timing_out_with_no_bigger_limit_keeps_page_one(self) -> None:
+        first = checkouts.CHECKOUT_PAGE_SIZES[0]
+
+        def fake_http(url, **kwargs):
+            if f"limit={first}" in url and "page=1" in url:
+                return _page(first)
+            raise SyncError("The read operation timed out") from TimeoutError()
+
+        with mock.patch.object(checkouts, "_http_json", fake_http):
+            snapshot = checkouts.read_checkout_snapshot("shop.example", "secret")
+
+        self.assertEqual(len(snapshot.records), first)
+        self.assertFalse(snapshot.complete)
+
+    def test_an_over_answer_proves_the_limit_is_not_a_cap(self) -> None:
+        # Production run 32485932896: limit=50 served 50, limit=250 served 1246.
+        # Answering past the limit means it is not capping the collection, and
+        # limit=1000 then being refused does not unsay that.
+        from urllib.error import HTTPError
+
+        first = checkouts.CHECKOUT_PAGE_SIZES[0]
+        bigger, biggest = checkouts.CHECKOUT_LIMIT_ESCALATION
+
+        def fake_http(url, **kwargs):
+            if f"limit={biggest}" in url:
+                raise SyncError("failed with HTTP 400") from HTTPError(
+                    url, 400, "Bad Request", {}, None
+                )
+            if f"limit={bigger}" in url:
+                return _page(1246)
+            return _page(first)
+
+        with mock.patch.object(checkouts, "_http_json", fake_http):
+            snapshot = checkouts.read_checkout_snapshot("shop.example", "secret")
+
+        self.assertEqual(len(snapshot.records), 1246)
+        self.assertTrue(snapshot.complete)
+        self.assertIn("not capping the collection", snapshot.completeness)
+
+    def test_page_one_over_answering_ends_pagination_immediately(self) -> None:
+        calls: list[str] = []
+
+        def fake_http(url, **kwargs):
+            calls.append(url)
+            return _page(600)
+
+        with mock.patch.object(checkouts, "_http_json", fake_http):
+            snapshot = checkouts.read_checkout_snapshot("shop.example", "secret")
+
+        self.assertEqual(len(snapshot.records), 600)
+        self.assertTrue(snapshot.complete)
+        self.assertEqual(len(calls), 1)
+        self.assertIn("more than it asked for", snapshot.pagination)
+
+    def test_one_short_page_with_page_ignored_is_complete(self) -> None:
+        with mock.patch.object(checkouts, "_http_json", return_value=_page(3)):
+            snapshot = checkouts.read_checkout_snapshot("shop.example", "secret")
+
+        self.assertEqual(len(snapshot.records), 3)
+        self.assertTrue(snapshot.complete)
+
+    def test_an_unproven_snapshot_is_annotated_and_still_synchronized(self) -> None:
+        snapshot = checkouts.CheckoutSnapshot(
+            records=({"cart_token": "cart-1", "line_items": []},),
+            pages_read=1,
+            details_fetched=0,
+            complete=False,
+            completeness="limit=1000 came back saturated",
+        )
+        with mock.patch.object(
+            checkouts, "read_checkout_snapshot", return_value=snapshot
+        ), mock.patch.object(
+            checkouts.commerce, "sync", return_value={"hubspot_carts_created": 1}
+        ) as cart_sync, mock.patch.object(
+            checkouts.sys, "stderr", new_callable=mock.MagicMock
+        ) as stderr:
+            summary = checkouts.sync(
+                store_domain="shop.example",
+                easystore_access_token="es",
+                hubspot_access_token="hs",
+                fallback_dial_code="65",
+            )
+
+        cart_sync.assert_called_once()
+        annotation = "".join(str(call.args[0]) for call in stderr.write.call_args_list)
+        self.assertIn("::warning title=EasyStore Checkout snapshot not proven complete::", annotation)
+        self.assertEqual(summary["hubspot_carts_created"], 1)
+        self.assertFalse(summary["easystore_checkout_snapshot_proven_complete"])
+        self.assertIn("saturated", summary["easystore_checkout_snapshot_completeness"])
 
     def test_unknown_response_shape_is_not_treated_as_empty(self) -> None:
         with mock.patch.object(checkouts, "_http_json", return_value={"products": []}):
             with self.assertRaisesRegex(SyncError, "without a checkout collection"):
-                checkouts.read_checkout_snapshot("shop.example", "secret")
-
-    def test_minimal_request_failure_names_the_exact_contract(self) -> None:
-        with mock.patch.object(
-            checkouts,
-            "_http_json",
-            side_effect=SyncError("The read operation timed out"),
-        ):
-            with self.assertRaisesRegex(
-                SyncError,
-                "minimal documented request.*no sort/date/product filters",
-            ):
                 checkouts.read_checkout_snapshot("shop.example", "secret")
 
 
@@ -147,28 +392,37 @@ class EasyStoreCheckoutDetailTests(unittest.TestCase):
         )
 
     def test_detail_without_line_items_fails_before_cart_reconciliation(self) -> None:
-        responses = iter(
-            [
-                {"checkouts": [{"cart_token": "cart-1", "financial_status": "unpaid"}]},
-                {"checkouts": []},
-                {"checkout": {"cart_token": "cart-1", "financial_status": "unpaid"}},
-            ]
-        )
-
-        # Collection page 1, collection page 2, then detail. The implementation
-        # hydrates only after all collection pages are buffered.
         def fake_http(url, **kwargs):
             if "/checkouts/cart-1.json" in url:
                 return {"checkout": {"cart_token": "cart-1", "financial_status": "unpaid"}}
-            return next(responses)
+            if "page=1" in url:
+                return {"checkouts": [{"cart_token": "cart-1", "financial_status": "unpaid"}]}
+            return {"checkouts": []}
 
         with mock.patch.object(checkouts, "_http_json", fake_http):
             with self.assertRaisesRegex(SyncError, "omitted line_items"):
                 checkouts.read_checkout_snapshot("shop.example", "secret")
 
+    def test_a_detail_outage_never_exposes_a_partial_snapshot(self) -> None:
+        def fake_http(url, **kwargs):
+            if "/checkouts/" in url and "checkouts.json" not in url:
+                raise SyncError("detail timed out") from TimeoutError()
+            if "page=1" in url:
+                return {
+                    "checkouts": [
+                        {"cart_token": "cart-1", "line_items": []},
+                        {"cart_token": "cart-2"},
+                    ]
+                }
+            return {"checkouts": []}
+
+        with mock.patch.object(checkouts, "_http_json", fake_http):
+            with self.assertRaises(checkouts.CheckoutSourceUnavailable):
+                checkouts.read_checkout_snapshot("shop.example", "secret")
+
 
 class HubSpotCartProjectionTests(unittest.TestCase):
-    def test_all_checkout_sessions_are_sent_to_cart_writer(self) -> None:
+    def test_every_checkout_session_reaches_the_cart_writer(self) -> None:
         snapshot = checkouts.CheckoutSnapshot(
             records=(
                 {
@@ -182,22 +436,14 @@ class HubSpotCartProjectionTests(unittest.TestCase):
                     "line_items": [],
                 },
             ),
-            pages_read=3,
+            pages_read=1,
             details_fetched=0,
         )
-        seen: list[dict[str, object]] = []
+        seen: dict[str, object] = {}
 
         def fake_commerce_sync(**kwargs):
-            records = list(
-                checkouts.commerce.iter_documented_checkouts(
-                    kwargs["store_domain"], kwargs["easystore_access_token"]
-                )
-            )
-            seen.extend(records)
-            # The wrapper deliberately overrides only the old skip predicate;
-            # raw financial_status remains on each record for property mapping.
-            self.assertTrue(checkouts.commerce.is_abandoned(records[0]))
-            self.assertTrue(checkouts.commerce.is_abandoned(records[1]))
+            seen.update(kwargs)
+            records = list(kwargs["checkouts"])
             return {
                 "easystore_checkouts_scanned": len(records),
                 "hubspot_carts_created": len(records),
@@ -216,16 +462,23 @@ class HubSpotCartProjectionTests(unittest.TestCase):
                 fallback_dial_code="65",
             )
 
-        self.assertEqual([item["cart_token"] for item in seen], ["open-cart", "paid-cart"])
-        self.assertEqual(seen[0]["financial_status"], "unpaid")
-        self.assertEqual(seen[1]["financial_status"], "paid")
+        # The snapshot is handed over as data, not by patching the core module,
+        # and paid sessions are kept because a HubSpot Cart is a shopping
+        # session rather than an abandonment record.
+        self.assertEqual(
+            [item["cart_token"] for item in seen["checkouts"]],
+            ["open-cart", "paid-cart"],
+        )
+        self.assertTrue(seen["include_completed"])
+        self.assertEqual(seen["cart_schema_object_type"], "cart")
         self.assertEqual(summary["hubspot_carts_created"], 2)
         self.assertEqual(summary["easystore_checkouts_abandoned_or_open"], 1)
         self.assertEqual(summary["easystore_checkouts_completed_or_paid"], 1)
+        self.assertEqual(summary["easystore_checkout_status"], "available")
         self.assertFalse(summary["cart_source_is_orders"])
         self.assertFalse(summary["easystore_checkout_product_style_filters_sent"])
 
-    def test_checkout_status_still_maps_to_hubspot_external_status(self) -> None:
+    def test_checkout_status_and_abandoned_flag_reach_the_cart(self) -> None:
         mapped = checkouts.commerce.cart_properties(
             {
                 "cart_token": "cart-1",
@@ -241,26 +494,18 @@ class HubSpotCartProjectionTests(unittest.TestCase):
         )
         self.assertEqual(mapped["hs_external_cart_id"], "cart-1")
         self.assertEqual(mapped["hs_external_status"], "unpaid")
+        self.assertEqual(mapped["easystore_cart_is_abandoned"], "true")
 
-    def test_checkout_wrapper_restores_core_predicate_after_sync(self) -> None:
-        original = checkouts.commerce.is_abandoned
-        snapshot = checkouts.CheckoutSnapshot(records=(), pages_read=1, details_fetched=0)
-        with mock.patch.object(
-            checkouts,
-            "read_checkout_snapshot",
-            return_value=snapshot,
-        ), mock.patch.object(
-            checkouts.commerce,
-            "sync",
-            return_value={},
-        ):
-            checkouts.sync(
-                store_domain="shop.example",
-                easystore_access_token="es",
-                hubspot_access_token="hs",
-                fallback_dial_code="65",
-            )
-        self.assertIs(checkouts.commerce.is_abandoned, original)
+        converted = checkouts.commerce.cart_properties(
+            {"cart_token": "cart-2", "financial_status": "paid", "order_id": 55},
+            cart_token="cart-2",
+            store_domain="shop.example",
+            field_properties=dict(
+                checkouts.commerce.cart_mapping.DEFAULT_CART_FIELD_PROPERTIES
+            ),
+            fallback_dial_code="65",
+        )
+        self.assertEqual(converted["easystore_cart_is_abandoned"], "false")
 
 
 if __name__ == "__main__":

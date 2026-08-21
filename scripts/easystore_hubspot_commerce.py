@@ -21,7 +21,7 @@ import argparse
 import json
 import os
 import sys
-from typing import Any, Iterator
+from typing import Any, Iterator, Sequence
 from urllib.parse import quote, urlencode
 
 import easystore_hubspot_carts as cart_mapping
@@ -75,39 +75,13 @@ def checkout_status(checkout: dict[str, Any]) -> str | None:
 
 
 def is_abandoned(checkout: dict[str, Any]) -> bool:
-    """Return whether a checkout still belongs in the active/abandoned cart funnel."""
+    """Return whether a checkout still belongs in the open/abandoned cart funnel.
 
-    if nonempty(checkout.get("order_id")) is not None:
-        return False
-    if isinstance(checkout.get("order"), dict):
-        return False
-    if nonempty(checkout.get("completed_at")) is not None:
-        return False
+    The predicate itself lives with the Cart mapping so this stage and the Cart
+    property it writes can never disagree about which sessions are abandoned.
+    """
 
-    financial = nonempty(
-        checkout.get("financial_status") or checkout.get("payment_status")
-    )
-    if financial and financial.casefold() in {
-        "paid",
-        "refunded",
-        "voided",
-        "cancelled",
-        "canceled",
-    }:
-        return False
-
-    status = nonempty(
-        checkout.get("status") or checkout.get("state") or checkout.get("checkout_status")
-    )
-    return not status or status.casefold() not in {
-        "completed",
-        "complete",
-        "paid",
-        "converted",
-        "order",
-        "cancelled",
-        "canceled",
-    }
+    return cart_mapping.is_abandoned(checkout)
 
 
 def iter_documented_checkouts(
@@ -197,11 +171,14 @@ def iter_orders_for_cart_links(
         yield document or listed
 
 
-def cart_object_available(access_token: str) -> bool:
+def cart_object_available(
+    access_token: str,
+    object_type: str | None = None,
+) -> bool:
     """Return whether this HubSpot portal exposes the Cart object."""
 
     document = _http_json(
-        f"{HUBSPOT_BASE}/crm/v3/properties/{CART_SCHEMA_OBJECT_TYPE}",
+        f"{HUBSPOT_BASE}/crm/v3/properties/{object_type or CART_SCHEMA_OBJECT_TYPE}",
         headers={"Authorization": f"Bearer {access_token}"},
         allow_statuses={400, 403, 404},
     )
@@ -359,8 +336,16 @@ def sync_cart_line_items(
     access_token: str,
     cart_id: str,
     desired: dict[str, dict[str, str]],
+    remove_stale: bool = True,
 ) -> tuple[int, int, int]:
-    """Upsert and reconcile product-backed Line Items for one HubSpot Cart."""
+    """Upsert and reconcile product-backed Line Items for one HubSpot Cart.
+
+    ``remove_stale`` is turned off for a Cart whose source Checkout had a line
+    this sync could not map to a HubSpot Product. Once a line is missing from
+    ``desired`` for that reason, "gone from the Checkout" and "product retired
+    from the catalogue" look identical, and deleting on that guess would throw
+    away a Cart line the shopper really had.
+    """
 
     existing = existing_cart_line_items(access_token, cart_id)
     headers = {"Authorization": f"Bearer {access_token}"}
@@ -440,7 +425,8 @@ def sync_cart_line_items(
         )
         updated += 1
 
-    for key, current in existing.items():
+    stale_candidates = existing.items() if remove_stale else ()
+    for key, current in stale_candidates:
         if key in desired:
             continue
         line_id = nonempty(current.get("id"))
@@ -519,10 +505,28 @@ def sync(
     easystore_access_token: str,
     hubspot_access_token: str,
     fallback_dial_code: str,
+    checkouts: Sequence[dict[str, Any]] | None = None,
+    include_completed: bool = False,
+    cart_schema_object_type: str | None = None,
 ) -> dict[str, Any]:
-    """Perform the corrected EasyStore Checkout → HubSpot Cart sync."""
+    """Perform the corrected EasyStore Checkout → HubSpot Cart sync.
 
-    if not cart_object_available(hubspot_access_token):
+    ``checkouts`` accepts a snapshot the caller has already read and hydrated, so
+    the production entrypoint can prove the source data is complete before any
+    HubSpot Cart is touched. Left out, the documented collection is read here.
+
+    ``include_completed`` keeps paid and converted Checkouts as Carts, which is
+    what HubSpot's Cart object models: a shopping session, abandoned or not. With
+    it off, only the abandoned subset becomes a Cart.
+
+    ``cart_schema_object_type`` overrides the object type used for the Cart
+    property schema, because HubSpot's schema API is singular (``cart``) while
+    its object API is plural (``carts``).
+    """
+
+    schema_object_type = cart_schema_object_type or CART_SCHEMA_OBJECT_TYPE
+
+    if not cart_object_available(hubspot_access_token, schema_object_type):
         print(
             "WARNING: this HubSpot portal does not expose the Cart object, so "
             "checkout synchronization was skipped.",
@@ -531,15 +535,17 @@ def sync(
         return {"hubspot_cart_object": "unavailable"}
 
     orders = list(iter_orders_for_cart_links(store_domain, easystore_access_token))
-    listed_checkouts = list(
-        iter_documented_checkouts(store_domain, easystore_access_token)
+    listed_checkouts = (
+        list(checkouts)
+        if checkouts is not None
+        else list(iter_documented_checkouts(store_domain, easystore_access_token))
     )
 
     schema_report: dict[str, Any] = {}
     cart_field_properties = resolve_fields(
         http_json=_http_json,
         access_token=hubspot_access_token,
-        object_type=CART_SCHEMA_OBJECT_TYPE,
+        object_type=schema_object_type,
         fields=cart_mapping.CART_FIELDS,
         error=SyncError,
         report=schema_report,
@@ -559,8 +565,11 @@ def sync(
     product_by_sku = hubspot_product_index(hubspot_access_token)
     contacts = hubspot_contact_index(hubspot_access_token, fallback_dial_code)
 
-    validated: list[tuple[dict[str, Any], str, dict[str, dict[str, str]]]] = []
+    validated: list[tuple[dict[str, Any], str, dict[str, dict[str, str]], bool]] = []
     scanned = completed = without_cart_token = 0
+    abandoned_carts = converted_carts = 0
+    carts_with_unmatched_lines = unmatched_line_count = 0
+    unmatched_skus: set[str] = set()
     checkout_keys: set[str] = set()
     line_keys: set[str] = set()
     field_coverage = {field.key: 0 for field in cart_mapping.CART_FIELDS}
@@ -575,9 +584,14 @@ def sync(
             for line in lines:
                 observed_keys(line_keys, line)
 
-        if not is_abandoned(checkout):
-            completed += 1
-            continue
+        if is_abandoned(checkout):
+            abandoned_carts += 1
+        else:
+            converted_carts += 1
+            if not include_completed:
+                completed += 1
+                continue
+
         cart_token = checkout_cart_token(checkout)
         if cart_token is None:
             without_cart_token += 1
@@ -590,12 +604,19 @@ def sync(
             if key in field_coverage:
                 field_coverage[key] += 1
 
+        unmatched: list[str] = []
         desired = desired_lines(
             checkout,
             product_by_sku,
             line_item_field_properties,
+            record="checkout",
+            unmatched_lines=unmatched,
         )
-        validated.append((checkout, cart_token, desired))
+        if unmatched:
+            carts_with_unmatched_lines += 1
+            unmatched_line_count += len(unmatched)
+            unmatched_skus.update(unmatched)
+        validated.append((checkout, cart_token, desired, bool(unmatched)))
 
     existing = hubspot_cart_index(hubspot_access_token)
     hubspot_orders = hubspot_order_index(hubspot_access_token)
@@ -603,7 +624,7 @@ def sync(
     contact_links = ambiguous_mobile = 0
     line_created = line_updated = line_removed = 0
 
-    for checkout, cart_token, desired in validated:
+    for checkout, cart_token, desired, had_unmatched in validated:
         existing_id = existing.get(cart_token)
         if existing_id is None:
             existing_id = _legacy_cart_owner(checkout, existing)
@@ -631,6 +652,7 @@ def sync(
             access_token=hubspot_access_token,
             cart_id=cart_id,
             desired=desired,
+            remove_stale=not had_unmatched,
         )
         line_created += c
         line_updated += u
@@ -667,7 +689,10 @@ def sync(
     return {
         "easystore_checkout_route": "checkouts.json",
         "easystore_checkouts_scanned": scanned,
+        "easystore_checkouts_abandoned": abandoned_carts,
+        "easystore_checkouts_converted": converted_carts,
         "checkouts_skipped_as_completed": completed,
+        "completed_checkouts_kept_as_carts": include_completed,
         "checkouts_without_cart_token": without_cart_token,
         "easystore_orders_scanned_for_cart_links": len(orders),
         "hubspot_carts_created": created,
@@ -679,6 +704,11 @@ def sync(
         "cart_contact_associations_ensured": contact_links,
         "cart_order_associations_ensured": order_links,
         "carts_with_ambiguous_contact_mobile": ambiguous_mobile,
+        "cart_lines_without_a_hubspot_product": unmatched_line_count,
+        "carts_with_lines_without_a_hubspot_product": carts_with_unmatched_lines,
+        "cart_line_skus_without_a_hubspot_product": sorted(unmatched_skus)[:25],
+        "hubspot_cart_schema_object_type": schema_object_type,
+        "hubspot_cart_abandoned_property": cart_field_properties.get("is_abandoned"),
         "hubspot_cart_field_properties": dict(sorted(cart_field_properties.items())),
         "easystore_cart_field_coverage": dict(sorted(field_coverage.items())),
         "easystore_checkout_keys_seen": sorted(checkout_keys),

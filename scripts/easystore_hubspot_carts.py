@@ -259,6 +259,20 @@ CART_FIELDS: tuple[FieldSpec, ...] = (
         label="EasyStore Cart Mobile",
         description="Normalized mobile number captured for the abandoned checkout.",
     ),
+    # HubSpot Carts hold both halves of the funnel: sessions still open and
+    # sessions that became Orders. ``hs_external_status`` carries EasyStore's own
+    # word for it, which differs per store, so the abandoned subset is also
+    # written as a plain flag that a HubSpot list or report can filter on.
+    FieldSpec(
+        key="is_abandoned",
+        native=(),
+        fallback="easystore_cart_is_abandoned",
+        label="EasyStore Cart Abandoned",
+        description=(
+            "true while the EasyStore checkout is unpaid and unconverted; "
+            "false once it has been paid, completed or turned into an order."
+        ),
+    ),
     # Native-only from here down. HubSpot defines these on every Cart object, so
     # a portal that somehow lacks one gains nothing from a duplicate custom
     # property, and the card that displays them stays authoritative.
@@ -379,11 +393,31 @@ def cart_mobile(cart: dict[str, Any], fallback_dial_code: str) -> str | None:
     return None
 
 
-def is_abandoned(cart: dict[str, Any]) -> bool:
-    """Report whether a checkout is still unpaid.
+# A checkout in one of these states has stopped being an open cart, whichever
+# EasyStore field reports it.
+SETTLED_STATUSES = frozenset(
+    {
+        "completed",
+        "complete",
+        "paid",
+        "converted",
+        "order",
+        "refunded",
+        "voided",
+        "cancelled",
+        "canceled",
+    }
+)
 
-    A checkout that became an order is already synchronized by the order stage,
-    so treating it as a cart here would double-count the revenue.
+
+def is_abandoned(cart: dict[str, Any]) -> bool:
+    """Report whether a checkout is still an open, unpaid cart.
+
+    This is the single abandoned-cart predicate for the CRM. A checkout that
+    became an order is already synchronized by the order stage, so counting it as
+    an abandoned cart would double-count the revenue; EasyStore reports that
+    state through an order reference, a completion timestamp, or one of several
+    status fields, so all three are read.
     """
 
     if nonempty(cart.get("order_id")) is not None:
@@ -392,8 +426,13 @@ def is_abandoned(cart: dict[str, Any]) -> bool:
         return False
     if nonempty(cart.get("completed_at")) is not None:
         return False
-    status = (first_present(cart, ("status", "state", "checkout_status")) or "").casefold()
-    return status not in {"completed", "complete", "paid", "converted", "order"}
+    for status in (
+        first_present(cart, ("financial_status", "payment_status")),
+        first_present(cart, ("status", "state", "checkout_status")),
+    ):
+        if status and status.casefold() in SETTLED_STATUSES:
+            return False
+    return True
 
 
 def cart_properties(
@@ -436,6 +475,7 @@ CART_FIELD_DERIVATIONS: dict[str, Callable[[dict[str, Any]], str | None]] = {
     "items": _items,
     "buyer_email": _buyer_email,
     "buyer_name": _buyer_name,
+    "is_abandoned": lambda cart: "true" if is_abandoned(cart) else "false",
     **_cart_address_derivations("shipping_address", _delivery_address),
     **_cart_address_derivations("billing_address", _billing_address),
 }
