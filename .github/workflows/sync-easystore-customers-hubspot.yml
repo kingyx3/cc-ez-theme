@@ -122,27 +122,6 @@ jobs:
           set -euo pipefail
           python scripts/easystore_hubspot_customer_sync.py | tee customer-sync-summary.json
 
-      # Runs straight after Customers so a click id that arrived on a contact in
-      # this run is joined in the same run. It needs no EasyStore access at all:
-      # the click id is already in HubSpot by now, and D1 holds the channel.
-      #
-      # Cloudflare credentials are optional here on purpose. The join is the only
-      # stage that needs them, and a run without them must not cost the store its
-      # Products, Contacts, Orders or Carts.
-      - name: Join Cloudflare source clicks to HubSpot contacts
-        env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          HUBSPOT_ACCESS_TOKEN: ${{ secrets.HUBSPOT_ACCESS_TOKEN }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ -z "${CLOUDFLARE_ACCOUNT_ID}" || -z "${CLOUDFLARE_API_TOKEN}" ]]; then
-            echo "::notice::Cloudflare credentials are not configured; source attribution was skipped."
-            exit 0
-          fi
-          python scripts/cloudflare_hubspot_attribution.py | tee attribution-summary.json
-
       - name: Pull EasyStore orders and upsert HubSpot orders and line items
         env:
           EASYSTORE_ACCESS_TOKEN: ${{ secrets.EASYSTORE_ACCESS_TOKEN }}
@@ -178,6 +157,32 @@ jobs:
           set -euo pipefail
           python scripts/easystore_hubspot_checkouts.py | tee cart-sync-summary.json
 
+      # Last, for the same reason abandoned checkouts run late: this is the only
+      # stage that depends on a third system and on provisioning new HubSpot
+      # properties, so a store where either is unavailable must not lose its
+      # Orders, Line Items, Reconciliation or Carts to it. It reads no EasyStore
+      # data - the click id is already on the contact by now, and D1 holds the
+      # channel - so nothing above depends on it either.
+      #
+      # It still fails loudly rather than degrading. Without somewhere to store
+      # the acquisition click id, a rerun could not tell an already-attributed
+      # contact from a new one, and silently rewriting them every six hours is
+      # worse than a red run. Missing Cloudflare credentials are the one case
+      # treated as "not configured" rather than broken.
+      - name: Join Cloudflare source clicks to HubSpot contacts
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          HUBSPOT_ACCESS_TOKEN: ${{ secrets.HUBSPOT_ACCESS_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${CLOUDFLARE_ACCOUNT_ID}" || -z "${CLOUDFLARE_API_TOKEN}" ]]; then
+            echo "::notice::Cloudflare credentials are not configured; source attribution was skipped."
+            exit 0
+          fi
+          python scripts/cloudflare_hubspot_attribution.py | tee attribution-summary.json
+
       - name: Publish run summary
         if: always()
         shell: bash
@@ -204,10 +209,10 @@ jobs:
               "Preflight|preflight-summary.json" \
               "Products|product-sync-summary.json" \
               "Customers|customer-sync-summary.json" \
-              "Cloudflare source attribution|attribution-summary.json" \
               "Orders and line items|order-sync-summary.json" \
               "Reconciliation|reconcile-summary.json" \
-              "Carts / abandoned carts and cart lines|cart-sync-summary.json"; do
+              "Carts / abandoned carts and cart lines|cart-sync-summary.json" \
+              "Cloudflare source attribution|attribution-summary.json"; do
               title="${entry%%|*}"
               file="${entry#*|}"
               echo "#### ${title}"

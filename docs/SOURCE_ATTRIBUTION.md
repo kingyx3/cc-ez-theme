@@ -94,15 +94,21 @@ visible input on four pages - `register`, `activate_account`, `account` and
    `cloudflare/attribution-worker/**` reaches `main`. This applies migration
    `0002`, which adds the automated-click columns.
 
-4. **Confirm the repository secrets.** The join stage reads
-   `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` - the same two the Worker
-   deployment uses - plus the `HUBSPOT_ACCESS_TOKEN` the CRM sync already has. The
-   join only ever reads D1, so a dedicated token with D1 read on the one account
-   is enough if you would rather not give the CRM workflow the deployment token.
+4. **Confirm the repository secrets and the HubSpot scopes.** The join stage
+   reads `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` - the same two the
+   Worker deployment uses - plus the `HUBSPOT_ACCESS_TOKEN` the CRM sync already
+   has. The join only ever reads D1, so a dedicated token with D1 read on the one
+   account is enough if you would rather not give the CRM workflow the deployment
+   token.
 
    With no Cloudflare credentials configured, the CRM sync logs a notice and
-   skips this stage. It never fails the run: Products, Contacts, Orders and Carts
-   do not depend on it.
+   skips this stage entirely.
+
+   The HubSpot token needs **`crm.schemas.contacts.read` and
+   `crm.schemas.contacts.write`**. Those are optional for every other stage,
+   which degrades to standard properties without them; this one cannot, because
+   every property it writes is one it provisions. It fails rather than degrading,
+   and because it runs last, a failure costs nothing else in the run.
 
 5. **Wait for a real sign-up through a tracked link, then run the sync.** Until
    then the stage reports `contacts_with_click_id: 0` and provisions nothing.
