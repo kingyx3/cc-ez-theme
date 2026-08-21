@@ -305,21 +305,23 @@ class StorefrontConfigurationTests(unittest.TestCase):
             layout,
         )
 
-    def test_homepage_collections_are_six_products_in_three_columns(self) -> None:
+    def test_homepage_collections_use_configured_product_counts(self) -> None:
         expected = {
-            "1667498127486": ("Best Sellers", "feature-on-homepage"),
+            "1667498127486": ("Best Sellers", "feature-on-homepage", 6),
             "1787270400000": (
                 "[Pre-order] Reality Fracture",
                 "reality-fracture",
+                3,
             ),
-            "1684403242688": ("The Hobbit Collection", "the-hobbit"),
-            "1684412368816": ("Marvel Collection", "marvel-super-heroes"),
+            "1684403242688": ("The Hobbit Collection", "the-hobbit", 3),
+            "1684412368816": ("Marvel Collection", "marvel-super-heroes", 3),
             "1684412368817": (
                 "Secrets of Strixhaven",
                 "secrets-of-strixhaven",
+                3,
             ),
         }
-        for section_id, (title, collection_id) in expected.items():
+        for section_id, (title, collection_id, products_to_show) in expected.items():
             section = self.sections[section_id]
             with self.subTest(section=title):
                 self.assertEqual(section["type"], "featured-collection")
@@ -328,12 +330,23 @@ class StorefrontConfigurationTests(unittest.TestCase):
                     section["settings"]["collection__id"], collection_id
                 )
                 self.assertEqual(section["settings"]["products_per_row"], 3)
-                self.assertEqual(section["settings"]["products_to_show"], 6)
+                self.assertEqual(
+                    section["settings"]["products_to_show"], products_to_show
+                )
 
         featured_collection = (
             THEME_ROOT / "sections" / "featured-collection.liquid"
         ).read_text(encoding="utf-8")
         self.assertIn("show_add_to_cart_button: false", featured_collection)
+        self.assertIn(
+            "{% assign products_to_show = section.settings.products_to_show %}",
+            featured_collection,
+        )
+        self.assertNotIn("{% assign products_to_show = 3 %}", featured_collection)
+        self.assertRegex(
+            featured_collection,
+            r'"id": "products_to_show",\s*"min": 2,\s*"max": 20,\s*"step": 1',
+        )
         self.assertIn(
             "grid--{{ section.settings.products_per_row }}-col-desktop",
             featured_collection,
