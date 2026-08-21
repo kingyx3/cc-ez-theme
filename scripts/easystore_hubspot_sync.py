@@ -25,7 +25,8 @@ import os
 import re
 import sys
 import time
-from collections import defaultdict
+from collections import Counter, defaultdict
+from datetime import date, datetime, timezone
 from typing import Any, Callable, Iterable, Iterator
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
@@ -34,9 +35,11 @@ from urllib.request import Request, urlopen
 from easystore_hubspot_schema import (
     FieldSpec,
     apply_fields,
+    date_value,
     describe_mapping,
     field_values,
     first_present,
+    note_text,
     observed_keys,
     resolve_fields,
 )
@@ -138,11 +141,30 @@ CONTACT_FIELDS: tuple[FieldSpec, ...] = (
     ),
     FieldSpec(
         key="birthday",
-        sources=("birthday", "birth_date", "date_of_birth", "dob"),
+        # Read through customer_birthday, which refuses a date that cannot be a
+        # birthday and moves on to the next source.
         native=("date_of_birth",),
         fallback="easystore_customer_birthday",
         label="EasyStore Birthday",
         description="Birthday the customer gave EasyStore.",
+        kind="date",
+    ),
+    FieldSpec(
+        key="birthday_day",
+        # The day and month, which EasyStore reports reliably even when the year
+        # it sends is only the next occurrence.
+        fallback="easystore_birthday_day",
+        label="EasyStore Birthday (day and month)",
+        description=(
+            "The customer's birthday as MM-DD. EasyStore reports a birthday as "
+            "its next occurrence, so the day and month are the trustworthy part."
+        ),
+    ),
+    FieldSpec(
+        key="next_birthday",
+        fallback="easystore_next_birthday",
+        label="EasyStore Next Birthday",
+        description="When the customer's birthday next falls.",
         kind="date",
     ),
     FieldSpec(
@@ -161,10 +183,12 @@ CONTACT_FIELDS: tuple[FieldSpec, ...] = (
     ),
     FieldSpec(
         key="note",
-        sources=("note", "notes", "remark"),
+        # Read through customer_note, because a note arrives as a string, as a
+        # record, or as a list of note records.
         fallback="easystore_customer_note",
         label="EasyStore Customer Note",
         description="Note staff left on the EasyStore customer record.",
+        field_type="textarea",
     ),
 )
 
@@ -178,6 +202,13 @@ CUSTOM_ATTRIBUTE_SOURCES = (
     "note_attributes",
     "metafields",
     "fields",
+)
+# Where the wording of the shop's own customer questions might live.
+ATTRIBUTE_SETTING_ROUTES = (
+    "customer_attribute_settings.json",
+    "attribute_settings.json",
+    "customer_attributes.json",
+    "shop.json",
 )
 ATTRIBUTE_PROPERTY_PREFIX = "easystore_attr_"
 ATTRIBUTE_KEY_PREFIX = "attribute:"
@@ -294,6 +325,177 @@ def lifecycle_stage_write(current: Any, target: str = LIFECYCLE_LEAD) -> str | N
     return target
 
 
+# ``birthdate`` is the field EasyStore's own storefront reads and writes for a
+# date of birth: theme/templates/customers/account.liquid renders it as
+# <input type="date" value="{{customer.birthdate}}" max="today">. ``birthday``
+# is a different thing -- it comes back as the next occurrence of that date, which
+# is why reading it as a birth year filled the CRM with dates in 2027.
+BIRTHDAY_SOURCES = ("birthdate", "birthday", "birth_date", "date_of_birth", "dob")
+# Where a note staff left on a customer might live. EasyStore calls the shopper's
+# own order message a "remark" (theme/templates/customers/order.liquid), so the
+# same wording is tried here alongside the usual names.
+NOTE_SOURCES = (
+    "note",
+    "notes",
+    "remark",
+    "remarks",
+    "internal_note",
+    "admin_note",
+    "staff_note",
+    "comment",
+    "comments",
+    "memo",
+    "description",
+)
+# The property this sync provisions for a date of birth. It owns that property,
+# which is what lets it clear a value an earlier run got wrong.
+BIRTHDAY_FALLBACK_PROPERTY = next(
+    field.fallback for field in CONTACT_FIELDS if field.key == "birthday"
+)
+
+
+def _utc_today_ms() -> int:
+    """Return UTC midnight today, in epoch milliseconds."""
+
+    today = datetime.now(timezone.utc)
+    return int(
+        datetime(today.year, today.month, today.day, tzinfo=timezone.utc).timestamp()
+        * 1000
+    )
+
+
+def _birthday_dates(customer: dict[str, Any]) -> list[tuple[str, date]]:
+    """Return each birthday-ish source that parses, as a calendar date."""
+
+    found: list[tuple[str, date]] = []
+    for key in BIRTHDAY_SOURCES:
+        stamp = date_value(customer.get(key))
+        if stamp is None:
+            continue
+        found.append(
+            (key, datetime.fromtimestamp(int(stamp) / 1000, tz=timezone.utc).date())
+        )
+    return found
+
+
+def is_date_of_birth(value: date, today: date | None = None) -> bool:
+    """Report whether a date can be a date of birth rather than an occurrence.
+
+    EasyStore reports a customer's birthday as its **next occurrence**, so the
+    year says when the birthday next falls, not when the customer was born. Such
+    a value is always within the coming twelve months, which is exactly what this
+    rules out: a real date of birth is at least a year old, and nobody with a
+    storefront account was born this week.
+    """
+
+    today = today or datetime.now(timezone.utc).date()
+    return value < date(today.year - 1, today.month, today.day)
+
+
+def customer_birthday(customer: dict[str, Any]) -> str | None:
+    """Return a real date of birth, if any source carries one.
+
+    A next-occurrence value is not written here. Inventing a birth year from it
+    would put wrong personal data in the CRM, and the day and month it does carry
+    are kept by :func:`customer_birthday_day` instead.
+    """
+
+    today = datetime.now(timezone.utc).date()
+    for _key, value in _birthday_dates(customer):
+        if is_date_of_birth(value, today):
+            return value.isoformat()
+    return None
+
+
+def customer_birthday_day(customer: dict[str, Any]) -> str | None:
+    """Return the day and month of the customer's birthday, as ``MM-DD``.
+
+    This is the part EasyStore actually knows and the part a birthday campaign
+    needs. It is the same whether the store reported a date of birth or the next
+    occurrence, so it is the one birthday value that is always trustworthy.
+    """
+
+    for _key, value in _birthday_dates(customer):
+        return f"{value.month:02d}-{value.day:02d}"
+    return None
+
+
+def _next_occurrence(value: date, today: date) -> date:
+    """Return the next time a day and month comes round, today included."""
+
+    for year in (today.year, today.year + 1):
+        try:
+            candidate = date(year, value.month, value.day)
+        except ValueError:
+            # 29 February in a common year: mark it on the 28th.
+            candidate = date(year, value.month, value.day - 1)
+        if candidate >= today:
+            return candidate
+    return today
+
+
+def customer_next_birthday(customer: dict[str, Any]) -> str | None:
+    """Return when the customer's birthday next falls.
+
+    A next-occurrence value from EasyStore is kept as it is, because that is
+    exactly what it means. A real date of birth is projected forward to its next
+    occurrence, so campaigns can target one property whichever way the store
+    reports birthdays.
+    """
+
+    today = datetime.now(timezone.utc).date()
+    for _key, value in _birthday_dates(customer):
+        if not is_date_of_birth(value, today):
+            return value.isoformat()
+        return _next_occurrence(value, today).isoformat()
+    return None
+
+
+def _mask(text: str) -> str:
+    """Return a value's shape with its content removed."""
+
+    return re.sub(r"[0-9]", "#", re.sub(r"[A-Za-z]", "a", text))
+
+
+def birthday_diagnostics(customer: dict[str, Any]) -> tuple[list[str], list[str], int]:
+    """Return the shape and year of each birthday source, and future-date count.
+
+    Reported so a wrong birthday can be diagnosed without putting anyone's date
+    of birth in a build log: shapes are masked (``####-##-##``) and years are an
+    aggregate distribution.
+    """
+
+    shapes: list[str] = []
+    years: list[str] = []
+    future = 0
+    today = _utc_today_ms()
+
+    for key in BIRTHDAY_SOURCES:
+        raw = _nonempty(customer.get(key))
+        if raw is None:
+            continue
+        shapes.append(f"{key}={_mask(raw)}")
+        stamp = date_value(raw)
+        if stamp is None:
+            years.append(f"{key}=unparsed")
+            continue
+        moment = datetime.fromtimestamp(int(stamp) / 1000, tz=timezone.utc)
+        years.append(f"{key}={moment.year}")
+        if int(stamp) > today:
+            future += 1
+    return shapes, years, future
+
+
+def customer_note(customer: dict[str, Any]) -> str | None:
+    """Return the note staff left on a customer, from whichever field holds it."""
+
+    for key in NOTE_SOURCES:
+        found = note_text(customer.get(key))
+        if found is not None:
+            return found
+    return None
+
+
 def _customer_tags(customer: dict[str, Any]) -> str | None:
     """Return the customer's tags as one comma separated value."""
 
@@ -319,6 +521,10 @@ def _customer_tags(customer: dict[str, Any]) -> str | None:
 
 CONTACT_FIELD_DERIVATIONS: dict[str, Callable[[dict[str, Any]], str | None]] = {
     "tags": _customer_tags,
+    "birthday": customer_birthday,
+    "birthday_day": customer_birthday_day,
+    "next_birthday": customer_next_birthday,
+    "note": customer_note,
 }
 
 
@@ -339,14 +545,27 @@ def _attribute_value(value: Any) -> str | None:
     return _nonempty(value)
 
 
-def customer_attributes(customer: dict[str, Any]) -> dict[str, str]:
+def customer_attributes(
+    customer: dict[str, Any],
+    attribute_titles: dict[str, str] | None = None,
+) -> dict[str, str]:
     """Return the merchant-defined attributes on a customer, keyed by label.
 
-    EasyStore reports these either as a mapping of label to answer or as a list
-    of records carrying a label and a value, so both shapes are read.
+    EasyStore answers carry the id of the shop attribute setting they belong to
+    rather than its question, e.g.
+    ``{"customer_attribute_setting_id": 7, "value": "Instagram"}`` -- the
+    storefront matches them against ``shop.attribute_settings`` to get the
+    wording. ``attribute_titles`` supplies that wording when it is available; an
+    answer whose question is unknown is still synchronized, under its setting id,
+    so no answer is lost to a missing title.
+
+    A mapping of question to answer and a record carrying its own label are both
+    read too, so a differently shaped payload still works.
     """
 
+    titles = attribute_titles or {}
     collected: dict[str, str] = {}
+
     for source in CUSTOM_ATTRIBUTE_SOURCES:
         raw = customer.get(source)
         entries: list[tuple[Any, Any]] = []
@@ -359,6 +578,18 @@ def customer_attributes(customer: dict[str, Any]) -> dict[str, str]:
                         item,
                         ("label", "name", "key", "title", "question"),
                     )
+                    if label is None:
+                        setting_id = first_present(
+                            item,
+                            (
+                                "customer_attribute_setting_id",
+                                "attribute_setting_id",
+                                "setting_id",
+                                "id",
+                            ),
+                        )
+                        if setting_id is not None:
+                            label = titles.get(setting_id) or f"setting {setting_id}"
                     if label is not None:
                         entries.append((label, item.get("value", item.get("answer"))))
                     continue
@@ -372,6 +603,59 @@ def customer_attributes(customer: dict[str, Any]) -> dict[str, str]:
                 continue
             collected.setdefault(label_text, answer)
     return collected
+
+
+def fetch_attribute_titles(
+    store_domain: str,
+    access_token: str,
+) -> tuple[str | None, dict[str, str]]:
+    """Return the route that names the shop's customer questions, and the names.
+
+    EasyStore holds the wording in its shop attribute settings, which the
+    storefront reads as ``shop.attribute_settings``. The API route for those is
+    not reachable from CI, so the candidates are tried and the one that answers is
+    reported. Without it the answers still sync, keyed by setting id.
+    """
+
+    domain = store_domain.strip().removeprefix("https://").removeprefix("http://")
+    domain = domain.rstrip("/")
+    headers = {"EasyStore-Access-Token": access_token}
+
+    for route in ATTRIBUTE_SETTING_ROUTES:
+        document = _http_json(
+            f"https://{domain}/api/3.0/{route}",
+            headers=headers,
+            allow_statuses={403, 404},
+        )
+        if document is None:
+            continue
+
+        settings: list[Any] = []
+        if isinstance(document, list):
+            settings = document
+        elif isinstance(document, dict):
+            for key in (
+                "customer_attribute_settings",
+                "attribute_settings",
+                "data",
+                "results",
+            ):
+                value = document.get(key)
+                if isinstance(value, list):
+                    settings = value
+                    break
+
+        titles: dict[str, str] = {}
+        for setting in settings:
+            if not isinstance(setting, dict):
+                continue
+            setting_id = first_present(setting, ("id", "setting_id"))
+            title = first_present(setting, ("title", "name", "label", "question"))
+            if setting_id is not None and title is not None:
+                titles[setting_id] = title
+        if titles:
+            return route, titles
+    return None, {}
 
 
 def attribute_property_name(label: str) -> str | None:
@@ -411,7 +695,10 @@ def attribute_fields(labels: Iterable[str]) -> tuple[tuple[FieldSpec, ...], list
     return tuple(fields), skipped
 
 
-def customer_field_values(customer: dict[str, Any]) -> dict[str, str]:
+def customer_field_values(
+    customer: dict[str, Any],
+    titles: dict[str, str] | None = None,
+) -> dict[str, str]:
     """Return the extra EasyStore customer facts, keyed by field key.
 
     Merchant-defined attributes are keyed by their label. Only the ones that
@@ -420,7 +707,7 @@ def customer_field_values(customer: dict[str, Any]) -> dict[str, str]:
     """
 
     values = field_values(customer, CONTACT_FIELDS, CONTACT_FIELD_DERIVATIONS)
-    for label, answer in customer_attributes(customer).items():
+    for label, answer in customer_attributes(customer, titles).items():
         values[f"{ATTRIBUTE_KEY_PREFIX}{label}"] = answer
     return values
 
@@ -472,6 +759,7 @@ def customer_properties(
     customer: dict[str, Any],
     mobile: str,
     field_properties: dict[str, str] | None = None,
+    attribute_titles: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """Map an EasyStore customer onto HubSpot's standard contact properties."""
 
@@ -519,7 +807,11 @@ def customer_properties(
             properties["country"] = country
 
     if field_properties:
-        apply_fields(properties, customer_field_values(customer), field_properties)
+        apply_fields(
+            properties,
+            customer_field_values(customer, attribute_titles),
+            field_properties,
+        )
 
     return properties
 
@@ -634,6 +926,53 @@ def iter_easystore_customers(
         if len(customers) < EASYSTORE_PAGE_SIZE:
             break
         page += 1
+
+
+def customer_needs_detail(customer: dict[str, Any]) -> bool:
+    """Report whether the list record omits fields the customer endpoint returns.
+
+    Key presence is the test, not a value: a customer legitimately has no
+    birthday or no answers, and re-fetching them every run would cost a request
+    per customer forever. A missing *key* is what says the list endpoint does not
+    carry the field at all.
+    """
+
+    has_birthday = any(key in customer for key in BIRTHDAY_SOURCES)
+    has_attributes = any(key in customer for key in CUSTOM_ATTRIBUTE_SOURCES)
+    has_note = any(key in customer for key in NOTE_SOURCES)
+    return not (has_birthday and has_attributes and has_note)
+
+
+def complete_customer(
+    store_domain: str,
+    access_token: str,
+    customer: dict[str, Any],
+) -> dict[str, Any]:
+    """Return the full customer record, fetching the detail when needed."""
+
+    if not customer_needs_detail(customer):
+        return customer
+
+    customer_id = _nonempty(customer.get("id"))
+    if customer_id is None:
+        return customer
+
+    domain = store_domain.strip().removeprefix("https://").removeprefix("http://")
+    domain = domain.rstrip("/")
+    document = _http_json(
+        f"https://{domain}/api/3.0/customers/{customer_id}.json",
+        headers={"EasyStore-Access-Token": access_token},
+        allow_statuses={403, 404},
+    )
+    if not isinstance(document, dict):
+        return customer
+
+    for key in ("customer", "data"):
+        candidate = document.get(key)
+        if isinstance(candidate, dict):
+            nested = candidate.get("customer")
+            return nested if isinstance(nested, dict) else candidate
+    return document if document else customer
 
 
 def iter_hubspot_contacts(access_token: str) -> Iterator[dict[str, Any]]:
@@ -799,16 +1138,43 @@ def sync(
     easystore_by_phone: dict[str, dict[str, Any]] = {}
     customer_keys: set[str] = set()
     address_keys: set[str] = set()
+    # A birthday that came out wrong is diagnosed from these: the shape of the
+    # value EasyStore sent, with its digits masked, and the year it parses to.
+    birthday_shapes: Counter[str] = Counter()
+    birthday_years: Counter[str] = Counter()
+    birthdays_in_future = 0
+    customers_fetched_in_detail = 0
     easystore_total = 0
+
+    # The wording of the shop's own customer questions, so an answer lands in a
+    # property a person can read rather than one keyed by a setting id.
+    attribute_route, titles = fetch_attribute_titles(
+        store_domain,
+        easystore_access_token,
+    )
+    if attribute_route is None:
+        print(
+            "WARNING: no EasyStore route named the shop's customer attributes. "
+            "Answers still sync, keyed by setting id. Tried: "
+            + ", ".join(ATTRIBUTE_SETTING_ROUTES),
+            file=sys.stderr,
+        )
     skipped_without_phone = 0
     duplicate_easystore_phones = 0
 
-    for customer in iter_easystore_customers(store_domain, easystore_access_token):
+    for listed in iter_easystore_customers(store_domain, easystore_access_token):
         easystore_total += 1
+        customer = complete_customer(store_domain, easystore_access_token, listed)
+        if customer is not listed:
+            customers_fetched_in_detail += 1
         # Names only, never values: enough to trace a zero in the coverage block
         # back to the real EasyStore field name.
         observed_keys(customer_keys, customer)
         observed_keys(address_keys, customer.get("primary_address"))
+        shapes, years, future = birthday_diagnostics(customer)
+        birthday_shapes.update(shapes)
+        birthday_years.update(years)
+        birthdays_in_future += future
         normalized = customer_mobile(customer, fallback_dial_code)
         if normalized is None:
             # Filtered out: no mobile number recorded, so no CRM identity.
@@ -827,7 +1193,7 @@ def sync(
     attribute_labels = {
         label
         for customer in easystore_by_phone.values()
-        for label in customer_attributes(customer)
+        for label in customer_attributes(customer, titles)
     }
     schema_report: dict[str, Any] = {}
     contact_field_properties = resolve_contact_fields(
@@ -846,6 +1212,7 @@ def sync(
     ambiguous_hubspot_phones = 0
     email_conflicts = 0
     lifecycle_assignments = 0
+    birthdays_cleared = 0
     # How many synchronized customers actually carried each extra fact. A zero
     # means EasyStore did not report it, not that HubSpot rejected it.
     field_coverage: dict[str, int] = {field.key: 0 for field in CONTACT_FIELDS}
@@ -861,8 +1228,13 @@ def sync(
             )
             continue
 
-        properties = customer_properties(customer, mobile, contact_field_properties)
-        for key in customer_field_values(customer):
+        properties = customer_properties(
+            customer,
+            mobile,
+            contact_field_properties,
+            titles,
+        )
+        for key in customer_field_values(customer, titles):
             field_coverage[key] = field_coverage.get(key, 0) + 1
         email = properties.get("email")
         target_id = next(iter(matching_ids), None)
@@ -892,6 +1264,21 @@ def sync(
             properties[LIFECYCLE_PROPERTY] = stage
             lifecycle_assignments += 1
 
+        birthday_property = contact_field_properties.get("birthday")
+        if (
+            target_id is not None
+            and birthday_property == BIRTHDAY_FALLBACK_PROPERTY
+            and birthday_property not in properties
+        ):
+            # This sync provisioned easystore_customer_birthday and owns it.
+            # Earlier runs wrote EasyStore's next-occurrence date into it, so
+            # clearing it when no date of birth is reported repairs those
+            # contacts rather than leaving a birthday in 2027 behind. A portal
+            # whose native date_of_birth was resolved instead is never cleared:
+            # that property belongs to the portal, not to this sync.
+            properties[birthday_property] = ""
+            birthdays_cleared += 1
+
         if target_id is None:
             creates.append({"properties": properties})
         else:
@@ -915,6 +1302,13 @@ def sync(
             sorted(contact_field_properties.items())
         ),
         "easystore_customer_attributes_found": len(attribute_labels),
+        "easystore_attribute_setting_route": attribute_route,
+        "easystore_attribute_settings_named": len(titles),
+        "customers_fetched_in_detail": customers_fetched_in_detail,
+        "easystore_birthday_shapes": dict(sorted(birthday_shapes.items())),
+        "easystore_birthday_years": dict(sorted(birthday_years.items())),
+        "birthdays_in_future_ignored": birthdays_in_future,
+        "birthday_property_cleared": birthdays_cleared,
         "easystore_customer_keys_seen": sorted(customer_keys),
         "easystore_customer_address_keys_seen": sorted(address_keys),
         "hubspot_contact_property_hints": schema_report.get("hints", {}),

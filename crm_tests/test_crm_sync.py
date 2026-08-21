@@ -11,6 +11,9 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import easystore_hubspot_orders as orders
 import easystore_hubspot_preflight as preflight
 import easystore_hubspot_products as products
+from datetime import date
+
+import easystore_hubspot_carts as carts
 import easystore_hubspot_reconcile as reconcile
 import easystore_hubspot_schema as schema
 import easystore_hubspot_sync as customers
@@ -758,7 +761,7 @@ class CustomerSyncBatchTests(unittest.TestCase):
         ), mock.patch.object(
             customers, "iter_hubspot_contacts", lambda *a, **k: iter(hubspot)
         ), mock.patch.object(
-            customers, "_http_json", lambda *a, **k: contact_schema
+            customers, "_http_json", _hubspot_only(contact_schema)
         ), mock.patch.object(
             customers, "_batch_write", fake_batch_write
         ):
@@ -793,16 +796,96 @@ class CustomerSyncBatchTests(unittest.TestCase):
             summary["easystore_customer_field_coverage"],
             {
                 "birthday": 0,
+                "birthday_day": 0,
                 "customer_id": 3,
                 "customer_since": 1,
                 "gender": 0,
                 "last_order_at": 0,
+                "next_birthday": 0,
                 "note": 0,
                 "orders_count": 1,
                 "tags": 1,
                 "total_spent": 1,
             },
         )
+
+    def test_a_birthday_an_earlier_run_got_wrong_is_cleared(self) -> None:
+        # The contact exists and EasyStore reports only a next occurrence, so the
+        # 2027 date an earlier run wrote must not simply be left behind.
+        easystore = [
+            {
+                "id": 1,
+                "phone": "9123 4567",
+                "country_code": "SG",
+                "birthday": "2027-01-15",
+            }
+        ]
+        hubspot = [{"id": "100", "properties": {"mobilephone": "+6591234567"}}]
+        contact_schema = {
+            "results": [
+                {"name": field.fallback, "type": field.kind}
+                for field in customers.CONTACT_FIELDS
+            ]
+        }
+        written: list[dict] = []
+
+        with mock.patch.object(
+            customers, "iter_easystore_customers", lambda *a, **k: iter(easystore)
+        ), mock.patch.object(
+            customers, "iter_hubspot_contacts", lambda *a, **k: iter(hubspot)
+        ), mock.patch.object(
+            customers, "_http_json", _hubspot_only(contact_schema)
+        ), mock.patch.object(
+            customers,
+            "_batch_write",
+            lambda token, action, inputs: written.extend(inputs),
+        ):
+            summary = customers.sync(
+                store_domain="cardboardcollective.easy.co",
+                easystore_access_token="es",
+                hubspot_access_token="hs",
+                fallback_dial_code="65",
+            )
+
+        properties = written[0]["properties"]
+        self.assertEqual(properties["easystore_customer_birthday"], "")
+        self.assertEqual(properties["easystore_birthday_day"], "01-15")
+        self.assertEqual(summary["birthday_property_cleared"], 1)
+
+    def test_a_portal_owned_birthday_property_is_never_cleared(self) -> None:
+        # date_of_birth belongs to the portal; a person may maintain it by hand.
+        easystore = [
+            {
+                "id": 1,
+                "phone": "9123 4567",
+                "country_code": "SG",
+                "birthday": "2027-01-15",
+            }
+        ]
+        hubspot = [{"id": "100", "properties": {"mobilephone": "+6591234567"}}]
+        contact_schema = {"results": [{"name": "date_of_birth", "type": "date"}]}
+        written: list[dict] = []
+
+        with mock.patch.object(
+            customers, "iter_easystore_customers", lambda *a, **k: iter(easystore)
+        ), mock.patch.object(
+            customers, "iter_hubspot_contacts", lambda *a, **k: iter(hubspot)
+        ), mock.patch.object(
+            customers, "_http_json", _hubspot_only(contact_schema)
+        ), mock.patch.object(
+            customers,
+            "_batch_write",
+            lambda token, action, inputs: written.extend(inputs),
+        ):
+            summary = customers.sync(
+                store_domain="cardboardcollective.easy.co",
+                easystore_access_token="es",
+                hubspot_access_token="hs",
+                fallback_dial_code="65",
+            )
+
+        self.assertNotIn("date_of_birth", written[0]["properties"])
+        self.assertEqual(summary["birthday_property_cleared"], 0)
 
     def test_customer_extras_are_skipped_without_the_schema_scopes(self) -> None:
         easystore = [{"id": 1, "phone": "9123 4567", "country_code": "SG"}]
@@ -830,6 +913,115 @@ class CustomerSyncBatchTests(unittest.TestCase):
         self.assertEqual(created["mobilephone"], "+6591234567")
         self.assertNotIn("easystore_customer_id", created)
         self.assertEqual(summary["hubspot_contact_field_properties"], {})
+
+
+class CustomerDetailTests(unittest.TestCase):
+    def test_a_list_record_missing_the_fields_is_fetched_in_detail(self) -> None:
+        # Key presence decides, not a value: a customer legitimately has no
+        # birthday, and re-fetching them forever would cost a request each run.
+        self.assertTrue(customers.customer_needs_detail({"id": 1, "email": "a@b.c"}))
+        self.assertTrue(customers.customer_needs_detail({"id": 1, "birthdate": "1993-04-20"}))
+        self.assertTrue(
+            customers.customer_needs_detail({"id": 1, "birthdate": "", "attributes": []})
+        )
+        self.assertFalse(
+            customers.customer_needs_detail(
+                {"id": 1, "birthdate": "", "attributes": [], "note": ""}
+            )
+        )
+
+    def test_the_detail_record_replaces_the_thin_one(self) -> None:
+        detail = {
+            "customer": {
+                "id": 1,
+                "birthdate": "1993-04-20",
+                "attributes": [{"customer_attribute_setting_id": 7, "value": "Instagram"}],
+            }
+        }
+        with mock.patch.object(customers, "_http_json", lambda *a, **k: detail):
+            completed = customers.complete_customer(
+                "shop.example",
+                "token",
+                {"id": 1, "email": "a@b.c"},
+            )
+        self.assertEqual(completed["birthdate"], "1993-04-20")
+
+    def test_a_customer_that_cannot_be_fetched_is_used_as_listed(self) -> None:
+        listed = {"id": 1, "email": "a@b.c"}
+        with mock.patch.object(customers, "_http_json", lambda *a, **k: None):
+            self.assertIs(
+                customers.complete_customer("shop.example", "token", listed),
+                listed,
+            )
+
+
+class CustomerNoteTests(unittest.TestCase):
+    def test_a_note_is_read_from_a_string_a_record_or_a_list(self) -> None:
+        self.assertEqual(
+            customers.customer_note({"note": "Collects the deluxe sets"}),
+            "Collects the deluxe sets",
+        )
+        self.assertEqual(
+            customers.customer_note({"note": {"body": "Prefers pickup"}}),
+            "Prefers pickup",
+        )
+        self.assertEqual(
+            customers.customer_note(
+                {
+                    "notes": [
+                        {"note": "Prefers pickup", "created_at": "2026-01-01"},
+                        {"note": "VIP"},
+                    ]
+                }
+            ),
+            "Prefers pickup\nVIP",
+        )
+
+    def test_the_wording_easystore_uses_for_a_remark_is_read_too(self) -> None:
+        # EasyStore calls the shopper's own order message a remark
+        # (theme/templates/customers/order.liquid renders order.remark).
+        for key in ("remark", "remarks", "internal_note", "admin_note", "comment"):
+            with self.subTest(key=key):
+                self.assertEqual(
+                    customers.customer_note({key: "Prefers pickup"}),
+                    "Prefers pickup",
+                )
+
+    def test_an_empty_note_collection_is_absent_not_a_python_repr(self) -> None:
+        # str([]) is "[]", which would have landed in the CRM as the note.
+        self.assertIsNone(customers.customer_note({"notes": []}))
+        self.assertIsNone(customers.customer_note({"note": ""}))
+        self.assertIsNone(customers.customer_note({}))
+
+    def test_no_container_is_ever_written_as_text(self) -> None:
+        # The same guard protects every field, not just notes.
+        self.assertIsNone(schema.nonempty([]))
+        self.assertIsNone(schema.nonempty([{"note": "x"}]))
+        self.assertIsNone(schema.nonempty({}))
+        self.assertIsNone(schema.nonempty({"body": "x"}))
+        self.assertEqual(schema.nonempty(0), "0")
+        self.assertEqual(schema.nonempty(" x "), "x")
+
+    def test_a_thin_money_value_triggers_a_detail_fetch_rather_than_a_repr(self) -> None:
+        # A money field arriving as a nested object used to stringify; now it
+        # reads as absent, which is what asks for the order's detail.
+        self.assertTrue(
+            orders.order_needs_detail(
+                {
+                    "id": 1,
+                    "line_items": [],
+                    "shipping_address": {"city": "Singapore"},
+                    "total_price": {"amount": "10.00"},
+                }
+            )
+        )
+
+    def test_an_order_note_reads_the_same_shapes(self) -> None:
+        self.assertEqual(
+            orders._order_note({"notes": [{"note": "Leave at the door"}]}),
+            "Leave at the door",
+        )
+        self.assertIsNone(orders._order_note({"notes": []}))
 
 
 class CustomerFieldTests(unittest.TestCase):
@@ -865,6 +1057,256 @@ class CustomerFieldTests(unittest.TestCase):
         self.assertEqual(values["note"], "Collects the deluxe sets")
 
 
+def _hubspot_only(schema_document: dict) -> object:
+    """Answer HubSpot schema reads only, so EasyStore routes stay unmocked.
+
+    The contact stage now reads EasyStore's customer detail and attribute
+    settings through the same helper, and answering those with a HubSpot payload
+    would make a test pass for the wrong reason.
+    """
+
+    def fake_http_json(url, *args, **kwargs):
+        return schema_document if "api.hubapi.com" in url else None
+
+    return fake_http_json
+
+
+class BirthdayTests(unittest.TestCase):
+    def test_a_compact_date_is_not_read_as_an_epoch(self) -> None:
+        # 19930420 read as epoch seconds lands in August 1970.
+        self.assertEqual(schema.date_value("19930420"), schema.date_value("1993-04-20"))
+
+    def test_a_date_keeps_the_calendar_day_it_was_written_with(self) -> None:
+        # Converting an offset-bearing midnight to UTC first moved a birthday to
+        # the previous day for every store east of Greenwich.
+        for value in (
+            "1993-04-20",
+            "1993-04-20T00:00:00+08:00",
+            "1993-04-20T23:30:00-05:00",
+        ):
+            with self.subTest(value=value):
+                self.assertEqual(schema.date_value(value), "735264000000")
+
+    def test_an_impossible_date_is_dropped(self) -> None:
+        self.assertIsNone(schema.date_value("19930231"))
+        self.assertIsNone(schema.date_value("20/04/1993"))
+
+    def test_nobody_is_born_in_the_future(self) -> None:
+        self.assertIsNone(customers.customer_birthday({"birthday": "2099-09-15"}))
+
+    def test_a_future_source_gives_way_to_a_real_birthday(self) -> None:
+        # A store that reports the upcoming anniversary in one field and the real
+        # date of birth in another must not sync the anniversary.
+        self.assertEqual(
+            customers.customer_birthday({"birthday": "2099-09-15", "dob": "1993-04-20"}),
+            "1993-04-20",
+        )
+
+    def test_a_real_birthday_is_kept(self) -> None:
+        self.assertEqual(
+            customers.customer_birthday({"birthday": "1993-04-20"}),
+            "1993-04-20",
+        )
+
+    def test_the_real_date_of_birth_field_wins_over_the_occurrence(self) -> None:
+        # EasyStore's storefront reads and writes customer.birthdate for a date of
+        # birth (theme/templates/customers/account.liquid), while `birthday` comes
+        # back as the next occurrence of it.
+        values = customers.customer_field_values(
+            {"birthdate": "1993-04-20", "birthday": "2027-04-20"}
+        )
+        self.assertEqual(values["birthday"], schema.date_value("1993-04-20"))
+        self.assertEqual(values["birthday_day"], "04-20")
+
+    def test_birthdate_is_read_before_every_other_source(self) -> None:
+        self.assertEqual(customers.BIRTHDAY_SOURCES[0], "birthdate")
+
+    def test_easystore_reports_the_next_occurrence_not_the_birth_year(self) -> None:
+        # A January birthday, reported in August, comes back dated next year.
+        values = customers.customer_field_values({"birthday": "2027-01-15"})
+        # No birth year is invented from it...
+        self.assertNotIn("birthday", values)
+        # ...but the day and month, which are real, are kept.
+        self.assertEqual(values["birthday_day"], "01-15")
+        # ...and the date is stored as what it actually is.
+        self.assertEqual(values["next_birthday"], schema.date_value("2027-01-15"))
+
+    def test_an_occurrence_later_this_year_is_read_the_same_way(self) -> None:
+        values = customers.customer_field_values({"birthday": "2026-09-15"})
+        self.assertNotIn("birthday", values)
+        self.assertEqual(values["birthday_day"], "09-15")
+
+    def test_a_real_date_of_birth_still_syncs_as_one(self) -> None:
+        values = customers.customer_field_values({"birthday": "1993-04-20"})
+        self.assertEqual(values["birthday"], schema.date_value("1993-04-20"))
+        self.assertEqual(values["birthday_day"], "04-20")
+        # And it is projected forward, so one property serves campaigns either way.
+        self.assertIsNotNone(values["next_birthday"])
+
+    def test_a_date_within_the_last_year_is_an_occurrence_not_a_birth(self) -> None:
+        today = date(2026, 8, 20)
+        self.assertFalse(customers.is_date_of_birth(date(2026, 3, 1), today))
+        self.assertFalse(customers.is_date_of_birth(date(2026, 8, 20), today))
+        self.assertTrue(customers.is_date_of_birth(date(2025, 8, 19), today))
+        self.assertTrue(customers.is_date_of_birth(date(1993, 4, 20), today))
+
+    def test_the_next_occurrence_of_29_february_lands_on_the_28th(self) -> None:
+        self.assertEqual(
+            customers._next_occurrence(date(1992, 2, 29), date(2026, 8, 20)),
+            date(2027, 2, 28),
+        )
+
+    def test_the_next_occurrence_includes_a_birthday_today(self) -> None:
+        self.assertEqual(
+            customers._next_occurrence(date(1993, 8, 20), date(2026, 8, 20)),
+            date(2026, 8, 20),
+        )
+
+    def test_diagnostics_report_shape_and_year_without_the_date(self) -> None:
+        shapes, years, future = customers.birthday_diagnostics(
+            {"birthday": "2099-09-15", "dob": "19930420"}
+        )
+        self.assertEqual(shapes, ["birthday=####-##-##", "dob=########"])
+        self.assertEqual(years, ["birthday=2099", "dob=1993"])
+        self.assertEqual(future, 1)
+        # The masked shape must not carry the date itself.
+        self.assertNotIn("1993", shapes[1])
+
+    def test_an_unparseable_birthday_is_named_as_such(self) -> None:
+        _shapes, years, future = customers.birthday_diagnostics({"birthday": "next week"})
+        self.assertEqual(years, ["birthday=unparsed"])
+        self.assertEqual(future, 0)
+
+
+class AbandonedCartTests(unittest.TestCase):
+    def _checkout(self) -> dict[str, object]:
+        return {
+            "id": 900,
+            "token": "abc123",
+            "currency": "sgd",
+            "status": "abandoned",
+            "created_at": "2026-08-19T20:00:00+08:00",
+            "updated_at": "2026-08-19T21:30:00+08:00",
+            "total_price": "266.00",
+            "subtotal_price": "266.00",
+            "total_discount": "-10.00",
+            "total_tax": "0.00",
+            "total_shipping": "5.00",
+            "abandoned_checkout_url": "https://shop.example/checkouts/abc123/recover",
+            "customer": {
+                "first_name": "Jeremy",
+                "last_name": "Ho",
+                "email": "shopper@example.com",
+                "phone": "9123 4567",
+                "country_code": "SG",
+            },
+            "line_items": [
+                {"title": "The Hobbit", "sku": "A", "quantity": 1},
+                {"title": "Scenes", "sku": "B", "quantity": 2},
+            ],
+        }
+
+    def test_a_checkout_maps_onto_hubspot_cart_properties(self) -> None:
+        mapped = carts.cart_properties(
+            self._checkout(),
+            external_id="900",
+            store_domain="cardboardcollective.easy.co",
+        )
+        self.assertEqual(mapped["hs_external_cart_id"], "900")
+        self.assertEqual(mapped["hs_currency_code"], "SGD")
+        self.assertEqual(mapped["hs_source_store"], "cardboardcollective.easy.co")
+        self.assertEqual(mapped["hs_total_price"], "266.00")
+        self.assertEqual(mapped["hs_subtotal_price"], "266.00")
+        self.assertEqual(mapped["hs_cart_discount"], "10.00")
+        self.assertEqual(mapped["hs_tax"], "0.00")
+        self.assertEqual(mapped["hs_shipping_cost"], "5.00")
+        self.assertEqual(mapped["hs_external_status"], "abandoned")
+
+    def test_the_cart_records_what_was_left_behind_and_how_to_recover_it(self) -> None:
+        mapped = carts.cart_properties(
+            self._checkout(),
+            external_id="900",
+            store_domain="cardboardcollective.easy.co",
+        )
+        self.assertEqual(mapped["easystore_cart_items"], "The Hobbit x1; Scenes x2")
+        self.assertEqual(mapped["easystore_cart_item_count"], "3")
+        self.assertEqual(
+            mapped["easystore_cart_recovery_url"],
+            "https://shop.example/checkouts/abc123/recover",
+        )
+        self.assertEqual(mapped["easystore_cart_email"], "shopper@example.com")
+        self.assertEqual(mapped["easystore_cart_customer_name"], "Jeremy Ho")
+        self.assertEqual(mapped["easystore_cart_phone"], "+6591234567")
+
+    def test_a_completed_checkout_is_not_a_cart(self) -> None:
+        # It is already an Order; syncing it here would double-count revenue.
+        for completed in (
+            {"id": 1, "order_id": 55},
+            {"id": 2, "order": {"id": 55}},
+            {"id": 3, "completed_at": "2026-08-19T21:00:00+08:00"},
+            {"id": 4, "status": "completed"},
+            {"id": 5, "status": "Paid"},
+        ):
+            with self.subTest(completed=sorted(completed)):
+                self.assertFalse(carts.is_abandoned(completed))
+        self.assertTrue(carts.is_abandoned(self._checkout()))
+
+    def test_the_shopper_is_resolved_with_the_crm_identity_rule(self) -> None:
+        self.assertEqual(carts.cart_mobile(self._checkout(), "65"), "+6591234567")
+        self.assertEqual(
+            carts.cart_mobile({"billing_address": {"phone": "9123 4568"}}, "65"),
+            "+6591234568",
+        )
+        self.assertIsNone(carts.cart_mobile({}, "65"))
+
+    def test_a_portal_without_the_cart_object_is_skipped_not_failed(self) -> None:
+        with mock.patch.object(carts, "_http_json", lambda *a, **k: None):
+            summary = carts.sync(
+                store_domain="cardboardcollective.easy.co",
+                easystore_access_token="es",
+                hubspot_access_token="hs",
+                fallback_dial_code="65",
+            )
+        self.assertEqual(summary, {"hubspot_cart_object": "unavailable"})
+
+    def test_every_checkout_route_is_tried_before_giving_up(self) -> None:
+        attempted: list[str] = []
+
+        def fake_http_json(url, *, allow_statuses=None, **kwargs):
+            attempted.append(url.split("/api/3.0/")[-1].split("?")[0])
+            return None
+
+        with mock.patch.object(carts, "_http_json", fake_http_json):
+            route, records = carts.iter_easystore_checkouts("shop.example", "token")
+
+        self.assertIsNone(route)
+        self.assertEqual(list(records), [])
+        self.assertEqual(attempted, list(carts.CHECKOUT_ROUTES))
+
+    def test_the_route_that_answers_is_the_one_used(self) -> None:
+        def fake_http_json(url, *, allow_statuses=None, **kwargs):
+            if "abandoned_checkouts.json" in url:
+                return {"abandoned_checkouts": [{"id": 900}]}
+            return None
+
+        with mock.patch.object(carts, "_http_json", fake_http_json):
+            route, records = carts.iter_easystore_checkouts("shop.example", "token")
+
+        self.assertEqual(route, "abandoned_checkouts.json")
+        self.assertEqual([record["id"] for record in records], [900])
+
+    def test_duplicate_hubspot_carts_fail_closed(self) -> None:
+        existing = [
+            {"id": "1", "properties": {"hs_external_cart_id": "900"}},
+            {"id": "2", "properties": {"hs_external_cart_id": "900"}},
+        ]
+        with mock.patch.object(
+            carts, "iter_hubspot_objects", lambda *a, **k: iter(existing)
+        ):
+            with self.assertRaises(carts.SyncError):
+                carts.hubspot_cart_index("token")
+
+
 class CustomerAttributeTests(unittest.TestCase):
     def test_attributes_are_read_from_both_easystore_shapes(self) -> None:
         self.assertEqual(
@@ -884,6 +1326,51 @@ class CustomerAttributeTests(unittest.TestCase):
                 "Newsletter frequency": "Weekly",
             },
         )
+
+    def test_an_answer_keyed_by_setting_id_is_still_synchronized(self) -> None:
+        # EasyStore answers carry the id of the shop attribute setting, not its
+        # question: {"customer_attribute_setting_id": 7, "value": "Instagram"}.
+        customer = {"attributes": [{"customer_attribute_setting_id": 7, "value": "Instagram"}]}
+        self.assertEqual(
+            customers.customer_attributes(customer),
+            {"setting 7": "Instagram"},
+        )
+        self.assertEqual(
+            customers.attribute_property_name("setting 7"),
+            "easystore_attr_setting_7",
+        )
+
+    def test_the_shop_wording_names_the_property_when_it_is_known(self) -> None:
+        customer = {"attributes": [{"customer_attribute_setting_id": 7, "value": "Instagram"}]}
+        self.assertEqual(
+            customers.customer_attributes(customer, {"7": "How did you find us?"}),
+            {"How did you find us?": "Instagram"},
+        )
+
+    def test_attribute_titles_come_from_the_route_that_answers(self) -> None:
+        def fake_http_json(url, *, allow_statuses=None, **kwargs):
+            # Only the second candidate answers, so the loop has to reach it.
+            if url.endswith("/attribute_settings.json"):
+                return {
+                    "attribute_settings": [
+                        {"id": 7, "title": "How did you find us?"},
+                        {"id": 8, "name": "Favourite set"},
+                        {"id": 9},
+                    ]
+                }
+            return None
+
+        with mock.patch.object(customers, "_http_json", fake_http_json):
+            route, titles = customers.fetch_attribute_titles("shop.example", "token")
+
+        self.assertEqual(route, "attribute_settings.json")
+        self.assertEqual(titles, {"7": "How did you find us?", "8": "Favourite set"})
+
+    def test_answers_still_sync_when_no_route_names_them(self) -> None:
+        with mock.patch.object(customers, "_http_json", lambda *a, **k: None):
+            route, titles = customers.fetch_attribute_titles("shop.example", "token")
+        self.assertIsNone(route)
+        self.assertEqual(titles, {})
 
     def test_blank_answers_are_not_attributes(self) -> None:
         self.assertEqual(

@@ -2,7 +2,7 @@
 
 `.github/workflows/sync-easystore-customers-hubspot.yml` independently synchronizes EasyStore commerce/CRM data into HubSpot at **00:00, 06:00, 12:00 and 18:00 Singapore time** and can also be run manually with `workflow_dispatch`.
 
-The production workflow runs in dependency order: **identity preflight → Products → Customers → Orders + Line Items → reconciliation**. Pull requests run only the credential-free validation job; they never call EasyStore or HubSpot with production credentials.
+The production workflow runs in dependency order: **identity preflight → Products → Customers → Orders + Line Items → Abandoned checkouts → reconciliation**. Pull requests run only the credential-free validation job; they never call EasyStore or HubSpot with production credentials.
 
 > GitHub Actions schedules are best-effort rather than a real-time scheduler. The workflow is configured for the four requested Singapore clock times, but GitHub may start scheduled runs late during platform load. Concurrency prevents two production sync runs from overlapping.
 
@@ -30,10 +30,15 @@ The production workflow runs in dependency order: **identity preflight → Produ
   - `crm.schemas.contacts.write`
   - `crm.schemas.products.read`
   - `crm.schemas.line_items.read`
+  - `crm.objects.carts.read`
+  - `crm.objects.carts.write`
+  - `crm.schemas.carts.read`
 
   Those stages degrade rather than fail: without the scopes, the Contact, Product
   and Line Item mappings log which extra fields they skipped and carry on
-  synchronizing everything that uses standard HubSpot properties.
+  synchronizing everything that uses standard HubSpot properties, and the
+  abandoned-checkout stage reports that the Cart object is unavailable and stops
+  there.
 
 Optional repository variable `CUSTOMER_SYNC_DEFAULT_DIAL_CODE` defaults to Singapore `65`.
 
@@ -65,7 +70,7 @@ A change that spans both products triggers both sets of gates, and either workfl
 
 Changes to the CRM workflow, sync scripts, CRM tests, or this document trigger the `Validate CRM sync` job on pull requests. That job requires no secrets and performs:
 
-1. Python 3.13 bytecode compilation of every CRM sync script, including the shared `easystore_hubspot_schema.py` property resolver.
+1. Python 3.13 bytecode compilation of every CRM sync script, including the shared `easystore_hubspot_schema.py` property resolver and the abandoned-checkout stage.
 2. `crm_tests/test_crm_sync.py`, covering mobile normalization, the no-mobile contact filter, duplicate-identity detection, SKU fallback, product-backed line construction, fail-closed catalog matching, stale-line reconciliation, order field mapping, order commerce-field resolution and provisioning, timestamp and amount normalization, lifecycle-stage transitions, and HubSpot partial-batch error handling.
 
 The credentialed `sync` job is explicitly skipped for `pull_request` events.
@@ -156,17 +161,82 @@ These are therefore provisioned in the `easystore_sync` group:
 | `orders_count` / `order_count` / `total_orders` | `easystore_orders_count` |
 | `total_spent` / `total_spend` / `lifetime_spend` | `easystore_total_spent` |
 | `last_order_at` / `last_order_date` / `latest_order_at` | `easystore_last_order_at` |
-| `birthday` / `birth_date` / `date_of_birth` / `dob` | `date_of_birth` or `easystore_customer_birthday` |
+| `birthdate`, then `birthday` / `birth_date` / `date_of_birth` / `dob` | `date_of_birth` or `easystore_customer_birthday`, plus `easystore_birthday_day` and `easystore_next_birthday` — see below |
 | `gender` / `sex` | `gender` or `easystore_customer_gender` |
 | `tags` | `easystore_customer_tags` |
-| `note` / `notes` / `remark` | `easystore_customer_note` |
+| `note` / `notes` / `remark` / `remarks` / `internal_note` / `admin_note` / `staff_note` / `comment` / `comments` / `memo` / `description` | `easystore_customer_note` |
 
 Tags are normalized from a list, a comma separated string, or a list of objects
-into one comma separated value. A birthday is stored as a HubSpot date, which
-holds a day rather than an instant, so it is truncated to UTC midnight; a value
-that does not parse as a date is dropped rather than rounded to today.
-`easystore_customer_field_coverage` in the run summary reports how many
-synchronized customers carried each fact.
+into one comma separated value. `easystore_customer_field_coverage` in the run
+summary reports how many synchronized customers carried each fact.
+
+A note is read whether it arrives as a string, as a record holding the words, or
+as a list of note records with their own timestamps; several notes are joined in
+the order given. EasyStore calls a shopper's own order message a *remark* — the
+storefront renders `order.remark` — so that wording is tried for a customer note
+too, alongside the usual names.
+
+**No container is ever written as text.** `str([])` is `"[]"`, and a list of note
+records stringifies to a Python repr; either would have landed in the CRM as the
+note. A value that arrives as a list or a mapping now reads as absent unless the
+field has a derivation that knows its shape, which also means a money field
+arriving as a nested object asks for the record's detail instead of writing
+nonsense.
+
+#### Birthdays
+
+EasyStore keeps a real date of birth in **`birthdate`** — the field its own
+storefront reads and writes, rendered by `theme/templates/customers/account.liquid`
+as `<input type="date" value="{{customer.birthdate}}" max="today">` and locked
+when `customer.birthdate_editable` is false. That is the field to read, and it is
+read first.
+
+**`birthday` is a different thing: it comes back as the next occurrence of that
+date.** A January birthday read in August arrives dated next January, which is
+why the first production run filled HubSpot with birthdays in 2027 — the sync was
+reading `birthday` and never read `birthdate` at all. The year of a `birthday`
+value says when the birthday next falls; only the day and month are real.
+
+So the birthday is split into three properties, each holding only what is true:
+
+| HubSpot Contact | Holds |
+| --- | --- |
+| `easystore_birthday_day` | the day and month as `MM-DD` — always trustworthy, and what a birthday campaign filters on |
+| `easystore_next_birthday` | when the birthday next falls: EasyStore's own value when that is what it sent, or a real date of birth projected forward |
+| `date_of_birth` or `easystore_customer_birthday` | a **real** date of birth, and only that |
+
+A date within the last twelve months cannot be a date of birth — nobody with a
+storefront account was born this week — so it is read as an occurrence. No birth
+year is ever invented from one.
+
+Because this sync provisions `easystore_customer_birthday`, it also owns it: when
+no date of birth is reported, the property is cleared, which repairs the contacts
+an earlier run filled with a next-occurrence date. `birthday_property_cleared`
+reports how many were cleared. A portal whose **native** `date_of_birth` was
+resolved instead is never cleared, because that property belongs to the portal
+and a person may maintain it by hand.
+
+Getting from a storefront's value to a HubSpot date had three further traps, all
+of which produced wrong dates in production:
+
+- **A date must keep the calendar day it was written with.** Converting an
+  offset-bearing midnight (`1993-04-20T00:00:00+08:00`) to UTC first moved every
+  birthday to the previous day for a store east of Greenwich.
+- **A compact date is not an epoch.** `19930420` read as epoch seconds lands in
+  August 1970. A four-digit year followed by a month and a day is now read as the
+  date it plainly is.
+- **Nobody is born in the future.** A future date is never written as a date of
+  birth. With the occurrence rule above, such a value now has a correct home
+  rather than simply being discarded.
+
+Because the wrong value cannot be inspected from CI without putting someone's
+date of birth in a build log, each run reports it redacted:
+`easystore_birthday_shapes` gives the masked shape per source
+(`birthday=####-##-##`), `easystore_birthday_years` gives the year each source
+parses to as a distribution, and `birthdays_in_future_ignored` counts the values
+refused as a date of birth. Between them, a wrong birthday is diagnosable without
+disclosing one: a year distribution clustered on next year is the signature of
+the occurrence behaviour above.
 
 ### Merchant-defined customer attributes
 
@@ -174,9 +244,20 @@ A store's own customer questions — "How did you find us?" and anything else
 defined in EasyStore — are synchronized without being named in this repository.
 The Contact stage reads them from whichever collection EasyStore uses
 (`custom_fields`, `customer_attributes`, `attributes`, `note_attributes`,
-`metafields`, `fields`), in either the mapping shape (`{label: answer}`) or the
-record shape (`{"label": ..., "value": ...}`), and a multi-answer value is joined
-into one comma separated string.
+`metafields`, `fields`), and a multi-answer value is joined into one comma
+separated string.
+
+**An EasyStore answer does not carry its question.** The storefront's own account
+page shows the shape: `customer.attributes` holds
+`{"customer_attribute_setting_id": 7, "value": "Instagram"}`, and the wording
+lives separately in `shop.attribute_settings`, which the page matches against by
+id. So the stage looks the wording up once per run — trying
+`customer_attribute_settings.json`, `attribute_settings.json`,
+`customer_attributes.json` and `shop.json`, and reporting the route that answers
+as `easystore_attribute_setting_route`. An answer whose question cannot be named
+is still synchronized, under its setting id (`easystore_attr_setting_7`), because
+losing an answer is worse than an ugly property name. A mapping of question to
+answer and a record carrying its own label are both read too.
 
 Each distinct label becomes its own HubSpot property named
 `easystore_attr_<slug>` with the original label as its HubSpot label, provisioned
@@ -423,6 +504,72 @@ After the main order upsert, reconciliation archives synchronized product-backed
 
 The buyer is resolved with the same normalized-mobile rule as Customer synchronization, checking customer data first and then billing/shipping phone fields. Because the workflow preflight has already ruled out duplicate CRM ownership, a unique Contact can be associated safely. That same unique Contact is promoted to the `customer` lifecycle stage. Orders without a usable mobile remain unassociated, promote nobody, and are counted in the run summary.
 
+## Abandoned checkouts
+
+`scripts/easystore_hubspot_carts.py` synchronizes EasyStore abandoned checkouts
+into HubSpot's native **Cart** object, keyed by `hs_external_cart_id` holding the
+EasyStore checkout ID. An abandoned checkout is CRM-worthy in its own right: it
+names a contactable person, the value they were about to spend, and the link that
+would let them finish.
+
+**A completed checkout is not a cart.** It already exists as an Order, so copying
+it here would double-count revenue. A checkout is treated as completed when it
+references an order, carries a `completed_at`, or reports a status of completed,
+complete, paid, converted or order; the run reports
+`checkouts_skipped_as_completed`.
+
+Fields synchronized are:
+
+| EasyStore | HubSpot Cart |
+| --- | --- |
+| checkout `id` (or `token`) | `hs_external_cart_id` |
+| `name` / `checkout_number` / `token` | `hs_cart_name` |
+| store domain | `hs_source_store` |
+| `currency` / `currency_code` | `hs_currency_code` |
+| `status` / `state` / `checkout_status` | `hs_external_status` or `easystore_cart_status` |
+| `total_price` / `total_amount` / `grand_total` / `total` | `hs_total_price` or `easystore_cart_total_amount` |
+| `subtotal_price` / `subtotal` / `sub_total` / `total_line_items_price` | `hs_subtotal_price` or `easystore_cart_subtotal_amount` |
+| `total_discount` / `total_discounts` / `discount_amount` | `hs_cart_discount` or `easystore_cart_discount_amount` |
+| `total_tax` / `total_taxes` / `tax_total` / `tax` | `hs_tax` or `easystore_cart_tax_amount` |
+| `total_shipping` / `shipping_price` / `shipping_total` / `shipping_fee` | `hs_shipping_cost` or `easystore_cart_shipping_amount` |
+| `tags` | `hs_tags` or `easystore_cart_tags` |
+| `created_at` / `created_on` / `started_at` | `easystore_cart_created_at` |
+| `abandoned_at` / `updated_at` / `last_activity_at` | `easystore_cart_abandoned_at` |
+| `abandoned_checkout_url` / `recovery_url` / `checkout_url` | `easystore_cart_recovery_url` |
+| line item quantities | `easystore_cart_item_count` |
+| line item titles and quantities | `easystore_cart_items` |
+| shopper email / name / mobile | `easystore_cart_email`, `easystore_cart_customer_name`, `easystore_cart_phone` |
+
+The shopper is resolved to a Contact with the same normalized-mobile rule as
+everything else, and associated using HubSpot's **v4 default association** route
+rather than a hard-coded association type ID, which is not documented for carts
+and would associate the wrong way if guessed.
+
+Two things this stage refuses to guess:
+
+- **Which EasyStore route serves abandoned checkouts.** `checkouts.json`,
+  `abandoned_checkouts.json`, `carts.json` and `abandoned_carts.json` are tried
+  in order; the one that answers is used for the whole run and reported as
+  `easystore_checkout_route`. If none answers, the stage reports the routes it
+  tried and stops without failing the workflow — that state means either the
+  route is named differently or the EasyStore token lacks the scope for it, and
+  both are one-line fixes rather than a crash.
+- **Whether the portal has a Cart object at all.** Not every HubSpot account
+  does. A portal without one reports `hubspot_cart_object: unavailable` and is
+  skipped rather than inventing somewhere else to put the data.
+
+### The customer list is thinner than the customer record
+
+Like orders, EasyStore's customer *list* returns less than its customer
+endpoint. The Contact stage therefore fetches `/api/3.0/customers/<id>.json`
+whenever a listed customer is missing the birthday, attributes or note fields
+altogether, and reports `customers_fetched_in_detail`.
+
+Key presence is the test, not a value. A customer legitimately has no birthday
+and no answers, so testing values would re-fetch those customers on every run
+forever; a missing *key* is what says the list endpoint does not carry the field
+at all.
+
 ## API behavior
 
 EasyStore orders are paged from `/api/3.0/orders.json`. That list record is thinner than the single-order record: it was already missing `line_items` for some orders, and it also omits addresses and totals. The order stage therefore fetches `/api/3.0/orders/<order_id>.json` whenever a listed order is missing line items, an address, or an order total, and reports how often it had to (`orders_fetched_in_detail`). The reconciliation stage only reads line items, so it opts out of that check and its request count is unchanged.
@@ -438,7 +585,7 @@ Before merging/enabling the scheduled sync:
 1. Configure `EASYSTORE_ACCESS_TOKEN` and `HUBSPOT_ACCESS_TOKEN` with exactly the scopes above.
 2. Confirm `CUSTOMER_SYNC_DEFAULT_DIAL_CODE` if the store's default is not Singapore.
 3. Reconcile any known duplicate customer mobile numbers in EasyStore or HubSpot; otherwise preflight will intentionally fail.
-4. Prefer a manual run first and review all five Actions summary sections: Preflight, Products, Customers, Orders and Line Items, Reconciliation.
+4. Prefer a manual run first and review all six Actions summary sections: Preflight, Products, Customers, Orders and Line Items, Abandoned checkouts, Reconciliation.
 5. Spot-check several HubSpot Contacts, Products, Orders, and associated Line Items against EasyStore, including a multi-variant product and an order with more than one line.
 6. Read the three coverage blocks in the run summary (`easystore_order_field_coverage`, `easystore_customer_field_coverage`, `easystore_catalogue_field_coverage`). Any field sitting at zero is one EasyStore does not report under the names the sync knows; add the real name to that field's `sources` and the value starts landing on the next run.
 7. For a full sandbox rehearsal before production, EasyStore supports development stores populated with Products, Variants, Customers, and Orders.
