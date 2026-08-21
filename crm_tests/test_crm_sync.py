@@ -632,7 +632,7 @@ class OrderCommerceFieldTests(unittest.TestCase):
 
     def test_a_stub_shipping_address_never_hides_a_real_billing_address(self) -> None:
         self.assertEqual(
-            orders._order_address(
+            orders._delivery_address(
                 {
                     "shipping_address": {"country": "SG"},
                     "billing_address": {"address1": "2 Other Road", "city": "JB"},
@@ -1230,13 +1230,67 @@ class AbandonedCartTests(unittest.TestCase):
         )
         self.assertEqual(mapped["easystore_cart_items"], "The Hobbit x1; Scenes x2")
         self.assertEqual(mapped["easystore_cart_item_count"], "3")
-        self.assertEqual(
-            mapped["easystore_cart_recovery_url"],
-            "https://shop.example/checkouts/abc123/recover",
-        )
         self.assertEqual(mapped["easystore_cart_email"], "shopper@example.com")
         self.assertEqual(mapped["easystore_cart_customer_name"], "Jeremy Ho")
         self.assertEqual(mapped["easystore_cart_phone"], "+6591234567")
+
+    def test_the_cart_natives_hubspot_already_defines_are_preferred(self) -> None:
+        # HubSpot's Cart object carries the recovery link and both external
+        # timestamps itself, so nothing here belongs in an easystore_* property.
+        mapped = carts.cart_properties(
+            self._checkout(),
+            external_id="900",
+            store_domain="cardboardcollective.easy.co",
+        )
+        self.assertEqual(
+            mapped["hs_cart_url"],
+            "https://shop.example/checkouts/abc123/recover",
+        )
+        self.assertEqual(mapped["hs_external_token"], "abc123")
+        self.assertIn("hs_external_created_date", mapped)
+        self.assertIn("hs_external_modified_date", mapped)
+        for retired in (
+            "easystore_cart_recovery_url",
+            "easystore_cart_created_at",
+            "easystore_cart_abandoned_at",
+        ):
+            self.assertNotIn(retired, mapped)
+
+    def test_a_checkout_address_lands_on_the_hubspot_cart_address(self) -> None:
+        checkout = self._checkout()
+        checkout["shipping_address"] = {
+            "address1": "1 Marina Boulevard",
+            "address2": "#12-01",
+            "city": "Singapore",
+            "zip": "018989",
+            "country": "Singapore",
+            "phone": "9123 4567",
+        }
+        checkout["billing_address"] = {"address1": "2 Other Road", "city": "Johor Bahru"}
+        mapped = carts.cart_properties(
+            checkout,
+            external_id="900",
+            store_domain="cardboardcollective.easy.co",
+        )
+        self.assertEqual(
+            mapped["hs_shipping_address_street"],
+            "1 Marina Boulevard\n#12-01",
+        )
+        self.assertEqual(mapped["hs_shipping_address_city"], "Singapore")
+        self.assertEqual(mapped["hs_shipping_address_postal_code"], "018989")
+        self.assertEqual(mapped["hs_shipping_address_phone"], "9123 4567")
+        self.assertEqual(mapped["hs_billing_address_street"], "2 Other Road")
+        self.assertEqual(mapped["hs_billing_address_city"], "Johor Bahru")
+
+    def test_checkout_discount_codes_reach_the_cart(self) -> None:
+        checkout = self._checkout()
+        checkout["discount_codes"] = [{"code": "WELCOME10"}, {"code": "WELCOME10"}]
+        mapped = carts.cart_properties(
+            checkout,
+            external_id="900",
+            store_domain="cardboardcollective.easy.co",
+        )
+        self.assertEqual(mapped["hs_discount_codes"], "WELCOME10")
 
     def test_a_completed_checkout_is_not_a_cart(self) -> None:
         # It is already an Order; syncing it here would double-count revenue.
@@ -1272,28 +1326,210 @@ class AbandonedCartTests(unittest.TestCase):
     def test_every_checkout_route_is_tried_before_giving_up(self) -> None:
         attempted: list[str] = []
 
-        def fake_http_json(url, *, allow_statuses=None, **kwargs):
+        def fake_http_json(url, **kwargs):
             attempted.append(url.split("/api/3.0/")[-1].split("?")[0])
             return None
 
         with mock.patch.object(carts, "_http_json", fake_http_json):
-            route, records = carts.iter_easystore_checkouts("shop.example", "token")
+            route, records, probes = carts.iter_easystore_checkouts(
+                "shop.example",
+                "token",
+            )
 
         self.assertIsNone(route)
         self.assertEqual(list(records), [])
         self.assertEqual(attempted, list(carts.CHECKOUT_ROUTES))
+        self.assertEqual(list(probes), list(carts.CHECKOUT_ROUTES))
 
     def test_the_route_that_answers_is_the_one_used(self) -> None:
-        def fake_http_json(url, *, allow_statuses=None, **kwargs):
+        def fake_http_json(url, **kwargs):
             if "abandoned_checkouts.json" in url:
                 return {"abandoned_checkouts": [{"id": 900}]}
             return None
 
         with mock.patch.object(carts, "_http_json", fake_http_json):
-            route, records = carts.iter_easystore_checkouts("shop.example", "token")
+            route, records, probes = carts.iter_easystore_checkouts(
+                "shop.example",
+                "token",
+            )
+            found = [record["id"] for record in records]
 
         self.assertEqual(route, "abandoned_checkouts.json")
-        self.assertEqual([record["id"] for record in records], [900])
+        self.assertEqual(found, [900])
+        # The routes after the answering one are not probed at all.
+        self.assertEqual(list(probes), ["checkouts.json", "abandoned_checkouts.json"])
+
+    def test_a_route_that_never_answers_does_not_fail_the_sync(self) -> None:
+        # The production symptom: EasyStore let the read hang on checkouts.json
+        # until it timed out, which took the whole workflow down with it.
+        def fake_http_json(url, **kwargs):
+            if "checkouts.json" in url and "abandoned" not in url:
+                raise carts.SyncError(
+                    f"GET {url} failed: The read operation timed out"
+                )
+            if "abandoned_checkouts.json" in url:
+                return {"abandoned_checkouts": [{"id": 900}]}
+            return None
+
+        with mock.patch.object(carts, "_http_json", fake_http_json):
+            route, records, probes = carts.iter_easystore_checkouts(
+                "shop.example",
+                "token",
+            )
+            found = [record["id"] for record in records]
+
+        self.assertEqual(route, "abandoned_checkouts.json")
+        self.assertEqual(found, [900])
+        self.assertIn("timed out", probes["checkouts.json"])
+
+    def test_a_probe_is_one_record_on_a_short_leash(self) -> None:
+        seen: list[dict[str, object]] = []
+
+        def fake_http_json(url, **kwargs):
+            seen.append({"url": url, **kwargs})
+            return None
+
+        with mock.patch.object(carts, "_http_json", fake_http_json):
+            carts.iter_easystore_checkouts("shop.example", "token")
+
+        for call in seen:
+            self.assertIn(f"limit={carts.CHECKOUT_PROBE_LIMIT}", call["url"])
+            self.assertEqual(call["retries"], carts.CHECKOUT_PROBE_RETRIES)
+            self.assertEqual(call["timeout"], carts.CHECKOUT_PROBE_TIMEOUT)
+
+    def test_an_empty_route_never_hides_one_holding_checkouts(self) -> None:
+        def fake_http_json(url, **kwargs):
+            if "carts.json" in url and "abandoned" not in url:
+                return {"carts": [{"id": 900}]}
+            return {"checkouts": []}
+
+        with mock.patch.object(carts, "_http_json", fake_http_json):
+            route, records, _probes = carts.iter_easystore_checkouts(
+                "shop.example",
+                "token",
+            )
+            found = [record["id"] for record in records]
+
+        self.assertEqual(route, "carts.json")
+        self.assertEqual(found, [900])
+
+    def test_an_empty_route_is_reported_when_no_route_holds_checkouts(self) -> None:
+        with mock.patch.object(carts, "_http_json", lambda url, **k: {"checkouts": []}):
+            route, records, probes = carts.iter_easystore_checkouts(
+                "shop.example",
+                "token",
+            )
+
+        self.assertEqual(route, "checkouts.json")
+        self.assertEqual(list(records), [])
+        self.assertEqual(probes["checkouts.json"], "answered with no records")
+
+    def test_nothing_to_sync_reads_no_hubspot_identities(self) -> None:
+        # Scanning every contact and cart to match zero checkouts is pure cost.
+        def fake_http_json(url, **kwargs):
+            if "properties/carts" in url:
+                return {"results": [{"name": "hs_external_cart_id", "type": "string"}]}
+            return {"checkouts": []}
+
+        def fail(*args, **kwargs):
+            raise AssertionError("HubSpot was scanned with nothing to sync")
+
+        with mock.patch.object(carts, "_http_json", fake_http_json):
+            with mock.patch.object(carts, "hubspot_cart_index", fail):
+                summary = carts.sync(
+                    store_domain="cardboardcollective.easy.co",
+                    easystore_access_token="es",
+                    hubspot_access_token="hs",
+                    fallback_dial_code="65",
+                )
+
+        self.assertEqual(summary["easystore_checkout_route"], "checkouts.json")
+        self.assertEqual(summary["easystore_checkouts_scanned"], 0)
+
+    # The Cart schema this portal actually reports, copied from a sync run. Only
+    # the properties this stage reasons about are listed; a mistyped or read-only
+    # native shows up here so the resolver's choice is checked against reality
+    # rather than against what HubSpot's docs imply.
+    PORTAL_CART_SCHEMA = (
+        ("hs_billing_address_city", "string", False),
+        ("hs_billing_address_country", "string", False),
+        ("hs_billing_address_phone", "string", False),
+        ("hs_billing_address_postal_code", "string", False),
+        ("hs_billing_address_state", "string", False),
+        ("hs_billing_address_street", "string", False),
+        ("hs_buyer_accepts_marketing", "bool", False),
+        ("hs_cart_discount", "number", False),
+        ("hs_cart_name", "string", False),
+        ("hs_cart_url", "string", False),
+        ("hs_currency_code", "enumeration", False),
+        ("hs_discount_codes", "string", False),
+        ("hs_external_cart_id", "string", False),
+        ("hs_external_created_date", "datetime", False),
+        ("hs_external_modified_date", "datetime", False),
+        ("hs_external_status", "string", False),
+        ("hs_external_token", "string", False),
+        ("hs_homecurrency_amount", "number", True),
+        ("hs_landing_site", "string", False),
+        ("hs_lastmodifieddate", "datetime", True),
+        ("hs_referring_site", "string", False),
+        ("hs_shipping_address_city", "string", False),
+        ("hs_shipping_address_country", "string", False),
+        ("hs_shipping_address_phone", "string", False),
+        ("hs_shipping_address_postal_code", "string", False),
+        ("hs_shipping_address_state", "string", False),
+        ("hs_shipping_address_street", "string", False),
+        ("hs_shipping_cost", "number", False),
+        ("hs_source_store", "string", False),
+        ("hs_subtotal_price", "number", False),
+        ("hs_tags", "string", False),
+        ("hs_tax", "number", False),
+        ("hs_total_price", "number", False),
+        ("hs_total_weight", "string", False),
+    )
+
+    def test_the_live_cart_schema_resolves_to_hubspots_own_properties(self) -> None:
+        results = [
+            {"name": name, "type": kind, "modificationMetadata": {"readOnlyValue": ro}}
+            for name, kind, ro in self.PORTAL_CART_SCHEMA
+        ]
+
+        def fake_http_json(url, *, method="GET", **kwargs):
+            if method == "GET" and url.endswith("/properties/carts"):
+                return {"results": results}
+            raise AssertionError(f"unexpected {method} {url}")
+
+        resolved = schema.resolve_fields(
+            http_json=fake_http_json,
+            access_token="hs",
+            object_type=carts.CART_OBJECT_TYPE,
+            fields=tuple(
+                field for field in carts.CART_FIELDS if not field.fallback
+            ),
+            error=carts.SyncError,
+        )
+
+        self.assertEqual(
+            resolved,
+            {
+                "token": "hs_external_token",
+                "discount_codes": "hs_discount_codes",
+                "landing_site": "hs_landing_site",
+                "referring_site": "hs_referring_site",
+                "total_weight": "hs_total_weight",
+                "shipping_address_street": "hs_shipping_address_street",
+                "shipping_address_city": "hs_shipping_address_city",
+                "shipping_address_state": "hs_shipping_address_state",
+                "shipping_address_postal_code": "hs_shipping_address_postal_code",
+                "shipping_address_country": "hs_shipping_address_country",
+                "shipping_address_phone": "hs_shipping_address_phone",
+                "billing_address_street": "hs_billing_address_street",
+                "billing_address_city": "hs_billing_address_city",
+                "billing_address_state": "hs_billing_address_state",
+                "billing_address_postal_code": "hs_billing_address_postal_code",
+                "billing_address_country": "hs_billing_address_country",
+                "billing_address_phone": "hs_billing_address_phone",
+            },
+        )
 
     def test_duplicate_hubspot_carts_fail_closed(self) -> None:
         existing = [

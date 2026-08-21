@@ -124,15 +124,6 @@ jobs:
           set -euo pipefail
           python scripts/easystore_hubspot_orders.py | tee order-sync-summary.json
 
-      - name: Pull EasyStore abandoned checkouts and upsert HubSpot carts
-        env:
-          EASYSTORE_ACCESS_TOKEN: ${{ secrets.EASYSTORE_ACCESS_TOKEN }}
-          HUBSPOT_ACCESS_TOKEN: ${{ secrets.HUBSPOT_ACCESS_TOKEN }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          python scripts/easystore_hubspot_carts.py | tee cart-sync-summary.json
-
       - name: Reconcile removed EasyStore order lines
         env:
           EASYSTORE_ACCESS_TOKEN: ${{ secrets.EASYSTORE_ACCESS_TOKEN }}
@@ -141,6 +132,18 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/easystore_hubspot_reconcile.py | tee reconcile-summary.json
+
+      # Last on purpose: this is the only stage whose EasyStore route is
+      # undocumented, so a store that does not serve it cannot cost the run
+      # the stages above.
+      - name: Pull EasyStore abandoned checkouts and upsert HubSpot carts
+        env:
+          EASYSTORE_ACCESS_TOKEN: ${{ secrets.EASYSTORE_ACCESS_TOKEN }}
+          HUBSPOT_ACCESS_TOKEN: ${{ secrets.HUBSPOT_ACCESS_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/easystore_hubspot_carts.py | tee cart-sync-summary.json
 
       - name: Publish run summary
         if: always()
@@ -164,8 +167,8 @@ jobs:
               "Products|product-sync-summary.json" \
               "Customers|customer-sync-summary.json" \
               "Orders and line items|order-sync-summary.json" \
-              "Abandoned checkouts|cart-sync-summary.json" \
-              "Reconciliation|reconcile-summary.json"; do
+              "Reconciliation|reconcile-summary.json" \
+              "Abandoned checkouts|cart-sync-summary.json"; do
               title="${entry%%|*}"
               file="${entry#*|}"
               echo "#### ${title}"
