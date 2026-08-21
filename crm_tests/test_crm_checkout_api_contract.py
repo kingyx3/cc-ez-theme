@@ -23,13 +23,16 @@ class EasyStoreCheckoutCollectionContractTests(unittest.TestCase):
         with mock.patch.object(checkouts, "_http_json", fake_http):
             snapshot = checkouts.read_checkout_snapshot("shop.example", "secret")
 
+        first = checkouts.CHECKOUT_PAGE_SIZES[0]
         self.assertEqual(snapshot.records, ())
         self.assertEqual(snapshot.pages_read, 1)
-        self.assertEqual(snapshot.page_size, 50)
+        self.assertEqual(snapshot.page_size, first)
         self.assertEqual(len(calls), 1)
+        # The largest page size goes first: the one request that succeeds against
+        # this endpoint should be the one that can return the whole collection.
         self.assertEqual(
             calls[0]["url"],
-            "https://shop.example/api/3.0/checkouts.json?page=1&limit=50",
+            f"https://shop.example/api/3.0/checkouts.json?page=1&limit={first}",
         )
         self.assertNotIn("sort=", str(calls[0]["url"]))
         self.assertNotIn("created_at_min", str(calls[0]["url"]))
@@ -77,10 +80,11 @@ class EasyStoreCheckoutCollectionContractTests(unittest.TestCase):
 
     def test_a_timing_out_page_size_falls_back_to_the_smallest_request(self) -> None:
         calls: list[str] = []
+        smallest = checkouts.CHECKOUT_PAGE_SIZES[-1]
 
         def fake_http(url, **kwargs):
             calls.append(url)
-            if "limit=50" in url:
+            if not url.endswith(f"limit={smallest}"):
                 raise SyncError("read timed out") from TimeoutError("timed out")
             if "page=1" in url:
                 return {
@@ -98,10 +102,10 @@ class EasyStoreCheckoutCollectionContractTests(unittest.TestCase):
             snapshot = checkouts.read_checkout_snapshot("shop.example", "secret")
 
         self.assertEqual([item["cart_token"] for item in snapshot.records], ["cart-1"])
-        self.assertEqual(snapshot.page_size, 1)
-        self.assertTrue(calls[0].endswith("page=1&limit=50"))
-        self.assertTrue(calls[1].endswith("page=1&limit=1"))
-        self.assertIn("limit=50", snapshot.attempts[0])
+        self.assertEqual(snapshot.page_size, smallest)
+        for index, page_size in enumerate(checkouts.CHECKOUT_PAGE_SIZES):
+            self.assertTrue(calls[index].endswith(f"page=1&limit={page_size}"))
+        self.assertIn(f"limit={checkouts.CHECKOUT_PAGE_SIZES[0]}", snapshot.attempts[0])
         self.assertIn("did not answer", snapshot.attempts[0])
 
     def test_no_page_size_answering_names_every_attempted_request(self) -> None:
@@ -151,6 +155,14 @@ def _page(count: int, *, start: int = 0) -> dict[str, object]:
     }
 
 
+FIRST_PAGE_SIZE = checkouts.CHECKOUT_PAGE_SIZES[0]
+BIGGER_LIMIT = next(
+    candidate
+    for candidate in checkouts.CHECKOUT_LIMIT_ESCALATION
+    if candidate > FIRST_PAGE_SIZE
+)
+
+
 class IgnoredPageParameterTests(unittest.TestCase):
     """This store's checkouts.json answers but serves page 2 identical to page 1.
 
@@ -161,8 +173,7 @@ class IgnoredPageParameterTests(unittest.TestCase):
 
     def test_a_repeated_page_escalates_the_limit_instead_of_failing(self) -> None:
         calls: list[str] = []
-        first = checkouts.CHECKOUT_PAGE_SIZES[0]
-        bigger = checkouts.CHECKOUT_LIMIT_ESCALATION[0]
+        first, bigger = FIRST_PAGE_SIZE, BIGGER_LIMIT
 
         def fake_http(url, **kwargs):
             calls.append(url)
@@ -184,7 +195,7 @@ class IgnoredPageParameterTests(unittest.TestCase):
     def test_the_same_count_at_a_larger_limit_is_not_claimed_complete(self) -> None:
         # Either the store holds exactly this many checkouts or the endpoint caps
         # the limit. Both are consistent with the answer, so neither is claimed.
-        first = checkouts.CHECKOUT_PAGE_SIZES[0]
+        first = FIRST_PAGE_SIZE
 
         with mock.patch.object(checkouts, "_http_json", return_value=_page(first)):
             snapshot = checkouts.read_checkout_snapshot("shop.example", "secret")
@@ -197,7 +208,7 @@ class IgnoredPageParameterTests(unittest.TestCase):
     def test_a_refused_escalation_keeps_the_snapshot_that_arrived(self) -> None:
         from urllib.error import HTTPError
 
-        first = checkouts.CHECKOUT_PAGE_SIZES[0]
+        first = FIRST_PAGE_SIZE
 
         def fake_http(url, **kwargs):
             if f"limit={first}" not in url:
@@ -231,8 +242,7 @@ class IgnoredPageParameterTests(unittest.TestCase):
         # Production run 32483557524: page 1 served 50 checkouts, page 2 hung
         # until it timed out, and discarding page 1 over it synced no carts.
         calls: list[str] = []
-        first = checkouts.CHECKOUT_PAGE_SIZES[0]
-        bigger = checkouts.CHECKOUT_LIMIT_ESCALATION[0]
+        first, bigger = FIRST_PAGE_SIZE, BIGGER_LIMIT
 
         def fake_http(url, **kwargs):
             calls.append(url)
@@ -259,7 +269,7 @@ class IgnoredPageParameterTests(unittest.TestCase):
                 checkouts.read_checkout_snapshot("shop.example", "secret")
 
     def test_a_later_page_timing_out_with_no_bigger_limit_keeps_page_one(self) -> None:
-        first = checkouts.CHECKOUT_PAGE_SIZES[0]
+        first = FIRST_PAGE_SIZE
 
         def fake_http(url, **kwargs):
             if f"limit={first}" in url and "page=1" in url:
@@ -278,7 +288,7 @@ class IgnoredPageParameterTests(unittest.TestCase):
         # limit=1000 then being refused does not unsay that.
         from urllib.error import HTTPError
 
-        first = checkouts.CHECKOUT_PAGE_SIZES[0]
+        first = FIRST_PAGE_SIZE
         bigger, biggest = checkouts.CHECKOUT_LIMIT_ESCALATION
 
         def fake_http(url, **kwargs):

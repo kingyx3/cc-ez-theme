@@ -42,7 +42,7 @@ The published EasyStore documentation names the correct Checkout endpoint, but i
 Because those parameters are not trustworthy as Checkout-specific contract, production intentionally sends only the two generic pagination parameters that are unambiguous:
 
 ```text
-GET /api/3.0/checkouts.json?page=1&limit=50
+GET /api/3.0/checkouts.json?page=1&limit=250
 EasyStore-Access-Token: <token>
 ```
 
@@ -59,7 +59,13 @@ The sync does **not** send:
 - `visibility`
 - or any other Product-style filter copied into the Checkout documentation block.
 
-Each request is retried once with backoff, so two attempts of 30s each, and the page size falls back from EasyStore's documented maximum of `50` to the smallest possible request of `1`, because this production store has served read timeouts on this endpoint. A page size that never answers is recorded and the next one starts again from page 1, so a snapshot is never stitched together from two of them.
+**This endpoint mostly does not answer.** Across observed production runs it served the collection roughly once in eight attempts; the rest timed out, sometimes on page 1 at every page size. Two things follow.
+
+First, the read is patient: four attempts of 60s per page size, with backoff. In the worst case that costs about twelve minutes, which a background sync can afford far more easily than another run that writes no Carts.
+
+Second, the page sizes are tried **largest first** — `250`, then `50`, then `1`. When this endpoint did answer, `limit=250` returned the store's whole collection of 1246 Checkouts in one request, while `limit=50` returned 50 and left page 2 (the only way to ask for the rest) unusable. The one request that succeeds should therefore be the one that can return everything, so a single lucky window is enough. `50` is the documented maximum and `1` is the smallest possible request; both are kept as fallbacks for a store that cannot serve a large one.
+
+A page size that never answers is recorded and the next one starts again from page 1, so a snapshot is never stitched together from two of them.
 
 Only a transport-level failure moves on: a timeout, a refused connection, a 429 or a 5xx that survived its retries. An HTTP 4xx is a request or credential problem — most likely a token without checkout scope — and fails the step immediately rather than being retried in a different shape or hidden behind a green run.
 
