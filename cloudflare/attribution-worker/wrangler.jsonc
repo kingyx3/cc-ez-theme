@@ -22,7 +22,7 @@
     {
       "binding": "DB",
       "database_name": "cc-attribution",
-      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "database_id": "f7377a40-379a-4713-9126-e05636162c84",
       "migrations_dir": "migrations"
     }
   ],
