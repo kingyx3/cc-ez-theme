@@ -11,6 +11,8 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import easystore_hubspot_orders as orders
 import easystore_hubspot_preflight as preflight
 import easystore_hubspot_products as products
+from datetime import date
+
 import easystore_hubspot_carts as carts
 import easystore_hubspot_reconcile as reconcile
 import easystore_hubspot_schema as schema
@@ -794,16 +796,96 @@ class CustomerSyncBatchTests(unittest.TestCase):
             summary["easystore_customer_field_coverage"],
             {
                 "birthday": 0,
+                "birthday_day": 0,
                 "customer_id": 3,
                 "customer_since": 1,
                 "gender": 0,
                 "last_order_at": 0,
+                "next_birthday": 0,
                 "note": 0,
                 "orders_count": 1,
                 "tags": 1,
                 "total_spent": 1,
             },
         )
+
+    def test_a_birthday_an_earlier_run_got_wrong_is_cleared(self) -> None:
+        # The contact exists and EasyStore reports only a next occurrence, so the
+        # 2027 date an earlier run wrote must not simply be left behind.
+        easystore = [
+            {
+                "id": 1,
+                "phone": "9123 4567",
+                "country_code": "SG",
+                "birthday": "2027-01-15",
+            }
+        ]
+        hubspot = [{"id": "100", "properties": {"mobilephone": "+6591234567"}}]
+        contact_schema = {
+            "results": [
+                {"name": field.fallback, "type": field.kind}
+                for field in customers.CONTACT_FIELDS
+            ]
+        }
+        written: list[dict] = []
+
+        with mock.patch.object(
+            customers, "iter_easystore_customers", lambda *a, **k: iter(easystore)
+        ), mock.patch.object(
+            customers, "iter_hubspot_contacts", lambda *a, **k: iter(hubspot)
+        ), mock.patch.object(
+            customers, "_http_json", lambda *a, **k: contact_schema
+        ), mock.patch.object(
+            customers,
+            "_batch_write",
+            lambda token, action, inputs: written.extend(inputs),
+        ):
+            summary = customers.sync(
+                store_domain="cardboardcollective.easy.co",
+                easystore_access_token="es",
+                hubspot_access_token="hs",
+                fallback_dial_code="65",
+            )
+
+        properties = written[0]["properties"]
+        self.assertEqual(properties["easystore_customer_birthday"], "")
+        self.assertEqual(properties["easystore_birthday_day"], "01-15")
+        self.assertEqual(summary["birthday_property_cleared"], 1)
+
+    def test_a_portal_owned_birthday_property_is_never_cleared(self) -> None:
+        # date_of_birth belongs to the portal; a person may maintain it by hand.
+        easystore = [
+            {
+                "id": 1,
+                "phone": "9123 4567",
+                "country_code": "SG",
+                "birthday": "2027-01-15",
+            }
+        ]
+        hubspot = [{"id": "100", "properties": {"mobilephone": "+6591234567"}}]
+        contact_schema = {"results": [{"name": "date_of_birth", "type": "date"}]}
+        written: list[dict] = []
+
+        with mock.patch.object(
+            customers, "iter_easystore_customers", lambda *a, **k: iter(easystore)
+        ), mock.patch.object(
+            customers, "iter_hubspot_contacts", lambda *a, **k: iter(hubspot)
+        ), mock.patch.object(
+            customers, "_http_json", lambda *a, **k: contact_schema
+        ), mock.patch.object(
+            customers,
+            "_batch_write",
+            lambda token, action, inputs: written.extend(inputs),
+        ):
+            summary = customers.sync(
+                store_domain="cardboardcollective.easy.co",
+                easystore_access_token="es",
+                hubspot_access_token="hs",
+                fallback_dial_code="65",
+            )
+
+        self.assertNotIn("date_of_birth", written[0]["properties"])
+        self.assertEqual(summary["birthday_property_cleared"], 0)
 
     def test_customer_extras_are_skipped_without_the_schema_scopes(self) -> None:
         easystore = [{"id": 1, "phone": "9123 4567", "country_code": "SG"}]
@@ -901,6 +983,47 @@ class BirthdayTests(unittest.TestCase):
         self.assertEqual(
             customers.customer_birthday({"birthday": "1993-04-20"}),
             "1993-04-20",
+        )
+
+    def test_easystore_reports_the_next_occurrence_not_the_birth_year(self) -> None:
+        # A January birthday, reported in August, comes back dated next year.
+        values = customers.customer_field_values({"birthday": "2027-01-15"})
+        # No birth year is invented from it...
+        self.assertNotIn("birthday", values)
+        # ...but the day and month, which are real, are kept.
+        self.assertEqual(values["birthday_day"], "01-15")
+        # ...and the date is stored as what it actually is.
+        self.assertEqual(values["next_birthday"], schema.date_value("2027-01-15"))
+
+    def test_an_occurrence_later_this_year_is_read_the_same_way(self) -> None:
+        values = customers.customer_field_values({"birthday": "2026-09-15"})
+        self.assertNotIn("birthday", values)
+        self.assertEqual(values["birthday_day"], "09-15")
+
+    def test_a_real_date_of_birth_still_syncs_as_one(self) -> None:
+        values = customers.customer_field_values({"birthday": "1993-04-20"})
+        self.assertEqual(values["birthday"], schema.date_value("1993-04-20"))
+        self.assertEqual(values["birthday_day"], "04-20")
+        # And it is projected forward, so one property serves campaigns either way.
+        self.assertIsNotNone(values["next_birthday"])
+
+    def test_a_date_within_the_last_year_is_an_occurrence_not_a_birth(self) -> None:
+        today = date(2026, 8, 20)
+        self.assertFalse(customers.is_date_of_birth(date(2026, 3, 1), today))
+        self.assertFalse(customers.is_date_of_birth(date(2026, 8, 20), today))
+        self.assertTrue(customers.is_date_of_birth(date(2025, 8, 19), today))
+        self.assertTrue(customers.is_date_of_birth(date(1993, 4, 20), today))
+
+    def test_the_next_occurrence_of_29_february_lands_on_the_28th(self) -> None:
+        self.assertEqual(
+            customers._next_occurrence(date(1992, 2, 29), date(2026, 8, 20)),
+            date(2027, 2, 28),
+        )
+
+    def test_the_next_occurrence_includes_a_birthday_today(self) -> None:
+        self.assertEqual(
+            customers._next_occurrence(date(1993, 8, 20), date(2026, 8, 20)),
+            date(2026, 8, 20),
         )
 
     def test_diagnostics_report_shape_and_year_without_the_date(self) -> None:

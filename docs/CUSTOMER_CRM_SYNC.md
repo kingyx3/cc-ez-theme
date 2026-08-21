@@ -161,7 +161,7 @@ These are therefore provisioned in the `easystore_sync` group:
 | `orders_count` / `order_count` / `total_orders` | `easystore_orders_count` |
 | `total_spent` / `total_spend` / `lifetime_spend` | `easystore_total_spent` |
 | `last_order_at` / `last_order_date` / `latest_order_at` | `easystore_last_order_at` |
-| `birthday` / `birth_date` / `date_of_birth` / `dob` | `date_of_birth` or `easystore_customer_birthday` |
+| `birthday` / `birth_date` / `date_of_birth` / `dob` | `date_of_birth` or `easystore_customer_birthday`, plus `easystore_birthday_day` and `easystore_next_birthday` — see below |
 | `gender` / `sex` | `gender` or `easystore_customer_gender` |
 | `tags` | `easystore_customer_tags` |
 | `note` / `notes` / `remark` | `easystore_customer_note` |
@@ -172,9 +172,32 @@ summary reports how many synchronized customers carried each fact.
 
 #### Birthdays
 
-A birthday is stored as a HubSpot date, which holds a day rather than an instant.
-Getting from a storefront's value to that day has three traps, all of which
-produced wrong dates in production:
+**EasyStore reports a birthday as its next occurrence, not as a date of birth.**
+A January birthday read in August comes back dated next January, which is why the
+first production run filled HubSpot with birthdays in 2027. The year says when
+the birthday next falls; the day and month are the real data.
+
+So the birthday is split into three properties, each holding only what is true:
+
+| HubSpot Contact | Holds |
+| --- | --- |
+| `easystore_birthday_day` | the day and month as `MM-DD` — always trustworthy, and what a birthday campaign filters on |
+| `easystore_next_birthday` | when the birthday next falls: EasyStore's own value when that is what it sent, or a real date of birth projected forward |
+| `date_of_birth` or `easystore_customer_birthday` | a **real** date of birth, and only that |
+
+A date within the last twelve months cannot be a date of birth — nobody with a
+storefront account was born this week — so it is read as an occurrence. No birth
+year is ever invented from one.
+
+Because this sync provisions `easystore_customer_birthday`, it also owns it: when
+no date of birth is reported, the property is cleared, which repairs the contacts
+an earlier run filled with a next-occurrence date. `birthday_property_cleared`
+reports how many were cleared. A portal whose **native** `date_of_birth` was
+resolved instead is never cleared, because that property belongs to the portal
+and a person may maintain it by hand.
+
+Getting from a storefront's value to a HubSpot date had three further traps, all
+of which produced wrong dates in production:
 
 - **A date must keep the calendar day it was written with.** Converting an
   offset-bearing midnight (`1993-04-20T00:00:00+08:00`) to UTC first moved every
@@ -182,19 +205,18 @@ produced wrong dates in production:
 - **A compact date is not an epoch.** `19930420` read as epoch seconds lands in
   August 1970. A four-digit year followed by a month and a day is now read as the
   date it plainly is.
-- **Nobody is born in the future.** A source reporting a future date is not a
-  birthday: it is an anniversary, a reminder date, or a field that means
-  something else. Such a value is never written; the next source is tried
-  instead, so a store that reports the upcoming anniversary in one field and the
-  real date of birth in another syncs the real one.
+- **Nobody is born in the future.** A future date is never written as a date of
+  birth. With the occurrence rule above, such a value now has a correct home
+  rather than simply being discarded.
 
 Because the wrong value cannot be inspected from CI without putting someone's
 date of birth in a build log, each run reports it redacted:
 `easystore_birthday_shapes` gives the masked shape per source
 (`birthday=####-##-##`), `easystore_birthday_years` gives the year each source
 parses to as a distribution, and `birthdays_in_future_ignored` counts the values
-refused by the rule above. Between them, a wrong birthday is diagnosable without
-disclosing one.
+refused as a date of birth. Between them, a wrong birthday is diagnosable without
+disclosing one: a year distribution clustered on next year is the signature of
+the occurrence behaviour above.
 
 ### Merchant-defined customer attributes
 

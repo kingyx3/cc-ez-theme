@@ -26,7 +26,7 @@ import re
 import sys
 import time
 from collections import Counter, defaultdict
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any, Callable, Iterable, Iterator
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
@@ -146,6 +146,24 @@ CONTACT_FIELDS: tuple[FieldSpec, ...] = (
         fallback="easystore_customer_birthday",
         label="EasyStore Birthday",
         description="Birthday the customer gave EasyStore.",
+        kind="date",
+    ),
+    FieldSpec(
+        key="birthday_day",
+        # The day and month, which EasyStore reports reliably even when the year
+        # it sends is only the next occurrence.
+        fallback="easystore_birthday_day",
+        label="EasyStore Birthday (day and month)",
+        description=(
+            "The customer's birthday as MM-DD. EasyStore reports a birthday as "
+            "its next occurrence, so the day and month are the trustworthy part."
+        ),
+    ),
+    FieldSpec(
+        key="next_birthday",
+        fallback="easystore_next_birthday",
+        label="EasyStore Next Birthday",
+        description="When the customer's birthday next falls.",
         kind="date",
     ),
     FieldSpec(
@@ -298,6 +316,11 @@ def lifecycle_stage_write(current: Any, target: str = LIFECYCLE_LEAD) -> str | N
 
 
 BIRTHDAY_SOURCES = ("birthday", "birth_date", "date_of_birth", "dob")
+# The property this sync provisions for a date of birth. It owns that property,
+# which is what lets it clear a value an earlier run got wrong.
+BIRTHDAY_FALLBACK_PROPERTY = next(
+    field.fallback for field in CONTACT_FIELDS if field.key == "birthday"
+)
 
 
 def _utc_today_ms() -> int:
@@ -310,22 +333,90 @@ def _utc_today_ms() -> int:
     )
 
 
-def customer_birthday(customer: dict[str, Any]) -> str | None:
-    """Return the first EasyStore value that can actually be a birthday.
+def _birthday_dates(customer: dict[str, Any]) -> list[tuple[str, date]]:
+    """Return each birthday-ish source that parses, as a calendar date."""
 
-    Nobody is born in the future, so a source reporting a future date is not a
-    birthday: it is a birthday *anniversary*, a reminder date, or a field that
-    means something else. Writing it would put wrong personal data in the CRM, so
-    it is skipped and the next source is tried.
+    found: list[tuple[str, date]] = []
+    for key in BIRTHDAY_SOURCES:
+        stamp = date_value(customer.get(key))
+        if stamp is None:
+            continue
+        found.append(
+            (key, datetime.fromtimestamp(int(stamp) / 1000, tz=timezone.utc).date())
+        )
+    return found
+
+
+def is_date_of_birth(value: date, today: date | None = None) -> bool:
+    """Report whether a date can be a date of birth rather than an occurrence.
+
+    EasyStore reports a customer's birthday as its **next occurrence**, so the
+    year says when the birthday next falls, not when the customer was born. Such
+    a value is always within the coming twelve months, which is exactly what this
+    rules out: a real date of birth is at least a year old, and nobody with a
+    storefront account was born this week.
     """
 
-    today = _utc_today_ms()
-    for key in BIRTHDAY_SOURCES:
-        raw = customer.get(key)
-        stamp = date_value(raw)
-        if stamp is None or int(stamp) > today:
-            continue
-        return _nonempty(raw)
+    today = today or datetime.now(timezone.utc).date()
+    return value < date(today.year - 1, today.month, today.day)
+
+
+def customer_birthday(customer: dict[str, Any]) -> str | None:
+    """Return a real date of birth, if any source carries one.
+
+    A next-occurrence value is not written here. Inventing a birth year from it
+    would put wrong personal data in the CRM, and the day and month it does carry
+    are kept by :func:`customer_birthday_day` instead.
+    """
+
+    today = datetime.now(timezone.utc).date()
+    for _key, value in _birthday_dates(customer):
+        if is_date_of_birth(value, today):
+            return value.isoformat()
+    return None
+
+
+def customer_birthday_day(customer: dict[str, Any]) -> str | None:
+    """Return the day and month of the customer's birthday, as ``MM-DD``.
+
+    This is the part EasyStore actually knows and the part a birthday campaign
+    needs. It is the same whether the store reported a date of birth or the next
+    occurrence, so it is the one birthday value that is always trustworthy.
+    """
+
+    for _key, value in _birthday_dates(customer):
+        return f"{value.month:02d}-{value.day:02d}"
+    return None
+
+
+def _next_occurrence(value: date, today: date) -> date:
+    """Return the next time a day and month comes round, today included."""
+
+    for year in (today.year, today.year + 1):
+        try:
+            candidate = date(year, value.month, value.day)
+        except ValueError:
+            # 29 February in a common year: mark it on the 28th.
+            candidate = date(year, value.month, value.day - 1)
+        if candidate >= today:
+            return candidate
+    return today
+
+
+def customer_next_birthday(customer: dict[str, Any]) -> str | None:
+    """Return when the customer's birthday next falls.
+
+    A next-occurrence value from EasyStore is kept as it is, because that is
+    exactly what it means. A real date of birth is projected forward to its next
+    occurrence, so campaigns can target one property whichever way the store
+    reports birthdays.
+    """
+
+    today = datetime.now(timezone.utc).date()
+    for _key, value in _birthday_dates(customer):
+        if not is_date_of_birth(value, today):
+            return value.isoformat()
+        return _next_occurrence(value, today).isoformat()
     return None
 
 
@@ -390,6 +481,8 @@ def _customer_tags(customer: dict[str, Any]) -> str | None:
 CONTACT_FIELD_DERIVATIONS: dict[str, Callable[[dict[str, Any]], str | None]] = {
     "tags": _customer_tags,
     "birthday": customer_birthday,
+    "birthday_day": customer_birthday_day,
+    "next_birthday": customer_next_birthday,
 }
 
 
@@ -926,6 +1019,7 @@ def sync(
     ambiguous_hubspot_phones = 0
     email_conflicts = 0
     lifecycle_assignments = 0
+    birthdays_cleared = 0
     # How many synchronized customers actually carried each extra fact. A zero
     # means EasyStore did not report it, not that HubSpot rejected it.
     field_coverage: dict[str, int] = {field.key: 0 for field in CONTACT_FIELDS}
@@ -972,6 +1066,21 @@ def sync(
             properties[LIFECYCLE_PROPERTY] = stage
             lifecycle_assignments += 1
 
+        birthday_property = contact_field_properties.get("birthday")
+        if (
+            target_id is not None
+            and birthday_property == BIRTHDAY_FALLBACK_PROPERTY
+            and birthday_property not in properties
+        ):
+            # This sync provisioned easystore_customer_birthday and owns it.
+            # Earlier runs wrote EasyStore's next-occurrence date into it, so
+            # clearing it when no date of birth is reported repairs those
+            # contacts rather than leaving a birthday in 2027 behind. A portal
+            # whose native date_of_birth was resolved instead is never cleared:
+            # that property belongs to the portal, not to this sync.
+            properties[birthday_property] = ""
+            birthdays_cleared += 1
+
         if target_id is None:
             creates.append({"properties": properties})
         else:
@@ -998,6 +1107,7 @@ def sync(
         "easystore_birthday_shapes": dict(sorted(birthday_shapes.items())),
         "easystore_birthday_years": dict(sorted(birthday_years.items())),
         "birthdays_in_future_ignored": birthdays_in_future,
+        "birthday_property_cleared": birthdays_cleared,
         "easystore_customer_keys_seen": sorted(customer_keys),
         "easystore_customer_address_keys_seen": sorted(address_keys),
         "hubspot_contact_property_hints": schema_report.get("hints", {}),
