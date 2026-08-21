@@ -179,6 +179,7 @@ def _http_json(
     payload: Any = None,
     retries: int = 4,
     allow_statuses: set[int] | None = None,
+    timeout: float = 60,
 ) -> Any:
     body = None
     request_headers = {
@@ -194,7 +195,7 @@ def _http_json(
     for attempt in range(retries + 1):
         request = Request(url, data=body, headers=request_headers, method=method)
         try:
-            with urlopen(request, timeout=60) as response:
+            with urlopen(request, timeout=timeout) as response:
                 raw = response.read()
                 return json.loads(raw.decode("utf-8")) if raw else {}
         except HTTPError as error:
@@ -505,7 +506,7 @@ def _usable_address(address: Any) -> bool:
     )
 
 
-def _order_address(order: dict[str, Any]) -> dict[str, Any]:
+def _delivery_address(order: dict[str, Any]) -> dict[str, Any]:
     """Return the address to ship to, falling back to the billing address.
 
     A stub is never preferred over a real address: the first candidate that says
@@ -765,18 +766,18 @@ def _buyer_name(order: dict[str, Any]) -> str | None:
         _person_name(order.get("customer"))
         or first_present(order, ("customer_name", "contact_name", "buyer_name"))
         or _person_name(order.get("billing_address"))
-        or _person_name(_order_address(order))
+        or _person_name(_delivery_address(order))
     )
 
 
 def _shipping_recipient(order: dict[str, Any]) -> str | None:
-    return _person_name(_order_address(order))
+    return _person_name(_delivery_address(order))
 
 
 def _shipping_phone(order: dict[str, Any]) -> str | None:
     """Return the delivery contact number as EasyStore recorded it."""
 
-    return first_present(_order_address(order), ("phone", "phone_number", "mobile"))
+    return first_present(_delivery_address(order), ("phone", "phone_number", "mobile"))
 
 
 def _item_count(order: dict[str, Any]) -> str | None:
@@ -1134,7 +1135,7 @@ ORDER_FIELD_DERIVATIONS: dict[str, Callable[[dict[str, Any]], str | None]] = {
     "payment_method": _payment_method,
     "tracking_number": _tracking_number,
     "tracking_url": _tracking_url,
-    **_address_derivations("shipping_address", _order_address),
+    **_address_derivations("shipping_address", _delivery_address),
     **_address_derivations("billing_address", _billing_address),
 }
 
@@ -1184,7 +1185,7 @@ def order_needs_detail(order: dict[str, Any]) -> bool:
     if not isinstance(order.get("line_items"), list):
         return True
     # A country-only stub is not a delivery address, so it does not count as one.
-    if not _usable_address(_order_address(order)):
+    if not _usable_address(_delivery_address(order)):
         return True
     return first_present(order, DETAIL_MONEY_SOURCES) is None
 
@@ -1686,7 +1687,7 @@ def sync(
         for key in order_field_values(order, fallback_dial_code):
             field_coverage[key] += 1
         observed_keys(order_keys, order)
-        observed_keys(address_keys, _order_address(order))
+        observed_keys(address_keys, _delivery_address(order))
         observed_keys(address_keys, _billing_address(order))
         for line in order.get("line_items") or ():
             observed_keys(line_keys, line)

@@ -12,9 +12,12 @@ copying them here would double-count revenue.
 
 Two things this stage refuses to guess:
 
-* **Which EasyStore route serves abandoned checkouts.** The candidates are tried
-  in order and the one that answers is reported, so an unexpected route is a
-  one-line fix rather than a silent empty sync.
+* **Which EasyStore route serves abandoned checkouts.** Every candidate is
+  probed for a single record and the outcome of each is reported, so an
+  unexpected route is a one-line fix rather than a silent empty sync. Probing is
+  discovery, not the sync: a route that 404s, hangs or serves HTML is recorded
+  and passed over, never fatal, because a storefront that has no such route must
+  not take the run down with it.
 * **Whether the portal has a Cart object at all.** Not every HubSpot account
   does. A portal without one is reported and skipped rather than failing the run
   or inventing somewhere else to put the data.
@@ -28,11 +31,17 @@ import argparse
 import json
 import os
 import sys
+from itertools import chain
 from typing import Any, Callable, Iterator
 
 from easystore_hubspot_orders import (
     HUBSPOT_BASE,
     SyncError,
+    _address_derivations,
+    _address_fields,
+    _billing_address,
+    _delivery_address,
+    _discount_codes,
     _extract_list,
     _http_json,
     _shop_domain,
@@ -57,14 +66,59 @@ HUBSPOT_CARTS_URL = f"{HUBSPOT_BASE}/crm/v3/objects/{CART_OBJECT_TYPE}"
 CART_EXTERNAL_ID_PROPERTY = "hs_external_cart_id"
 EASYSTORE_PAGE_SIZE = 50
 
-# EasyStore's admin calls these "abandoned checkouts". The API route is tried in
-# this order and the first one that answers is used for the whole run.
+# EasyStore's admin calls these "abandoned checkouts". Every candidate below is
+# probed and the first one holding records is used for the whole run; a route
+# that answers empty is only settled for once no other route has anything.
 CHECKOUT_ROUTES = (
     "checkouts.json",
     "abandoned_checkouts.json",
     "carts.json",
     "abandoned_carts.json",
 )
+
+# The collection keys a checkout payload may arrive under.
+CHECKOUT_COLLECTIONS = (
+    "checkouts",
+    "abandoned_checkouts",
+    "carts",
+    "data",
+    "results",
+)
+
+# Discovery is throwaway work, so it gets a short leash: one record, one retry
+# and a fraction of the normal read timeout. Four dead routes at the default
+# 60 seconds and four retries each would spend twenty minutes proving nothing.
+CHECKOUT_PROBE_LIMIT = 1
+CHECKOUT_PROBE_RETRIES = 1
+CHECKOUT_PROBE_TIMEOUT = 20
+
+
+def _cart_address_fields(prefix: str, native_prefix: str) -> tuple[FieldSpec, ...]:
+    """Return one address role's FieldSpecs, phone included.
+
+    The Order stage's address table is reused so both objects read the same
+    EasyStore keys. HubSpot's Cart object adds an address phone the Order object
+    has no equivalent for, so that one is declared here.
+    """
+
+    return (
+        *_address_fields(prefix, native_prefix),
+        FieldSpec(key=f"{prefix}_phone", native=(f"{native_prefix}_phone",)),
+    )
+
+
+def _cart_address_derivations(
+    prefix: str,
+    getter: Callable[[dict[str, Any]], dict[str, Any]],
+) -> dict[str, Callable[[dict[str, Any]], str | None]]:
+    return {
+        **_address_derivations(prefix, getter),
+        f"{prefix}_phone": lambda cart: first_present(
+            getter(cart),
+            ("phone", "phone_number", "mobile"),
+        ),
+    }
+
 
 # Fields copied onto the HubSpot Cart. The native names come from HubSpot's Cart
 # object; anything without one lands in a provisioned easystore_* property, the
@@ -140,7 +194,7 @@ CART_FIELDS: tuple[FieldSpec, ...] = (
     FieldSpec(
         key="created_at",
         sources=("created_at", "created_on", "started_at"),
-        native=(),
+        native=("hs_external_created_date",),
         fallback="easystore_cart_created_at",
         label="EasyStore Cart Started",
         description="When the shopper started the checkout in EasyStore.",
@@ -149,7 +203,7 @@ CART_FIELDS: tuple[FieldSpec, ...] = (
     FieldSpec(
         key="abandoned_at",
         sources=("abandoned_at", "updated_at", "last_activity_at", "modified_at"),
-        native=(),
+        native=("hs_external_modified_date",),
         fallback="easystore_cart_abandoned_at",
         label="EasyStore Cart Abandoned",
         description="Last time EasyStore saw activity on the abandoned checkout.",
@@ -164,7 +218,7 @@ CART_FIELDS: tuple[FieldSpec, ...] = (
             "url",
             "link",
         ),
-        native=(),
+        native=("hs_cart_url",),
         fallback="easystore_cart_recovery_url",
         label="EasyStore Recovery Link",
         description="Link that lets the shopper resume this checkout.",
@@ -205,6 +259,34 @@ CART_FIELDS: tuple[FieldSpec, ...] = (
         label="EasyStore Cart Mobile",
         description="Normalized mobile number captured for the abandoned checkout.",
     ),
+    # Native-only from here down. HubSpot defines these on every Cart object, so
+    # a portal that somehow lacks one gains nothing from a duplicate custom
+    # property, and the card that displays them stays authoritative.
+    FieldSpec(
+        key="token",
+        sources=("token", "cart_token", "checkout_token"),
+        native=("hs_external_token",),
+    ),
+    FieldSpec(key="discount_codes", native=("hs_discount_codes",)),
+    FieldSpec(
+        key="landing_site",
+        sources=("landing_site", "landing_page", "landing_site_url"),
+        native=("hs_landing_site",),
+    ),
+    FieldSpec(
+        key="referring_site",
+        sources=("referring_site", "referrer", "referral_site"),
+        native=("hs_referring_site",),
+    ),
+    # A weight, not a price: HubSpot types this one as text, so the unit
+    # EasyStore reports travels with the number instead of being guessed at.
+    FieldSpec(
+        key="total_weight",
+        sources=("total_weight", "weight", "total_weight_grams"),
+        native=("hs_total_weight",),
+    ),
+    *_cart_address_fields("shipping_address", "hs_shipping_address"),
+    *_cart_address_fields("billing_address", "hs_billing_address"),
 )
 
 
@@ -349,10 +431,13 @@ def cart_properties(
 
 CART_FIELD_DERIVATIONS: dict[str, Callable[[dict[str, Any]], str | None]] = {
     "tags": _tags,
+    "discount_codes": _discount_codes,
     "item_count": _item_count,
     "items": _items,
     "buyer_email": _buyer_email,
     "buyer_name": _buyer_name,
+    **_cart_address_derivations("shipping_address", _delivery_address),
+    **_cart_address_derivations("billing_address", _billing_address),
 }
 
 DEFAULT_CART_FIELD_PROPERTIES: dict[str, str] = {
@@ -375,65 +460,84 @@ def cart_field_values(
     return field_values(cart, CART_FIELDS, derivations)
 
 
+def _describe_probes(probes: dict[str, str]) -> str:
+    """Return each candidate route and its outcome, in the order tried."""
+
+    return "; ".join(f"{route}: {reason}" for route, reason in probes.items())
+
+
+def _probe_reason(error: SyncError) -> str:
+    """Return why a candidate route was passed over, short enough to read."""
+
+    return " ".join(str(error).split())[:200]
+
+
 def iter_easystore_checkouts(
     store_domain: str,
     access_token: str,
-) -> tuple[str | None, Iterator[dict[str, Any]]]:
-    """Return the route that serves abandoned checkouts, and their records.
+) -> tuple[str | None, Iterator[dict[str, Any]], dict[str, str]]:
+    """Return the route serving abandoned checkouts, its records, and the probes.
 
     EasyStore's documented route for these is not reachable from CI, so each
-    candidate is tried once and the one that answers is used and reported.
+    candidate is probed for one record. Any failure only rules that route out,
+    whether it is a 404, the storefront's HTML in place of JSON, or a read that
+    never comes back: the reason is recorded and the next candidate is tried. A
+    store with no abandoned-checkout route at all therefore reports what it
+    tried instead of failing the sync.
     """
 
     domain = _shop_domain(store_domain)
     headers = {"EasyStore-Access-Token": access_token}
+    probes: dict[str, str] = {}
+    answered_empty: str | None = None
 
     for route in CHECKOUT_ROUTES:
-        document = _http_json(
-            f"https://{domain}/api/3.0/{route}?page=1&limit={EASYSTORE_PAGE_SIZE}",
-            headers=headers,
-            allow_statuses={403, 404},
-        )
-        if document is None:
+        try:
+            document = _http_json(
+                f"https://{domain}/api/3.0/{route}"
+                f"?page=1&limit={CHECKOUT_PROBE_LIMIT}",
+                headers=headers,
+                retries=CHECKOUT_PROBE_RETRIES,
+                timeout=CHECKOUT_PROBE_TIMEOUT,
+            )
+        except SyncError as error:
+            probes[route] = _probe_reason(error)
             continue
-        first_page = _extract_list(
-            document,
-            "checkouts",
-            "abandoned_checkouts",
-            "carts",
-            "data",
-            "results",
-        )
-        return route, _iter_route(domain, access_token, route, first_page)
-    return None, iter(())
+
+        if document is None:
+            probes[route] = "no answer"
+            continue
+
+        if _extract_list(document, *CHECKOUT_COLLECTIONS):
+            probes[route] = "answered with abandoned checkouts"
+            return route, _iter_route(domain, access_token, route), probes
+
+        probes[route] = "answered with no records"
+        if answered_empty is None:
+            answered_empty = route
+
+    return answered_empty, iter(()), probes
 
 
 def _iter_route(
     domain: str,
     access_token: str,
     route: str,
-    first_page: list[dict[str, Any]],
 ) -> Iterator[dict[str, Any]]:
-    page_records = first_page
+    """Yield every checkout the chosen route serves, a page at a time."""
+
     page = 1
     while True:
+        document = _http_json(
+            f"https://{domain}/api/3.0/{route}?page={page}&limit={EASYSTORE_PAGE_SIZE}",
+            headers={"EasyStore-Access-Token": access_token},
+        )
+        page_records = _extract_list(document, *CHECKOUT_COLLECTIONS)
         for record in page_records:
             yield record
         if len(page_records) < EASYSTORE_PAGE_SIZE:
             return
         page += 1
-        document = _http_json(
-            f"https://{domain}/api/3.0/{route}?page={page}&limit={EASYSTORE_PAGE_SIZE}",
-            headers={"EasyStore-Access-Token": access_token},
-        )
-        page_records = _extract_list(
-            document,
-            "checkouts",
-            "abandoned_checkouts",
-            "carts",
-            "data",
-            "results",
-        )
 
 
 def hubspot_cart_index(access_token: str) -> dict[str, str]:
@@ -555,17 +659,37 @@ def sync(
         file=sys.stderr,
     )
 
-    route, checkouts = iter_easystore_checkouts(store_domain, easystore_access_token)
+    route, checkouts, probes = iter_easystore_checkouts(
+        store_domain,
+        easystore_access_token,
+    )
     if route is None:
         print(
-            "WARNING: no EasyStore route answered for abandoned checkouts. Tried: "
-            + ", ".join(CHECKOUT_ROUTES),
+            "WARNING: no EasyStore route answered for abandoned checkouts, so "
+            "none were synchronized. Nothing else is affected. Routes tried: "
+            + _describe_probes(probes),
             file=sys.stderr,
         )
         return {
             "easystore_checkout_route": None,
-            "easystore_checkout_routes_tried": list(CHECKOUT_ROUTES),
+            "easystore_checkout_route_probes": probes,
         }
+
+    # Nothing to sync is worth knowing before scanning every HubSpot contact and
+    # cart for identities no checkout will ask about.
+    first_checkout = next(checkouts, None)
+    if first_checkout is None:
+        print(
+            f"WARNING: EasyStore route {route} reports no abandoned checkouts, "
+            "so there was nothing to synchronize.",
+            file=sys.stderr,
+        )
+        return {
+            "easystore_checkout_route": route,
+            "easystore_checkout_route_probes": probes,
+            "easystore_checkouts_scanned": 0,
+        }
+    checkouts = chain([first_checkout], checkouts)
 
     from easystore_hubspot_orders import hubspot_contact_index
 
@@ -631,6 +755,7 @@ def sync(
 
     return {
         "easystore_checkout_route": route,
+        "easystore_checkout_route_probes": probes,
         "easystore_checkouts_scanned": scanned,
         "checkouts_skipped_as_completed": completed,
         "checkouts_without_id": without_id,
