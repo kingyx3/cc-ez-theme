@@ -25,7 +25,8 @@ import os
 import re
 import sys
 import time
-from collections import defaultdict
+from collections import Counter, defaultdict
+from datetime import datetime, timezone
 from typing import Any, Callable, Iterable, Iterator
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
@@ -34,6 +35,7 @@ from urllib.request import Request, urlopen
 from easystore_hubspot_schema import (
     FieldSpec,
     apply_fields,
+    date_value,
     describe_mapping,
     field_values,
     first_present,
@@ -138,7 +140,8 @@ CONTACT_FIELDS: tuple[FieldSpec, ...] = (
     ),
     FieldSpec(
         key="birthday",
-        sources=("birthday", "birth_date", "date_of_birth", "dob"),
+        # Read through customer_birthday, which refuses a date that cannot be a
+        # birthday and moves on to the next source.
         native=("date_of_birth",),
         fallback="easystore_customer_birthday",
         label="EasyStore Birthday",
@@ -294,6 +297,73 @@ def lifecycle_stage_write(current: Any, target: str = LIFECYCLE_LEAD) -> str | N
     return target
 
 
+BIRTHDAY_SOURCES = ("birthday", "birth_date", "date_of_birth", "dob")
+
+
+def _utc_today_ms() -> int:
+    """Return UTC midnight today, in epoch milliseconds."""
+
+    today = datetime.now(timezone.utc)
+    return int(
+        datetime(today.year, today.month, today.day, tzinfo=timezone.utc).timestamp()
+        * 1000
+    )
+
+
+def customer_birthday(customer: dict[str, Any]) -> str | None:
+    """Return the first EasyStore value that can actually be a birthday.
+
+    Nobody is born in the future, so a source reporting a future date is not a
+    birthday: it is a birthday *anniversary*, a reminder date, or a field that
+    means something else. Writing it would put wrong personal data in the CRM, so
+    it is skipped and the next source is tried.
+    """
+
+    today = _utc_today_ms()
+    for key in BIRTHDAY_SOURCES:
+        raw = customer.get(key)
+        stamp = date_value(raw)
+        if stamp is None or int(stamp) > today:
+            continue
+        return _nonempty(raw)
+    return None
+
+
+def _mask(text: str) -> str:
+    """Return a value's shape with its content removed."""
+
+    return re.sub(r"[0-9]", "#", re.sub(r"[A-Za-z]", "a", text))
+
+
+def birthday_diagnostics(customer: dict[str, Any]) -> tuple[list[str], list[str], int]:
+    """Return the shape and year of each birthday source, and future-date count.
+
+    Reported so a wrong birthday can be diagnosed without putting anyone's date
+    of birth in a build log: shapes are masked (``####-##-##``) and years are an
+    aggregate distribution.
+    """
+
+    shapes: list[str] = []
+    years: list[str] = []
+    future = 0
+    today = _utc_today_ms()
+
+    for key in BIRTHDAY_SOURCES:
+        raw = _nonempty(customer.get(key))
+        if raw is None:
+            continue
+        shapes.append(f"{key}={_mask(raw)}")
+        stamp = date_value(raw)
+        if stamp is None:
+            years.append(f"{key}=unparsed")
+            continue
+        moment = datetime.fromtimestamp(int(stamp) / 1000, tz=timezone.utc)
+        years.append(f"{key}={moment.year}")
+        if int(stamp) > today:
+            future += 1
+    return shapes, years, future
+
+
 def _customer_tags(customer: dict[str, Any]) -> str | None:
     """Return the customer's tags as one comma separated value."""
 
@@ -319,6 +389,7 @@ def _customer_tags(customer: dict[str, Any]) -> str | None:
 
 CONTACT_FIELD_DERIVATIONS: dict[str, Callable[[dict[str, Any]], str | None]] = {
     "tags": _customer_tags,
+    "birthday": customer_birthday,
 }
 
 
@@ -799,6 +870,11 @@ def sync(
     easystore_by_phone: dict[str, dict[str, Any]] = {}
     customer_keys: set[str] = set()
     address_keys: set[str] = set()
+    # A birthday that came out wrong is diagnosed from these: the shape of the
+    # value EasyStore sent, with its digits masked, and the year it parses to.
+    birthday_shapes: Counter[str] = Counter()
+    birthday_years: Counter[str] = Counter()
+    birthdays_in_future = 0
     easystore_total = 0
     skipped_without_phone = 0
     duplicate_easystore_phones = 0
@@ -809,6 +885,10 @@ def sync(
         # back to the real EasyStore field name.
         observed_keys(customer_keys, customer)
         observed_keys(address_keys, customer.get("primary_address"))
+        shapes, years, future = birthday_diagnostics(customer)
+        birthday_shapes.update(shapes)
+        birthday_years.update(years)
+        birthdays_in_future += future
         normalized = customer_mobile(customer, fallback_dial_code)
         if normalized is None:
             # Filtered out: no mobile number recorded, so no CRM identity.
@@ -915,6 +995,9 @@ def sync(
             sorted(contact_field_properties.items())
         ),
         "easystore_customer_attributes_found": len(attribute_labels),
+        "easystore_birthday_shapes": dict(sorted(birthday_shapes.items())),
+        "easystore_birthday_years": dict(sorted(birthday_years.items())),
+        "birthdays_in_future_ignored": birthdays_in_future,
         "easystore_customer_keys_seen": sorted(customer_keys),
         "easystore_customer_address_keys_seen": sorted(address_keys),
         "hubspot_contact_property_hints": schema_report.get("hints", {}),

@@ -43,6 +43,9 @@ PROPERTY_FIELD_TYPES = {
 }
 
 _MONEY_PATTERN = re.compile(r"-?\d+(?:\.\d+)?")
+# A compact ISO 8601 calendar date, e.g. 19930420. Read as an epoch it would come
+# out as a day in 1970, so it is recognised before the epoch heuristic.
+_COMPACT_DATE_PATTERN = re.compile(r"^(\d{4})(\d{2})(\d{2})$")
 
 # Tokens that describe every field rather than any one of them, so they make
 # useless search keywords when looking for a portal's property by name.
@@ -116,6 +119,19 @@ def money_value(value: Any, *, absolute: bool = False) -> str | None:
     return str(amount)
 
 
+def iso_datetime(value: Any) -> datetime | None:
+    """Return the datetime an ISO 8601 value denotes, or ``None``."""
+
+    text = nonempty(value)
+    if text is None:
+        return None
+    candidate = text[:-1] + "+00:00" if text[-1:] in {"Z", "z"} else text
+    try:
+        return datetime.fromisoformat(candidate)
+    except ValueError:
+        return None
+
+
 def timestamp_value(value: Any) -> str | None:
     """Return epoch milliseconds for a timestamp, or ``None``.
 
@@ -133,13 +149,19 @@ def timestamp_value(value: Any) -> str | None:
         # Ten digits or fewer is a seconds-precision epoch, otherwise milliseconds.
         return str(epoch * 1000 if len(text) <= 10 else epoch)
 
-    candidate = text[:-1] + "+00:00" if text[-1:] in {"Z", "z"} else text
-    try:
-        moment = datetime.fromisoformat(candidate)
-    except ValueError:
+    moment = iso_datetime(text)
+    if moment is None:
         return None
     if moment.tzinfo is None:
         moment = moment.replace(tzinfo=timezone.utc)
+    return str(int(moment.timestamp() * 1000))
+
+
+def _utc_midnight(year: int, month: int, day: int) -> str | None:
+    try:
+        moment = datetime(year, month, day, tzinfo=timezone.utc)
+    except ValueError:
+        return None
     return str(int(moment.timestamp() * 1000))
 
 
@@ -149,14 +171,32 @@ def date_value(value: Any) -> str | None:
     HubSpot date properties store a day, not an instant, and reject a value that
     is not midnight UTC. A value that does not parse as a date is dropped rather
     than rounded to today.
+
+    A date keeps the calendar day it was written with. Converting an
+    offset-bearing midnight to UTC first would move a birthday to the previous
+    day for every store east of Greenwich, and a compact ``19930420`` read as an
+    epoch would land in 1970, so both are handled before the epoch heuristic.
     """
 
-    stamp = timestamp_value(value)
+    text = nonempty(value)
+    if text is None:
+        return None
+
+    compact = _COMPACT_DATE_PATTERN.match(text)
+    if compact is not None:
+        year, month, day = (int(part) for part in compact.groups())
+        if 1900 <= year <= 2100:
+            return _utc_midnight(year, month, day)
+
+    written = iso_datetime(text)
+    if written is not None:
+        return _utc_midnight(written.year, written.month, written.day)
+
+    stamp = timestamp_value(text)
     if stamp is None:
         return None
     moment = datetime.fromtimestamp(int(stamp) / 1000, tz=timezone.utc)
-    midnight = moment.replace(hour=0, minute=0, second=0, microsecond=0)
-    return str(int(midnight.timestamp() * 1000))
+    return _utc_midnight(moment.year, moment.month, moment.day)
 
 
 def field_value(

@@ -11,6 +11,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import easystore_hubspot_orders as orders
 import easystore_hubspot_preflight as preflight
 import easystore_hubspot_products as products
+import easystore_hubspot_carts as carts
 import easystore_hubspot_reconcile as reconcile
 import easystore_hubspot_schema as schema
 import easystore_hubspot_sync as customers
@@ -863,6 +864,188 @@ class CustomerFieldTests(unittest.TestCase):
         self.assertEqual(values["total_spent"], "1000.00")
         self.assertEqual(values["last_order_at"], "1777602030000")
         self.assertEqual(values["note"], "Collects the deluxe sets")
+
+
+class BirthdayTests(unittest.TestCase):
+    def test_a_compact_date_is_not_read_as_an_epoch(self) -> None:
+        # 19930420 read as epoch seconds lands in August 1970.
+        self.assertEqual(schema.date_value("19930420"), schema.date_value("1993-04-20"))
+
+    def test_a_date_keeps_the_calendar_day_it_was_written_with(self) -> None:
+        # Converting an offset-bearing midnight to UTC first moved a birthday to
+        # the previous day for every store east of Greenwich.
+        for value in (
+            "1993-04-20",
+            "1993-04-20T00:00:00+08:00",
+            "1993-04-20T23:30:00-05:00",
+        ):
+            with self.subTest(value=value):
+                self.assertEqual(schema.date_value(value), "735264000000")
+
+    def test_an_impossible_date_is_dropped(self) -> None:
+        self.assertIsNone(schema.date_value("19930231"))
+        self.assertIsNone(schema.date_value("20/04/1993"))
+
+    def test_nobody_is_born_in_the_future(self) -> None:
+        self.assertIsNone(customers.customer_birthday({"birthday": "2099-09-15"}))
+
+    def test_a_future_source_gives_way_to_a_real_birthday(self) -> None:
+        # A store that reports the upcoming anniversary in one field and the real
+        # date of birth in another must not sync the anniversary.
+        self.assertEqual(
+            customers.customer_birthday({"birthday": "2099-09-15", "dob": "1993-04-20"}),
+            "1993-04-20",
+        )
+
+    def test_a_real_birthday_is_kept(self) -> None:
+        self.assertEqual(
+            customers.customer_birthday({"birthday": "1993-04-20"}),
+            "1993-04-20",
+        )
+
+    def test_diagnostics_report_shape_and_year_without_the_date(self) -> None:
+        shapes, years, future = customers.birthday_diagnostics(
+            {"birthday": "2099-09-15", "dob": "19930420"}
+        )
+        self.assertEqual(shapes, ["birthday=####-##-##", "dob=########"])
+        self.assertEqual(years, ["birthday=2099", "dob=1993"])
+        self.assertEqual(future, 1)
+        # The masked shape must not carry the date itself.
+        self.assertNotIn("1993", shapes[1])
+
+    def test_an_unparseable_birthday_is_named_as_such(self) -> None:
+        _shapes, years, future = customers.birthday_diagnostics({"birthday": "next week"})
+        self.assertEqual(years, ["birthday=unparsed"])
+        self.assertEqual(future, 0)
+
+
+class AbandonedCartTests(unittest.TestCase):
+    def _checkout(self) -> dict[str, object]:
+        return {
+            "id": 900,
+            "token": "abc123",
+            "currency": "sgd",
+            "status": "abandoned",
+            "created_at": "2026-08-19T20:00:00+08:00",
+            "updated_at": "2026-08-19T21:30:00+08:00",
+            "total_price": "266.00",
+            "subtotal_price": "266.00",
+            "total_discount": "-10.00",
+            "total_tax": "0.00",
+            "total_shipping": "5.00",
+            "abandoned_checkout_url": "https://shop.example/checkouts/abc123/recover",
+            "customer": {
+                "first_name": "Jeremy",
+                "last_name": "Ho",
+                "email": "shopper@example.com",
+                "phone": "9123 4567",
+                "country_code": "SG",
+            },
+            "line_items": [
+                {"title": "The Hobbit", "sku": "A", "quantity": 1},
+                {"title": "Scenes", "sku": "B", "quantity": 2},
+            ],
+        }
+
+    def test_a_checkout_maps_onto_hubspot_cart_properties(self) -> None:
+        mapped = carts.cart_properties(
+            self._checkout(),
+            external_id="900",
+            store_domain="cardboardcollective.easy.co",
+        )
+        self.assertEqual(mapped["hs_external_cart_id"], "900")
+        self.assertEqual(mapped["hs_currency_code"], "SGD")
+        self.assertEqual(mapped["hs_source_store"], "cardboardcollective.easy.co")
+        self.assertEqual(mapped["hs_total_price"], "266.00")
+        self.assertEqual(mapped["hs_subtotal_price"], "266.00")
+        self.assertEqual(mapped["hs_cart_discount"], "10.00")
+        self.assertEqual(mapped["hs_tax"], "0.00")
+        self.assertEqual(mapped["hs_shipping_cost"], "5.00")
+        self.assertEqual(mapped["hs_external_status"], "abandoned")
+
+    def test_the_cart_records_what_was_left_behind_and_how_to_recover_it(self) -> None:
+        mapped = carts.cart_properties(
+            self._checkout(),
+            external_id="900",
+            store_domain="cardboardcollective.easy.co",
+        )
+        self.assertEqual(mapped["easystore_cart_items"], "The Hobbit x1; Scenes x2")
+        self.assertEqual(mapped["easystore_cart_item_count"], "3")
+        self.assertEqual(
+            mapped["easystore_cart_recovery_url"],
+            "https://shop.example/checkouts/abc123/recover",
+        )
+        self.assertEqual(mapped["easystore_cart_email"], "shopper@example.com")
+        self.assertEqual(mapped["easystore_cart_customer_name"], "Jeremy Ho")
+        self.assertEqual(mapped["easystore_cart_phone"], "+6591234567")
+
+    def test_a_completed_checkout_is_not_a_cart(self) -> None:
+        # It is already an Order; syncing it here would double-count revenue.
+        for completed in (
+            {"id": 1, "order_id": 55},
+            {"id": 2, "order": {"id": 55}},
+            {"id": 3, "completed_at": "2026-08-19T21:00:00+08:00"},
+            {"id": 4, "status": "completed"},
+            {"id": 5, "status": "Paid"},
+        ):
+            with self.subTest(completed=sorted(completed)):
+                self.assertFalse(carts.is_abandoned(completed))
+        self.assertTrue(carts.is_abandoned(self._checkout()))
+
+    def test_the_shopper_is_resolved_with_the_crm_identity_rule(self) -> None:
+        self.assertEqual(carts.cart_mobile(self._checkout(), "65"), "+6591234567")
+        self.assertEqual(
+            carts.cart_mobile({"billing_address": {"phone": "9123 4568"}}, "65"),
+            "+6591234568",
+        )
+        self.assertIsNone(carts.cart_mobile({}, "65"))
+
+    def test_a_portal_without_the_cart_object_is_skipped_not_failed(self) -> None:
+        with mock.patch.object(carts, "_http_json", lambda *a, **k: None):
+            summary = carts.sync(
+                store_domain="cardboardcollective.easy.co",
+                easystore_access_token="es",
+                hubspot_access_token="hs",
+                fallback_dial_code="65",
+            )
+        self.assertEqual(summary, {"hubspot_cart_object": "unavailable"})
+
+    def test_every_checkout_route_is_tried_before_giving_up(self) -> None:
+        attempted: list[str] = []
+
+        def fake_http_json(url, *, allow_statuses=None, **kwargs):
+            attempted.append(url.split("/api/3.0/")[-1].split("?")[0])
+            return None
+
+        with mock.patch.object(carts, "_http_json", fake_http_json):
+            route, records = carts.iter_easystore_checkouts("shop.example", "token")
+
+        self.assertIsNone(route)
+        self.assertEqual(list(records), [])
+        self.assertEqual(attempted, list(carts.CHECKOUT_ROUTES))
+
+    def test_the_route_that_answers_is_the_one_used(self) -> None:
+        def fake_http_json(url, *, allow_statuses=None, **kwargs):
+            if "abandoned_checkouts.json" in url:
+                return {"abandoned_checkouts": [{"id": 900}]}
+            return None
+
+        with mock.patch.object(carts, "_http_json", fake_http_json):
+            route, records = carts.iter_easystore_checkouts("shop.example", "token")
+
+        self.assertEqual(route, "abandoned_checkouts.json")
+        self.assertEqual([record["id"] for record in records], [900])
+
+    def test_duplicate_hubspot_carts_fail_closed(self) -> None:
+        existing = [
+            {"id": "1", "properties": {"hs_external_cart_id": "900"}},
+            {"id": "2", "properties": {"hs_external_cart_id": "900"}},
+        ]
+        with mock.patch.object(
+            carts, "iter_hubspot_objects", lambda *a, **k: iter(existing)
+        ):
+            with self.assertRaises(carts.SyncError):
+                carts.hubspot_cart_index("token")
 
 
 class CustomerAttributeTests(unittest.TestCase):
