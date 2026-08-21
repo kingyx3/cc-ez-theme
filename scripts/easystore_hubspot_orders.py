@@ -48,6 +48,7 @@ from easystore_hubspot_schema import (
     field_values,
     first_present,
     nonempty,
+    note_text,
     observed_keys,
     resolve_fields,
 )
@@ -680,8 +681,24 @@ def _discount_codes(order: dict[str, Any]) -> str | None:
     return ", ".join(codes) if codes else None
 
 
+ORDER_NOTE_SOURCES = (
+    "note",
+    "notes",
+    "customer_note",
+    "remark",
+    "remarks",
+    "comment",
+)
+
+
 def _order_note(order: dict[str, Any]) -> str | None:
-    return first_present(order, ("note", "notes", "customer_note", "remark"))
+    """Return the note on an order, however the storefront wrapped it."""
+
+    for key in ORDER_NOTE_SOURCES:
+        found = note_text(order.get(key))
+        if found is not None:
+            return found
+    return None
 
 
 def _tags(record: dict[str, Any], key: str = "tags") -> str | None:
