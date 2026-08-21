@@ -1,0 +1,80 @@
+name: Deploy Cloudflare attribution Worker
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "cloudflare/attribution-worker/**"
+      - ".github/workflows/deploy-cloudflare-attribution-worker.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-attribution-worker-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Migrate D1 and deploy Worker
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: cloudflare/attribution-worker
+
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - name: Check Cloudflare credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${CLOUDFLARE_API_TOKEN}" ]]; then
+            echo "::error::Repository secret CLOUDFLARE_API_TOKEN is not configured."
+            exit 1
+          fi
+          if [[ -z "${CLOUDFLARE_ACCOUNT_ID}" ]]; then
+            echo "::error::Repository secret CLOUDFLARE_ACCOUNT_ID is not configured."
+            exit 1
+          fi
+
+      - name: Install Worker dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Validate Worker JavaScript
+        run: npm run check
+
+      - name: Validate Wrangler deployment bundle
+        run: npx wrangler deploy --dry-run
+
+      - name: Apply pending D1 migrations
+        run: npm run d1:migrate:remote
+
+      - name: Deploy Worker
+        run: npm run deploy
+
+      - name: Write deployment summary
+        if: success()
+        shell: bash
+        run: |
+          {
+            echo "### Cloudflare attribution Worker"
+            echo
+            echo "- Worker: \`cc-attribution\`"
+            echo "- Source commit: \`${GITHUB_SHA}\`"
+            echo "- D1 migrations: applied"
+            echo "- Worker deployment: successful"
+          } >> "${GITHUB_STEP_SUMMARY}"
