@@ -173,6 +173,25 @@
           },
           "type": "featured-collection"
         },
+        "1787270400000": {
+          "settings": {
+            "eyebrow": "PRE-ORDER NOW OPEN",
+            "title": "[Pre-order] Reality Fracture",
+            "subtitle": "Reserve the newest Reality Fracture products before release.",
+            "accent_color": "#00897B",
+            "collection__id": "reality-fracture",
+            "products_per_row": 3,
+            "products_to_show": 6,
+            "show_view_all": true,
+            "image_ratio": "square",
+            "show_secondary_image": true,
+            "swipe_on_mobile": true,
+            "center_title": true,
+            "show_product_info": true,
+            "product_bg_color": "rgba(245, 245, 245, 1)"
+          },
+          "type": "featured-collection"
+        },
         "1684403242688": {
           "settings": {
             "eyebrow": "MIDDLE-EARTH AWAITS",
@@ -233,6 +252,7 @@
       },
       "content_for_index": [
         "1667498127486",
+        "1787270400000",
         "1684403242688",
         "1684412368816",
         "1684412368817"

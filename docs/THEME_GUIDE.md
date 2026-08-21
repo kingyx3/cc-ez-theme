@@ -167,15 +167,24 @@ Homepage order is controlled by `content_for_index` in:
 The default order is:
 
 1. Best Sellers
-2. The Hobbit Collection
-3. Marvel Collection
-4. Secrets of Strixhaven
+2. [Pre-order] Reality Fracture
+3. The Hobbit Collection
+4. Marvel Collection
+5. Secrets of Strixhaven
 
 ### Best Sellers
 
 - Section type: `featured-collection`
 - Default title: `Best Sellers`
 - Default collection: `feature-on-homepage`
+- Default display: 6 products, 3 per desktop row
+- Homepage quick add: disabled
+
+### [Pre-order] Reality Fracture
+
+- Section type: `featured-collection`
+- Default title: `[Pre-order] Reality Fracture`
+- Default collection: `reality-fracture`
 - Default display: 6 products, 3 per desktop row
 - Homepage quick add: disabled
 
@@ -273,21 +282,22 @@ background.
 
 ### Navigation data
 
-The desktop header and mobile drawer expose a Browse dropdown followed by five
+The desktop header and mobile drawer expose a Browse dropdown followed by six
 top-level destinations in a fixed order:
 
 1. Browse (EasyStore product collection hierarchy)
 2. Crack-a-Pack (`/collections/late-night-crackers`)
-3. Hobbit (`/collections/the-hobbit`)
-4. Marvel (`/collections/marvel-super-heroes`)
-5. Strixhaven (`/collections/secrets-of-strixhaven`)
-6. About Us (`/pages/about-us`)
+3. [Pre-order] Reality Fracture (`/collections/reality-fracture`)
+4. Hobbit (`/collections/the-hobbit`)
+5. Marvel (`/collections/marvel-super-heroes`)
+6. Strixhaven (`/collections/secrets-of-strixhaven`)
+7. About Us (`/pages/about-us`)
 
 About Us is pushed to the right edge of the desktop navigation area. The
 Browse reads `contents.catalog.links` and renders up to three collection levels
 from EasyStore's product catalog hierarchy. On desktop, hovering or focusing a
 parent collection opens its child collection flyout; mobile retains nested
-drill-down navigation. The four fixed collection shortcuts remain direct
+drill-down navigation. The five fixed collection shortcuts remain direct
 EasyStore links.
 
 The theme controls:
