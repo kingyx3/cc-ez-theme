@@ -55,6 +55,7 @@ from easystore_hubspot_schema import (
     describe_mapping,
     field_values,
     first_present,
+    iter_easystore_pages,
     nonempty,
     observed_keys,
     resolve_fields,
@@ -566,18 +567,20 @@ def _iter_route(
 ) -> Iterator[dict[str, Any]]:
     """Yield every checkout the chosen route serves, a page at a time."""
 
-    page = 1
-    while True:
+
+    def fetch(page: int) -> list[dict[str, Any]]:
         document = _http_json(
             f"https://{domain}/api/3.0/{route}?page={page}&limit={EASYSTORE_PAGE_SIZE}",
             headers={"EasyStore-Access-Token": access_token},
         )
-        page_records = _extract_list(document, *CHECKOUT_COLLECTIONS)
-        for record in page_records:
-            yield record
-        if len(page_records) < EASYSTORE_PAGE_SIZE:
-            return
-        page += 1
+        return _extract_list(document, *CHECKOUT_COLLECTIONS)
+
+    yield from iter_easystore_pages(
+        fetch,
+        page_size=EASYSTORE_PAGE_SIZE,
+        what=route,
+        error=SyncError,
+    )
 
 
 def hubspot_cart_index(access_token: str) -> dict[str, str]:

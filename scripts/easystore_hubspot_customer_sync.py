@@ -27,7 +27,11 @@ from urllib.parse import quote, urlencode
 
 import easystore_hubspot_sync as base
 from easystore_hubspot_orders import _extract_list, _http_json, _shop_domain
-from easystore_hubspot_schema import nonempty, note_text
+from easystore_hubspot_schema import (
+    iter_easystore_pages,
+    nonempty,
+    note_text,
+)
 
 CUSTOMER_NOTE_SOURCES = ("note", "note2")
 EASYSTORE_ORDER_PAGE_SIZE = 50
@@ -96,10 +100,9 @@ def customer_note_fallback_index(
     access_token: str,
 ) -> dict[str, dict[str, Any]]:
     domain = _shop_domain(store_domain)
-    page = 1
     indexed: dict[str, dict[str, Any]] = {}
 
-    while True:
+    def fetch(page: int) -> list[dict[str, Any]]:
         query = urlencode(
             {
                 "page": page,
@@ -112,21 +115,25 @@ def customer_note_fallback_index(
             f"https://{domain}/api/3.0/orders.json?{query}",
             headers={"EasyStore-Access-Token": access_token},
         )
-        orders = _extract_list(document, "orders", "data", "results")
-        for listed in orders:
-            customer = _complete_order_customer(store_domain, access_token, listed)
-            if customer is None:
-                continue
-            customer_id = nonempty(customer.get("id"))
-            if customer_id is None or customer_id in indexed:
-                continue
-            if not any(key in customer for key in CUSTOMER_NOTE_SOURCES):
-                continue
-            indexed[customer_id] = customer
+        return _extract_list(document, "orders", "data", "results")
 
-        if len(orders) < EASYSTORE_ORDER_PAGE_SIZE:
-            return indexed
-        page += 1
+    for listed in iter_easystore_pages(
+        fetch,
+        page_size=EASYSTORE_ORDER_PAGE_SIZE,
+        what="orders.json",
+        error=base.SyncError,
+    ):
+        customer = _complete_order_customer(store_domain, access_token, listed)
+        if customer is None:
+            continue
+        customer_id = nonempty(customer.get("id"))
+        if customer_id is None or customer_id in indexed:
+            continue
+        if not any(key in customer for key in CUSTOMER_NOTE_SOURCES):
+            continue
+        indexed[customer_id] = customer
+
+    return indexed
 
 
 def complete_customer(

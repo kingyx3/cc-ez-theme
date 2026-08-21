@@ -2013,3 +2013,115 @@ class OrderPropertyTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class EasyStorePaginationGuardTests(unittest.TestCase):
+    """Every EasyStore list read must be unable to loop on a repeated page.
+
+    checkouts.json is known to ignore `page` and serve page 2 identical to
+    page 1. A loop that only stops on a short page would spend the whole job
+    timeout re-reading page 1 and rewriting those records in HubSpot on every
+    lap, so the same guard covers every list endpoint.
+    """
+
+    @staticmethod
+    def _page(count, start=0):
+        return [{"id": str(index)} for index in range(start, start + count)]
+
+    def test_pages_are_yielded_until_a_short_page(self) -> None:
+        pages = {1: self._page(50), 2: self._page(50, start=50), 3: self._page(7, start=100)}
+        seen = list(
+            schema.iter_easystore_pages(
+                lambda page: pages.get(page, []),
+                page_size=50,
+                what="orders.json",
+                error=orders.SyncError,
+            )
+        )
+        self.assertEqual(len(seen), 107)
+
+    def test_an_empty_first_page_ends_the_read(self) -> None:
+        calls = []
+
+        def fetch(page):
+            calls.append(page)
+            return []
+
+        self.assertEqual(
+            list(
+                schema.iter_easystore_pages(
+                    fetch, page_size=50, what="products.json", error=orders.SyncError
+                )
+            ),
+            [],
+        )
+        self.assertEqual(calls, [1])
+
+    def test_a_repeated_page_raises_instead_of_looping(self) -> None:
+        full = self._page(50)
+        calls = []
+
+        def fetch(page):
+            calls.append(page)
+            return full
+
+        with self.assertRaisesRegex(orders.SyncError, "page parameter does nothing"):
+            list(
+                schema.iter_easystore_pages(
+                    fetch, page_size=50, what="orders.json", error=orders.SyncError
+                )
+            )
+        # Page 1 served, page 2 recognised as the same records, then it stopped.
+        self.assertEqual(calls, [1, 2])
+
+    def test_the_error_names_the_endpoint(self) -> None:
+        full = self._page(50)
+        with self.assertRaisesRegex(orders.SyncError, "customers.json"):
+            list(
+                schema.iter_easystore_pages(
+                    lambda page: full,
+                    page_size=50,
+                    what="customers.json",
+                    error=orders.SyncError,
+                )
+            )
+
+    def test_records_without_ids_still_terminate(self) -> None:
+        # A collection whose records carry no id is compared by position, so an
+        # endpoint replaying it is still caught rather than looping forever.
+        full = [{"cart_token": f"c{index}"} for index in range(50)]
+        with self.assertRaises(orders.SyncError):
+            list(
+                schema.iter_easystore_pages(
+                    lambda page: full,
+                    page_size=50,
+                    what="checkouts.json",
+                    error=orders.SyncError,
+                )
+            )
+
+    def test_every_easystore_list_read_uses_the_guard(self) -> None:
+        # A new list endpoint added without the guard is the bug this prevents.
+        import easystore_hubspot_carts
+        import easystore_hubspot_commerce
+        import easystore_hubspot_customer_sync
+        import easystore_hubspot_products
+        import easystore_hubspot_sync
+
+        for module in (
+            orders,
+            easystore_hubspot_products,
+            easystore_hubspot_sync,
+            easystore_hubspot_customer_sync,
+            easystore_hubspot_commerce,
+            easystore_hubspot_carts,
+        ):
+            source = Path(module.__file__).read_text()
+            for line_number, line in enumerate(source.splitlines(), 1):
+                if "api/3.0/" in line and "?page=" in line or "\"page\": page" in line:
+                    self.assertIn(
+                        "iter_easystore_pages",
+                        source,
+                        f"{module.__name__}:{line_number} pages an EasyStore "
+                        "collection without the repeated-page guard",
+                    )

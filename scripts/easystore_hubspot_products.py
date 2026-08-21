@@ -31,6 +31,7 @@ from easystore_hubspot_schema import (
     describe_mapping,
     field_values,
     first_present,
+    iter_easystore_pages,
     observed_keys,
     resolve_fields,
 )
@@ -138,19 +139,21 @@ def _extract_list(document: Any, *keys: str) -> list[dict[str, Any]]:
 
 def iter_easystore_products(store_domain: str, access_token: str) -> Iterator[dict[str, Any]]:
     domain = store_domain.strip().removeprefix("https://").removeprefix("http://").rstrip("/")
-    page = 1
-    while True:
+
+    def fetch(page: int) -> list[dict[str, Any]]:
         query = urlencode({"page": page, "limit": EASYSTORE_PAGE_SIZE, "sort": "id.asc"})
         document = _http_json(
             f"https://{domain}/api/3.0/products.json?{query}",
             headers={"EasyStore-Access-Token": access_token},
         )
-        products = _extract_list(document, "products", "data", "results")
-        for product in products:
-            yield product
-        if len(products) < EASYSTORE_PAGE_SIZE:
-            break
-        page += 1
+        return _extract_list(document, "products", "data", "results")
+
+    yield from iter_easystore_pages(
+        fetch,
+        page_size=EASYSTORE_PAGE_SIZE,
+        what="products.json",
+        error=SyncError,
+    )
 
 
 def product_variants(

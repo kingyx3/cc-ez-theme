@@ -44,7 +44,12 @@ import sys
 from collections import Counter, defaultdict
 from typing import Any, Iterator
 
-from easystore_hubspot_schema import FieldSpec, describe_mapping, resolve_fields
+from easystore_hubspot_schema import (
+    FieldSpec,
+    describe_mapping,
+    property_schema,
+    resolve_fields,
+)
 from easystore_hubspot_sync import (
     SyncError,
     _batch_write,
@@ -204,6 +209,32 @@ def click_id_of(
         click_id = valid_click_id(raw)
         return (click_id, click_id is None)
     return None, False
+
+
+def present_click_id_properties(
+    access_token: str,
+    candidates: tuple[str, ...],
+) -> tuple[str, ...]:
+    """Return the candidate click-id properties this portal actually defines.
+
+    Filtering on a property HubSpot has never heard of fails the entire search
+    with an HTTP 400, which is indistinguishable from a real outage in the log
+    and takes the whole CRM sync down with it. A portal that simply does not
+    record click ids should report that and move on.
+    """
+
+    schema = property_schema(
+        http_json=_http_json,
+        access_token=access_token,
+        object_type=CONTACT_OBJECT_TYPE,
+        error=SyncError,
+        optional=True,
+    )
+    if schema is None:
+        # The token cannot read the contact schema, so the names cannot be
+        # checked. Trust the caller rather than silently skipping attribution.
+        return candidates
+    return tuple(name for name in candidates if name in schema)
 
 
 def iter_hubspot_contacts(
@@ -410,16 +441,34 @@ def sync(
     """Write the acquisition channel onto every contact that can be resolved."""
 
     summary: dict[str, Any] = {
-        "click_id_properties_read": list(click_id_properties),
+        "click_id_properties_requested": list(click_id_properties),
         "d1_database_id": database_id,
         "contacts_with_click_id": 0,
         "contacts_with_unusable_click_id": 0,
     }
 
+    # HubSpot's search rejects the whole request with an HTTP 400 when a filter
+    # names a property the portal does not have, and the click-id property names
+    # are a guess at where a storefront put them. So the portal's own schema
+    # decides which of them are real before anything is filtered on.
+    present = present_click_id_properties(hubspot_access_token, click_id_properties)
+    summary["click_id_properties_read"] = list(present)
+    if not present:
+        summary["attribution_status"] = "no click id property in this portal"
+        print(
+            "WARNING: none of the click-id properties "
+            f"({', '.join(click_id_properties)}) exist on HubSpot contacts in this "
+            "portal, so there are no tracked clicks to attribute. Set "
+            "ATTRIBUTION_CLICK_ID_PROPERTIES to the property that holds them.",
+            file=sys.stderr,
+        )
+        return summary
+
+    summary["attribution_status"] = "read"
     contacts: list[tuple[str, str]] = []
     unusable = 0
-    for contact in iter_hubspot_contacts(hubspot_access_token, click_id_properties):
-        click_id, malformed = click_id_of(contact, click_id_properties)
+    for contact in iter_hubspot_contacts(hubspot_access_token, present):
+        click_id, malformed = click_id_of(contact, present)
         if malformed:
             unusable += 1
             continue
