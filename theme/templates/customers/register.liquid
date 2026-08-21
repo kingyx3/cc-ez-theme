@@ -185,3 +185,10 @@
 </script>
 
 {% app_snippet 'register/content_bottom' %}
+
+{% comment %}
+  Fills and hides the Cloudflare "Click ID" customer attribute rendered by
+  the attribute loop above. Included here rather than from the layout,
+  because `shop.attribute_settings` belongs to the customer pages.
+{% endcomment %}
+{% include 'attribution-click-id-field' %}
