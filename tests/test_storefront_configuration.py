@@ -308,6 +308,10 @@ class StorefrontConfigurationTests(unittest.TestCase):
     def test_homepage_collections_are_six_products_in_three_columns(self) -> None:
         expected = {
             "1667498127486": ("Best Sellers", "feature-on-homepage"),
+            "1787270400000": (
+                "[Pre-order] Reality Fracture",
+                "reality-fracture",
+            ),
             "1684403242688": ("The Hobbit Collection", "the-hobbit"),
             "1684412368816": ("Marvel Collection", "marvel-super-heroes"),
             "1684412368817": (
@@ -347,6 +351,7 @@ class StorefrontConfigurationTests(unittest.TestCase):
             homepage["content_for_index"],
             [
                 "1667498127486",
+                "1787270400000",
                 "1684403242688",
                 "1684412368816",
                 "1684412368817",
@@ -458,6 +463,9 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertEqual(
             header.count('href="/collections/late-night-crackers"'), 2
         )
+        self.assertEqual(
+            header.count('href="/collections/reality-fracture"'), 2
+        )
         self.assertEqual(header.count('href="/collections/the-hobbit"'), 2)
         self.assertEqual(
             header.count('href="/collections/marvel-super-heroes"'), 2
@@ -471,8 +479,11 @@ class StorefrontConfigurationTests(unittest.TestCase):
         first_crackers = header.index(
             'href="/collections/late-night-crackers"'
         )
+        first_preorder = header.index(
+            'href="/collections/reality-fracture"', first_crackers
+        )
         first_hobbit = header.index(
-            'href="/collections/the-hobbit"', first_crackers
+            'href="/collections/the-hobbit"', first_preorder
         )
         first_marvel = header.index(
             'href="/collections/marvel-super-heroes"', first_hobbit
@@ -482,7 +493,8 @@ class StorefrontConfigurationTests(unittest.TestCase):
         )
         first_about = header.index('href="/pages/about-us"', first_strixhaven)
         self.assertLess(first_browse, first_crackers)
-        self.assertLess(first_crackers, first_hobbit)
+        self.assertLess(first_crackers, first_preorder)
+        self.assertLess(first_preorder, first_hobbit)
         self.assertLess(first_hobbit, first_marvel)
         self.assertLess(first_marvel, first_strixhaven)
         self.assertLess(first_strixhaven, first_about)
@@ -491,8 +503,11 @@ class StorefrontConfigurationTests(unittest.TestCase):
         second_crackers = header.index(
             'href="/collections/late-night-crackers"', first_about
         )
+        second_preorder = header.index(
+            'href="/collections/reality-fracture"', second_crackers
+        )
         second_hobbit = header.index(
-            'href="/collections/the-hobbit"', second_crackers
+            'href="/collections/the-hobbit"', second_preorder
         )
         second_marvel = header.index(
             'href="/collections/marvel-super-heroes"', second_hobbit
@@ -502,7 +517,8 @@ class StorefrontConfigurationTests(unittest.TestCase):
         )
         second_about = header.index('href="/pages/about-us"', second_strixhaven)
         self.assertLess(second_browse, second_crackers)
-        self.assertLess(second_crackers, second_hobbit)
+        self.assertLess(second_crackers, second_preorder)
+        self.assertLess(second_preorder, second_hobbit)
         self.assertLess(second_hobbit, second_marvel)
         self.assertLess(second_marvel, second_strixhaven)
         self.assertLess(second_strixhaven, second_about)
