@@ -1,0 +1,164 @@
+{% comment %}
+  Carries the Cloudflare click id into EasyStore's own customer record.
+
+  The `cc-attribution` Worker mints a random click id for every /go/* entry,
+  records the channel it came from in D1, and redirects here with the id both in
+  the URL as `cb_click_id` and in a first-party cookie. Until this snippet
+  existed the id died there: nothing on the storefront read it, so no click could
+  ever be tied to a customer and `scripts/cloudflare_hubspot_attribution.py`
+  would have had nothing to join.
+
+  EasyStore gives a theme exactly one place to write a fact onto a customer that
+  the API will hand back: a merchant-defined customer attribute, posted as
+  `customer[attributes][<setting id>]` and listed in `shop.attribute_settings`.
+  So the store defines one text attribute titled "Click ID", this fills it during
+  sign-up, the existing Contact sync copies it to HubSpot as
+  `easystore_attr_click_id`, and the join script resolves it against D1.
+
+  Three deliberate rules:
+
+  * **Only ever filled when empty.** The cookie is last-touch - a shopper who
+    comes back through a new link gets a new id - but the attribute records how
+    the account was *acquired*, so once EasyStore holds a value nothing here
+    overwrites it. That also means the account page cannot blank it on save.
+  * **The field is hidden, never removed.** `register`, `details` and `account`
+    all render every attribute setting from one loop. Hiding this one at runtime
+    keeps those three templates untouched and means an admin who renames or
+    deletes the attribute gets the ordinary field back rather than a broken form.
+  * **A store with no such attribute is left completely alone.** No attribute
+    titled "Click ID" means `attribution_click_id_setting` stays blank, and every
+    line below no-ops. The id is still captured into the cookie, so nothing is
+    lost if the attribute is created later.
+
+  The id is an opaque random value that identifies a click, not a person. It is
+  not joined to an IP address, and the Worker stores no personal data alongside
+  it. `tests/test_source_attribution_capture.py` pins the names this snippet and
+  the join script have to agree on.
+{% endcomment %}
+
+{% assign attribution_click_id_setting = '' %}
+{% assign attribution_click_id_titles = 'click id|clickid|cb_click_id|source click id|attribution click id' | split: '|' %}
+{% for attribute_setting in shop.attribute_settings %}
+  {% assign attribution_candidate_title = attribute_setting.title | default: '' | downcase | strip %}
+  {% if attribution_click_id_titles contains attribution_candidate_title %}
+    {% assign attribution_click_id_setting = attribute_setting.id %}
+  {% endif %}
+{% endfor %}
+
+{% if attribution_click_id_setting != '' %}
+  {% comment %}
+    Hidden before first paint. A shopper must never be shown a machine id in the
+    middle of a sign-up form, and `:has()` reaches the wrapper that the shared
+    attribute loop built, which a stylesheet on its own cannot.
+  {% endcomment %}
+  <style>
+    .field:has(#DetailAttribute{{ attribution_click_id_setting }}),
+    .grid__item:has(#DetailAttribute{{ attribution_click_id_setting }}) {
+      display: none !important;
+    }
+  </style>
+{% endif %}
+
+<script>
+  (function () {
+    'use strict';
+
+    var COOKIE = 'cb_click_id';
+    var STORAGE_KEY = 'cc:cb_click_id';
+    var PARAM = 'cb_click_id';
+    var NINETY_DAYS_SECONDS = 7776000;
+    // The Worker mints a UUID and nothing else is accepted. A value from the
+    // query string is shopper-supplied, so anything that is not the shape the
+    // Worker produces is discarded rather than stored and shipped to the CRM.
+    var CLICK_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    var SETTING_ID = '{{ attribution_click_id_setting }}';
+
+    function valid(value) {
+      var text = String(value || '').trim();
+      return CLICK_ID.test(text) ? text.toLowerCase() : '';
+    }
+
+    function fromCookie() {
+      var match = String(document.cookie || '').match(
+        new RegExp('(?:^|;\\s*)' + COOKIE + '=([^;]*)')
+      );
+      return match ? valid(decodeURIComponent(match[1])) : '';
+    }
+
+    function fromStorage() {
+      try {
+        return valid(window.localStorage.getItem(STORAGE_KEY));
+      } catch (error) {
+        return '';
+      }
+    }
+
+    function remember(clickId) {
+      // The cookie is what the Worker set and what a later page reads first;
+      // localStorage is the copy that survives a browser clearing cookies
+      // between the landing page and the eventual sign-up.
+      var attributes =
+        '; path=/; max-age=' + NINETY_DAYS_SECONDS + '; samesite=lax';
+      if (window.location.protocol === 'https:') {
+        attributes += '; secure';
+      }
+      try {
+        document.cookie = COOKIE + '=' + encodeURIComponent(clickId) + attributes;
+      } catch (error) {
+        /* a browser refusing cookies still has the copy below */
+      }
+      try {
+        window.localStorage.setItem(STORAGE_KEY, clickId);
+      } catch (error) {
+        /* private browsing: the cookie above is the only copy */
+      }
+    }
+
+    var fromUrl = '';
+    try {
+      fromUrl = valid(new URLSearchParams(window.location.search).get(PARAM));
+    } catch (error) {
+      fromUrl = '';
+    }
+
+    // The URL wins: it is the click that is happening now, and it is what makes
+    // a returning shopper's stored id current again.
+    var clickId = fromUrl || fromCookie() || fromStorage();
+    if (fromUrl) {
+      remember(fromUrl);
+    }
+
+    // Read by nothing in the theme today. It is here so a future section or app
+    // snippet does not have to re-implement the resolution order above.
+    window.ccSourceClickId = clickId || null;
+
+    if (!SETTING_ID || !clickId) return;
+
+    function fill() {
+      var field = document.getElementById('DetailAttribute' + SETTING_ID);
+      if (!field) return;
+
+      // Hidden by the stylesheet above; also hidden here so a store whose
+      // browser lacks :has() still never shows the field, and un-required so a
+      // required attribute cannot block a sign-up on an invisible input.
+      var wrapper = field.closest('.field, .grid__item');
+      if (wrapper) {
+        wrapper.setAttribute('hidden', 'hidden');
+      }
+      field.removeAttribute('required');
+
+      // Acquisition, not last touch: `details.liquid` and `account.liquid`
+      // populate this field from `customer.attributes` while the page parses, so
+      // by now a value here means EasyStore already recorded one and it stands.
+      if (!String(field.value || '').trim()) {
+        field.value = clickId;
+      }
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', fill);
+    } else {
+      fill();
+    }
+  })();
+</script>

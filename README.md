@@ -13,6 +13,9 @@ shopping on desktop and mobile.
 - [EasyStore API deployment](docs/EASYSTORE_API_DEPLOYMENT.md) — automatic
   post-package imports and publishing, theme id resolution, branch/version
   naming, token setup, and troubleshooting
+- [Source attribution](docs/SOURCE_ATTRIBUTION.md) — how a Cloudflare click
+  becomes the acquisition channel on a HubSpot contact, what that claim covers,
+  and the one manual EasyStore setup step it needs
 
 ## Repository layout
 

@@ -1,6 +1,12 @@
 name: Deploy Cloudflare attribution Worker
 
 on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "cloudflare/attribution-worker/**"
+      - ".github/workflows/deploy-cloudflare-attribution-worker.yml"
   push:
     branches:
       - main
@@ -13,12 +19,43 @@ permissions:
   contents: read
 
 concurrency:
-  group: cloudflare-attribution-worker-production
+  group: >-
+    cloudflare-attribution-worker-${{ github.event_name == 'pull_request' &&
+    github.event.pull_request.number || 'production' }}
   cancel-in-progress: false
 
 jobs:
+  validate:
+    name: Validate Worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        working-directory: cloudflare/attribution-worker
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - name: Install Worker dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Validate Worker JavaScript
+        run: npm run check
+
+      - name: Run Worker behaviour tests
+        run: npm test
+
   deploy:
     name: Migrate D1 and deploy Worker
+    if: github.event_name != 'pull_request'
+    needs: validate
     runs-on: ubuntu-latest
 
     defaults:
@@ -56,6 +93,9 @@ jobs:
 
       - name: Validate Worker JavaScript
         run: npm run check
+
+      - name: Run Worker behaviour tests
+        run: npm test
 
       - name: Validate Wrangler deployment bundle
         run: npx wrangler deploy --dry-run
