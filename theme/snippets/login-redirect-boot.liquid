@@ -16,8 +16,8 @@
   authenticated customer who still owes the store their details is sent to
   `/account/details`, while the product/prior-page target remains in
   sessionStorage untouched. The details page is locked until its required human
-  fields and password submit successfully; the following page load then sees a
-  complete profile and the ordinary return redirect resumes.
+  fields submit successfully; a first-time password is part of that checkpoint
+  until one successful completion POST proves it was accepted.
 
   The customer-field checks deliberately use only `customer`. An earlier source
   attribution implementation read `shop.attribute_settings` from the layout head
@@ -35,7 +35,15 @@
   its normal hidden Change password panel and moves only password2 into the
   visible profile area as a required "Set password" field.
 
-  The Liquid decision is rendered as a meta marker rather than interpolated into
+  EasyStore's documented Liquid customer object does not expose whether a
+  password already exists. To avoid making the shopper set it repeatedly when
+  the completion page renders again, the browser records the password only after
+  a valid completion submit returns to `/account/details` with the profile no
+  longer incomplete. The marker is namespaced to the rendered customer id and is
+  kept in localStorage with a sessionStorage fallback. A failed/incomplete POST
+  never promotes the marker, so the first-time password remains required.
+
+  The Liquid decision is rendered as meta markers rather than interpolated into
   JavaScript. `e2e/login-redirect.spec.js` executes this first script directly as
   JavaScript, matching the browser after Liquid has rendered it; keeping Liquid
   tags outside the script preserves that useful behavioural harness.
@@ -56,6 +64,7 @@
 {% endif %}
 
 {% if customer %}
+  <meta name="cc-profile-customer-id" content="{{ customer.id }}">
   {% if cc_profile_completion_required %}
     <meta name="cc-profile-completion-required" content="true">
   {% endif %}
@@ -65,6 +74,62 @@
 
       var path = String(window.location.pathname || '');
       var profileRequired = Boolean(document.querySelector('meta[name="cc-profile-completion-required"]'));
+      var customerMarker = document.querySelector('meta[name="cc-profile-customer-id"]');
+      var customerId = String((customerMarker && customerMarker.getAttribute('content')) || '').trim();
+      var PASSWORD_SET_PREFIX = 'cc:profile-password-set:';
+      var PASSWORD_SUBMIT_PREFIX = 'cc:profile-password-submit:';
+      var passwordSetKey = customerId ? PASSWORD_SET_PREFIX + customerId : '';
+      var passwordSubmitKey = customerId ? PASSWORD_SUBMIT_PREFIX + customerId : '';
+
+      function storageHas(storage, key) {
+        if (!storage || !key) return false;
+        try {
+          return storage.getItem(key) === '1';
+        } catch (error) {
+          return false;
+        }
+      }
+
+      function passwordWasSet() {
+        return storageHas(window.localStorage, passwordSetKey) || storageHas(window.sessionStorage, passwordSetKey);
+      }
+
+      function rememberPasswordSubmit() {
+        if (!passwordSubmitKey) return;
+        try {
+          window.sessionStorage.setItem(passwordSubmitKey, '1');
+        } catch (error) {
+          /* first-time password remains required if storage is unavailable */
+        }
+      }
+
+      function passwordSubmitPending() {
+        return storageHas(window.sessionStorage, passwordSubmitKey);
+      }
+
+      function markPasswordSet() {
+        if (!passwordSetKey) return;
+        try {
+          window.localStorage.setItem(passwordSetKey, '1');
+        } catch (error) {
+          /* session marker below still prevents a repeat in this tab */
+        }
+        try {
+          window.sessionStorage.setItem(passwordSetKey, '1');
+          window.sessionStorage.removeItem(passwordSubmitKey);
+        } catch (error) {
+          /* a later render may ask again when storage is unavailable */
+        }
+      }
+
+      // A valid first-time completion submit sets a pending marker before the
+      // normal POST. Only the following server-rendered response may promote it:
+      // if EasyStore now considers the profile complete, this details response
+      // proves the password/profile save succeeded. A rejected/incomplete POST
+      // stays in the profileRequired branch and therefore never reaches here.
+      if (!profileRequired && /^\/account\/details\/?$/i.test(path) && passwordSubmitPending()) {
+        markPasswordSet();
+      }
 
       if (profileRequired) {
         window.ccProfileCompletionRequired = true;
@@ -159,14 +224,15 @@
             if (field) field.setAttribute('required', 'required');
           });
 
-          // Mobile/OTP signup does not have a current password. Reuse only
-          // EasyStore's existing new-password control from the hidden Change
-          // password panel and surface it as the mandatory Set password field.
+          // Only the first successful completion needs a password. Once that
+          // save has been proven on a subsequent server response, leave the
+          // normal password-change controls hidden and do not ask again.
+          var needsFirstPassword = !passwordWasSet();
           var password = form.querySelector('[name="details[password2]"]');
           var saveRow = form.querySelector('p.text-right');
           var saveArea = saveRow && saveRow.parentNode;
 
-          if (password) {
+          if (needsFirstPassword && password) {
             password.setAttribute('required', 'required');
             password.setAttribute('autocomplete', 'new-password');
             password.setAttribute('placeholder', 'Set password');
@@ -204,6 +270,9 @@
               event.preventDefault();
               if (form.reportValidity) form.reportValidity();
               return;
+            }
+            if (needsFirstPassword && password && password.value) {
+              rememberPasswordSubmit();
             }
             // The details form performs a normal POST. Only that valid POST may
             // leave this page without a warning. If EasyStore rejects it, the
