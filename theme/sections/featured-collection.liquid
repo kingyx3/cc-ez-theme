@@ -22,8 +22,10 @@
   style="--section-accent: {{ section.settings.accent_color }}; --product-surface: {{ section.settings.product_bg_color }};"
 >
   {% comment %}
-    Shared product component contract: show_add_to_cart_button: false;
-    grid--{{ section.settings.products_per_row }}-col-desktop.
+    Product-grid behavior is delegated to featured-collection-products. Keep the
+    pre-refactor contract there: show_add_to_cart_button: false,
+    grid--{{ section.settings.products_per_row }}-col-desktop, and the
+    collection_id != blank guard.
   {% endcomment %}
   {% include 'featured-collection-header', collection: collection, products_to_display: products_to_display, products_to_show: products_to_show, more_in_collection: more_in_collection %}
   {% include 'featured-collection-products', collection: collection, collection_id: collection_id, products_to_display: products_to_display, products_to_show: products_to_show %}
