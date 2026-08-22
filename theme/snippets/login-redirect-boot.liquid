@@ -16,8 +16,7 @@
   authenticated customer who still owes the store their details is sent to
   `/account/details`, while the product/prior-page target remains in
   sessionStorage untouched. The details page is locked until its required human
-  fields and password submit successfully; the following page load then sees a
-  complete profile and the ordinary return redirect resumes.
+  fields submit successfully.
 
   The customer-field checks deliberately use only `customer`. An earlier source
   attribution implementation read `shop.attribute_settings` from the layout head
@@ -26,16 +25,24 @@
   explicit name/gender/birthdate checks also rescue customers whose old Click ID
   made that flag look complete before the human fields were actually filled.
 
-  EasyStore's current phone-registration flow creates/authenticates the shopper
-  with OTP before the final name/password step. The theme's register and activate
-  templates already contain required password inputs, but an OTP-created customer
-  can arrive at `/account/details` without those templates ever rendering. The
-  details template already ships EasyStore's supported password-update fields as
-  `details[password1]` and `details[password2]`; during mandatory completion this
-  script moves those real fields into the visible profile area, leaves the current
-  password optional for a passwordless account, and requires the new password.
+  This store signs customers up by mobile number and OTP, and guest checkout is
+  disabled. EasyStore can create/authenticate the shopper before the final
+  profile/password step. The details template already ships EasyStore's supported
+  password-update controls as `details[password1]` (current password) and
+  `details[password2]` (new password). A brand-new OTP signup has no current
+  password to provide, so mandatory signup completion deliberately leaves
+  password1 in its normal hidden Change password panel and moves only password2
+  into the visible profile area as a required "Set password" field.
 
-  The Liquid decision is rendered as a meta marker rather than interpolated into
+  Set password is a signup-only concern, not a permanent property of the profile
+  gate. A tiny second script records when this tab visits `/account/register` and
+  keeps that session marker through EasyStore's OTP pages. The mandatory details
+  form surfaces password2 only while that signup marker exists. EasyStore's
+  server-rendered `update_success` acknowledgement clears it after the successful
+  details save. Visiting the normal login page clears an abandoned signup marker.
+  Normal account-details visits never surface Set password.
+
+  The Liquid decision is rendered as meta markers rather than interpolated into
   JavaScript. `e2e/login-redirect.spec.js` executes this first script directly as
   JavaScript, matching the browser after Liquid has rendered it; keeping Liquid
   tags outside the script preserves that useful behavioural harness.
@@ -59,12 +66,40 @@
   {% if cc_profile_completion_required %}
     <meta name="cc-profile-completion-required" content="true">
   {% endif %}
+  {% if update_success %}
+    <meta name="cc-profile-update-success" content="true">
+  {% endif %}
   <script>
     (function () {
       'use strict';
 
       var path = String(window.location.pathname || '');
       var profileRequired = Boolean(document.querySelector('meta[name="cc-profile-completion-required"]'));
+      var profileUpdateSucceeded = Boolean(document.querySelector('meta[name="cc-profile-update-success"]'));
+      var SIGNUP_PASSWORD_KEY = 'cc:signup-password-setup';
+
+      function signupPasswordPending() {
+        try {
+          return window.sessionStorage.getItem(SIGNUP_PASSWORD_KEY) === '1';
+        } catch (error) {
+          return false;
+        }
+      }
+
+      function clearSignupPasswordPending() {
+        try {
+          window.sessionStorage.removeItem(SIGNUP_PASSWORD_KEY);
+        } catch (error) {
+          /* signup marker disappears with the tab when storage is unavailable */
+        }
+      }
+
+      // The mandatory form requires Set password only while this tab is still in
+      // the signup trip. A successful EasyStore details save ends that trip even
+      // if another human profile requirement keeps the customer on the form.
+      if (profileUpdateSucceeded && signupPasswordPending()) {
+        clearSignupPasswordPending();
+      }
 
       if (profileRequired) {
         window.ccProfileCompletionRequired = true;
@@ -159,35 +194,22 @@
             if (field) field.setAttribute('required', 'required');
           });
 
-          // OTP registration can authenticate a brand-new customer before a
-          // password has ever been collected. The details template already owns
-          // EasyStore's supported old/new password fields, but keeps them inside
-          // a hidden "Change password" panel. Reuse those exact fields instead
-          // of inventing a second password POST contract.
-          var currentPassword = form.querySelector('[name="details[password1]"]');
+          // Set password belongs only to the signup trip. Outside signup the
+          // password controls stay exactly where EasyStore normally keeps them:
+          // hidden inside the account's Change password panel.
+          var signupPasswordSetup = signupPasswordPending();
           var password = form.querySelector('[name="details[password2]"]');
           var saveRow = form.querySelector('p.text-right');
           var saveArea = saveRow && saveRow.parentNode;
 
-          if (currentPassword) {
-            currentPassword.removeAttribute('required');
-            currentPassword.setAttribute('autocomplete', 'current-password');
-            currentPassword.setAttribute('placeholder', 'Current password (if already set)');
-
-            var currentWrapper = currentPassword.closest('.field');
-            var currentLabel = currentWrapper && currentWrapper.querySelector('label');
-            if (currentLabel) currentLabel.textContent = 'Current password (if already set)';
-            if (currentWrapper && saveArea) saveArea.insertBefore(currentWrapper, saveRow);
-          }
-
-          if (password) {
+          if (signupPasswordSetup && password) {
             password.setAttribute('required', 'required');
             password.setAttribute('autocomplete', 'new-password');
-            password.setAttribute('placeholder', 'Password');
+            password.setAttribute('placeholder', 'Set password');
 
             var passwordWrapper = password.closest('.field');
             var passwordLabel = passwordWrapper && passwordWrapper.querySelector('label');
-            if (passwordLabel) passwordLabel.textContent = 'Password';
+            if (passwordLabel) passwordLabel.textContent = 'Set password';
             if (passwordWrapper && saveArea) saveArea.insertBefore(passwordWrapper, saveRow);
           }
 
@@ -274,3 +296,27 @@
     })();
   </script>
 {% endif %}
+
+<script>
+  (function () {
+    'use strict';
+
+    var path = String(window.location.pathname || '');
+    var SIGNUP_PASSWORD_KEY = 'cc:signup-password-setup';
+
+    try {
+      if (/^\/account\/register(?:\/|$)/i.test(path)) {
+        window.sessionStorage.setItem(SIGNUP_PASSWORD_KEY, '1');
+        return;
+      }
+
+      // Following the register page's "Sign in" escape hatch means signup was
+      // abandoned. Do not let that stale marker affect an existing account.
+      if (/^\/account\/login(?:\/|$)/i.test(path)) {
+        window.sessionStorage.removeItem(SIGNUP_PASSWORD_KEY);
+      }
+    } catch (error) {
+      /* signup still works; only the optional details-page promotion is lost */
+    }
+  })();
+</script>
