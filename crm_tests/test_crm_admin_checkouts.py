@@ -75,7 +75,7 @@ class AdminCollectionRequestTests(unittest.TestCase):
         self.assertIn("end_date=", url)
         self.assertIn("sort=created_at.desc", url)
 
-    def test_each_credential_shape_is_tried_until_one_is_accepted(self) -> None:
+    def test_each_admin_token_header_shape_is_tried_until_one_is_accepted(self) -> None:
         seen: list[dict] = []
 
         def refuse_then_accept(_url, *, headers, **_kwargs):
@@ -85,15 +85,16 @@ class AdminCollectionRequestTests(unittest.TestCase):
             return _body([_record()])
 
         with mock.patch.object(admin, "_http_json", refuse_then_accept):
-            read = admin.read_admin_checkouts("app-token")
+            read = admin.read_admin_checkouts("app-token", "admin-token")
 
         self.assertEqual(len(read.records), 1)
-        self.assertIn("EasyStore-Access-Token", seen[0])
-        self.assertEqual(seen[1]["Authorization"], "Bearer app-token")
-        self.assertEqual(read.authentication, "app token as Bearer")
+        self.assertEqual(seen[0]["EasyStore-Access-Token"], "admin-token")
+        self.assertEqual(seen[1]["Authorization"], "Bearer admin-token")
+        self.assertEqual(read.authentication, "admin token as Bearer")
         self.assertIn("refused the credential", read.attempts[0])
+        self.assertNotIn("app-token", repr(seen))
 
-    def test_a_dedicated_admin_token_is_tried_before_the_app_token(self) -> None:
+    def test_the_public_access_token_is_never_sent_to_the_admin_host(self) -> None:
         seen: list[dict] = []
 
         def accept(_url, *, headers, **_kwargs):
@@ -105,17 +106,27 @@ class AdminCollectionRequestTests(unittest.TestCase):
 
         self.assertEqual(seen[0]["EasyStore-Access-Token"], "admin-token")
         self.assertEqual(read.authentication, "admin token as EasyStore-Access-Token")
+        self.assertNotIn("app-token", repr(seen))
+
+    def test_missing_admin_token_is_reported_without_trying_the_public_token(self) -> None:
+        http = mock.Mock()
+        with mock.patch.object(admin, "_http_json", http):
+            with self.assertRaises(admin.AdminSourceUnavailable) as caught:
+                admin.read_admin_checkouts("app-token")
+
+        http.assert_not_called()
+        self.assertIn("EASYSTORE_ADMIN_TOKEN", str(caught.exception))
+        self.assertEqual(caught.exception.attempts, ())
 
     def test_a_route_that_accepts_nothing_is_reported_not_raised_blindly(self) -> None:
         with mock.patch.object(admin, "_http_json", lambda *a, **k: None):
             with self.assertRaises(admin.AdminSourceUnavailable) as caught:
-                admin.read_admin_checkouts("app-token")
+                admin.read_admin_checkouts("app-token", "admin-token")
 
-        # Every credential tried is named, so a fix is a one-line change.
         self.assertEqual(len(caught.exception.attempts), 2)
         self.assertIn("refused the credential", caught.exception.attempts[0])
 
-    def test_a_transport_failure_ends_the_read_without_retrying_credentials(
+    def test_a_transport_failure_ends_the_read_without_retrying_header_shapes(
         self,
     ) -> None:
         calls: list[str] = []
@@ -126,7 +137,7 @@ class AdminCollectionRequestTests(unittest.TestCase):
 
         with mock.patch.object(admin, "_http_json", die):
             with self.assertRaises(admin.AdminSourceUnavailable) as caught:
-                admin.read_admin_checkouts("app-token")
+                admin.read_admin_checkouts("app-token", "admin-token")
 
         self.assertEqual(len(calls), 1)
         self.assertIn("timed out", caught.exception.attempts[0])
@@ -139,7 +150,7 @@ class AdminCollectionPaginationTests(unittest.TestCase):
         with mock.patch.object(
             admin, "_http_json", lambda *a, **k: _body([_record()], total=15)
         ):
-            read = admin.read_admin_checkouts("app-token")
+            read = admin.read_admin_checkouts("app-token", "admin-token")
 
         self.assertEqual(read.total_count, 15)
         self.assertEqual(len(read.records), 1)
@@ -150,7 +161,7 @@ class AdminCollectionPaginationTests(unittest.TestCase):
         with mock.patch.object(
             admin, "_http_json", lambda *a, **k: _body(records, total=15)
         ):
-            read = admin.read_admin_checkouts("app-token")
+            read = admin.read_admin_checkouts("app-token", "admin-token")
 
         self.assertEqual(len(read.records), 15)
         self.assertTrue(read.complete)
@@ -169,7 +180,7 @@ class AdminCollectionPaginationTests(unittest.TestCase):
             return _body([], total=2, pages=2)
 
         with mock.patch.object(admin, "_http_json", serve):
-            read = admin.read_admin_checkouts("app-token")
+            read = admin.read_admin_checkouts("app-token", "admin-token")
 
         self.assertEqual(read.pages_read, 2)
         self.assertEqual([item["id"] for item in read.records], [1, 2])
@@ -185,7 +196,7 @@ class AdminCollectionPaginationTests(unittest.TestCase):
             return _body([_record()], total=99, pages=99)
 
         with mock.patch.object(admin, "_http_json", serve):
-            read = admin.read_admin_checkouts("app-token")
+            read = admin.read_admin_checkouts("app-token", "admin-token")
 
         self.assertEqual(len(calls), 2)
         self.assertEqual(len(read.records), 1)
@@ -203,7 +214,7 @@ class AdminCollectionPaginationTests(unittest.TestCase):
             )
 
         with mock.patch.object(admin, "_http_json", serve):
-            read = admin.read_admin_checkouts("app-token")
+            read = admin.read_admin_checkouts("app-token", "admin-token")
 
         self.assertEqual(read.pages_read, admin.ADMIN_PAGE_CEILING)
 
@@ -272,13 +283,20 @@ class AdminRecordShapeTests(unittest.TestCase):
         # The phone is still there, so the shopper is still contactable.
         self.assertEqual(cart_mapping.cart_mobile(checkout, "65"), "+6588143218")
 
+    def test_admin_records_do_not_request_public_checkout_line_items(self) -> None:
+        checkout = admin.as_checkout(_record())
+
+        self.assertEqual(checkout["line_items"], [])
+        self.assertTrue(checkout[commerce.LINE_ITEMS_UNAVAILABLE_KEY])
+
 
 class AdminSnapshotIntegrationTests(unittest.TestCase):
     """What the checkout stage does with the admin collection."""
 
-    LINE = [{"sku": "SKU-A", "quantity": 1, "price": "168.0"}]
-
-    def _snapshot(self, detail):
+    def _snapshot(self):
+        public_detail = mock.Mock(
+            side_effect=AssertionError("admin records must not use public checkout detail")
+        )
         with mock.patch.object(
             checkouts.admin_source,
             "read_admin_checkouts",
@@ -286,19 +304,22 @@ class AdminSnapshotIntegrationTests(unittest.TestCase):
                 records=(_record(),),
                 total_count=1,
                 pages_read=1,
-                authentication="app token as EasyStore-Access-Token",
-                attempts=("app token: answered 1 of 1 checkout(s) over 1 page(s)",),
+                authentication="admin token as EasyStore-Access-Token",
+                attempts=("admin token: answered 1 of 1 checkout(s) over 1 page(s)",),
             ),
-        ), mock.patch.object(checkouts, "_http_json", detail):
-            return checkouts.read_admin_snapshot("shop.example", "es")
+        ), mock.patch.object(checkouts, "_http_json", public_detail):
+            snapshot, report = checkouts.read_admin_snapshot(
+                "shop.example", "app-token", "admin-token"
+            )
+        return snapshot, report, public_detail
 
-    def test_line_items_are_hydrated_from_the_detail_route(self) -> None:
-        snapshot, report = self._snapshot(
-            lambda *a, **k: {"checkout": {"line_items": self.LINE}}
-        )
+    def test_admin_records_are_not_hydrated_from_the_public_detail_route(self) -> None:
+        snapshot, report, public_detail = self._snapshot()
 
-        self.assertEqual(snapshot.records[0]["line_items"], self.LINE)
-        self.assertEqual(snapshot.details_fetched, 1)
+        public_detail.assert_not_called()
+        self.assertEqual(snapshot.records[0]["line_items"], [])
+        self.assertTrue(snapshot.records[0][commerce.LINE_ITEMS_UNAVAILABLE_KEY])
+        self.assertEqual(snapshot.details_fetched, 0)
         self.assertTrue(snapshot.complete)
         self.assertEqual(
             report["easystore_checkout_source"], "admin_api_abandoned_checkouts"
@@ -306,31 +327,18 @@ class AdminSnapshotIntegrationTests(unittest.TestCase):
         self.assertEqual(report["easystore_admin_checkouts_declared"], 1)
         self.assertIn("customer_id", snapshot.customer_reference)
 
-    def test_a_cart_survives_a_detail_route_that_will_not_answer(self) -> None:
-        def die(*_args, **_kwargs):
-            raise checkouts.SyncError("The read operation timed out")
-
-        snapshot, _ = self._snapshot(die)
-
-        # The Cart is still written - an abandoned cart missing from the CRM is
-        # worse than one whose items are not itemized - and it is marked so the
-        # writer leaves any Line Items an earlier run wrote alone.
-        self.assertEqual(len(snapshot.records), 1)
-        self.assertTrue(
-            snapshot.records[0][commerce.LINE_ITEMS_UNAVAILABLE_KEY]
-        )
-        self.assertEqual(snapshot.details_fetched, 0)
-
     def test_a_refused_admin_collection_falls_back_and_says_so(self) -> None:
         with mock.patch.object(
             checkouts.admin_source,
             "read_admin_checkouts",
             side_effect=admin.AdminSourceUnavailable(
-                "No credential was accepted by EasyStore's admin checkout list.",
-                ("app token as Bearer: refused the credential",),
+                "EASYSTORE_ADMIN_TOKEN was not accepted by EasyStore's admin checkout list.",
+                ("admin token as Bearer: refused the credential",),
             ),
         ):
-            snapshot, report = checkouts.read_admin_snapshot("shop.example", "es")
+            snapshot, report = checkouts.read_admin_snapshot(
+                "shop.example", "app-token", "admin-token"
+            )
 
         self.assertIsNone(snapshot)
         self.assertEqual(report["easystore_admin_checkout_status"], "unavailable")
@@ -342,7 +350,7 @@ class AdminSnapshotIntegrationTests(unittest.TestCase):
         snapshot = checkouts.CheckoutSnapshot(
             records=(admin.as_checkout(_record()),),
             pages_read=1,
-            details_fetched=1,
+            details_fetched=0,
         )
         with mock.patch.object(
             checkouts,
@@ -358,6 +366,7 @@ class AdminSnapshotIntegrationTests(unittest.TestCase):
                 easystore_access_token="es",
                 hubspot_access_token="hs",
                 fallback_dial_code="65",
+                admin_access_token="admin-token",
             )
 
         public.assert_not_called()
@@ -384,6 +393,7 @@ class AdminSnapshotIntegrationTests(unittest.TestCase):
                 easystore_access_token="es",
                 hubspot_access_token="hs",
                 fallback_dial_code="65",
+                admin_access_token="admin-token",
             )
 
         self.assertTrue(cart_sync.call_args.kwargs["recoverable_only"])
