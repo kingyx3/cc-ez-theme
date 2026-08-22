@@ -2,8 +2,8 @@
 
 A Buy Now login carries the product/prior-page target in sessionStorage. The
 customer may be authenticated before EasyStore considers their profile complete,
-so the target must stay pending until the human profile fields and any first-time
-password requirement are accepted.
+so the target must stay pending until the required human profile fields are
+accepted. Set password is surfaced only during the mobile/OTP signup trip.
 """
 
 from __future__ import annotations
@@ -90,16 +90,15 @@ class ProfileCompletionGateTests(unittest.TestCase):
         self.assertIn("form.checkValidity", boot)
         self.assertIn("form.reportValidity", boot)
 
-    def test_signup_asks_only_for_a_new_password(self) -> None:
+    def test_signup_surfaces_only_the_new_password_field(self) -> None:
         boot = read(BOOT)
         details = read(DETAILS)
 
-        # Keep EasyStore's account-details password contract. The template still
-        # owns both controls for the later Change password feature.
+        # Keep EasyStore's normal account password-change pair intact.
         self.assertIn('name="details[password1]"', details)
         self.assertIn('name="details[password2]"', details)
 
-        # Mandatory mobile/OTP signup must never surface current password.
+        # Signup must never surface or query the current-password control.
         self.assertNotIn("form.querySelector('[name=\"details[password1]\"]')", boot)
         self.assertIn("form.querySelector('[name=\"details[password2]\"]')", boot)
         self.assertNotIn("currentPassword", boot)
@@ -111,35 +110,32 @@ class ProfileCompletionGateTests(unittest.TestCase):
         self.assertIn("passwordLabel.textContent = 'Set password';", boot)
         self.assertIn("saveArea.insertBefore(passwordWrapper, saveRow);", boot)
 
-    def test_password_is_required_only_until_first_successful_completion(self) -> None:
+    def test_set_password_is_visible_only_during_signup(self) -> None:
         boot = read(BOOT)
 
-        # Password state is scoped to the authenticated customer rather than one
-        # global browser flag shared by different accounts.
-        self.assertIn('<meta name="cc-profile-customer-id" content="{{ customer.id }}">', boot)
-        self.assertIn("PASSWORD_SET_PREFIX = 'cc:profile-password-set:'", boot)
-        self.assertIn("PASSWORD_SUBMIT_PREFIX = 'cc:profile-password-submit:'", boot)
-        self.assertIn("var needsFirstPassword = !passwordWasSet();", boot)
-        self.assertIn("if (needsFirstPassword && password) {", boot)
+        # Visiting the real registration route starts a tab-scoped signup trip.
+        self.assertIn("SIGNUP_PASSWORD_KEY = 'cc:signup-password-setup'", boot)
+        self.assertIn("if (/^\\/account\\/register(?:\\/|$)/i.test(path)) {", boot)
+        self.assertIn("window.sessionStorage.setItem(SIGNUP_PASSWORD_KEY, '1');", boot)
 
-        # A password is not remembered merely because the shopper clicked Save.
-        # Submit records a pending attempt; EasyStore's existing update_success
-        # response is the server acknowledgement that promotes it.
-        self.assertIn("if (needsFirstPassword && password && password.value) {", boot)
-        self.assertIn("rememberPasswordSubmit();", boot)
+        # Returning to ordinary login means signup was abandoned, so an existing
+        # customer cannot inherit the signup-only password prompt.
+        self.assertIn("if (/^\\/account\\/login(?:\\/|$)/i.test(path)) {", boot)
+        self.assertIn("window.sessionStorage.removeItem(SIGNUP_PASSWORD_KEY);", boot)
+
+        # The mandatory details gate promotes the new-password field only while
+        # that signup marker is present. Normal profile completion leaves it hidden.
+        self.assertIn("var signupPasswordSetup = signupPasswordPending();", boot)
+        self.assertIn("if (signupPasswordSetup && password) {", boot)
+        self.assertNotIn("PASSWORD_SET_PREFIX", boot)
+        self.assertNotIn("cc-profile-customer-id", boot)
+        self.assertNotIn("localStorage", boot)
+
+        # EasyStore's server acknowledgement ends the signup-only password step.
         self.assertIn("{% if update_success %}", boot)
         self.assertIn('<meta name="cc-profile-update-success" content="true">', boot)
-        self.assertIn("var profileUpdateSucceeded = Boolean(", boot)
-        self.assertIn("if (profileUpdateSucceeded && passwordSubmitPending()) {", boot)
-        self.assertIn("markPasswordSet();", boot)
-
-        # The accepted marker survives later renders in the same browser, with a
-        # session fallback for browsers that reject localStorage.
-        self.assertIn("window.localStorage.setItem(passwordSetKey, '1');", boot)
-        self.assertIn("window.sessionStorage.setItem(passwordSetKey, '1');", boot)
-        self.assertIn("window.sessionStorage.removeItem(passwordSubmitKey);", boot)
-        self.assertIn("storageHas('localStorage', passwordSetKey)", boot)
-        self.assertIn("storageHas('sessionStorage', passwordSetKey)", boot)
+        self.assertIn("if (profileUpdateSucceeded && signupPasswordPending()) {", boot)
+        self.assertIn("clearSignupPasswordPending();", boot)
 
     def test_signup_policy_is_documented(self) -> None:
         documentation = read(SIGNUP_DOC).lower()
@@ -149,8 +145,9 @@ class ProfileCompletionGateTests(unittest.TestCase):
         self.assertIn("guest checkout is disabled", documentation)
         self.assertIn("set password", documentation)
         self.assertIn("no current-password field", documentation)
-        self.assertIn("first successful", documentation)
-        self.assertIn("then is not required again", documentation)
+        self.assertIn("signup-only", documentation)
+        self.assertIn("/account/register", documentation)
+        self.assertIn("normal account-details", documentation)
         self.assertIn("update_success", documentation)
         self.assertIn("product or prior storefront page", documentation)
 
