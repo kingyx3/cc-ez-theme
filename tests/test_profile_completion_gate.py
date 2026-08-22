@@ -150,7 +150,7 @@ class ProfileCompletionGateTests(unittest.TestCase):
         self.assertIn("set password", documentation)
         self.assertIn("no current-password field", documentation)
         self.assertIn("first successful", documentation)
-        self.assertIn("do not ask for it again", documentation)
+        self.assertIn("then is not required again", documentation)
         self.assertIn("update_success", documentation)
         self.assertIn("product or prior storefront page", documentation)
 
