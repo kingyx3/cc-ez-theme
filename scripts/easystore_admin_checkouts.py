@@ -21,15 +21,19 @@ The admin route the EasyStore UI itself calls does better on every count:
   read ``unpaid``.
 
 The two EasyStore API surfaces deliberately use different credentials. Public
-``/api/3.0`` requests use ``EASYSTORE_ACCESS_TOKEN`` elsewhere in the sync;
-``api.easystore.co/admin/v2`` requests in this module use only
-``EASYSTORE_ADMIN_TOKEN``. The public token is never sent to the admin host.
+``/api/3.0`` requests use ``EASYSTORE_ACCESS_TOKEN``; ``api.easystore.co/admin/v2``
+requests use only ``EASYSTORE_ADMIN_TOKEN``. The tokens are never exchanged
+between API surfaces.
 
-The admin checkout collection does not include line items. Admin records are
-therefore carried to HubSpot without re-fetching the same cart through the
-public Checkout detail route. They are marked as having unavailable line items
-so existing HubSpot Cart Line Items are preserved instead of being deleted on
-an empty read.
+The admin checkout collection does not include line items, so after the admin
+list is read this module reads the public Checkout collection with
+``EASYSTORE_ACCESS_TOKEN`` and joins line items onto only the abandoned admin
+records whose ``cart_token`` matches. It deliberately does not use the public
+Checkout detail route, because that route has rejected tokens returned by the
+admin list in production.
+
+When the public collection cannot be read or does not contain a matching token,
+the Cart still survives and its existing HubSpot Cart Line Items are preserved.
 
 Only Python's standard library is used.
 """
@@ -43,7 +47,8 @@ from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlencode
 
-from easystore_hubspot_orders import SyncError, _http_json
+import easystore_hubspot_carts as cart_mapping
+from easystore_hubspot_orders import SyncError, _http_json, _shop_domain
 from easystore_hubspot_schema import nonempty
 
 
@@ -51,6 +56,10 @@ ADMIN_CHECKOUTS_URL = "https://api.easystore.co/admin/v2/store/checkouts"
 ADMIN_PAGE_SIZE = 50
 ADMIN_SORT = "created_at.desc"
 LINE_ITEMS_UNAVAILABLE_KEY = "easystore_line_items_unavailable"
+PUBLIC_CHECKOUT_PATH = "/api/3.0/checkouts.json"
+PUBLIC_CHECKOUT_LIMIT = 250
+PUBLIC_READ_TIMEOUT_SECONDS = 60
+PUBLIC_READ_RETRIES = 3
 
 # A backstop, not an expectation: this collection is the abandoned-cart list, so
 # 2000 records is already far past anything a store should hold. It exists so a
@@ -100,9 +109,10 @@ def _authentication_schemes(
 ) -> tuple[tuple[str, dict[str, str]], ...]:
     """Return admin-token header shapes to try.
 
-    ``access_token`` remains in the signature because the checkout sync already
-    passes it for the public API, but it is intentionally ignored here. The
-    admin host must only ever receive ``EASYSTORE_ADMIN_TOKEN``.
+    ``access_token`` remains in the signature because it is used later for the
+    public Checkout collection join, but it is intentionally never put into an
+    admin API request header. The admin host only receives
+    ``EASYSTORE_ADMIN_TOKEN``.
     """
 
     del access_token
@@ -162,6 +172,131 @@ def _checkouts(document: Any) -> list[dict[str, Any]]:
     return [record for record in records if isinstance(record, dict)]
 
 
+def _public_checkouts(document: Any) -> list[dict[str, Any]]:
+    """Return Checkout records from the public collection response shapes."""
+
+    if isinstance(document, list):
+        return [record for record in document if isinstance(record, dict)]
+    if not isinstance(document, dict):
+        return []
+    for key in ("checkouts", "data", "results"):
+        value = document.get(key)
+        if isinstance(value, list):
+            return [record for record in value if isinstance(record, dict)]
+        if isinstance(value, dict):
+            nested = value.get("checkouts")
+            if isinstance(nested, list):
+                return [record for record in nested if isinstance(record, dict)]
+    return []
+
+
+def _public_collection_url(store_domain: str) -> str:
+    domain = _shop_domain(store_domain)
+    query = urlencode({"page": 1, "limit": PUBLIC_CHECKOUT_LIMIT})
+    return f"https://{domain}{PUBLIC_CHECKOUT_PATH}?{query}"
+
+
+def _join_public_line_items(
+    records: list[dict[str, Any]],
+    access_token: str,
+    attempts: list[str],
+) -> list[dict[str, Any]]:
+    """Join public Checkout line items to admin abandoned carts by cart_token.
+
+    The admin collection decides membership in the abandoned-cart set. The
+    public collection contributes only ``line_items`` to matching tokens, so an
+    unrelated public session can never become a HubSpot Cart through this join.
+    """
+
+    token = nonempty(access_token)
+    store_domain = nonempty(os.getenv("EASYSTORE_STORE_DOMAIN"))
+    if token is None or store_domain is None or not records:
+        attempts.append(
+            "public checkout line join skipped: EASYSTORE_ACCESS_TOKEN or "
+            "EASYSTORE_STORE_DOMAIN was unavailable"
+        )
+        return records
+
+    url = _public_collection_url(store_domain)
+    try:
+        document = _http_json(
+            url,
+            headers={"EasyStore-Access-Token": token, "Accept": "application/json"},
+            retries=PUBLIC_READ_RETRIES,
+            timeout=PUBLIC_READ_TIMEOUT_SECONDS,
+        )
+    except SyncError as error:
+        attempts.append(
+            "public checkout line join unavailable: "
+            + " ".join(str(error).split())[:200]
+        )
+        return records
+
+    public_records = _public_checkouts(document)
+    by_token: dict[str, list[dict[str, Any]]] = {}
+    for public in public_records:
+        cart_token = nonempty(public.get("cart_token"))
+        if cart_token is not None:
+            by_token.setdefault(cart_token, []).append(public)
+
+    joined: list[dict[str, Any]] = []
+    matched = 0
+    ambiguous = 0
+    missing = 0
+    for record in records:
+        cart_token = nonempty(record.get("cart_token"))
+        candidates = by_token.get(cart_token or "", [])
+        if len(candidates) != 1:
+            if len(candidates) > 1:
+                ambiguous += 1
+            else:
+                missing += 1
+            joined.append(record)
+            continue
+
+        lines = candidates[0].get("line_items")
+        if not isinstance(lines, list):
+            missing += 1
+            joined.append(record)
+            continue
+
+        matched += 1
+        joined.append({**record, "line_items": lines})
+
+    attempts.append(
+        f"public checkout line join: read {len(public_records)} checkout(s), "
+        f"matched {matched} of {len(records)} abandoned cart(s) by cart_token; "
+        f"missing={missing}, ambiguous={ambiguous}"
+    )
+    return joined
+
+
+def _prefer_easystore_cart_started_property() -> None:
+    """Map checkout created_at to the custom EasyStore Cart Started property.
+
+    The default Cart mapping prefers HubSpot's native ``hs_external_created_date``.
+    For the authoritative admin checkout source, the store wants ``created_at``
+    written to the existing custom ``easystore_cart_created_at`` property whose
+    label is "EasyStore Cart Started". The mapping is changed only after the
+    admin source has authenticated successfully, so public-fallback runs keep
+    their existing native mapping.
+    """
+
+    updated = []
+    for spec in cart_mapping.CART_FIELDS:
+        if spec.key == "created_at":
+            updated.append(
+                spec._replace(
+                    native=(),
+                    fallback="easystore_cart_created_at",
+                    label="EasyStore Cart Started",
+                )
+            )
+        else:
+            updated.append(spec)
+    cart_mapping.CART_FIELDS = tuple(updated)
+
+
 def _params(document: Any) -> dict[str, Any]:
     if isinstance(document, dict) and isinstance(document.get("params"), dict):
         return document["params"]
@@ -180,12 +315,7 @@ def read_admin_checkouts(
     access_token: str,
     admin_access_token: str | None = None,
 ) -> AdminCheckoutRead:
-    """Read every abandoned checkout the admin collection serves.
-
-    The public EasyStore access token is accepted only for call-site
-    compatibility and is never used here. ``EASYSTORE_ADMIN_TOKEN`` is required
-    for this API surface.
-    """
+    """Read every abandoned checkout and enrich its lines from the public list."""
 
     attempts: list[str] = []
     schemes = _authentication_schemes(access_token, admin_access_token)
@@ -198,8 +328,6 @@ def read_admin_checkouts(
         try:
             first = _read_page(_page_url(1), headers)
         except SyncError as error:
-            # A transport failure is about the route, not the credential, so it
-            # ends the read rather than moving on to another header shape.
             attempts.append(f"{label}: {' '.join(str(error).split())[:200]}")
             raise AdminSourceUnavailable(
                 "EasyStore's admin checkout list did not answer.", tuple(attempts)
@@ -209,6 +337,7 @@ def read_admin_checkouts(
             attempts.append(f"{label}: refused the credential")
             continue
 
+        _prefer_easystore_cart_started_property()
         records = _checkouts(first)
         params = _params(first)
         total_count = _positive_int(params.get("total_count"))
@@ -242,8 +371,6 @@ def read_admin_checkouts(
                 break
             signature = _signature(page_records)
             if signature in seen_pages:
-                # The public route does exactly this. Stop rather than rewrite
-                # the same records for as long as the job is allowed to run.
                 attempts.append(
                     f"page {page}: repeated records already read, so pagination "
                     "stopped here"
@@ -253,6 +380,7 @@ def read_admin_checkouts(
             collected.extend(page_records)
             pages_read += 1
 
+        collected = _join_public_line_items(collected, access_token, attempts)
         return AdminCheckoutRead(
             records=tuple(collected),
             total_count=total_count,
@@ -275,20 +403,7 @@ def _signature(records: list[dict[str, Any]]) -> tuple[str, ...]:
 
 
 def as_checkout(record: dict[str, Any]) -> dict[str, Any]:
-    """Return one admin record in the shape the Cart writer already reads.
-
-    Only renaming and shaping happens here: ``amount`` is the total, ``currency``
-    is the currency code, and the shopper's own fields are gathered under
-    ``customer`` because that is where the Cart mapping looks for a name. The
-    payment state is expressed as ``financial_status`` so the one abandoned-cart
-    predicate keeps deciding what is abandoned, rather than this module deciding
-    it a second way.
-
-    The admin collection does not provide line items. An empty ``line_items``
-    list prevents the downstream Cart helper from attempting a public Checkout
-    detail request for this admin-only record, while the unavailable marker tells
-    the HubSpot writer to preserve any line items it already has.
-    """
+    """Return one enriched admin record in the shape the Cart writer reads."""
 
     customer_id = nonempty(record.get("customer_id"))
     customer: dict[str, Any] = {
@@ -299,6 +414,8 @@ def as_checkout(record: dict[str, Any]) -> dict[str, Any]:
     if customer_id is not None:
         customer["id"] = customer_id
 
+    lines = record.get("line_items")
+    lines_available = isinstance(lines, list)
     checkout: dict[str, Any] = {
         "id": record.get("id"),
         "cart_token": record.get("cart_token"),
@@ -308,9 +425,11 @@ def as_checkout(record: dict[str, Any]) -> dict[str, Any]:
         "total_line_items_price": record.get("total_line_items_price"),
         "url": record.get("url"),
         "financial_status": "recovered" if record.get("is_recovered") else "unpaid",
-        "line_items": [],
-        LINE_ITEMS_UNAVAILABLE_KEY: True,
+        "line_items": lines if lines_available else [],
     }
+    if not lines_available:
+        checkout[LINE_ITEMS_UNAVAILABLE_KEY] = True
+
     for key in (
         "email",
         "phone",
@@ -355,9 +474,10 @@ def main(argv: list[str] | None = None) -> int:
     if admin_access_token is None:
         print("ERROR: EASYSTORE_ADMIN_TOKEN is required", file=sys.stderr)
         return 1
+    access_token = nonempty(os.getenv("EASYSTORE_ACCESS_TOKEN")) or ""
 
     try:
-        read = read_admin_checkouts("", admin_access_token)
+        read = read_admin_checkouts(access_token, admin_access_token)
     except AdminSourceUnavailable as error:
         print(
             json.dumps(
