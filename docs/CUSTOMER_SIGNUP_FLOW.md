@@ -31,7 +31,7 @@ After the first successful profile/password save, the completion gate records th
 
 A password is not considered initialized merely because the shopper clicked Save. The form first records a pending password submission; EasyStore's existing `update_success` value on the following `/account/details` response is the server acknowledgement that promotes that state to "password set". If EasyStore rejects the POST, there is no `update_success`, so **Set password** remains required. If EasyStore accepts the password/profile update but another completion requirement still keeps the form open, the password is nevertheless treated as already set and the form does not ask for it again.
 
-EasyStore's documented Liquid `customer` object exposes profile fields and `customer.is_optional_fields_filled`, but no password-exists flag. The theme therefore stores the acknowledged first-time password marker in the browser, namespaced by `customer.id`, using `localStorage` with a `sessionStorage` fallback. Clearing browser storage can make the form ask to set a password again; it cannot remove or change the actual EasyStore account password.
+EasyStore's documented Liquid `customer` object exposes profile fields and `customer.is_optional_fields_filled`, but no password-exists flag. The theme therefore stores the acknowledged first-time password marker in the browser, namespaced by `customer.id`, using `localStorage` with a `sessionStorage` fallback. This marker only controls whether the mandatory profile form asks for **Set password** again; it is not an authentication credential. Clearing browser storage can make the form ask to set a password again, but it cannot remove or change the actual EasyStore account password.
 
 ## Completion and return-target invariants
 
