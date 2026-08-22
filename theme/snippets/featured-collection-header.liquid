@@ -1,0 +1,18 @@
+<div class="sales-collection__header{% if products_to_display > 2 and section.settings.swipe_on_mobile and products_to_show > 2 %} title-wrapper--self-padded-tablet-down{% endif %}{% if section.settings.center_title == true %} sales-collection__header--center{% endif %}">
+  <div class="sales-collection__heading">
+    {% if section.settings.eyebrow != blank %}
+      <p class="sales-collection__eyebrow">{{ section.settings.eyebrow | escape }}</p>
+    {% endif %}
+    <h2 class="sales-collection__title{% if section.settings.title == '' %} title--no-heading{% endif %}">{{ section.settings.title | escape }}</h2>
+    {% if section.settings.subtitle != blank %}
+      <p class="sales-collection__subtitle">{{ section.settings.subtitle | escape }}</p>
+    {% endif %}
+  </div>
+
+  {% if section.settings.show_view_all and more_in_collection %}
+    <a href="{{ collection.url }}" class="sales-collection__link">
+      <span>{{ 'general.view_all' | t }}</span>
+      <span aria-hidden="true">→</span>
+    </a>
+  {% endif %}
+</div>

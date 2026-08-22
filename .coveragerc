@@ -14,6 +14,7 @@ source = scripts
 # pinning the names the theme and the join have to agree on.
 omit =
     scripts/easystore_hubspot_*.py
+    scripts/easystore_admin_checkouts.py
     scripts/cloudflare_hubspot_attribution.py
 
 [report]
