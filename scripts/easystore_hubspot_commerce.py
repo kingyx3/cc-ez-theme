@@ -21,6 +21,7 @@ import argparse
 import json
 import os
 import sys
+from collections import Counter
 from typing import Any, Iterator, Sequence
 from urllib.parse import quote, urlencode
 
@@ -42,6 +43,7 @@ from easystore_hubspot_orders import (
 )
 from easystore_hubspot_schema import (
     describe_mapping,
+    first_present,
     iter_easystore_pages,
     nonempty,
     observed_keys,
@@ -53,6 +55,12 @@ CART_SCHEMA_OBJECT_TYPE = cart_mapping.CART_OBJECT_TYPE
 HUBSPOT_CARTS_URL = f"{HUBSPOT_BASE}/crm/v3/objects/carts"
 CART_EXTERNAL_ID_PROPERTY = cart_mapping.CART_EXTERNAL_ID_PROPERTY
 EASYSTORE_PAGE_SIZE = 50
+# Set on a checkout whose line items could not be read. The Cart is still
+# written, but its existing Line Items are left alone: "the shopper removed
+# them" and "the detail route did not answer" look identical from here, and
+# deleting on that guess throws away lines a previous run read successfully.
+LINE_ITEMS_UNAVAILABLE_KEY = "easystore_line_items_unavailable"
+
 CART_CONTACT_ASSOCIATION_TYPE_ID = 586
 CART_LINE_ITEM_ASSOCIATION_TYPE_ID = 590
 CART_ORDER_ASSOCIATION_TYPE_ID = 592
@@ -62,6 +70,24 @@ def checkout_cart_token(checkout: dict[str, Any]) -> str | None:
     """Return EasyStore's unique cart identity and nothing else."""
 
     return nonempty(checkout.get("cart_token"))
+
+
+def checkout_customer_id(checkout: dict[str, Any]) -> str | None:
+    """Return the EasyStore customer this Checkout belongs to, if it says.
+
+    A store without guest checkout knows who every session belongs to, so this
+    is the association the CRM wants: an identity EasyStore assigned, not an
+    email a shopper typed into a form. The observed ``checkouts.json`` payload
+    does not carry it, hence the detail probe in the checkout stage; the lookup
+    is written here so the link works the moment a reference does appear.
+    """
+
+    customer = checkout.get("customer")
+    if isinstance(customer, dict):
+        found = first_present(customer, ("id", "customer_id"))
+        if found is not None:
+            return found
+    return first_present(checkout, ("customer_id", "easystore_customer_id"))
 
 
 def checkout_status(checkout: dict[str, Any]) -> str | None:
@@ -511,6 +537,7 @@ def sync(
     fallback_dial_code: str,
     checkouts: Sequence[dict[str, Any]] | None = None,
     include_completed: bool = False,
+    recoverable_only: bool = True,
     cart_schema_object_type: str | None = None,
 ) -> dict[str, Any]:
     """Perform the corrected EasyStore Checkout → HubSpot Cart sync.
@@ -522,6 +549,11 @@ def sync(
     ``include_completed`` keeps paid and converted Checkouts as Carts, which is
     what HubSpot's Cart object models: a shopping session, abandoned or not. With
     it off, only the abandoned subset becomes a Cart.
+
+    ``recoverable_only`` keeps the abandoned-cart funnel to sessions that hold
+    line items and name a shopper, which is what EasyStore's own abandoned
+    checkout list shows. Turning it off writes a Cart for every session the API
+    served, empty and anonymous ones included.
 
     ``cart_schema_object_type`` overrides the object type used for the Cart
     property schema, because HubSpot's schema API is singular (``cart``) while
@@ -571,11 +603,16 @@ def sync(
 
     validated: list[tuple[dict[str, Any], str, dict[str, dict[str, str]], bool]] = []
     scanned = completed = without_cart_token = 0
+    without_lines = without_buyer = carts_without_readable_lines = 0
     abandoned_carts = converted_carts = 0
     carts_with_unmatched_lines = unmatched_line_count = 0
     unmatched_skus: set[str] = set()
     checkout_keys: set[str] = set()
     line_keys: set[str] = set()
+    # Every status value the source served, counted before anything is filtered.
+    # "All the Carts are unpaid" is either the truth about EasyStore's checkout
+    # feed or a mapping fault, and only the distribution tells the two apart.
+    status_counts: Counter[str] = Counter()
     field_coverage = {field.key: 0 for field in cart_mapping.CART_FIELDS}
 
     # Validate all checkout product references before mutating Carts/Line Items.
@@ -587,6 +624,8 @@ def sync(
         if isinstance(lines, list):
             for line in lines:
                 observed_keys(line_keys, line)
+
+        status_counts[checkout_status(checkout) or "(no status field)"] += 1
 
         if is_abandoned(checkout):
             abandoned_carts += 1
@@ -600,6 +639,24 @@ def sync(
         if cart_token is None:
             without_cart_token += 1
             continue
+
+        # checkouts.json serves every session the storefront ever opened, not
+        # the recoverable carts EasyStore's admin lists: run 32539291543
+        # answered 1267 records where the admin showed 15, and only 41 of them
+        # carried an email at all. A session is worth a Cart when there is
+        # something in it and someone to send it to; the rest are anonymous
+        # browse sessions and are counted rather than written.
+        if recoverable_only:
+            if not (isinstance(lines, list) and lines):
+                without_lines += 1
+                continue
+            if (
+                checkout_customer_id(checkout) is None
+                and cart_mapping.cart_email(checkout) is None
+                and cart_mapping.cart_mobile(checkout, fallback_dial_code) is None
+            ):
+                without_buyer += 1
+                continue
 
         values = cart_mapping.cart_field_values(checkout, fallback_dial_code)
         if checkout_status(checkout) is not None:
@@ -620,15 +677,31 @@ def sync(
             carts_with_unmatched_lines += 1
             unmatched_line_count += len(unmatched)
             unmatched_skus.update(unmatched)
-        validated.append((checkout, cart_token, desired, bool(unmatched)))
+        keep_existing_lines = bool(unmatched) or bool(
+            checkout.get(LINE_ITEMS_UNAVAILABLE_KEY)
+        )
+        if checkout.get(LINE_ITEMS_UNAVAILABLE_KEY):
+            carts_without_readable_lines += 1
+        validated.append((checkout, cart_token, desired, keep_existing_lines))
 
     existing = hubspot_cart_index(hubspot_access_token)
     hubspot_orders = hubspot_order_index(hubspot_access_token)
+    # Carts HubSpot holds that this run did not qualify: earlier runs' records,
+    # and sessions that have since left the source collection. Nothing is
+    # deleted here - a Cart is only ever written or left alone - so this is
+    # reported for the operator to act on, not acted on.
+    qualified_tokens = {token for _, token, _, _ in validated}
+    unqualified_existing = sum(
+        1 for token in existing if token not in qualified_tokens
+    )
     created = updated = migrated = 0
-    contact_links = ambiguous_mobile = 0
+    contact_links = ambiguous_mobile = ambiguous_email = 0
+    contact_links_by_customer = 0
+    contact_links_by_mobile = contact_links_by_email = 0
+    carts_without_identity = carts_without_a_contact = 0
     line_created = line_updated = line_removed = 0
 
-    for checkout, cart_token, desired, had_unmatched in validated:
+    for checkout, cart_token, desired, keep_existing_lines in validated:
         existing_id = existing.get(cart_token)
         if existing_id is None:
             existing_id = _legacy_cart_owner(checkout, existing)
@@ -656,32 +729,83 @@ def sync(
             access_token=hubspot_access_token,
             cart_id=cart_id,
             desired=desired,
-            remove_stale=not had_unmatched,
+            remove_stale=not keep_existing_lines,
         )
         line_created += c
         line_updated += u
         line_removed += r
 
+        # Cart→Contact, by mobile first because that is the CRM's contact
+        # identity, then by email. Most abandoned checkouts carry one or the
+        # other and not both, so every Cart lands in exactly one bucket below:
+        # linked, ambiguous, no identity to match on, or an identity HubSpot has
+        # no contact for. Those five counts add up to the Carts written, which is
+        # what makes "the association is working" checkable rather than assumed.
+        customer_id = checkout_customer_id(checkout)
         mobile = cart_mapping.cart_mobile(checkout, fallback_dial_code)
-        if mobile is None:
-            continue
-        matching = contacts.by_phone.get(mobile, set())
-        if len(matching) == 1:
+        email = cart_mapping.cart_email(checkout)
+        by_customer = (
+            contacts.by_easystore_customer_id.get(customer_id, set())
+            if customer_id
+            else set()
+        )
+        by_mobile = (
+            contacts.by_phone.get(mobile, set()) if mobile and not by_customer else set()
+        )
+        by_email = (
+            contacts.by_email.get(email.casefold(), set())
+            if email and not by_customer and not by_mobile
+            else set()
+        )
+
+        if len(by_customer) == 1:
             associate_cart(
                 hubspot_access_token,
                 cart_id,
                 "contact",
-                next(iter(matching)),
+                next(iter(by_customer)),
                 CART_CONTACT_ASSOCIATION_TYPE_ID,
             )
             contact_links += 1
-        elif len(matching) > 1:
+            contact_links_by_customer += 1
+        elif len(by_mobile) == 1:
+            associate_cart(
+                hubspot_access_token,
+                cart_id,
+                "contact",
+                next(iter(by_mobile)),
+                CART_CONTACT_ASSOCIATION_TYPE_ID,
+            )
+            contact_links += 1
+            contact_links_by_mobile += 1
+        elif len(by_mobile) > 1:
             ambiguous_mobile += 1
             print(
                 f"WARNING: EasyStore cart {cart_token} mobile {mobile} matches "
                 "multiple HubSpot contacts; Cart→Contact association skipped.",
                 file=sys.stderr,
             )
+        elif len(by_email) == 1:
+            associate_cart(
+                hubspot_access_token,
+                cart_id,
+                "contact",
+                next(iter(by_email)),
+                CART_CONTACT_ASSOCIATION_TYPE_ID,
+            )
+            contact_links += 1
+            contact_links_by_email += 1
+        elif len(by_email) > 1:
+            ambiguous_email += 1
+            print(
+                f"WARNING: EasyStore cart {cart_token} email {email} matches "
+                "multiple HubSpot contacts; Cart→Contact association skipped.",
+                file=sys.stderr,
+            )
+        elif customer_id is None and mobile is None and email is None:
+            carts_without_identity += 1
+        else:
+            carts_without_a_contact += 1
 
     order_links = link_carts_to_orders(
         orders=orders,
@@ -695,9 +819,21 @@ def sync(
         "easystore_checkouts_scanned": scanned,
         "easystore_checkouts_abandoned": abandoned_carts,
         "easystore_checkouts_converted": converted_carts,
+        "easystore_checkout_status_counts": dict(
+            sorted(status_counts.items(), key=lambda item: (-item[1], item[0]))
+        ),
+        "easystore_checkout_status_field_read": (
+            "financial_status, then status/state/checkout_status"
+        ),
         "checkouts_skipped_as_completed": completed,
         "completed_checkouts_kept_as_carts": include_completed,
         "checkouts_without_cart_token": without_cart_token,
+        "checkouts_without_line_items": without_lines,
+        "carts_whose_line_items_could_not_be_read": carts_without_readable_lines,
+        "checkouts_without_a_contactable_buyer": without_buyer,
+        "easystore_checkouts_recoverable": len(validated),
+        "abandoned_cart_filter_applied": recoverable_only,
+        "hubspot_carts_not_qualified_by_this_run": unqualified_existing,
         "easystore_orders_scanned_for_cart_links": len(orders),
         "hubspot_carts_created": created,
         "hubspot_carts_updated": updated,
@@ -706,8 +842,21 @@ def sync(
         "hubspot_cart_line_items_updated": line_updated,
         "stale_product_backed_cart_line_items_removed": line_removed,
         "cart_contact_associations_ensured": contact_links,
+        "cart_contact_associations_by_easystore_customer_id": contact_links_by_customer,
+        "cart_contact_associations_by_mobile": contact_links_by_mobile,
+        "cart_contact_associations_by_email": contact_links_by_email,
         "cart_order_associations_ensured": order_links,
         "carts_with_ambiguous_contact_mobile": ambiguous_mobile,
+        "carts_with_ambiguous_contact_email": ambiguous_email,
+        "carts_with_no_shopper_identity": carts_without_identity,
+        "carts_whose_shopper_is_not_a_hubspot_contact": carts_without_a_contact,
+        "cart_contact_association_accounted_for": (
+            contact_links
+            + ambiguous_mobile
+            + ambiguous_email
+            + carts_without_identity
+            + carts_without_a_contact
+        ),
         "cart_lines_without_a_hubspot_product": unmatched_line_count,
         "carts_with_lines_without_a_hubspot_product": carts_with_unmatched_lines,
         "cart_line_skus_without_a_hubspot_product": sorted(unmatched_skus)[:25],

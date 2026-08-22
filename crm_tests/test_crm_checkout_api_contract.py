@@ -163,7 +163,26 @@ BIGGER_LIMIT = next(
 )
 
 
-class IgnoredPageParameterTests(unittest.TestCase):
+class PublicCollectionOnly(unittest.TestCase):
+    """Base for tests of the public collection path.
+
+    EasyStore's admin collection is tried first in production, so a test about
+    the public one starts from an admin route that refused the credential. It
+    also keeps the suite off the network.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        patcher = mock.patch.object(
+            checkouts,
+            "read_admin_snapshot",
+            return_value=(None, {"easystore_admin_checkout_status": "unavailable"}),
+        )
+        self.addCleanup(patcher.stop)
+        patcher.start()
+
+
+class IgnoredPageParameterTests(PublicCollectionOnly):
     """This store's checkouts.json answers but serves page 2 identical to page 1.
 
     Failing there means never syncing a Cart, and looping on it never
@@ -431,8 +450,10 @@ class EasyStoreCheckoutDetailTests(unittest.TestCase):
                 checkouts.read_checkout_snapshot("shop.example", "secret")
 
 
-class HubSpotCartProjectionTests(unittest.TestCase):
-    def test_every_checkout_session_reaches_the_cart_writer(self) -> None:
+class HubSpotCartProjectionTests(PublicCollectionOnly):
+    def test_the_whole_snapshot_reaches_the_writer_but_only_unpaid_is_written(
+        self,
+    ) -> None:
         snapshot = checkouts.CheckoutSnapshot(
             records=(
                 {
@@ -472,14 +493,14 @@ class HubSpotCartProjectionTests(unittest.TestCase):
                 fallback_dial_code="65",
             )
 
-        # The snapshot is handed over as data, not by patching the core module,
-        # and paid sessions are kept because a HubSpot Cart is a shopping
-        # session rather than an abandonment record.
+        # The whole snapshot is handed over as data, not by patching the core
+        # module, and the writer is told to keep the unpaid subset: a paid
+        # session is already an Order, so a Cart for it would double-count it.
         self.assertEqual(
             [item["cart_token"] for item in seen["checkouts"]],
             ["open-cart", "paid-cart"],
         )
-        self.assertTrue(seen["include_completed"])
+        self.assertFalse(seen["include_completed"])
         self.assertEqual(seen["cart_schema_object_type"], "cart")
         self.assertEqual(summary["hubspot_carts_created"], 2)
         self.assertEqual(summary["easystore_checkouts_abandoned_or_open"], 1)

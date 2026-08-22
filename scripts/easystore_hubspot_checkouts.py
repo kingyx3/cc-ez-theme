@@ -20,10 +20,27 @@ the operation "List products". Production therefore sends only the two generic
 pagination parameters that are unambiguous for this endpoint: ``page`` and
 ``limit``. In particular, it does not send ``sort`` or ``created_at_min``.
 
-Every Checkout session becomes a HubSpot Cart. The unpaid, unconverted subset is
-the abandoned-cart funnel and is flagged as such on the Cart itself; paid and
-converted sessions stay Carts with their EasyStore status and can be associated
-to the Order they became.
+Only the unpaid, unconverted subset becomes a HubSpot Cart: that is the
+abandoned-cart funnel, and it is flagged as such on the Cart itself. A paid or
+converted session is skipped, because the Order stage already carries it and a
+Cart alongside it would double-count the revenue.
+
+The unpaid subset is narrowed once more, to the sessions that are actually
+recoverable: holding line items and naming a shopper. This collection is not
+EasyStore's abandoned checkout list - it is every session the storefront ever
+opened. Run 32539291543 answered 1267 records where the admin list showed 15,
+717 of them holding line items and 41 carrying an email; the rest are anonymous
+browse sessions with nothing in them and nobody to send them to. Each exclusion
+is counted in the run summary rather than passed over silently.
+
+Observed reality of this collection, and the reason every Cart in the CRM reads
+``unpaid``: ``checkouts.json`` serves open sessions only. It carries no
+``status``, ``completed_at`` or ``order_id`` field at all - ``financial_status``
+is its only state, and it reads ``unpaid`` on every record - and a session that
+converts leaves the collection rather than changing status inside it. The run
+summary therefore reports ``easystore_checkout_status_counts``, the distribution
+of the raw values the source served, so a portal full of unpaid Carts can be
+told apart from a mapping fault without re-reading the API by hand.
 
 This endpoint mostly does not answer: across observed production runs it served
 the collection roughly once in eight attempts. Reading it is therefore patient -
@@ -65,9 +82,10 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
 
+import easystore_admin_checkouts as admin_source
 import easystore_hubspot_commerce as commerce
 from easystore_hubspot_orders import SyncError, _http_json, _shop_domain
-from easystore_hubspot_schema import nonempty
+from easystore_hubspot_schema import nonempty, observed_keys
 
 
 EASYSTORE_CHECKOUT_COLLECTION_PATH = "/api/3.0/checkouts.json"
@@ -93,6 +111,28 @@ HUBSPOT_CART_PROPERTIES_PATH = "/crm/v3/properties/cart"
 # Only a transport-level failure moves on to the next size, and each size starts
 # again from page 1, so a snapshot is never stitched together from two of them.
 CHECKOUT_PAGE_SIZES = (250, 50, 1)
+
+# This store has no guest checkout, so every session belongs to a known
+# customer and Cart->Contact should be an ID lookup rather than a guess at what
+# the shopper typed. The collection payload names no customer, though: run
+# 32539291543 observed 18 keys across 1267 records and none of them referenced
+# one. So a couple of recoverable sessions are probed on the detail route and
+# what it answers with is reported, which settles whether a direct link is
+# available without anyone reading the API by hand. The probe is diagnostic
+# only: it never fails the stage, and hydrating the whole collection from a
+# route this unreliable is not on the table.
+CHECKOUT_CUSTOMER_PROBE_LIMIT = 2
+
+# The admin collection carries no line items, so each of its records is hydrated
+# from the documented detail route. That route belongs to the storefront host
+# that answers roughly one attempt in eight, and this list is small, so the read
+# is impatient rather than patient: a stubborn detail route must not cost the
+# stage its Carts. After this many failures hydration stops and the rest of the
+# snapshot is written without lines, marked so no existing Cart line is deleted
+# on the strength of a read that never happened.
+CHECKOUT_HYDRATION_TIMEOUT_SECONDS = 20
+CHECKOUT_HYDRATION_RETRIES = 1
+CHECKOUT_HYDRATION_FAILURE_BUDGET = 3
 
 # Patience is the whole strategy against an endpoint this unreliable. Four
 # attempts of 60s per page size costs about twelve minutes in the worst case,
@@ -149,6 +189,8 @@ class CheckoutSnapshot:
     pagination: str = "the collection ended short of the limit it asked for"
     complete: bool = True
     completeness: str = "the collection ended short of the limit it asked for"
+    detail_keys: tuple[str, ...] = ()
+    customer_reference: str = "not probed"
 
 
 def _short(error: BaseException) -> str:
@@ -457,6 +499,209 @@ def _prove_complete_collection(
     )
 
 
+def _probe_customer_reference(
+    domain: str,
+    access_token: str,
+    records: tuple[dict[str, Any], ...],
+) -> tuple[tuple[str, ...], str]:
+    """Report whether EasyStore names the customer a Checkout belongs to.
+
+    The collection payload does not. If the detail route does, Cart→Contact can
+    be an EasyStore customer ID lookup instead of a match on the email or phone
+    the shopper typed, which is what a store without guest checkout should have.
+    Only a couple of sessions worth associating are probed, and any failure is
+    reported rather than raised: this answers a question, it does not sync.
+    """
+
+    if any(commerce.checkout_customer_id(record) is not None for record in records):
+        return (), "the checkout collection names the customer directly"
+
+    keys: set[str] = set()
+    probed = 0
+    named = 0
+    for record in records:
+        if probed >= CHECKOUT_CUSTOMER_PROBE_LIMIT:
+            break
+        cart_token = commerce.checkout_cart_token(record)
+        if cart_token is None or not record.get("line_items"):
+            continue
+        if (
+            commerce.cart_mapping.cart_email(record) is None
+            and commerce.cart_mapping.cart_mobile(record, "65") is None
+        ):
+            # An anonymous browse session would not name a customer either way.
+            continue
+
+        probed += 1
+        path = EASYSTORE_CHECKOUT_DETAIL_PATH.format(
+            cart_token=quote(cart_token, safe="")
+        )
+        try:
+            detail = _checkout_detail(
+                _checkout_get(
+                    f"https://{domain}{path}",
+                    access_token,
+                    what=f"EasyStore checkout {cart_token} detail",
+                ),
+                cart_token,
+            )
+        except (SyncError, CheckoutSourceUnavailable) as error:
+            return tuple(sorted(keys)), (
+                f"the detail route did not answer the probe: {_short(error)}"
+            )
+        observed_keys(keys, detail)
+        if commerce.checkout_customer_id(detail) is not None:
+            named += 1
+
+    if probed == 0:
+        return (), "no recoverable checkout was available to probe"
+    if named:
+        return tuple(sorted(keys)), (
+            f"the checkout detail route names the customer on {named} of "
+            f"{probed} probed session(s), so Cart→Contact can be associated on "
+            "the EasyStore customer ID"
+        )
+    return tuple(sorted(keys)), (
+        f"neither the collection nor the detail route named a customer on "
+        f"{probed} probed session(s), so Cart→Contact resolves on the email or "
+        "mobile the shopper gave at checkout"
+    )
+
+
+def _hydrate_lines(
+    domain: str,
+    access_token: str,
+    checkouts: tuple[dict[str, Any], ...],
+) -> tuple[tuple[dict[str, Any], ...], int, str]:
+    """Fill in line items for admin records, which the admin list omits.
+
+    A record whose lines could not be read is kept and marked, not dropped: an
+    abandoned cart missing from the CRM is worse than one whose items are not
+    itemized, and the mark stops the writer from deleting Cart lines it wrote on
+    a previous run just because this read failed.
+    """
+
+    hydrated: list[dict[str, Any]] = []
+    fetched = 0
+    failures = 0
+    for checkout in checkouts:
+        cart_token = commerce.checkout_cart_token(checkout)
+        if isinstance(checkout.get("line_items"), list):
+            hydrated.append(checkout)
+            continue
+        if cart_token is None or failures >= CHECKOUT_HYDRATION_FAILURE_BUDGET:
+            hydrated.append({**checkout, commerce.LINE_ITEMS_UNAVAILABLE_KEY: True})
+            continue
+
+        path = EASYSTORE_CHECKOUT_DETAIL_PATH.format(
+            cart_token=quote(cart_token, safe="")
+        )
+        try:
+            detail = _checkout_detail(
+                _http_json(
+                    f"https://{domain}{path}",
+                    headers={"EasyStore-Access-Token": access_token},
+                    retries=CHECKOUT_HYDRATION_RETRIES,
+                    timeout=CHECKOUT_HYDRATION_TIMEOUT_SECONDS,
+                ),
+                cart_token,
+            )
+        except SyncError:
+            failures += 1
+            hydrated.append({**checkout, commerce.LINE_ITEMS_UNAVAILABLE_KEY: True})
+            continue
+
+        lines = detail.get("line_items")
+        if isinstance(lines, list):
+            fetched += 1
+            hydrated.append({**checkout, "line_items": lines})
+        else:
+            hydrated.append({**checkout, commerce.LINE_ITEMS_UNAVAILABLE_KEY: True})
+
+    if failures == 0:
+        note = "every abandoned checkout was itemized from the detail route"
+    elif failures >= CHECKOUT_HYDRATION_FAILURE_BUDGET:
+        note = (
+            f"the detail route failed {failures} times, so hydration stopped and "
+            "the remaining Carts were written without itemized lines"
+        )
+    else:
+        note = f"the detail route failed for {failures} checkout(s)"
+    return tuple(hydrated), fetched, note
+
+
+def read_admin_snapshot(
+    store_domain: str,
+    easystore_access_token: str,
+    admin_access_token: str | None = None,
+) -> tuple[CheckoutSnapshot | None, dict[str, Any]]:
+    """Return EasyStore's real abandoned checkout list, and what was tried.
+
+    The snapshot is ``None`` when the collection would not authenticate; the
+    dictionary reports that either way, so a run says which source it used.
+
+    This collection is authoritative in a way the public one is not: it is the
+    list the EasyStore admin shows, it declares its own ``total_count``, and
+    every record names the customer it belongs to. When it will not authenticate
+    the caller falls back to the public collection, so an unusable credential
+    costs diagnostics rather than a sync.
+    """
+
+    try:
+        read = admin_source.read_admin_checkouts(
+            easystore_access_token,
+            admin_access_token,
+        )
+    except admin_source.AdminSourceUnavailable as error:
+        print(
+            "::warning title=EasyStore admin checkout list unavailable::"
+            "Falling back to the public checkouts collection, which serves every "
+            f"session rather than the abandoned ones. {_short(error)}",
+            file=sys.stderr,
+        )
+        return None, {
+            "easystore_admin_checkout_status": "unavailable",
+            "easystore_admin_checkout_error": _short(error),
+            "easystore_admin_checkout_attempts": list(error.attempts),
+        }
+
+    records, fetched, hydration = _hydrate_lines(
+        _shop_domain(store_domain),
+        easystore_access_token,
+        admin_source.as_checkouts(read.records),
+    )
+    completeness = (
+        f"the admin collection declared {read.total_count} abandoned checkout(s) "
+        f"and served {len(read.records)}"
+    )
+    snapshot = CheckoutSnapshot(
+        records=records,
+        pages_read=read.pages_read,
+        details_fetched=fetched,
+        page_size=admin_source.ADMIN_PAGE_SIZE,
+        attempts=read.attempts,
+        page_parameter_honored=True,
+        pagination=completeness,
+        complete=read.complete,
+        completeness=completeness,
+        customer_reference=(
+            "the admin collection names customer_id on every abandoned checkout"
+        ),
+    )
+    return snapshot, {
+        "easystore_checkout_source": "admin_api_abandoned_checkouts",
+        "easystore_checkout_collection_endpoint": admin_source.ADMIN_CHECKOUTS_URL,
+        "easystore_checkout_collection_query": "page,limit,start_date,end_date,sort",
+        "easystore_admin_checkout_status": "available",
+        "easystore_admin_checkout_authentication": read.authentication,
+        "easystore_admin_checkouts_declared": read.total_count,
+        "easystore_admin_checkout_attempts": list(read.attempts),
+        "easystore_checkout_page_sizes_tried_in_order": [admin_source.ADMIN_PAGE_SIZE],
+        "easystore_checkout_product_style_filters_sent": False,
+        "easystore_checkout_line_item_hydration": hydration,
+    }
+
+
 def read_checkout_snapshot(
     store_domain: str,
     access_token: str,
@@ -512,10 +757,16 @@ def read_checkout_snapshot(
             completed.append(checkout)
             details_fetched += int(fetched)
 
+        detail_keys, customer_reference = _probe_customer_reference(
+            domain, access_token, tuple(completed)
+        )
+
         return CheckoutSnapshot(
             records=tuple(completed),
             pages_read=pages_read,
             details_fetched=details_fetched,
+            detail_keys=detail_keys,
+            customer_reference=customer_reference,
             page_size=page_size,
             attempts=tuple(attempts),
             page_parameter_honored=page_honored,
@@ -563,7 +814,8 @@ def _endpoint_summary(store_domain: str) -> dict[str, Any]:
         ),
         "hubspot_cart_schema_object_type": HUBSPOT_CART_SCHEMA_OBJECT_TYPE,
         "hubspot_cart_source_semantics": (
-            "all EasyStore Checkout sessions; unpaid/open is the abandoned subset"
+            "the unpaid, open EasyStore Checkout subset; paid and converted "
+            "sessions stay with the Order stage"
         ),
         "cart_source_is_orders": False,
     }
@@ -615,14 +867,29 @@ def sync(
     hubspot_access_token: str,
     fallback_dial_code: str,
     require_checkouts: bool = False,
+    admin_access_token: str | None = None,
 ) -> dict[str, Any]:
-    """Synchronize all real EasyStore Checkout sessions into HubSpot Carts."""
+    """Synchronize EasyStore's abandoned checkouts into HubSpot Carts."""
 
     _validate_hubspot_cart_contract()
     summary = _endpoint_summary(store_domain)
 
+    # EasyStore's admin collection is the abandoned checkout list itself, so it
+    # needs no filtering: every record is a real cart, and it names the customer
+    # each one belongs to. The public collection needs both - it serves every
+    # session the storefront opened - so the filter goes on only when the sync
+    # has fallen back to it.
+    snapshot, admin_report = read_admin_snapshot(
+        store_domain,
+        easystore_access_token,
+        admin_access_token,
+    )
+    summary.update(admin_report)
+    recoverable_only = snapshot is None
+
     try:
-        snapshot = read_checkout_snapshot(store_domain, easystore_access_token)
+        if snapshot is None:
+            snapshot = read_checkout_snapshot(store_domain, easystore_access_token)
     except CheckoutSourceUnavailable as error:
         if require_checkouts:
             raise
@@ -673,11 +940,21 @@ def sync(
             file=sys.stderr,
         )
 
-    # HubSpot Carts represent shopping sessions that may later be purchased or
-    # abandoned, so every real Checkout is fed to the Cart writer with its own
-    # financial_status preserved as hs_external_status. The abandoned subset is
-    # counted here and flagged on each Cart by the shared cart mapping.
+    # Only the unpaid, open subset becomes a Cart. A paid or converted Checkout
+    # is already synchronized by the Order stage, so writing it here as well
+    # would double-count the revenue; it is counted and skipped instead. In
+    # practice EasyStore's checkouts.json only ever serves the open subset - a
+    # session that converts leaves the collection entirely - so this is the
+    # guarantee rather than a filter that trims anything.
     abandoned = sum(1 for item in snapshot.records if commerce.is_abandoned(item))
+    if abandoned != len(snapshot.records):
+        print(
+            "::warning title=Paid EasyStore Checkouts left to the Order stage::"
+            f"{len(snapshot.records) - abandoned} of {len(snapshot.records)} "
+            "Checkouts EasyStore served are paid or converted. They are not "
+            "written as Carts, because the Order stage already carries them.",
+            file=sys.stderr,
+        )
 
     summary.update(
         commerce.sync(
@@ -686,7 +963,8 @@ def sync(
             hubspot_access_token=hubspot_access_token,
             fallback_dial_code=fallback_dial_code,
             checkouts=snapshot.records,
-            include_completed=True,
+            include_completed=False,
+            recoverable_only=recoverable_only,
             cart_schema_object_type=HUBSPOT_CART_SCHEMA_OBJECT_TYPE,
         )
     )
@@ -702,6 +980,8 @@ def sync(
             "easystore_checkout_pages_read": snapshot.pages_read,
             "easystore_checkout_details_fetched": snapshot.details_fetched,
             "easystore_checkouts_buffered": len(snapshot.records),
+            "easystore_checkout_customer_reference": snapshot.customer_reference,
+            "easystore_checkout_detail_keys_seen": list(snapshot.detail_keys),
             "easystore_checkouts_abandoned_or_open": abandoned,
             "easystore_checkouts_completed_or_paid": len(snapshot.records) - abandoned,
             "hubspot_cart_upserts_skipped": False,
@@ -725,6 +1005,15 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--store-domain", default=os.getenv("EASYSTORE_STORE_DOMAIN"))
     parser.add_argument("--easystore-token", default=os.getenv("EASYSTORE_ACCESS_TOKEN"))
+    parser.add_argument(
+        "--easystore-admin-token",
+        default=admin_source.admin_access_token_from_environment(),
+        help=(
+            "Credential for EasyStore's admin abandoned-checkout collection, if "
+            "it does not accept the app access token. Without one, the app token "
+            "is tried and the public collection is the fallback."
+        ),
+    )
     parser.add_argument("--hubspot-token", default=os.getenv("HUBSPOT_ACCESS_TOKEN"))
     parser.add_argument(
         "--fallback-dial-code",
@@ -757,6 +1046,7 @@ def main(argv: list[str] | None = None) -> int:
                 "CUSTOMER_SYNC_DEFAULT_DIAL_CODE",
             ),
             require_checkouts=args.require_checkouts,
+            admin_access_token=args.easystore_admin_token,
         )
     except SyncError as error:
         print(f"ERROR: {error}", file=sys.stderr)

@@ -18,7 +18,26 @@ OUTAGE = checkouts.CheckoutSourceUnavailable(
 )
 
 
-class CheckoutOutageBehaviorTests(unittest.TestCase):
+class PublicCollectionOnly(unittest.TestCase):
+    """Base for tests of the public collection path.
+
+    EasyStore's admin collection is tried first in production, so a test about
+    the public one starts from an admin route that refused the credential. It
+    also keeps the suite off the network.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        patcher = mock.patch.object(
+            checkouts,
+            "read_admin_snapshot",
+            return_value=(None, {"easystore_admin_checkout_status": "unavailable"}),
+        )
+        self.addCleanup(patcher.stop)
+        patcher.start()
+
+
+class CheckoutOutageBehaviorTests(PublicCollectionOnly):
     """One unreachable EasyStore endpoint must not fail the whole CRM sync.
 
     Products, Customers, Orders and reconciliation have already written to
@@ -224,3 +243,176 @@ class CartOrderLinkRefreshTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class UnpaidSubsetOnlyTests(PublicCollectionOnly):
+    def test_the_production_entrypoint_asks_for_the_unpaid_subset_only(self) -> None:
+        snapshot = checkouts.CheckoutSnapshot(
+            records=({"cart_token": "c1", "financial_status": "unpaid"},),
+            pages_read=1,
+            details_fetched=0,
+        )
+        with mock.patch.object(
+            checkouts, "read_checkout_snapshot", return_value=snapshot
+        ), mock.patch.object(
+            checkouts.commerce, "sync", return_value={}
+        ) as cart_sync:
+            summary = checkouts.sync(
+                store_domain="shop.example",
+                easystore_access_token="es",
+                hubspot_access_token="hs",
+                fallback_dial_code="65",
+            )
+
+        self.assertFalse(cart_sync.call_args.kwargs["include_completed"])
+        self.assertEqual(summary["easystore_checkouts_abandoned_or_open"], 1)
+        self.assertEqual(summary["easystore_checkouts_completed_or_paid"], 0)
+        self.assertIn("unpaid", summary["hubspot_cart_source_semantics"])
+
+    def test_a_paid_session_in_the_feed_is_annotated_not_written(self) -> None:
+        snapshot = checkouts.CheckoutSnapshot(
+            records=(
+                {"cart_token": "c1", "financial_status": "unpaid"},
+                {"cart_token": "c2", "financial_status": "paid"},
+            ),
+            pages_read=1,
+            details_fetched=0,
+        )
+        with mock.patch.object(
+            checkouts, "read_checkout_snapshot", return_value=snapshot
+        ), mock.patch.object(
+            checkouts.commerce, "sync", return_value={}
+        ), mock.patch("sys.stderr") as stderr:
+            summary = checkouts.sync(
+                store_domain="shop.example",
+                easystore_access_token="es",
+                hubspot_access_token="hs",
+                fallback_dial_code="65",
+            )
+
+        printed = "".join(
+            call.args[0] for call in stderr.write.call_args_list if call.args
+        )
+        self.assertIn("Paid EasyStore Checkouts left to the Order stage", printed)
+        self.assertEqual(summary["easystore_checkouts_completed_or_paid"], 1)
+
+
+class CustomerReferenceProbeTests(unittest.TestCase):
+    """The store has no guest checkout, so the direct link is worth chasing.
+
+    The collection payload names no customer (run 32539291543 observed 18 keys
+    across 1267 records, none of them a customer reference), so a couple of
+    recoverable sessions are probed on the detail route and what it answers is
+    reported. That settles whether Cart→Contact can key on the EasyStore
+    customer ID rather than on what the shopper typed.
+    """
+
+    LINE = [{"sku": "SKU-A", "quantity": 1, "price": "10"}]
+
+    def test_a_detail_route_that_names_the_customer_is_reported(self) -> None:
+        records = (
+            {
+                "cart_token": "c1",
+                "email": "shopper@example.com",
+                "line_items": self.LINE,
+            },
+        )
+        detail = {"cart_token": "c1", "customer": {"id": 4321}, "line_items": self.LINE}
+
+        with mock.patch.object(checkouts, "_checkout_get", lambda *a, **k: detail):
+            keys, note = checkouts._probe_customer_reference("shop.example", "es", records)
+
+        self.assertIn("customer", keys)
+        self.assertIn("names the customer", note)
+        self.assertIn("EasyStore customer ID", note)
+
+    def test_a_detail_route_without_a_customer_says_so(self) -> None:
+        records = (
+            {
+                "cart_token": "c1",
+                "email": "shopper@example.com",
+                "line_items": self.LINE,
+            },
+        )
+        with mock.patch.object(
+            checkouts,
+            "_checkout_get",
+            lambda *a, **k: {"cart_token": "c1", "line_items": self.LINE},
+        ):
+            keys, note = checkouts._probe_customer_reference("shop.example", "es", records)
+
+        self.assertIn("cart_token", keys)
+        self.assertIn("the email or mobile the shopper gave", note)
+
+    def test_the_probe_is_skipped_when_the_collection_already_names_the_customer(
+        self,
+    ) -> None:
+        def fail(*_args, **_kwargs):  # pragma: no cover - must not be reached
+            raise AssertionError("the detail route was probed unnecessarily")
+
+        with mock.patch.object(checkouts, "_checkout_get", fail):
+            keys, note = checkouts._probe_customer_reference(
+                "shop.example",
+                "es",
+                ({"cart_token": "c1", "customer_id": 7, "line_items": self.LINE},),
+            )
+
+        self.assertEqual(keys, ())
+        self.assertIn("collection names the customer directly", note)
+
+    def test_anonymous_and_empty_sessions_are_not_probed(self) -> None:
+        def fail(*_args, **_kwargs):  # pragma: no cover - must not be reached
+            raise AssertionError("an unrecoverable session was probed")
+
+        with mock.patch.object(checkouts, "_checkout_get", fail):
+            keys, note = checkouts._probe_customer_reference(
+                "shop.example",
+                "es",
+                (
+                    {"cart_token": "anonymous", "line_items": self.LINE},
+                    {"cart_token": "empty", "email": "a@b.co", "line_items": []},
+                ),
+            )
+
+        self.assertEqual(keys, ())
+        self.assertIn("no recoverable checkout", note)
+
+    def test_a_probe_the_endpoint_refuses_never_fails_the_stage(self) -> None:
+        def refuse(*_args, **_kwargs):
+            raise SyncError("The read operation timed out")
+
+        with mock.patch.object(checkouts, "_checkout_get", refuse):
+            keys, note = checkouts._probe_customer_reference(
+                "shop.example",
+                "es",
+                (
+                    {
+                        "cart_token": "c1",
+                        "email": "shopper@example.com",
+                        "line_items": self.LINE,
+                    },
+                ),
+            )
+
+        self.assertEqual(keys, ())
+        self.assertIn("did not answer the probe", note)
+
+    def test_at_most_two_sessions_are_probed(self) -> None:
+        probed: list[str] = []
+
+        def record(url, *_args, **_kwargs):
+            probed.append(url)
+            return {"cart_token": "x", "line_items": self.LINE}
+
+        records = tuple(
+            {
+                "cart_token": f"c{index}",
+                "email": f"s{index}@example.com",
+                "line_items": self.LINE,
+            }
+            for index in range(6)
+        )
+        with mock.patch.object(checkouts, "_checkout_get", record):
+            checkouts._probe_customer_reference("shop.example", "es", records)
+
+        self.assertEqual(len(probed), checkouts.CHECKOUT_CUSTOMER_PROBE_LIMIT)
