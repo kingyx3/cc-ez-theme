@@ -16,8 +16,7 @@
   authenticated customer who still owes the store their details is sent to
   `/account/details`, while the product/prior-page target remains in
   sessionStorage untouched. The details page is locked until its required human
-  fields submit successfully; a first-time password is part of that checkpoint
-  until one successful completion POST proves it was accepted.
+  fields submit successfully.
 
   The customer-field checks deliberately use only `customer`. An earlier source
   attribution implementation read `shop.attribute_settings` from the layout head
@@ -27,21 +26,21 @@
   made that flag look complete before the human fields were actually filled.
 
   This store signs customers up by mobile number and OTP, and guest checkout is
-  disabled. EasyStore can therefore create/authenticate the shopper before the
-  final profile/password step. The details template already ships EasyStore's
-  supported password-update controls as `details[password1]` (current password)
-  and `details[password2]` (new password). A brand-new OTP signup has no current
-  password to provide, so mandatory completion deliberately leaves password1 in
-  its normal hidden Change password panel and moves only password2 into the
-  visible profile area as a required "Set password" field.
+  disabled. EasyStore can create/authenticate the shopper before the final
+  profile/password step. The details template already ships EasyStore's supported
+  password-update controls as `details[password1]` (current password) and
+  `details[password2]` (new password). A brand-new OTP signup has no current
+  password to provide, so mandatory signup completion deliberately leaves
+  password1 in its normal hidden Change password panel and moves only password2
+  into the visible profile area as a required "Set password" field.
 
-  EasyStore's documented Liquid customer object does not expose whether a
-  password already exists. To avoid making the shopper set it repeatedly when
-  the completion page renders again, the browser records the password only after
-  EasyStore renders its existing `update_success` acknowledgement for the
-  `/account/details` save. The marker is namespaced to the rendered customer id
-  and is kept in localStorage with a sessionStorage fallback. A rejected POST
-  never promotes the marker, so the first-time password remains required.
+  Set password is a signup-only concern, not a permanent property of the profile
+  gate. A tiny second script records when this tab visits `/account/register` and
+  keeps that session marker through EasyStore's OTP pages. The mandatory details
+  form surfaces password2 only while that signup marker exists. EasyStore's
+  server-rendered `update_success` acknowledgement clears it after the successful
+  details save. Visiting the normal login page clears an abandoned signup marker.
+  Normal account-details visits never surface Set password.
 
   The Liquid decision is rendered as meta markers rather than interpolated into
   JavaScript. `e2e/login-redirect.spec.js` executes this first script directly as
@@ -64,7 +63,6 @@
 {% endif %}
 
 {% if customer %}
-  <meta name="cc-profile-customer-id" content="{{ customer.id }}">
   {% if cc_profile_completion_required %}
     <meta name="cc-profile-completion-required" content="true">
   {% endif %}
@@ -78,61 +76,29 @@
       var path = String(window.location.pathname || '');
       var profileRequired = Boolean(document.querySelector('meta[name="cc-profile-completion-required"]'));
       var profileUpdateSucceeded = Boolean(document.querySelector('meta[name="cc-profile-update-success"]'));
-      var customerMarker = document.querySelector('meta[name="cc-profile-customer-id"]');
-      var customerId = String((customerMarker && customerMarker.getAttribute('content')) || '').trim();
-      var PASSWORD_SET_PREFIX = 'cc:profile-password-set:';
-      var PASSWORD_SUBMIT_PREFIX = 'cc:profile-password-submit:';
-      var passwordSetKey = customerId ? PASSWORD_SET_PREFIX + customerId : '';
-      var passwordSubmitKey = customerId ? PASSWORD_SUBMIT_PREFIX + customerId : '';
+      var SIGNUP_PASSWORD_KEY = 'cc:signup-password-setup';
 
-      function storageHas(storageName, key) {
-        if (!key) return false;
+      function signupPasswordPending() {
         try {
-          var storage = window[storageName];
-          return Boolean(storage) && storage.getItem(key) === '1';
+          return window.sessionStorage.getItem(SIGNUP_PASSWORD_KEY) === '1';
         } catch (error) {
           return false;
         }
       }
 
-      function passwordWasSet() {
-        return storageHas('localStorage', passwordSetKey) || storageHas('sessionStorage', passwordSetKey);
-      }
-
-      function rememberPasswordSubmit() {
-        if (!passwordSubmitKey) return;
+      function clearSignupPasswordPending() {
         try {
-          window.sessionStorage.setItem(passwordSubmitKey, '1');
+          window.sessionStorage.removeItem(SIGNUP_PASSWORD_KEY);
         } catch (error) {
-          /* first-time password remains required if storage is unavailable */
+          /* signup marker disappears with the tab when storage is unavailable */
         }
       }
 
-      function passwordSubmitPending() {
-        return storageHas('sessionStorage', passwordSubmitKey);
-      }
-
-      function markPasswordSet() {
-        if (!passwordSetKey) return;
-        try {
-          window.localStorage.setItem(passwordSetKey, '1');
-        } catch (error) {
-          /* session marker below still prevents a repeat in this tab */
-        }
-        try {
-          window.sessionStorage.setItem(passwordSetKey, '1');
-          window.sessionStorage.removeItem(passwordSubmitKey);
-        } catch (error) {
-          /* a later render may ask again when storage is unavailable */
-        }
-      }
-
-      // A valid first-time completion submit sets a pending marker before the
-      // normal POST. Only EasyStore's server-rendered `update_success` response
-      // promotes it, so merely clicking Save or receiving a validation error can
-      // never make the one-time password requirement disappear.
-      if (profileUpdateSucceeded && passwordSubmitPending()) {
-        markPasswordSet();
+      // The mandatory form requires Set password only while this tab is still in
+      // the signup trip. A successful EasyStore details save ends that trip even
+      // if another human profile requirement keeps the customer on the form.
+      if (profileUpdateSucceeded && signupPasswordPending()) {
+        clearSignupPasswordPending();
       }
 
       if (profileRequired) {
@@ -228,15 +194,15 @@
             if (field) field.setAttribute('required', 'required');
           });
 
-          // Only the first successful completion needs a password. Once that
-          // save has been acknowledged by EasyStore, leave the normal password-
-          // change controls hidden and do not ask again on this mandatory form.
-          var needsFirstPassword = !passwordWasSet();
+          // Set password belongs only to the signup trip. Outside signup the
+          // password controls stay exactly where EasyStore normally keeps them:
+          // hidden inside the account's Change password panel.
+          var signupPasswordSetup = signupPasswordPending();
           var password = form.querySelector('[name="details[password2]"]');
           var saveRow = form.querySelector('p.text-right');
           var saveArea = saveRow && saveRow.parentNode;
 
-          if (needsFirstPassword && password) {
+          if (signupPasswordSetup && password) {
             password.setAttribute('required', 'required');
             password.setAttribute('autocomplete', 'new-password');
             password.setAttribute('placeholder', 'Set password');
@@ -274,9 +240,6 @@
               event.preventDefault();
               if (form.reportValidity) form.reportValidity();
               return;
-            }
-            if (needsFirstPassword && password && password.value) {
-              rememberPasswordSubmit();
             }
             // The details form performs a normal POST. Only that valid POST may
             // leave this page without a warning. If EasyStore rejects it, the
@@ -333,3 +296,27 @@
     })();
   </script>
 {% endif %}
+
+<script>
+  (function () {
+    'use strict';
+
+    var path = String(window.location.pathname || '');
+    var SIGNUP_PASSWORD_KEY = 'cc:signup-password-setup';
+
+    try {
+      if (/^\/account\/register(?:\/|$)/i.test(path)) {
+        window.sessionStorage.setItem(SIGNUP_PASSWORD_KEY, '1');
+        return;
+      }
+
+      // Following the register page's "Sign in" escape hatch means signup was
+      // abandoned. Do not let that stale marker affect an existing account.
+      if (/^\/account\/login(?:\/|$)/i.test(path)) {
+        window.sessionStorage.removeItem(SIGNUP_PASSWORD_KEY);
+      }
+    } catch (error) {
+      /* signup still works; only the optional details-page promotion is lost */
+    }
+  })();
+</script>
