@@ -2,7 +2,8 @@
 
 A Buy Now login carries the product/prior-page target in sessionStorage.  The
 customer may be authenticated before EasyStore considers their profile complete,
-so the target must stay pending until the human profile fields are accepted.
+so the target must stay pending until the human profile fields and a password are
+accepted.
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 THEME = ROOT / "theme"
 BOOT = THEME / "snippets" / "login-redirect-boot.liquid"
+DETAILS = THEME / "templates" / "customers" / "details.liquid"
 ASSET = THEME / "assets" / "account-login-redirect.js"
 EDITOR_ASSET = THEME / "editor_assets" / "account-login-redirect.js"
 
@@ -86,6 +88,29 @@ class ProfileCompletionGateTests(unittest.TestCase):
         self.assertIn("field.setAttribute('required', 'required');", boot)
         self.assertIn("form.checkValidity", boot)
         self.assertIn("form.reportValidity", boot)
+
+    def test_password_is_a_visible_required_part_of_profile_completion(self) -> None:
+        boot = read(BOOT)
+        details = read(DETAILS)
+
+        # Use EasyStore's existing account-details password contract rather than
+        # introducing an unsupported field name or separate endpoint.
+        self.assertIn('name="details[password1]"', details)
+        self.assertIn('name="details[password2]"', details)
+        self.assertIn("form.querySelector('[name=\"details[password1]\"]')", boot)
+        self.assertIn("form.querySelector('[name=\"details[password2]\"]')", boot)
+
+        # A just-created OTP account may not have an old password yet, so current
+        # password stays optional while the new password is mandatory.
+        self.assertIn("currentPassword.removeAttribute('required');", boot)
+        self.assertIn("password.setAttribute('required', 'required');", boot)
+        self.assertIn("password.setAttribute('autocomplete', 'new-password');", boot)
+        self.assertIn("password.setAttribute('placeholder', 'Password');", boot)
+
+        # Both real password fields are moved out of the template's hidden
+        # Change-password panel and into the visible profile form before Save.
+        self.assertIn("saveArea.insertBefore(currentWrapper, saveRow);", boot)
+        self.assertIn("saveArea.insertBefore(passwordWrapper, saveRow);", boot)
 
     def test_navigation_is_locked_until_a_valid_details_post(self) -> None:
         boot = read(BOOT)
