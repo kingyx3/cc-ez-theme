@@ -2,8 +2,8 @@
 
 A Buy Now login carries the product/prior-page target in sessionStorage. The
 customer may be authenticated before EasyStore considers their profile complete,
-so the target must stay pending until the human profile fields and a password are
-accepted.
+so the target must stay pending until the human profile fields and any first-time
+password requirement are accepted.
 """
 
 from __future__ import annotations
@@ -65,7 +65,7 @@ class ProfileCompletionGateTests(unittest.TestCase):
         # The pending Buy Now target is preserved, never consumed by the gate.
         self.assertIn("cc:pending-login-redirect", required)
         self.assertIn("if (pendingTarget()) return;", required)
-        self.assertNotIn("removeItem", required)
+        self.assertNotIn("window.sessionStorage.removeItem(KEY)", required)
 
     def test_prior_storefront_page_is_remembered_when_buy_now_did_not_supply_one(self) -> None:
         boot = read(BOOT)
@@ -99,7 +99,7 @@ class ProfileCompletionGateTests(unittest.TestCase):
         self.assertIn('name="details[password1]"', details)
         self.assertIn('name="details[password2]"', details)
 
-        # Mandatory mobile/OTP signup must surface only the new-password field.
+        # Mandatory mobile/OTP signup must never surface current password.
         self.assertNotIn("form.querySelector('[name=\"details[password1]\"]')", boot)
         self.assertIn("form.querySelector('[name=\"details[password2]\"]')", boot)
         self.assertNotIn("currentPassword", boot)
@@ -111,6 +111,36 @@ class ProfileCompletionGateTests(unittest.TestCase):
         self.assertIn("passwordLabel.textContent = 'Set password';", boot)
         self.assertIn("saveArea.insertBefore(passwordWrapper, saveRow);", boot)
 
+    def test_password_is_required_only_until_first_successful_completion(self) -> None:
+        boot = read(BOOT)
+
+        # Password state is scoped to the authenticated customer rather than one
+        # global browser flag shared by different accounts.
+        self.assertIn('<meta name="cc-profile-customer-id" content="{{ customer.id }}">', boot)
+        self.assertIn("PASSWORD_SET_PREFIX = 'cc:profile-password-set:'", boot)
+        self.assertIn("PASSWORD_SUBMIT_PREFIX = 'cc:profile-password-submit:'", boot)
+        self.assertIn("var needsFirstPassword = !passwordWasSet();", boot)
+        self.assertIn("if (needsFirstPassword && password) {", boot)
+
+        # A password is not remembered merely because the shopper clicked Save.
+        # Submit records a pending attempt; only a following server-rendered
+        # /account/details response whose profile is complete promotes it.
+        self.assertIn("if (needsFirstPassword && password && password.value) {", boot)
+        self.assertIn("rememberPasswordSubmit();", boot)
+        self.assertIn(
+            "if (!profileRequired && /^\\/account\\/details\\/?$/i.test(path) && passwordSubmitPending()) {",
+            boot,
+        )
+        self.assertIn("markPasswordSet();", boot)
+
+        # The accepted marker survives later renders in the same browser, with a
+        # session fallback for browsers that reject localStorage.
+        self.assertIn("window.localStorage.setItem(passwordSetKey, '1');", boot)
+        self.assertIn("window.sessionStorage.setItem(passwordSetKey, '1');", boot)
+        self.assertIn("window.sessionStorage.removeItem(passwordSubmitKey);", boot)
+        self.assertIn("storageHas(window.localStorage, passwordSetKey)", boot)
+        self.assertIn("storageHas(window.sessionStorage, passwordSetKey)", boot)
+
     def test_signup_policy_is_documented(self) -> None:
         documentation = read(SIGNUP_DOC).lower()
 
@@ -119,6 +149,8 @@ class ProfileCompletionGateTests(unittest.TestCase):
         self.assertIn("guest checkout is disabled", documentation)
         self.assertIn("set password", documentation)
         self.assertIn("no current-password field", documentation)
+        self.assertIn("first successful", documentation)
+        self.assertIn("do not ask for it again", documentation)
         self.assertIn("product or prior storefront page", documentation)
 
     def test_navigation_is_locked_until_a_valid_details_post(self) -> None:
