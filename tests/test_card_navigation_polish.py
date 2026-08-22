@@ -55,12 +55,14 @@ class CardNavigationPolishTests(unittest.TestCase):
         stylesheet = (
             THEME_ROOT / "assets" / "card-navigation-polish.css"
         ).read_text(encoding="utf-8")
-        featured_collection = (
-            THEME_ROOT / "sections" / "featured-collection.liquid"
+        featured_collection_products = (
+            THEME_ROOT / "snippets" / "featured-collection-products.liquid"
         ).read_text(encoding="utf-8")
 
-        self.assertIn("products_to_display < products_to_show", featured_collection)
-        self.assertIn("negative-margin", featured_collection)
+        self.assertIn(
+            "products_to_display < products_to_show", featured_collection_products
+        )
+        self.assertIn("negative-margin", featured_collection_products)
         self.assertIn(".product-grid.negative-margin", stylesheet)
         self.assertIn(".product-grid.negative-margin--small", stylesheet)
         self.assertIn("margin-bottom: 0", stylesheet)
