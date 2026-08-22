@@ -16,8 +16,8 @@
   authenticated customer who still owes the store their details is sent to
   `/account/details`, while the product/prior-page target remains in
   sessionStorage untouched. The details page is locked until its required human
-  fields submit successfully; the following page load then sees a complete
-  profile and the ordinary return redirect resumes.
+  fields and password submit successfully; the following page load then sees a
+  complete profile and the ordinary return redirect resumes.
 
   The customer-field checks deliberately use only `customer`. An earlier source
   attribution implementation read `shop.attribute_settings` from the layout head
@@ -25,6 +25,15 @@
   that lookup. EasyStore's own optional-fields flag covers its profile state;
   explicit name/gender/birthdate checks also rescue customers whose old Click ID
   made that flag look complete before the human fields were actually filled.
+
+  EasyStore's current phone-registration flow creates/authenticates the shopper
+  with OTP before the final name/password step. The theme's register and activate
+  templates already contain required password inputs, but an OTP-created customer
+  can arrive at `/account/details` without those templates ever rendering. The
+  details template already ships EasyStore's supported password-update fields as
+  `details[password1]` and `details[password2]`; during mandatory completion this
+  script moves those real fields into the visible profile area, leaves the current
+  password optional for a passwordless account, and requires the new password.
 
   The Liquid decision is rendered as a meta marker rather than interpolated into
   JavaScript. `e2e/login-redirect.spec.js` executes this first script directly as
@@ -149,6 +158,38 @@
             var field = form.querySelector('[name="' + name + '"]');
             if (field) field.setAttribute('required', 'required');
           });
+
+          // OTP registration can authenticate a brand-new customer before a
+          // password has ever been collected. The details template already owns
+          // EasyStore's supported old/new password fields, but keeps them inside
+          // a hidden "Change password" panel. Reuse those exact fields instead
+          // of inventing a second password POST contract.
+          var currentPassword = form.querySelector('[name="details[password1]"]');
+          var password = form.querySelector('[name="details[password2]"]');
+          var saveRow = form.querySelector('p.text-right');
+          var saveArea = saveRow && saveRow.parentNode;
+
+          if (currentPassword) {
+            currentPassword.removeAttribute('required');
+            currentPassword.setAttribute('autocomplete', 'current-password');
+            currentPassword.setAttribute('placeholder', 'Current password (if already set)');
+
+            var currentWrapper = currentPassword.closest('.field');
+            var currentLabel = currentWrapper && currentWrapper.querySelector('label');
+            if (currentLabel) currentLabel.textContent = 'Current password (if already set)';
+            if (currentWrapper && saveArea) saveArea.insertBefore(currentWrapper, saveRow);
+          }
+
+          if (password) {
+            password.setAttribute('required', 'required');
+            password.setAttribute('autocomplete', 'new-password');
+            password.setAttribute('placeholder', 'Password');
+
+            var passwordWrapper = password.closest('.field');
+            var passwordLabel = passwordWrapper && passwordWrapper.querySelector('label');
+            if (passwordLabel) passwordLabel.textContent = 'Password';
+            if (passwordWrapper && saveArea) saveArea.insertBefore(passwordWrapper, saveRow);
+          }
 
           var allowUnload = false;
 
