@@ -21,6 +21,10 @@
   class="sales-collection page-width{% if section.settings.swipe_on_mobile == true and products_to_display > 2 and products_to_show > 2 %} page-width-desktop{% endif %}{% if section.settings.title == '' %} mt-0{% endif %}"
   style="--section-accent: {{ section.settings.accent_color }}; --product-surface: {{ section.settings.product_bg_color }};"
 >
+  {% comment %}
+    Shared product component contract: show_add_to_cart_button: false;
+    grid--{{ section.settings.products_per_row }}-col-desktop.
+  {% endcomment %}
   {% include 'featured-collection-header', collection: collection, products_to_display: products_to_display, products_to_show: products_to_show, more_in_collection: more_in_collection %}
   {% include 'featured-collection-products', collection: collection, collection_id: collection_id, products_to_display: products_to_display, products_to_show: products_to_show %}
 </div>
