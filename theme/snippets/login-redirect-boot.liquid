@@ -18,12 +18,13 @@
   sessionStorage untouched. The details page is locked until its required human
   fields submit successfully.
 
-  The customer-field checks deliberately use only `customer`. An earlier source
-  attribution implementation read `shop.attribute_settings` from the layout head
-  and broke non-customer storefront pages, so the global gate must never repeat
-  that lookup. EasyStore's own optional-fields flag covers its profile state;
-  explicit name/gender/birthdate checks also rescue customers whose old Click ID
-  made that flag look complete before the human fields were actually filled.
+  The gate deliberately uses only the human fields this store actually requires:
+  first name, last name, gender, and birthdate. EasyStore's
+  `customer.is_optional_fields_filled` is an aggregate platform flag and may stay
+  false because of unrelated optional/custom fields even after those four fields
+  are saved. Treating it as a hard requirement can therefore trap a customer on
+  `/account/details` forever. Click ID still cannot satisfy the gate because none
+  of the four explicit checks use customer attributes.
 
   This store signs customers up by mobile number and OTP, and guest checkout is
   disabled. EasyStore can create/authenticate the shopper before the final
@@ -54,9 +55,6 @@
 
 {% assign cc_profile_completion_required = false %}
 {% if customer %}
-  {% if customer.is_optional_fields_filled == false %}
-    {% assign cc_profile_completion_required = true %}
-  {% endif %}
   {% if customer.first_name == blank or customer.last_name == blank or customer.gender == blank or customer.birthdate == blank %}
     {% assign cc_profile_completion_required = true %}
   {% endif %}
