@@ -123,14 +123,14 @@ class ProfileCompletionGateTests(unittest.TestCase):
         self.assertIn("if (needsFirstPassword && password) {", boot)
 
         # A password is not remembered merely because the shopper clicked Save.
-        # Submit records a pending attempt; only a following server-rendered
-        # /account/details response whose profile is complete promotes it.
+        # Submit records a pending attempt; EasyStore's existing update_success
+        # response is the server acknowledgement that promotes it.
         self.assertIn("if (needsFirstPassword && password && password.value) {", boot)
         self.assertIn("rememberPasswordSubmit();", boot)
-        self.assertIn(
-            "if (!profileRequired && /^\\/account\\/details\\/?$/i.test(path) && passwordSubmitPending()) {",
-            boot,
-        )
+        self.assertIn("{% if update_success %}", boot)
+        self.assertIn('<meta name="cc-profile-update-success" content="true">', boot)
+        self.assertIn("var profileUpdateSucceeded = Boolean(", boot)
+        self.assertIn("if (profileUpdateSucceeded && passwordSubmitPending()) {", boot)
         self.assertIn("markPasswordSet();", boot)
 
         # The accepted marker survives later renders in the same browser, with a
@@ -138,8 +138,8 @@ class ProfileCompletionGateTests(unittest.TestCase):
         self.assertIn("window.localStorage.setItem(passwordSetKey, '1');", boot)
         self.assertIn("window.sessionStorage.setItem(passwordSetKey, '1');", boot)
         self.assertIn("window.sessionStorage.removeItem(passwordSubmitKey);", boot)
-        self.assertIn("storageHas(window.localStorage, passwordSetKey)", boot)
-        self.assertIn("storageHas(window.sessionStorage, passwordSetKey)", boot)
+        self.assertIn("storageHas('localStorage', passwordSetKey)", boot)
+        self.assertIn("storageHas('sessionStorage', passwordSetKey)", boot)
 
     def test_signup_policy_is_documented(self) -> None:
         documentation = read(SIGNUP_DOC).lower()
@@ -151,6 +151,7 @@ class ProfileCompletionGateTests(unittest.TestCase):
         self.assertIn("no current-password field", documentation)
         self.assertIn("first successful", documentation)
         self.assertIn("do not ask for it again", documentation)
+        self.assertIn("update_success", documentation)
         self.assertIn("product or prior storefront page", documentation)
 
     def test_navigation_is_locked_until_a_valid_details_post(self) -> None:
