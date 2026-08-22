@@ -52,3 +52,27 @@ summary.list-menu__item {
 summary.menu-drawer__menu-item > a.list-menu__item {
   padding: 0;
 }
+
+.menu-drawer__navigation > .menu-drawer__menu {
+  display: flex;
+  flex-direction: column;
+}
+
+.menu-drawer__navigation > .menu-drawer__menu > li:has(> a[href="/collections/secret-lair"]) {
+  order: 1;
+}
+
+.menu-drawer__navigation > .menu-drawer__menu > li:has(> a[href="/pages/about-us"]) {
+  order: 2;
+}
+
+@media screen and (min-width: 990px) {
+  .header__inline-menu > .list-menu--inline > li:has(> a[href="/collections/secret-lair"]) {
+    order: 1;
+  }
+
+  .header__inline-menu > .list-menu--inline > .header__nav-item--about {
+    order: 2;
+    margin-left: auto;
+  }
+}
