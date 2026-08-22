@@ -18,7 +18,8 @@ cardboard.sg/go/ca            Cloudflare Worker  (cc-attribution)
 storefront landing page       theme/snippets/attribution-click-id.liquid
         │                     stores the click id, cookie + localStorage
         ▼
-account sign-up               fills the hidden "Click ID" customer attribute
+account sign-up               theme/snippets/attribution-click-id-field.liquid
+        │                     fills the hidden "Click ID" customer attribute
         │
         ▼
 EasyStore customer record     the click id is now a fact EasyStore owns
@@ -68,8 +69,7 @@ visible input on four pages - `register`, `activate_account`, `account` and
 `details` - so an attribute created before the theme ships is a text box labelled
 "Click ID" that shoppers are asked to fill in. The snippet is what hides it.
 
-1. **Deploy the theme.** The snippet ships with it and is already included from
-   the layout head, so it runs on all four of those pages.
+1. **Deploy the theme.** Both snippets ship with it and are already wired up.
 
 2. **Create the customer attribute.** EasyStore admin → Settings → Customers →
    customer attributes. Add a **text** attribute titled exactly **`Click ID`**,
@@ -224,6 +224,40 @@ GROUP BY source, campaign
 ORDER BY clicks DESC;
 ```
 
+## Why the theme side is two snippets
+
+Capturing the click id and filling the customer attribute look like one job, and
+putting them in one snippet in the layout head **took the storefront down** the
+first time this shipped.
+
+`shop.attribute_settings` is populated on the four customer pages that ask for
+it. Looping it from the layout head meant every page in the store - the homepage
+included - resolved a shop object it had never touched before, and EasyStore
+errored rather than rendering. CI could not catch it: the packaging workflow
+validates Liquid structurally and the browser suite drives the *published*
+storefront, so nothing executed the new Liquid until it was live.
+
+So the two halves live where each one belongs:
+
+| Snippet | Included from | Reads |
+| --- | --- | --- |
+| `attribution-click-id` | the layout head, every page | nothing but the browser - no `shop`, no `customer`, no `settings` |
+| `attribution-click-id-field` | the four customer templates | `shop.attribute_settings`, on pages that already loop it |
+
+`tests/test_source_attribution_capture.py` keeps that split: it asserts the head
+snippet contains no Liquid logic whatsoever, and that no template outside those
+four reads `shop.attribute_settings`.
+
+The lesson generalises past this feature. **A snippet in the layout head runs on
+every page, so anything it reads is now read by every page** - the cost and the
+blast radius of a Liquid object are decided by where you include it, not by what
+it does.
+
+The field snippet also sticks to constructs the rest of the theme already proves
+work on EasyStore's Liquid: the `default: '' | append: '' | downcase | strip`
+coercion used by `customer-order-limit-rule`, and plain `==` comparisons rather
+than testing an array with `contains`, which nothing else in this theme does.
+
 ## Where each part lives
 
 | Part | File |
@@ -232,6 +266,7 @@ ORDER BY clicks DESC;
 | Click storage | `cloudflare/attribution-worker/migrations/` |
 | Worker behaviour tests | `cloudflare/attribution-worker/test/worker.test.js` |
 | Storefront capture | `theme/snippets/attribution-click-id.liquid` |
+| Attribute fill and hide | `theme/snippets/attribution-click-id-field.liquid` |
 | Storefront wiring tests | `tests/test_source_attribution_capture.py` |
 | Attribute → HubSpot | `scripts/easystore_hubspot_sync.py` (customer attributes) |
 | The join | `scripts/cloudflare_hubspot_attribution.py` |
