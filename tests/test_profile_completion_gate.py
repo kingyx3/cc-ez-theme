@@ -1,6 +1,6 @@
 """Profile completion must finish before a signed-in shopper returns to shopping.
 
-A Buy Now login carries the product/prior-page target in sessionStorage.  The
+A Buy Now login carries the product/prior-page target in sessionStorage. The
 customer may be authenticated before EasyStore considers their profile complete,
 so the target must stay pending until the human profile fields and a password are
 accepted.
@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 THEME = ROOT / "theme"
 BOOT = THEME / "snippets" / "login-redirect-boot.liquid"
 DETAILS = THEME / "templates" / "customers" / "details.liquid"
+SIGNUP_DOC = ROOT / "docs" / "CUSTOMER_SIGNUP_FLOW.md"
 ASSET = THEME / "assets" / "account-login-redirect.js"
 EDITOR_ASSET = THEME / "editor_assets" / "account-login-redirect.js"
 
@@ -49,7 +50,7 @@ class ProfileCompletionGateTests(unittest.TestCase):
             with self.subTest(field=field):
                 self.assertIn(field, code)
 
-        # This runs from the layout head on every storefront page.  The source
+        # This runs from the layout head on every storefront page. The source
         # attribution incident proved that attribute settings are not safe here.
         self.assertNotIn("shop.attribute_settings", code)
 
@@ -89,28 +90,36 @@ class ProfileCompletionGateTests(unittest.TestCase):
         self.assertIn("form.checkValidity", boot)
         self.assertIn("form.reportValidity", boot)
 
-    def test_password_is_a_visible_required_part_of_profile_completion(self) -> None:
+    def test_signup_asks_only_for_a_new_password(self) -> None:
         boot = read(BOOT)
         details = read(DETAILS)
 
-        # Use EasyStore's existing account-details password contract rather than
-        # introducing an unsupported field name or separate endpoint.
+        # Keep EasyStore's account-details password contract. The template still
+        # owns both controls for the later Change password feature.
         self.assertIn('name="details[password1]"', details)
         self.assertIn('name="details[password2]"', details)
-        self.assertIn("form.querySelector('[name=\"details[password1]\"]')", boot)
-        self.assertIn("form.querySelector('[name=\"details[password2]\"]')", boot)
 
-        # A just-created OTP account may not have an old password yet, so current
-        # password stays optional while the new password is mandatory.
-        self.assertIn("currentPassword.removeAttribute('required');", boot)
+        # Mandatory mobile/OTP signup must surface only the new-password field.
+        self.assertNotIn("form.querySelector('[name=\"details[password1]\"]')", boot)
+        self.assertIn("form.querySelector('[name=\"details[password2]\"]')", boot)
+        self.assertNotIn("currentPassword", boot)
+        self.assertNotIn("currentWrapper", boot)
+
         self.assertIn("password.setAttribute('required', 'required');", boot)
         self.assertIn("password.setAttribute('autocomplete', 'new-password');", boot)
-        self.assertIn("password.setAttribute('placeholder', 'Password');", boot)
-
-        # Both real password fields are moved out of the template's hidden
-        # Change-password panel and into the visible profile form before Save.
-        self.assertIn("saveArea.insertBefore(currentWrapper, saveRow);", boot)
+        self.assertIn("password.setAttribute('placeholder', 'Set password');", boot)
+        self.assertIn("passwordLabel.textContent = 'Set password';", boot)
         self.assertIn("saveArea.insertBefore(passwordWrapper, saveRow);", boot)
+
+    def test_signup_policy_is_documented(self) -> None:
+        documentation = read(SIGNUP_DOC).lower()
+
+        self.assertIn("mobile number", documentation)
+        self.assertIn("otp", documentation)
+        self.assertIn("guest checkout is disabled", documentation)
+        self.assertIn("set password", documentation)
+        self.assertIn("no current-password field", documentation)
+        self.assertIn("product or prior storefront page", documentation)
 
     def test_navigation_is_locked_until_a_valid_details_post(self) -> None:
         boot = read(BOOT)
