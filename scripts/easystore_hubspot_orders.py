@@ -47,6 +47,7 @@ from easystore_hubspot_schema import (
     ensure_property_group,
     field_values,
     first_present,
+    iter_easystore_pages,
     nonempty,
     note_text,
     observed_keys,
@@ -259,8 +260,8 @@ def iter_easystore_orders(
     access_token: str,
 ) -> Iterator[dict[str, Any]]:
     domain = _shop_domain(store_domain)
-    page = 1
-    while True:
+
+    def fetch(page: int) -> list[dict[str, Any]]:
         query = urlencode(
             {
                 "page": page,
@@ -272,12 +273,14 @@ def iter_easystore_orders(
             f"https://{domain}/api/3.0/orders.json?{query}",
             headers={"EasyStore-Access-Token": access_token},
         )
-        orders = _extract_list(document, "orders", "data", "results")
-        for order in orders:
-            yield order
-        if len(orders) < EASYSTORE_PAGE_SIZE:
-            break
-        page += 1
+        return _extract_list(document, "orders", "data", "results")
+
+    yield from iter_easystore_pages(
+        fetch,
+        page_size=EASYSTORE_PAGE_SIZE,
+        what="orders.json",
+        error=SyncError,
+    )
 
 
 def complete_order(

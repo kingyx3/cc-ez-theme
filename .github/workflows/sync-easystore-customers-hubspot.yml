@@ -95,7 +95,15 @@ jobs:
             exit 1
           fi
 
+      # Preflight is the one stage that must stop the others. It proves the
+      # mobile number identifying a customer is unambiguous, and writing
+      # Contacts, Orders or Carts against an ambiguous identity would merge two
+      # people's records. Everything after it runs independently: a stage that
+      # fails is reported and the rest of the CRM still syncs, because one
+      # unreachable upstream endpoint is not a reason to leave Products,
+      # Contacts, Orders and Carts a day stale. The final step fails the run.
       - name: Preflight customer mobile identity
+        id: preflight
         env:
           EASYSTORE_ACCESS_TOKEN: ${{ secrets.EASYSTORE_ACCESS_TOKEN }}
           HUBSPOT_ACCESS_TOKEN: ${{ secrets.HUBSPOT_ACCESS_TOKEN }}
@@ -105,6 +113,8 @@ jobs:
           python scripts/easystore_hubspot_preflight.py | tee preflight-summary.json
 
       - name: Pull EasyStore products and upsert HubSpot products
+        id: products
+        continue-on-error: true
         env:
           EASYSTORE_ACCESS_TOKEN: ${{ secrets.EASYSTORE_ACCESS_TOKEN }}
           HUBSPOT_ACCESS_TOKEN: ${{ secrets.HUBSPOT_ACCESS_TOKEN }}
@@ -114,6 +124,8 @@ jobs:
           python scripts/easystore_hubspot_products.py | tee product-sync-summary.json
 
       - name: Pull EasyStore customers and upsert HubSpot contacts
+        id: customers
+        continue-on-error: true
         env:
           EASYSTORE_ACCESS_TOKEN: ${{ secrets.EASYSTORE_ACCESS_TOKEN }}
           HUBSPOT_ACCESS_TOKEN: ${{ secrets.HUBSPOT_ACCESS_TOKEN }}
@@ -130,6 +142,8 @@ jobs:
       # stage that needs them, and a run without them must not cost the store its
       # Products, Contacts, Orders or Carts.
       - name: Join Cloudflare source clicks to HubSpot contacts
+        id: attribution
+        continue-on-error: true
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -144,6 +158,8 @@ jobs:
           python scripts/cloudflare_hubspot_attribution.py | tee attribution-summary.json
 
       - name: Pull EasyStore orders and upsert HubSpot orders and line items
+        id: orders
+        continue-on-error: true
         env:
           EASYSTORE_ACCESS_TOKEN: ${{ secrets.EASYSTORE_ACCESS_TOKEN }}
           HUBSPOT_ACCESS_TOKEN: ${{ secrets.HUBSPOT_ACCESS_TOKEN }}
@@ -153,6 +169,8 @@ jobs:
           python scripts/easystore_hubspot_orders.py | tee order-sync-summary.json
 
       - name: Reconcile removed EasyStore order lines
+        id: reconcile
+        continue-on-error: true
         env:
           EASYSTORE_ACCESS_TOKEN: ${{ secrets.EASYSTORE_ACCESS_TOKEN }}
           HUBSPOT_ACCESS_TOKEN: ${{ secrets.HUBSPOT_ACCESS_TOKEN }}
@@ -170,6 +188,8 @@ jobs:
       # wrote Products, Customers and Orders. Set EASYSTORE_CHECKOUTS_REQUIRED
       # to 1 to make that outage fail this step instead.
       - name: Sync EasyStore checkouts to HubSpot carts and cart line items
+        id: carts
+        continue-on-error: true
         env:
           EASYSTORE_ACCESS_TOKEN: ${{ secrets.EASYSTORE_ACCESS_TOKEN }}
           HUBSPOT_ACCESS_TOKEN: ${{ secrets.HUBSPOT_ACCESS_TOKEN }}
@@ -181,6 +201,14 @@ jobs:
       - name: Publish run summary
         if: always()
         shell: bash
+        env:
+          PREFLIGHT_OUTCOME: ${{ steps.preflight.outcome }}
+          PRODUCTS_OUTCOME: ${{ steps.products.outcome }}
+          CUSTOMERS_OUTCOME: ${{ steps.customers.outcome }}
+          ATTRIBUTION_OUTCOME: ${{ steps.attribution.outcome }}
+          ORDERS_OUTCOME: ${{ steps.orders.outcome }}
+          RECONCILE_OUTCOME: ${{ steps.reconcile.outcome }}
+          CARTS_OUTCOME: ${{ steps.carts.outcome }}
         run: |
           {
             echo "### EasyStore → HubSpot CRM sync"
@@ -193,12 +221,23 @@ jobs:
             echo "- Orders: keyed by immutable EasyStore order ID with product-backed Line Items"
             echo "- Carts: every EasyStore Checkout session is synchronized to a HubSpot Cart using checkout.cart_token"
             echo "- Abandoned carts: unpaid/open Checkouts are the abandoned subset, flagged on the Cart; paid/completed Checkouts remain Carts with their source status and can associate to Orders"
-            echo "- Checkout list request: /api/3.0/checkouts.json with page + limit only; no sort/date/Product-style filters, retried with backoff and falling back to limit=1"
+            echo "- Checkout list request: /api/3.0/checkouts.json with page + limit only; no sort/date/Product-style filters. Largest limit first (250, then 50, then 1), four attempts of 60s each, because this endpoint answers roughly one attempt in eight"
             echo "- Checkout pagination: page 2 is unusable (repeats page 1, or hangs), so a larger limit on page 1 proves the snapshot; the page that answered is kept either way, and a snapshot EasyStore will not prove complete is still synchronized and annotated"
             echo "- Checkout outage: Cart and Cart Line Item writes pause and the run is annotated; existing Cart→Order links still refresh from order.cart_token"
             echo "- Cart lines: real Checkout line_items become separate product-backed HubSpot Cart Line Items"
             echo "- Retired variants: a Checkout line with no HubSpot Product is skipped and counted, keeping the Cart; the Order stage still fails on one"
             echo "- Store: \`${EASYSTORE_STORE_DOMAIN}\`"
+            echo
+            echo "| Stage | Outcome |"
+            echo "| --- | --- |"
+            printf '| %s | %s |\n' \
+              "Preflight" "${PREFLIGHT_OUTCOME:-skipped}" \
+              "Products" "${PRODUCTS_OUTCOME:-skipped}" \
+              "Customers" "${CUSTOMERS_OUTCOME:-skipped}" \
+              "Cloudflare source attribution" "${ATTRIBUTION_OUTCOME:-skipped}" \
+              "Orders and line items" "${ORDERS_OUTCOME:-skipped}" \
+              "Reconciliation" "${RECONCILE_OUTCOME:-skipped}" \
+              "Carts / abandoned carts and cart lines" "${CARTS_OUTCOME:-skipped}"
             echo
             for entry in \
               "Preflight|preflight-summary.json" \
@@ -221,3 +260,45 @@ jobs:
               echo
             done
           } >> "${GITHUB_STEP_SUMMARY}"
+
+      # continue-on-error above keeps a failed stage from cancelling the ones
+      # after it, which also means it cannot fail the job on its own. This step
+      # is what makes the run red, and it names every stage that failed rather
+      # than only the first.
+      - name: Fail the run if any stage failed
+        if: always()
+        shell: bash
+        env:
+          STAGE_OUTCOMES: >-
+            Preflight=${{ steps.preflight.outcome }}
+            Products=${{ steps.products.outcome }}
+            Customers=${{ steps.customers.outcome }}
+            Attribution=${{ steps.attribution.outcome }}
+            Orders=${{ steps.orders.outcome }}
+            Reconciliation=${{ steps.reconcile.outcome }}
+            Carts=${{ steps.carts.outcome }}
+        run: |
+          set -euo pipefail
+          failed=()
+          for pair in ${STAGE_OUTCOMES}; do
+            stage="${pair%%=*}"
+            outcome="${pair#*=}"
+            case "${outcome}" in
+              success)
+                echo "ok       ${stage}"
+                ;;
+              ""|skipped|cancelled)
+                echo "skipped  ${stage} (${outcome:-not reached})"
+                ;;
+              *)
+                echo "FAILED   ${stage} (${outcome})"
+                echo "::error::The ${stage} stage of the CRM sync failed. Every other stage still ran; see this run's summary for what each one wrote."
+                failed+=("${stage}")
+                ;;
+            esac
+          done
+          if (( ${#failed[@]} > 0 )); then
+            echo "::error::CRM sync finished with ${#failed[@]} failed stage(s): ${failed[*]}."
+            exit 1
+          fi
+          echo "Every CRM sync stage that ran succeeded."

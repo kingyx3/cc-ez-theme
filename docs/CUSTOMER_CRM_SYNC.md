@@ -57,6 +57,8 @@ The integration is deliberately fail-closed where an automatic choice could merg
 - **Stale synchronized order lines are reconciled only after the upsert succeeds.** `scripts/easystore_hubspot_reconcile.py` builds a complete reconciliation plan first, then archives product-backed HubSpot Line Items that no longer exist on their EasyStore order. Standalone/manual HubSpot line items without `hs_product_id` are preserved.
 - **Transient remote failures retry.** HTTP 429 and 5xx responses use bounded backoff; persistent API errors fail the run and surface in Actions.
 - **Production runs never overlap.** The workflow concurrency group serializes scheduled/manual production executions.
+- **One broken stage does not cost the others their run.** Preflight is the only stage whose failure stops the rest, because writing against an ambiguous identity would merge two people's records. Every stage after it runs independently and reports its own outcome; the last step then fails the run and names each stage that failed. Before this, a single unreachable upstream endpoint left Products, Contacts, Orders and Carts a day stale — one HTTP 400 from the attribution stage cost the store every stage after it.
+- **No list read can loop.** EasyStore's `checkouts.json` is known to ignore `page` and serve page 2 identical to page 1. A `while True` that only stops on a short page would then re-read page 1 until the job timed out, rewriting those same records in HubSpot on every lap. Every EasyStore `page` + `limit` read goes through one guard that ends the read with an error naming the endpoint when a page repeats records it has already served.
 
 ## Pull-request CI
 
@@ -638,6 +640,10 @@ forever; a missing *key* is what says the list endpoint does not carry the field
 at all.
 
 ## API behavior
+
+**EasyStore's paging cannot be trusted, so nothing depends on it terminating.** `checkouts.json` demonstrably ignores `page`: page 2 comes back identical to page 1, and on other attempts it hangs until it times out. Every `page` + `limit` read in this integration therefore shares `iter_easystore_pages`, which stops with an error naming the endpoint if a page repeats records already served. See `docs/EASYSTORE_CHECKOUT_CART_SYNC.md` for how the Cart stage proves a complete snapshot with `limit` instead.
+
+**HubSpot search filters are checked against the portal's schema first.** Filtering on a property the portal has never defined fails the whole search with an HTTP 400 that reads like an outage. The attribution stage reads the contact property schema and keeps only the click-id properties that actually exist; a portal defining none of them reports that and finishes cleanly, because a store that never captured click ids has nothing to attribute.
 
 EasyStore orders are paged from `/api/3.0/orders.json`. That list record is thinner than the single-order record: it was already missing `line_items` for some orders, and it also omits addresses and totals. The order stage therefore fetches `/api/3.0/orders/<order_id>.json` whenever a listed order is missing line items, an address, or an order total, and reports how often it had to (`orders_fetched_in_detail`). The reconciliation stage only reads line items, so it opts out of that check and its request count is unchanged.
 

@@ -39,6 +39,7 @@ from easystore_hubspot_schema import (
     describe_mapping,
     field_values,
     first_present,
+    iter_easystore_pages,
     note_text,
     observed_keys,
     resolve_fields,
@@ -904,9 +905,8 @@ def iter_easystore_customers(
 
     domain = store_domain.strip().removeprefix("https://").removeprefix("http://")
     domain = domain.rstrip("/")
-    page = 1
 
-    while True:
+    def fetch(page: int) -> list[dict[str, Any]]:
         query = urlencode(
             {
                 "page": page,
@@ -914,18 +914,18 @@ def iter_easystore_customers(
                 "sort": "id.asc",
             }
         )
-        url = f"https://{domain}/api/3.0/customers.json?{query}"
         document = _http_json(
-            url,
+            f"https://{domain}/api/3.0/customers.json?{query}",
             headers={"EasyStore-Access-Token": access_token},
         )
-        customers = _extract_easystore_customers(document)
-        for customer in customers:
-            yield customer
+        return _extract_easystore_customers(document)
 
-        if len(customers) < EASYSTORE_PAGE_SIZE:
-            break
-        page += 1
+    yield from iter_easystore_pages(
+        fetch,
+        page_size=EASYSTORE_PAGE_SIZE,
+        what="customers.json",
+        error=SyncError,
+    )
 
 
 def customer_needs_detail(customer: dict[str, Any]) -> bool:

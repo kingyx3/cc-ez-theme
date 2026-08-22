@@ -12,6 +12,7 @@ import json
 import re
 import sys
 import unittest
+from unittest import mock
 from pathlib import Path
 from typing import Any
 
@@ -65,7 +66,21 @@ class FakeApi:
         self.contacts = contacts or []
         self.clicks = clicks or []
         self.recorded = recorded or {}
-        self.schema = schema if schema is not None else []
+        # A contact cannot hold a property the portal has never defined, so a
+        # portal whose contacts carry click ids defines the click-id property.
+        # The read side filters on it, and HubSpot 400s a filter naming a
+        # property it does not know.
+        self.schema = (
+            schema
+            if schema is not None
+            else [
+                {
+                    "name": attribution.DEFAULT_CLICK_ID_PROPERTIES[0],
+                    "type": "string",
+                    "fieldType": "text",
+                }
+            ]
+        )
         self.d1_error = d1_error
         self.legacy_d1 = legacy_d1
         self.calls: list[tuple[str, Any]] = []
@@ -490,7 +505,14 @@ class SyncTests(unittest.TestCase):
                     "name": "cc_acquisition_click_id",
                     "type": "string",
                     "fieldType": "text",
-                }
+                },
+                # The property the contact's click id is read from has to exist
+                # too, or the read-side search never runs.
+                {
+                    "name": attribution.DEFAULT_CLICK_ID_PROPERTIES[0],
+                    "type": "string",
+                    "fieldType": "text",
+                },
             ],
         )
         harness = Harness(api)
@@ -510,7 +532,14 @@ class SyncTests(unittest.TestCase):
                     "name": "cc_acquisition_click_id",
                     "type": "string",
                     "fieldType": "text",
-                }
+                },
+                # The property the contact's click id is read from has to exist
+                # too, or the read-side search never runs.
+                {
+                    "name": attribution.DEFAULT_CLICK_ID_PROPERTIES[0],
+                    "type": "string",
+                    "fieldType": "text",
+                },
             ],
         )
         harness = Harness(api)
@@ -599,6 +628,61 @@ class SyncTests(unittest.TestCase):
         finally:
             attribution.resolve_fields = original_resolve
         self.assertIn("acquisition click id", str(raised.exception))
+
+
+class PortalWithoutClickIdPropertyTests(unittest.TestCase):
+    """Production run 32502241646 failed the whole CRM sync on this.
+
+    The click-id property names are a guess at where a storefront put them.
+    Filtering on one this portal has never defined fails the search with an
+    HTTP 400 that reads like an outage, and because this stage runs before
+    Orders and Carts it took everything after it down too.
+    """
+
+    def test_a_portal_without_the_property_never_searches_and_does_not_fail(self) -> None:
+        api = FakeApi(
+            contacts=[contact("1", easystore_attr_click_id=CLICK_A)],
+            clicks=[click_row(CLICK_A)],
+            schema=[{"name": "email", "type": "string", "fieldType": "text"}],
+        )
+        summary = Harness(api).run()
+
+        self.assertEqual(summary["click_id_properties_read"], [])
+        self.assertIn("no click id property", summary["attribution_status"])
+        self.assertEqual(summary["contacts_with_click_id"], 0)
+        searches = [url for url, _ in api.calls if url.endswith("/contacts/search")]
+        self.assertEqual(searches, [])
+        self.assertEqual(api.created_properties, [])
+        self.assertEqual(api.d1_statements, [])
+
+    def test_only_the_properties_the_portal_has_are_filtered_on(self) -> None:
+        present, absent = attribution.DEFAULT_CLICK_ID_PROPERTIES[:2]
+        api = FakeApi(
+            contacts=[contact("1", **{present: CLICK_A})],
+            clicks=[click_row(CLICK_A)],
+            schema=[{"name": present, "type": "string", "fieldType": "text"}],
+        )
+        summary = Harness(api).run()
+
+        self.assertEqual(summary["click_id_properties_requested"], [present, absent])
+        self.assertEqual(summary["click_id_properties_read"], [present])
+        self.assertEqual(summary["contacts_with_click_id"], 1)
+
+    def test_a_token_that_cannot_read_the_schema_still_tries(self) -> None:
+        # Without the schema the names cannot be checked, and refusing to read
+        # would silently stop attributing for a portal that is working fine.
+        api = FakeApi(
+            contacts=[contact("1", easystore_attr_click_id=CLICK_A)],
+            clicks=[click_row(CLICK_A)],
+        )
+        with mock.patch.object(attribution, "property_schema", return_value=None):
+            summary = Harness(api).run()
+
+        self.assertEqual(
+            summary["click_id_properties_read"],
+            list(attribution.DEFAULT_CLICK_ID_PROPERTIES),
+        )
+        self.assertEqual(summary["contacts_with_click_id"], 1)
 
 
 class ConfigurationTests(unittest.TestCase):

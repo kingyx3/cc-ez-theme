@@ -25,11 +25,12 @@ the abandoned-cart funnel and is flagged as such on the Cart itself; paid and
 converted sessions stay Carts with their EasyStore status and can be associated
 to the Order they became.
 
-Reading the collection is retried with backoff, and the page size falls back from
-the documented maximum to the smallest possible request, because this store has
-served read timeouts on this endpoint. The snapshot is buffered and any missing
-line items are hydrated from the documented detail endpoint before HubSpot is
-mutated.
+This endpoint mostly does not answer: across observed production runs it served
+the collection roughly once in eight attempts. Reading it is therefore patient -
+four attempts of 60s per page size, with backoff - and asks for the largest page
+first, because the one request that succeeds should be the one that can return
+everything. The snapshot is buffered and any missing line items are hydrated from
+the documented detail endpoint before HubSpot is mutated.
 
 Page 2 of this endpoint is not usable. It has come back identical to page 1, and
 it has hung until it timed out. Neither discards the page that did arrive:
@@ -79,19 +80,32 @@ HUBSPOT_CART_PROPERTIES_PATH = "/crm/v3/properties/cart"
 # clearly contain Product endpoint fields in the Checkout parameter table, so we
 # do not rely on those copied filters for production correctness.
 #
-# The page sizes are tried in order. EasyStore documents 50 as the maximum, which
-# needs the fewest requests; 1 is the smallest request the endpoint can be asked
-# for, and is what a store that times out on anything larger can still answer.
+# The page sizes are tried in order, and the order is chosen for an endpoint that
+# usually does not answer at all. Across observed production runs this one
+# answered roughly once in eight attempts, and when it did, limit=250 returned
+# the store's whole collection of 1246 checkouts in a single request while
+# limit=50 returned 50 and left page 2 - the only way to ask for the rest -
+# unusable. So the first request is the one that can return everything: a single
+# lucky window is then enough. 50 is the documented maximum and 1 is the smallest
+# request that can be made, kept as fallbacks for a store that cannot serve a
+# large one.
+#
 # Only a transport-level failure moves on to the next size, and each size starts
 # again from page 1, so a snapshot is never stitched together from two of them.
-CHECKOUT_PAGE_SIZES = (50, 1)
-CHECKOUT_READ_TIMEOUT_SECONDS = 30
-CHECKOUT_READ_RETRIES = 1
+CHECKOUT_PAGE_SIZES = (250, 50, 1)
 
-# This endpoint answers but ignores ``page``: page 2 comes back byte-identical to
-# page 1. Paging cannot prove a full snapshot, so ``limit`` does it instead - a
-# request whose answer is shorter than the limit it asked for is the whole
-# collection. These are tried in order once the first page comes back saturated.
+# Patience is the whole strategy against an endpoint this unreliable. Four
+# attempts of 60s per page size costs about twelve minutes in the worst case,
+# which a background sync can afford far more easily than another run that writes
+# no Carts.
+CHECKOUT_READ_TIMEOUT_SECONDS = 60
+CHECKOUT_READ_RETRIES = 3
+
+# This endpoint ignores ``page``: page 2 comes back identical to page 1, or hangs.
+# Paging cannot prove a full snapshot, so ``limit`` does it instead - an answer
+# shorter than the limit it asked for, or longer than it, is the whole collection.
+# These are tried in order when a page size came back saturated. limit=1000 has
+# been refused with an HTTP 400, which is recorded rather than fatal.
 CHECKOUT_LIMIT_ESCALATION = (250, 1000)
 
 

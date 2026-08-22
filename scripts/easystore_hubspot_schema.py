@@ -532,6 +532,50 @@ def resolve_fields(
     return resolved
 
 
+def iter_easystore_pages(
+    fetch: Callable[[int], list[dict[str, Any]]],
+    *,
+    page_size: int,
+    what: str,
+    error: type[Exception],
+) -> Iterable[dict[str, Any]]:
+    """Yield every record of an EasyStore ``page`` + ``limit`` collection.
+
+    EasyStore's Checkout collection is known to ignore ``page``: it serves page 2
+    identical to page 1. A ``while True`` that only stops on a short page would
+    then never stop, spending the whole job timeout re-reading the first page and
+    rewriting those same records in HubSpot on every lap. Since one endpoint on
+    this API already behaves that way, every list read gets the same guard: a
+    page whose records repeat a page already served ends the read with an error
+    naming the endpoint.
+
+    ``fetch`` is given the page number and returns that page's records, so this
+    holds no HTTP client of its own and each stage keeps its own request policy.
+    """
+
+    seen: set[tuple[str, ...]] = set()
+    page = 1
+    while True:
+        records = fetch(page)
+        if records:
+            signature = tuple(
+                nonempty(record.get("id")) or f"row:{index}"
+                for index, record in enumerate(records)
+            )
+            if signature in seen:
+                raise error(
+                    f"EasyStore {what} served page {page} with records already "
+                    f"read, so its page parameter does nothing. Refusing to loop "
+                    f"over the same {len(records)} records."
+                )
+            seen.add(signature)
+
+        yield from records
+        if len(records) < page_size:
+            return
+        page += 1
+
+
 def observed_keys(seen: set[str], record: Any) -> None:
     """Record which keys a source record carried, for run diagnostics.
 

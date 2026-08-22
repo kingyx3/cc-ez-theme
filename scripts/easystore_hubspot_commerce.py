@@ -42,6 +42,7 @@ from easystore_hubspot_orders import (
 )
 from easystore_hubspot_schema import (
     describe_mapping,
+    iter_easystore_pages,
     nonempty,
     observed_keys,
     resolve_fields,
@@ -91,18 +92,21 @@ def iter_documented_checkouts(
     """Yield checkouts only from EasyStore's documented ``checkouts.json`` route."""
 
     domain = _shop_domain(store_domain)
-    page = 1
-    while True:
+
+    def fetch(page: int) -> list[dict[str, Any]]:
         query = urlencode({"page": page, "limit": EASYSTORE_PAGE_SIZE})
         document = _http_json(
             f"https://{domain}/api/3.0/checkouts.json?{query}",
             headers={"EasyStore-Access-Token": access_token},
         )
-        records = _extract_list(document, "checkouts", "data", "results")
-        yield from records
-        if len(records) < EASYSTORE_PAGE_SIZE:
-            return
-        page += 1
+        return _extract_list(document, "checkouts", "data", "results")
+
+    yield from iter_easystore_pages(
+        fetch,
+        page_size=EASYSTORE_PAGE_SIZE,
+        what="checkouts.json",
+        error=SyncError,
+    )
 
 
 def complete_checkout(
