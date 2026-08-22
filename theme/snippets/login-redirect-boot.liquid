@@ -26,14 +26,14 @@
   explicit name/gender/birthdate checks also rescue customers whose old Click ID
   made that flag look complete before the human fields were actually filled.
 
-  EasyStore's current phone-registration flow creates/authenticates the shopper
-  with OTP before the final name/password step. The theme's register and activate
-  templates already contain required password inputs, but an OTP-created customer
-  can arrive at `/account/details` without those templates ever rendering. The
-  details template already ships EasyStore's supported password-update fields as
-  `details[password1]` and `details[password2]`; during mandatory completion this
-  script moves those real fields into the visible profile area, leaves the current
-  password optional for a passwordless account, and requires the new password.
+  This store signs customers up by mobile number and OTP, and guest checkout is
+  disabled. EasyStore can therefore create/authenticate the shopper before the
+  final profile/password step. The details template already ships EasyStore's
+  supported password-update controls as `details[password1]` (current password)
+  and `details[password2]` (new password). A brand-new OTP signup has no current
+  password to provide, so mandatory completion deliberately leaves password1 in
+  its normal hidden Change password panel and moves only password2 into the
+  visible profile area as a required "Set password" field.
 
   The Liquid decision is rendered as a meta marker rather than interpolated into
   JavaScript. `e2e/login-redirect.spec.js` executes this first script directly as
@@ -159,35 +159,21 @@
             if (field) field.setAttribute('required', 'required');
           });
 
-          // OTP registration can authenticate a brand-new customer before a
-          // password has ever been collected. The details template already owns
-          // EasyStore's supported old/new password fields, but keeps them inside
-          // a hidden "Change password" panel. Reuse those exact fields instead
-          // of inventing a second password POST contract.
-          var currentPassword = form.querySelector('[name="details[password1]"]');
+          // Mobile/OTP signup does not have a current password. Reuse only
+          // EasyStore's existing new-password control from the hidden Change
+          // password panel and surface it as the mandatory Set password field.
           var password = form.querySelector('[name="details[password2]"]');
           var saveRow = form.querySelector('p.text-right');
           var saveArea = saveRow && saveRow.parentNode;
 
-          if (currentPassword) {
-            currentPassword.removeAttribute('required');
-            currentPassword.setAttribute('autocomplete', 'current-password');
-            currentPassword.setAttribute('placeholder', 'Current password (if already set)');
-
-            var currentWrapper = currentPassword.closest('.field');
-            var currentLabel = currentWrapper && currentWrapper.querySelector('label');
-            if (currentLabel) currentLabel.textContent = 'Current password (if already set)';
-            if (currentWrapper && saveArea) saveArea.insertBefore(currentWrapper, saveRow);
-          }
-
           if (password) {
             password.setAttribute('required', 'required');
             password.setAttribute('autocomplete', 'new-password');
-            password.setAttribute('placeholder', 'Password');
+            password.setAttribute('placeholder', 'Set password');
 
             var passwordWrapper = password.closest('.field');
             var passwordLabel = passwordWrapper && passwordWrapper.querySelector('label');
-            if (passwordLabel) passwordLabel.textContent = 'Password';
+            if (passwordLabel) passwordLabel.textContent = 'Set password';
             if (passwordWrapper && saveArea) saveArea.insertBefore(passwordWrapper, saveRow);
           }
 
