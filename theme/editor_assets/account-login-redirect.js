@@ -204,6 +204,10 @@
       return;
     }
 
+    // The head gate owns this customer until the required profile details have
+    // been accepted. In particular, do not consume the saved Buy Now target.
+    if (window.ccProfileCompletionRequired) return;
+
     if (!signedIn()) return;
 
     // Signed in on a page that is asking for nothing further, so the trip is
