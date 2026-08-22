@@ -224,3 +224,55 @@ class CartOrderLinkRefreshTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class UnpaidSubsetOnlyTests(unittest.TestCase):
+    def test_the_production_entrypoint_asks_for_the_unpaid_subset_only(self) -> None:
+        snapshot = checkouts.CheckoutSnapshot(
+            records=({"cart_token": "c1", "financial_status": "unpaid"},),
+            pages_read=1,
+            details_fetched=0,
+        )
+        with mock.patch.object(
+            checkouts, "read_checkout_snapshot", return_value=snapshot
+        ), mock.patch.object(
+            checkouts.commerce, "sync", return_value={}
+        ) as cart_sync:
+            summary = checkouts.sync(
+                store_domain="shop.example",
+                easystore_access_token="es",
+                hubspot_access_token="hs",
+                fallback_dial_code="65",
+            )
+
+        self.assertFalse(cart_sync.call_args.kwargs["include_completed"])
+        self.assertEqual(summary["easystore_checkouts_abandoned_or_open"], 1)
+        self.assertEqual(summary["easystore_checkouts_completed_or_paid"], 0)
+        self.assertIn("unpaid", summary["hubspot_cart_source_semantics"])
+
+    def test_a_paid_session_in_the_feed_is_annotated_not_written(self) -> None:
+        snapshot = checkouts.CheckoutSnapshot(
+            records=(
+                {"cart_token": "c1", "financial_status": "unpaid"},
+                {"cart_token": "c2", "financial_status": "paid"},
+            ),
+            pages_read=1,
+            details_fetched=0,
+        )
+        with mock.patch.object(
+            checkouts, "read_checkout_snapshot", return_value=snapshot
+        ), mock.patch.object(
+            checkouts.commerce, "sync", return_value={}
+        ), mock.patch("sys.stderr") as stderr:
+            summary = checkouts.sync(
+                store_domain="shop.example",
+                easystore_access_token="es",
+                hubspot_access_token="hs",
+                fallback_dial_code="65",
+            )
+
+        printed = "".join(
+            call.args[0] for call in stderr.write.call_args_list if call.args
+        )
+        self.assertIn("Paid EasyStore Checkouts left to the Order stage", printed)
+        self.assertEqual(summary["easystore_checkouts_completed_or_paid"], 1)

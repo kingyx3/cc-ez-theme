@@ -26,14 +26,20 @@ Orders are **not** a Cart data source. Order data may only be used after a real 
 
 ## Carts versus abandoned carts
 
-HubSpot's Cart object represents a shopping session whose items can later be purchased or abandoned. The CRM therefore synchronizes **all real EasyStore Checkout sessions**, not only unpaid ones.
+Only the **unpaid, unconverted subset** of EasyStore Checkouts becomes a HubSpot Cart. A paid or converted Checkout is counted and skipped, because the Order stage already carries it and a Cart alongside it would double-count the revenue.
 
-- `financial_status=unpaid` (or another still-open source state) is the abandoned / open Cart subset.
-- paid or completed Checkouts still remain HubSpot Carts with their source status and may be associated with the resulting HubSpot Order.
+Because EasyStore's own word for that state differs per store, the abandoned subset is also written to the Cart as a plain flag a HubSpot list or report can filter on: `easystore_cart_is_abandoned` is `true` while a Checkout is unpaid and unconverted, and `false` once it has been paid, completed, or turned into an order. A Checkout carrying an order reference, a `completed_at`, or a settled status in `financial_status`, `payment_status`, `status`, `state` or `checkout_status` is not abandoned — settled includes partial payments, partial refunds and authorizations, because money moved; `pending` is deliberately not settled, because nothing has been collected and the cart is still worth recovering. That single predicate lives in `scripts/easystore_hubspot_carts.py` and is what both the counters and the Cart property use.
 
-Because EasyStore's own word for that state differs per store, the abandoned subset is also written to the Cart as a plain flag a HubSpot list or report can filter on: `easystore_cart_is_abandoned` is `true` while a Checkout is unpaid and unconverted, and `false` once it has been paid, completed, or turned into an order. A Checkout carrying an order reference, a `completed_at`, or a settled status in `financial_status`, `payment_status`, `status`, `state` or `checkout_status` is not abandoned. That single predicate lives in `scripts/easystore_hubspot_carts.py` and is what both the counters and the Cart property use.
+### Why every Cart in the CRM reads `unpaid`
 
-This avoids an empty HubSpot Cart object when the store currently has only converted / paid Checkouts.
+This is the source, not the mapping. `checkouts.json` serves open sessions only:
+
+- `financial_status` is the **only** state field on the payload. Run 32539291543 observed exactly 18 keys across 1267 records, and `status`, `state`, `checkout_status`, `completed_at` and `order_id` are all absent — the endpoint has no notion of completion to report.
+- a session that converts leaves the collection rather than changing status inside it. That run classified 1267 of 1267 as abandoned and 0 as converted, and none of the store's 27 orders shared a `cart_token` with any listed Checkout (`cart_order_associations_ensured: 0`).
+
+So the Cart object holds the abandoned funnel and nothing else, which is what it is for. To keep this checkable rather than assumed, `cart-sync-summary.json` reports `easystore_checkout_status_counts`: the distribution of the raw status values EasyStore served, counted before anything is filtered. A paid session appearing in this collection would show up there, would be skipped rather than written, and annotates the run.
+
+One consequence worth knowing: a Cart written while unpaid is not revisited once its Checkout leaves the collection, so a Cart that converts later keeps the status it was last seen with. `order.cart_token` remains the bridge for attaching the resulting Order.
 
 ## EasyStore list request
 
@@ -137,6 +143,23 @@ Association IDs used by the sync:
 - Cart → Line Item: `590`
 - Cart → Order: `592`
 
+### Cart → Contact resolution
+
+The shopper is resolved by **normalized mobile first**, because that is the CRM's contact identity, and then by **email**. An abandoned Checkout is usually a session that got as far as an email and no phone, so mobile alone leaves Carts unlinked that HubSpot could resolve: run 32539291543 linked 26 of 1267 Carts, with a phone present on only 31 of them and an email on 41.
+
+Email is an association key only. Contacts are still created and deduplicated by mobile in the customer stage, and this stage never creates a Contact from a Checkout — an anonymous cart has no shopper to record.
+
+An identity that matches more than one Contact is never guessed: it is reported and skipped. Every Cart written by the stage falls into exactly one outcome, and those outcomes sum to the Carts written (`cart_contact_association_accounted_for`, counting a link once however it was resolved), so an unlinked Cart always has a stated reason:
+
+- `cart_contact_associations_by_mobile`
+- `cart_contact_associations_by_email`
+- `carts_with_ambiguous_contact_mobile`
+- `carts_with_ambiguous_contact_email`
+- `carts_with_no_shopper_identity` — the Checkout carries neither a usable mobile nor an email
+- `carts_whose_shopper_is_not_a_hubspot_contact` — it carries one, and no Contact holds it
+
+The association call is an idempotent `PUT`, so a rerun re-affirms every link rather than duplicating it.
+
 Every Checkout merchandise line becomes its own product-backed HubSpot Line Item associated to the Cart. These are distinct records from Order Line Items.
 
 The existing SKU mapper also supports EasyStore lines without a literal SKU when both `product_id` and `variant_id` are present, using the integration's stable synthetic identity `ES-<product_id>-<variant_id>`.
@@ -166,7 +189,10 @@ The existing SKU mapper also supports EasyStore lines without a literal SKU when
 - `hubspot_carts_updated`
 - `hubspot_cart_line_items_created`
 - `hubspot_cart_line_items_updated`
-- `cart_contact_associations_ensured`
+- `easystore_checkout_status_counts` and `easystore_checkout_status_field_read`
+- `easystore_checkouts_abandoned`, `easystore_checkouts_converted` and `checkouts_skipped_as_completed`
+- `cart_contact_associations_ensured`, `cart_contact_associations_by_mobile` and `cart_contact_associations_by_email`
+- `carts_with_ambiguous_contact_mobile`, `carts_with_ambiguous_contact_email`, `carts_with_no_shopper_identity`, `carts_whose_shopper_is_not_a_hubspot_contact` and `cart_contact_association_accounted_for`
 - `cart_order_associations_ensured`
 - `cart_lines_without_a_hubspot_product`, `carts_with_lines_without_a_hubspot_product` and `cart_line_skus_without_a_hubspot_product`
 - `cart_source_is_orders`

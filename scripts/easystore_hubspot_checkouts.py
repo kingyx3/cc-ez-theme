@@ -20,10 +20,19 @@ the operation "List products". Production therefore sends only the two generic
 pagination parameters that are unambiguous for this endpoint: ``page`` and
 ``limit``. In particular, it does not send ``sort`` or ``created_at_min``.
 
-Every Checkout session becomes a HubSpot Cart. The unpaid, unconverted subset is
-the abandoned-cart funnel and is flagged as such on the Cart itself; paid and
-converted sessions stay Carts with their EasyStore status and can be associated
-to the Order they became.
+Only the unpaid, unconverted subset becomes a HubSpot Cart: that is the
+abandoned-cart funnel, and it is flagged as such on the Cart itself. A paid or
+converted session is skipped, because the Order stage already carries it and a
+Cart alongside it would double-count the revenue.
+
+Observed reality of this collection, and the reason every Cart in the CRM reads
+``unpaid``: ``checkouts.json`` serves open sessions only. It carries no
+``status``, ``completed_at`` or ``order_id`` field at all - ``financial_status``
+is its only state, and it reads ``unpaid`` on every record - and a session that
+converts leaves the collection rather than changing status inside it. The run
+summary therefore reports ``easystore_checkout_status_counts``, the distribution
+of the raw values the source served, so a portal full of unpaid Carts can be
+told apart from a mapping fault without re-reading the API by hand.
 
 This endpoint mostly does not answer: across observed production runs it served
 the collection roughly once in eight attempts. Reading it is therefore patient -
@@ -563,7 +572,8 @@ def _endpoint_summary(store_domain: str) -> dict[str, Any]:
         ),
         "hubspot_cart_schema_object_type": HUBSPOT_CART_SCHEMA_OBJECT_TYPE,
         "hubspot_cart_source_semantics": (
-            "all EasyStore Checkout sessions; unpaid/open is the abandoned subset"
+            "the unpaid, open EasyStore Checkout subset; paid and converted "
+            "sessions stay with the Order stage"
         ),
         "cart_source_is_orders": False,
     }
@@ -673,11 +683,21 @@ def sync(
             file=sys.stderr,
         )
 
-    # HubSpot Carts represent shopping sessions that may later be purchased or
-    # abandoned, so every real Checkout is fed to the Cart writer with its own
-    # financial_status preserved as hs_external_status. The abandoned subset is
-    # counted here and flagged on each Cart by the shared cart mapping.
+    # Only the unpaid, open subset becomes a Cart. A paid or converted Checkout
+    # is already synchronized by the Order stage, so writing it here as well
+    # would double-count the revenue; it is counted and skipped instead. In
+    # practice EasyStore's checkouts.json only ever serves the open subset - a
+    # session that converts leaves the collection entirely - so this is the
+    # guarantee rather than a filter that trims anything.
     abandoned = sum(1 for item in snapshot.records if commerce.is_abandoned(item))
+    if abandoned != len(snapshot.records):
+        print(
+            "::warning title=Paid EasyStore Checkouts left to the Order stage::"
+            f"{len(snapshot.records) - abandoned} of {len(snapshot.records)} "
+            "Checkouts EasyStore served are paid or converted. They are not "
+            "written as Carts, because the Order stage already carries them.",
+            file=sys.stderr,
+        )
 
     summary.update(
         commerce.sync(
@@ -686,7 +706,7 @@ def sync(
             hubspot_access_token=hubspot_access_token,
             fallback_dial_code=fallback_dial_code,
             checkouts=snapshot.records,
-            include_completed=True,
+            include_completed=False,
             cart_schema_object_type=HUBSPOT_CART_SCHEMA_OBJECT_TYPE,
         )
     )

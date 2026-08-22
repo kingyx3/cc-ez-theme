@@ -21,6 +21,7 @@ import argparse
 import json
 import os
 import sys
+from collections import Counter
 from typing import Any, Iterator, Sequence
 from urllib.parse import quote, urlencode
 
@@ -576,6 +577,10 @@ def sync(
     unmatched_skus: set[str] = set()
     checkout_keys: set[str] = set()
     line_keys: set[str] = set()
+    # Every status value the source served, counted before anything is filtered.
+    # "All the Carts are unpaid" is either the truth about EasyStore's checkout
+    # feed or a mapping fault, and only the distribution tells the two apart.
+    status_counts: Counter[str] = Counter()
     field_coverage = {field.key: 0 for field in cart_mapping.CART_FIELDS}
 
     # Validate all checkout product references before mutating Carts/Line Items.
@@ -587,6 +592,8 @@ def sync(
         if isinstance(lines, list):
             for line in lines:
                 observed_keys(line_keys, line)
+
+        status_counts[checkout_status(checkout) or "(no status field)"] += 1
 
         if is_abandoned(checkout):
             abandoned_carts += 1
@@ -625,7 +632,9 @@ def sync(
     existing = hubspot_cart_index(hubspot_access_token)
     hubspot_orders = hubspot_order_index(hubspot_access_token)
     created = updated = migrated = 0
-    contact_links = ambiguous_mobile = 0
+    contact_links = ambiguous_mobile = ambiguous_email = 0
+    contact_links_by_mobile = contact_links_by_email = 0
+    carts_without_identity = carts_without_a_contact = 0
     line_created = line_updated = line_removed = 0
 
     for checkout, cart_token, desired, had_unmatched in validated:
@@ -662,26 +671,59 @@ def sync(
         line_updated += u
         line_removed += r
 
+        # Cart→Contact, by mobile first because that is the CRM's contact
+        # identity, then by email. Most abandoned checkouts carry one or the
+        # other and not both, so every Cart lands in exactly one bucket below:
+        # linked, ambiguous, no identity to match on, or an identity HubSpot has
+        # no contact for. Those five counts add up to the Carts written, which is
+        # what makes "the association is working" checkable rather than assumed.
         mobile = cart_mapping.cart_mobile(checkout, fallback_dial_code)
-        if mobile is None:
-            continue
-        matching = contacts.by_phone.get(mobile, set())
-        if len(matching) == 1:
+        email = cart_mapping.cart_email(checkout)
+        by_mobile = contacts.by_phone.get(mobile, set()) if mobile else set()
+        by_email = (
+            contacts.by_email.get(email.casefold(), set())
+            if email and not by_mobile
+            else set()
+        )
+
+        if len(by_mobile) == 1:
             associate_cart(
                 hubspot_access_token,
                 cart_id,
                 "contact",
-                next(iter(matching)),
+                next(iter(by_mobile)),
                 CART_CONTACT_ASSOCIATION_TYPE_ID,
             )
             contact_links += 1
-        elif len(matching) > 1:
+            contact_links_by_mobile += 1
+        elif len(by_mobile) > 1:
             ambiguous_mobile += 1
             print(
                 f"WARNING: EasyStore cart {cart_token} mobile {mobile} matches "
                 "multiple HubSpot contacts; Cart→Contact association skipped.",
                 file=sys.stderr,
             )
+        elif len(by_email) == 1:
+            associate_cart(
+                hubspot_access_token,
+                cart_id,
+                "contact",
+                next(iter(by_email)),
+                CART_CONTACT_ASSOCIATION_TYPE_ID,
+            )
+            contact_links += 1
+            contact_links_by_email += 1
+        elif len(by_email) > 1:
+            ambiguous_email += 1
+            print(
+                f"WARNING: EasyStore cart {cart_token} email {email} matches "
+                "multiple HubSpot contacts; Cart→Contact association skipped.",
+                file=sys.stderr,
+            )
+        elif mobile is None and email is None:
+            carts_without_identity += 1
+        else:
+            carts_without_a_contact += 1
 
     order_links = link_carts_to_orders(
         orders=orders,
@@ -695,6 +737,12 @@ def sync(
         "easystore_checkouts_scanned": scanned,
         "easystore_checkouts_abandoned": abandoned_carts,
         "easystore_checkouts_converted": converted_carts,
+        "easystore_checkout_status_counts": dict(
+            sorted(status_counts.items(), key=lambda item: (-item[1], item[0]))
+        ),
+        "easystore_checkout_status_field_read": (
+            "financial_status, then status/state/checkout_status"
+        ),
         "checkouts_skipped_as_completed": completed,
         "completed_checkouts_kept_as_carts": include_completed,
         "checkouts_without_cart_token": without_cart_token,
@@ -706,8 +754,20 @@ def sync(
         "hubspot_cart_line_items_updated": line_updated,
         "stale_product_backed_cart_line_items_removed": line_removed,
         "cart_contact_associations_ensured": contact_links,
+        "cart_contact_associations_by_mobile": contact_links_by_mobile,
+        "cart_contact_associations_by_email": contact_links_by_email,
         "cart_order_associations_ensured": order_links,
         "carts_with_ambiguous_contact_mobile": ambiguous_mobile,
+        "carts_with_ambiguous_contact_email": ambiguous_email,
+        "carts_with_no_shopper_identity": carts_without_identity,
+        "carts_whose_shopper_is_not_a_hubspot_contact": carts_without_a_contact,
+        "cart_contact_association_accounted_for": (
+            contact_links
+            + ambiguous_mobile
+            + ambiguous_email
+            + carts_without_identity
+            + carts_without_a_contact
+        ),
         "cart_lines_without_a_hubspot_product": unmatched_line_count,
         "carts_with_lines_without_a_hubspot_product": carts_with_unmatched_lines,
         "cart_line_skus_without_a_hubspot_product": sorted(unmatched_skus)[:25],

@@ -374,6 +374,12 @@ def _buyer_name(cart: dict[str, Any]) -> str | None:
     )
 
 
+def cart_email(cart: dict[str, Any]) -> str | None:
+    """Return the shopper email EasyStore recorded on this checkout, if any."""
+
+    return _buyer_email(cart)
+
+
 def cart_mobile(cart: dict[str, Any], fallback_dial_code: str) -> str | None:
     """Return the shopper's normalized mobile, using the CRM identity rule."""
 
@@ -407,6 +413,12 @@ SETTLED_STATUSES = frozenset(
         "voided",
         "cancelled",
         "canceled",
+        # Money moved, even if not all of it: these are conversions, not
+        # abandoned carts. "pending" is deliberately absent - a pending payment
+        # is still an unpaid cart worth recovering.
+        "partially_paid",
+        "partially_refunded",
+        "authorized",
     }
 )
 

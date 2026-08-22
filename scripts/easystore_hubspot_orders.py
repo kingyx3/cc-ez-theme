@@ -425,6 +425,11 @@ class ContactIndex(NamedTuple):
 
     by_phone: dict[str, set[str]]
     lifecycle_by_id: dict[str, str]
+    # Email is an association key only, never an identity: contacts are still
+    # created and deduplicated by normalized mobile. Abandoned checkouts often
+    # carry an email and no phone, so without this the Cart of a shopper HubSpot
+    # already knows would have nothing to associate to.
+    by_email: dict[str, set[str]] = {}
 
 
 def hubspot_contact_index(
@@ -432,11 +437,12 @@ def hubspot_contact_index(
     fallback_dial_code: str,
 ) -> ContactIndex:
     by_phone: dict[str, set[str]] = defaultdict(set)
+    by_email: dict[str, set[str]] = defaultdict(set)
     lifecycle_by_id: dict[str, str] = {}
     for contact in iter_hubspot_objects(
         HUBSPOT_CONTACTS_URL,
         access_token,
-        f"phone,mobilephone,{CONTACT_LIFECYCLE_PROPERTY}",
+        f"phone,mobilephone,email,{CONTACT_LIFECYCLE_PROPERTY}",
     ):
         contact_id = nonempty(contact.get("id"))
         properties = contact.get("properties")
@@ -449,10 +455,17 @@ def hubspot_contact_index(
             )
             if mobile:
                 by_phone[mobile].add(contact_id)
+        email = nonempty(properties.get("email"))
+        if email:
+            by_email[email.casefold()].add(contact_id)
         stage = nonempty(properties.get(CONTACT_LIFECYCLE_PROPERTY))
         if stage is not None:
             lifecycle_by_id[contact_id] = stage
-    return ContactIndex(by_phone=by_phone, lifecycle_by_id=lifecycle_by_id)
+    return ContactIndex(
+        by_phone=by_phone,
+        lifecycle_by_id=lifecycle_by_id,
+        by_email=by_email,
+    )
 
 
 def hubspot_order_index(access_token: str) -> dict[str, str]:
