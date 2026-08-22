@@ -268,35 +268,15 @@
                     <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
                     <path d="M7 10v4h3v7h4v-7h3l1 -4h-4v-2a1 1 0 0 1 1 -1h3v-4h-3a5 5 0 0 0 -5 5v2h-3" />
                   </svg>
-                {% else %}
-                  <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-social" width="20" height="20" viewBox="0 0 24 24" stroke-width="1" stroke="#000000" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                {% elsif key == 'google' %}
+                  <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-brand-google" width="20" height="20" viewBox="0 0 24 24" stroke-width="1" stroke="#000000" fill="none" stroke-linecap="round" stroke-linejoin="round">
                     <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                    <circle cx="12" cy="5" r="2" />
-                    <circle cx="5" cy="19" r="2" />
-                    <circle cx="19" cy="19" r="2" />
-                    <circle cx="12" cy="14" r="3" />
-                    <line x1="12" y1="7" x2="12" y2="11" />
-                    <line x1="6.7" y1="17.8" x2="9.5" y2="15.8" />
-                    <line x1="17.3" y1="17.8" x2="14.5" y2="15.8" />
+                    <path d="M20.945 11a9 9 0 1 1 -3.284 -5.997l-2.655 2.099a5.5 5.5 0 1 0 2.24 6.794h-5.246v-2.896h8.945z" />
                   </svg>
                 {% endif %}
-
-                {% if key == 'phone' %}
-                	{{ 'customer.addresses.phone' | t | capitalize }}
-                {% else %}
-                	{{ key | capitalize }}
-                {% endif %}
-              </strong>
-              <p>
-                {{ value.account }}
-                <br>
-                {% if value.is_verified %}
-                  <span style="color: green;">{{ 'customer.details.verified' | t }}</span>
-                {% else %}
-                  {% comment %} <a style="cursor: pointer;" href="/account/request-verify?customer_id={{ customer.id }}&method={{ key }}">Verify now</a> {% endcomment %}
-                  <button type="button" id="request-verify-{{ customer.id }}" class="link" data-theme-action="request-verification" data-customer-id="{{ customer.id }}" data-verification-method="{{ key | escape }}">{{ 'customer.details.verify_now' | t }}</button>
-                {% endif %}
-              </p>
+                {{ key | capitalize }}
+              </strong><br>
+              {{ value.identifier }}
             </div>
           </div>
           {% endif %}
@@ -304,100 +284,41 @@
       </div>
     </div>
   </div>
-
 </form>
-
-
-<style>
-  .grid__item .card-box{
-    height: 100%;
-  }
-</style>
-
 
 {{ 'flatpickr.min.css' | asset_url | stylesheet_tag }}
 {{ 'flatpickr.min.js' | asset_url | script_tag }}
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    var detailsForm = document.getElementById('details_form');
+    if (!detailsForm) return;
 
-<script type="text/javascript">
+    detailsForm.addEventListener('click', function (event) {
+      var action = event.target.closest('[data-theme-action]');
+      if (!action) return;
 
-  let this_el = document.querySelector.bind(document)
-
-  function viewChangePW(){
-    this_el(".change_password").style.display = this_el(".change_password").style.display == "none" ? "block" : "none";
-    this_el(".confirm_password").style.display = this_el(".confirm_password").style.display == "none" ? "block" : "none";
-  }
-
-  async function requestVerify(customer_id, method) {
-
-    if(method == 'email') {
-      this_el(`#request-verify-${customer_id}`).style.display = "none";
-      this_el('#EmailVerify').style.display = "block";
-    }
-
-    const params = { '_token': '{% csrf %}', 'customer_id': customer_id, 'method': method };
-
-    // Verification email: run reCAPTCHA, mint a captcha_proof bound to the
-    // customer's email, and send it in the POST body (never the query string, so
-    // the proof isn't exposed via access logs or Referer). Fail open on the
-    // client (send without a proof) — the API decides whether a proof is
-    // required via the store flag.
-    if (method == 'email') {
-      try {
-        if (window.grecaptcha && grecaptcha.enterprise) {
-          const identity = (document.getElementById('verify-email-identity') || {}).value || '';
-          const token = await grecaptcha.enterprise.execute('6LdMNdIqAAAAALegJp7y4weVcCIlnwmIN8TWseEF', { action: 'VERIFY_EMAIL' });
-          const res = await fetch('/account/captcha-proof', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': '{% csrf %}' },
-            body: JSON.stringify({ '_token': '{% csrf %}', 'identity': identity, 'captcha_token': token })
-          });
-          const data = await res.json();
-          if (data && data.captcha_proof) {
-            params.captcha_proof = data.captcha_proof;
-          }
-        }
-      } catch (e) { /* fail open */ }
-    }
-
-    fetch('/account/request-verify', {
-      method: 'POST',
-      headers: { 'Accept': 'application/json' },
-      body: new URLSearchParams(params)
-    })
-    .then(response => response.json())
-    .then((res) => {
-      if(res.redirect_to) {
-        window.location.replace(res.redirect_to)
+      var themeAction = action.getAttribute('data-theme-action');
+      if (themeAction === 'history-back') {
+        event.preventDefault();
+        history.back();
+        return;
       }
-    })
-  }
 
-  flatpickr.localize({% include 'flatpickr-locale' %})
-
-  let input_birthdate = flatpickr("#DetailBirthdate",{
-    maxDate: "today",
-    disableMobile: "true"
+      if (themeAction === 'toggle-password-form') {
+        event.preventDefault();
+        var passwordForm = detailsForm.querySelector('.confirm_password');
+        if (!passwordForm) return;
+        passwordForm.style.display = passwordForm.style.display === 'none' ? '' : 'none';
+      }
+    });
   });
 
+  flatpickr.localize({% include 'flatpickr-locale' %})
   flatpickr(".input-datepicker",{
     disableMobile: "true",
     allowInput:true
   });
-
-  var customer_attributes = {{ customer.attributes | json }};
-  var attribute_settings = {{ shop.attribute_settings | json }};
-  if(typeof customer_attributes == 'object' && typeof attribute_settings == 'object'){
-    attribute_settings.forEach(function (attribute_setting) {
-      customer_attributes.forEach(function (customer_attribute) {
-        if(customer_attribute.customer_attribute_setting_id == attribute_setting.id) {
-          document.querySelector('#DetailAttribute' + attribute_setting.id).value = customer_attribute.value;
-        }
-      });
-    });
-  }
 </script>
-
-{% app_snippet 'account/content_bottom' %}
 
 {% comment %}
   Fills and hides the Cloudflare "Click ID" customer attribute rendered by
