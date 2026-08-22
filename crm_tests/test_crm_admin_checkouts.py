@@ -208,6 +208,18 @@ class AdminCollectionPaginationTests(unittest.TestCase):
         self.assertEqual(read.pages_read, admin.ADMIN_PAGE_CEILING)
 
 
+class AdminEnvironmentTokenTests(unittest.TestCase):
+    def test_reads_the_dedicated_admin_token_from_the_renamed_variable(self) -> None:
+        with mock.patch.dict(
+            admin.os.environ, {"EASYSTORE_ADMIN_TOKEN": "admin-token"}, clear=True
+        ):
+            self.assertEqual(admin.admin_access_token_from_environment(), "admin-token")
+
+    def test_missing_the_renamed_variable_returns_none(self) -> None:
+        with mock.patch.dict(admin.os.environ, {}, clear=True):
+            self.assertIsNone(admin.admin_access_token_from_environment())
+
+
 class AdminRecordShapeTests(unittest.TestCase):
     """The admin record is renamed into the shape the Cart writer already reads."""
 
