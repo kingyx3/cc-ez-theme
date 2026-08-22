@@ -68,6 +68,9 @@ ORDER_OBJECT_TYPE = "order"
 LINE_ITEM_OBJECT_TYPE = "line_items"
 ORDER_EXTERNAL_ID_PROPERTY = "easystore_order_id"
 CONTACT_LIFECYCLE_PROPERTY = "lifecyclestage"
+# Written onto contacts by the customer stage; it has no native HubSpot
+# equivalent, so the provisioned name is stable across portals.
+CONTACT_EASYSTORE_ID_PROPERTY = "easystore_customer_id"
 LIFECYCLE_CUSTOMER = "customer"
 
 # HubSpot refuses to move a contact backwards through the default lifecycle
@@ -430,6 +433,10 @@ class ContactIndex(NamedTuple):
     # carry an email and no phone, so without this the Cart of a shopper HubSpot
     # already knows would have nothing to associate to.
     by_email: dict[str, set[str]] = {}
+    # The EasyStore customer ID the customer stage wrote onto each contact. A
+    # store without guest checkout can associate on this directly, rather than
+    # inferring the shopper from what they typed at checkout.
+    by_easystore_customer_id: dict[str, set[str]] = {}
 
 
 def hubspot_contact_index(
@@ -438,11 +445,13 @@ def hubspot_contact_index(
 ) -> ContactIndex:
     by_phone: dict[str, set[str]] = defaultdict(set)
     by_email: dict[str, set[str]] = defaultdict(set)
+    by_customer_id: dict[str, set[str]] = defaultdict(set)
     lifecycle_by_id: dict[str, str] = {}
     for contact in iter_hubspot_objects(
         HUBSPOT_CONTACTS_URL,
         access_token,
-        f"phone,mobilephone,email,{CONTACT_LIFECYCLE_PROPERTY}",
+        "phone,mobilephone,email,"
+        f"{CONTACT_EASYSTORE_ID_PROPERTY},{CONTACT_LIFECYCLE_PROPERTY}",
     ):
         contact_id = nonempty(contact.get("id"))
         properties = contact.get("properties")
@@ -458,6 +467,9 @@ def hubspot_contact_index(
         email = nonempty(properties.get("email"))
         if email:
             by_email[email.casefold()].add(contact_id)
+        easystore_id = nonempty(properties.get(CONTACT_EASYSTORE_ID_PROPERTY))
+        if easystore_id:
+            by_customer_id[easystore_id].add(contact_id)
         stage = nonempty(properties.get(CONTACT_LIFECYCLE_PROPERTY))
         if stage is not None:
             lifecycle_by_id[contact_id] = stage
@@ -465,6 +477,7 @@ def hubspot_contact_index(
         by_phone=by_phone,
         lifecycle_by_id=lifecycle_by_id,
         by_email=by_email,
+        by_easystore_customer_id=by_customer_id,
     )
 
 

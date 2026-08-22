@@ -25,6 +25,14 @@ abandoned-cart funnel, and it is flagged as such on the Cart itself. A paid or
 converted session is skipped, because the Order stage already carries it and a
 Cart alongside it would double-count the revenue.
 
+The unpaid subset is narrowed once more, to the sessions that are actually
+recoverable: holding line items and naming a shopper. This collection is not
+EasyStore's abandoned checkout list - it is every session the storefront ever
+opened. Run 32539291543 answered 1267 records where the admin list showed 15,
+717 of them holding line items and 41 carrying an email; the rest are anonymous
+browse sessions with nothing in them and nobody to send them to. Each exclusion
+is counted in the run summary rather than passed over silently.
+
 Observed reality of this collection, and the reason every Cart in the CRM reads
 ``unpaid``: ``checkouts.json`` serves open sessions only. It carries no
 ``status``, ``completed_at`` or ``order_id`` field at all - ``financial_status``
@@ -76,7 +84,7 @@ from urllib.parse import quote, urlencode
 
 import easystore_hubspot_commerce as commerce
 from easystore_hubspot_orders import SyncError, _http_json, _shop_domain
-from easystore_hubspot_schema import nonempty
+from easystore_hubspot_schema import nonempty, observed_keys
 
 
 EASYSTORE_CHECKOUT_COLLECTION_PATH = "/api/3.0/checkouts.json"
@@ -102,6 +110,17 @@ HUBSPOT_CART_PROPERTIES_PATH = "/crm/v3/properties/cart"
 # Only a transport-level failure moves on to the next size, and each size starts
 # again from page 1, so a snapshot is never stitched together from two of them.
 CHECKOUT_PAGE_SIZES = (250, 50, 1)
+
+# This store has no guest checkout, so every session belongs to a known
+# customer and Cart->Contact should be an ID lookup rather than a guess at what
+# the shopper typed. The collection payload names no customer, though: run
+# 32539291543 observed 18 keys across 1267 records and none of them referenced
+# one. So a couple of recoverable sessions are probed on the detail route and
+# what it answers with is reported, which settles whether a direct link is
+# available without anyone reading the API by hand. The probe is diagnostic
+# only: it never fails the stage, and hydrating the whole collection from a
+# route this unreliable is not on the table.
+CHECKOUT_CUSTOMER_PROBE_LIMIT = 2
 
 # Patience is the whole strategy against an endpoint this unreliable. Four
 # attempts of 60s per page size costs about twelve minutes in the worst case,
@@ -158,6 +177,8 @@ class CheckoutSnapshot:
     pagination: str = "the collection ended short of the limit it asked for"
     complete: bool = True
     completeness: str = "the collection ended short of the limit it asked for"
+    detail_keys: tuple[str, ...] = ()
+    customer_reference: str = "not probed"
 
 
 def _short(error: BaseException) -> str:
@@ -466,6 +487,75 @@ def _prove_complete_collection(
     )
 
 
+def _probe_customer_reference(
+    domain: str,
+    access_token: str,
+    records: tuple[dict[str, Any], ...],
+) -> tuple[tuple[str, ...], str]:
+    """Report whether EasyStore names the customer a Checkout belongs to.
+
+    The collection payload does not. If the detail route does, Cart→Contact can
+    be an EasyStore customer ID lookup instead of a match on the email or phone
+    the shopper typed, which is what a store without guest checkout should have.
+    Only a couple of sessions worth associating are probed, and any failure is
+    reported rather than raised: this answers a question, it does not sync.
+    """
+
+    if any(commerce.checkout_customer_id(record) is not None for record in records):
+        return (), "the checkout collection names the customer directly"
+
+    keys: set[str] = set()
+    probed = 0
+    named = 0
+    for record in records:
+        if probed >= CHECKOUT_CUSTOMER_PROBE_LIMIT:
+            break
+        cart_token = commerce.checkout_cart_token(record)
+        if cart_token is None or not record.get("line_items"):
+            continue
+        if (
+            commerce.cart_mapping.cart_email(record) is None
+            and commerce.cart_mapping.cart_mobile(record, "65") is None
+        ):
+            # An anonymous browse session would not name a customer either way.
+            continue
+
+        probed += 1
+        path = EASYSTORE_CHECKOUT_DETAIL_PATH.format(
+            cart_token=quote(cart_token, safe="")
+        )
+        try:
+            detail = _checkout_detail(
+                _checkout_get(
+                    f"https://{domain}{path}",
+                    access_token,
+                    what=f"EasyStore checkout {cart_token} detail",
+                ),
+                cart_token,
+            )
+        except (SyncError, CheckoutSourceUnavailable) as error:
+            return tuple(sorted(keys)), (
+                f"the detail route did not answer the probe: {_short(error)}"
+            )
+        observed_keys(keys, detail)
+        if commerce.checkout_customer_id(detail) is not None:
+            named += 1
+
+    if probed == 0:
+        return (), "no recoverable checkout was available to probe"
+    if named:
+        return tuple(sorted(keys)), (
+            f"the checkout detail route names the customer on {named} of "
+            f"{probed} probed session(s), so Cart→Contact can be associated on "
+            "the EasyStore customer ID"
+        )
+    return tuple(sorted(keys)), (
+        f"neither the collection nor the detail route named a customer on "
+        f"{probed} probed session(s), so Cart→Contact resolves on the email or "
+        "mobile the shopper gave at checkout"
+    )
+
+
 def read_checkout_snapshot(
     store_domain: str,
     access_token: str,
@@ -521,10 +611,16 @@ def read_checkout_snapshot(
             completed.append(checkout)
             details_fetched += int(fetched)
 
+        detail_keys, customer_reference = _probe_customer_reference(
+            domain, access_token, tuple(completed)
+        )
+
         return CheckoutSnapshot(
             records=tuple(completed),
             pages_read=pages_read,
             details_fetched=details_fetched,
+            detail_keys=detail_keys,
+            customer_reference=customer_reference,
             page_size=page_size,
             attempts=tuple(attempts),
             page_parameter_honored=page_honored,
@@ -722,6 +818,8 @@ def sync(
             "easystore_checkout_pages_read": snapshot.pages_read,
             "easystore_checkout_details_fetched": snapshot.details_fetched,
             "easystore_checkouts_buffered": len(snapshot.records),
+            "easystore_checkout_customer_reference": snapshot.customer_reference,
+            "easystore_checkout_detail_keys_seen": list(snapshot.detail_keys),
             "easystore_checkouts_abandoned_or_open": abandoned,
             "easystore_checkouts_completed_or_paid": len(snapshot.records) - abandoned,
             "hubspot_cart_upserts_skipped": False,

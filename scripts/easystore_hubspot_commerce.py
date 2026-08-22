@@ -43,6 +43,7 @@ from easystore_hubspot_orders import (
 )
 from easystore_hubspot_schema import (
     describe_mapping,
+    first_present,
     iter_easystore_pages,
     nonempty,
     observed_keys,
@@ -63,6 +64,24 @@ def checkout_cart_token(checkout: dict[str, Any]) -> str | None:
     """Return EasyStore's unique cart identity and nothing else."""
 
     return nonempty(checkout.get("cart_token"))
+
+
+def checkout_customer_id(checkout: dict[str, Any]) -> str | None:
+    """Return the EasyStore customer this Checkout belongs to, if it says.
+
+    A store without guest checkout knows who every session belongs to, so this
+    is the association the CRM wants: an identity EasyStore assigned, not an
+    email a shopper typed into a form. The observed ``checkouts.json`` payload
+    does not carry it, hence the detail probe in the checkout stage; the lookup
+    is written here so the link works the moment a reference does appear.
+    """
+
+    customer = checkout.get("customer")
+    if isinstance(customer, dict):
+        found = first_present(customer, ("id", "customer_id"))
+        if found is not None:
+            return found
+    return first_present(checkout, ("customer_id", "easystore_customer_id"))
 
 
 def checkout_status(checkout: dict[str, Any]) -> str | None:
@@ -512,6 +531,7 @@ def sync(
     fallback_dial_code: str,
     checkouts: Sequence[dict[str, Any]] | None = None,
     include_completed: bool = False,
+    recoverable_only: bool = True,
     cart_schema_object_type: str | None = None,
 ) -> dict[str, Any]:
     """Perform the corrected EasyStore Checkout → HubSpot Cart sync.
@@ -523,6 +543,11 @@ def sync(
     ``include_completed`` keeps paid and converted Checkouts as Carts, which is
     what HubSpot's Cart object models: a shopping session, abandoned or not. With
     it off, only the abandoned subset becomes a Cart.
+
+    ``recoverable_only`` keeps the abandoned-cart funnel to sessions that hold
+    line items and name a shopper, which is what EasyStore's own abandoned
+    checkout list shows. Turning it off writes a Cart for every session the API
+    served, empty and anonymous ones included.
 
     ``cart_schema_object_type`` overrides the object type used for the Cart
     property schema, because HubSpot's schema API is singular (``cart``) while
@@ -572,6 +597,7 @@ def sync(
 
     validated: list[tuple[dict[str, Any], str, dict[str, dict[str, str]], bool]] = []
     scanned = completed = without_cart_token = 0
+    without_lines = without_buyer = 0
     abandoned_carts = converted_carts = 0
     carts_with_unmatched_lines = unmatched_line_count = 0
     unmatched_skus: set[str] = set()
@@ -608,6 +634,24 @@ def sync(
             without_cart_token += 1
             continue
 
+        # checkouts.json serves every session the storefront ever opened, not
+        # the recoverable carts EasyStore's admin lists: run 32539291543
+        # answered 1267 records where the admin showed 15, and only 41 of them
+        # carried an email at all. A session is worth a Cart when there is
+        # something in it and someone to send it to; the rest are anonymous
+        # browse sessions and are counted rather than written.
+        if recoverable_only:
+            if not (isinstance(lines, list) and lines):
+                without_lines += 1
+                continue
+            if (
+                checkout_customer_id(checkout) is None
+                and cart_mapping.cart_email(checkout) is None
+                and cart_mapping.cart_mobile(checkout, fallback_dial_code) is None
+            ):
+                without_buyer += 1
+                continue
+
         values = cart_mapping.cart_field_values(checkout, fallback_dial_code)
         if checkout_status(checkout) is not None:
             values.setdefault("status", checkout_status(checkout) or "")
@@ -631,8 +675,17 @@ def sync(
 
     existing = hubspot_cart_index(hubspot_access_token)
     hubspot_orders = hubspot_order_index(hubspot_access_token)
+    # Carts HubSpot holds that this run did not qualify: earlier runs' records,
+    # and sessions that have since left the source collection. Nothing is
+    # deleted here - a Cart is only ever written or left alone - so this is
+    # reported for the operator to act on, not acted on.
+    qualified_tokens = {token for _, token, _, _ in validated}
+    unqualified_existing = sum(
+        1 for token in existing if token not in qualified_tokens
+    )
     created = updated = migrated = 0
     contact_links = ambiguous_mobile = ambiguous_email = 0
+    contact_links_by_customer = 0
     contact_links_by_mobile = contact_links_by_email = 0
     carts_without_identity = carts_without_a_contact = 0
     line_created = line_updated = line_removed = 0
@@ -677,16 +730,34 @@ def sync(
         # linked, ambiguous, no identity to match on, or an identity HubSpot has
         # no contact for. Those five counts add up to the Carts written, which is
         # what makes "the association is working" checkable rather than assumed.
+        customer_id = checkout_customer_id(checkout)
         mobile = cart_mapping.cart_mobile(checkout, fallback_dial_code)
         email = cart_mapping.cart_email(checkout)
-        by_mobile = contacts.by_phone.get(mobile, set()) if mobile else set()
+        by_customer = (
+            contacts.by_easystore_customer_id.get(customer_id, set())
+            if customer_id
+            else set()
+        )
+        by_mobile = (
+            contacts.by_phone.get(mobile, set()) if mobile and not by_customer else set()
+        )
         by_email = (
             contacts.by_email.get(email.casefold(), set())
-            if email and not by_mobile
+            if email and not by_customer and not by_mobile
             else set()
         )
 
-        if len(by_mobile) == 1:
+        if len(by_customer) == 1:
+            associate_cart(
+                hubspot_access_token,
+                cart_id,
+                "contact",
+                next(iter(by_customer)),
+                CART_CONTACT_ASSOCIATION_TYPE_ID,
+            )
+            contact_links += 1
+            contact_links_by_customer += 1
+        elif len(by_mobile) == 1:
             associate_cart(
                 hubspot_access_token,
                 cart_id,
@@ -720,7 +791,7 @@ def sync(
                 "multiple HubSpot contacts; Cart→Contact association skipped.",
                 file=sys.stderr,
             )
-        elif mobile is None and email is None:
+        elif customer_id is None and mobile is None and email is None:
             carts_without_identity += 1
         else:
             carts_without_a_contact += 1
@@ -746,6 +817,11 @@ def sync(
         "checkouts_skipped_as_completed": completed,
         "completed_checkouts_kept_as_carts": include_completed,
         "checkouts_without_cart_token": without_cart_token,
+        "checkouts_without_line_items": without_lines,
+        "checkouts_without_a_contactable_buyer": without_buyer,
+        "easystore_checkouts_recoverable": len(validated),
+        "abandoned_cart_filter_applied": recoverable_only,
+        "hubspot_carts_not_qualified_by_this_run": unqualified_existing,
         "easystore_orders_scanned_for_cart_links": len(orders),
         "hubspot_carts_created": created,
         "hubspot_carts_updated": updated,
@@ -754,6 +830,7 @@ def sync(
         "hubspot_cart_line_items_updated": line_updated,
         "stale_product_backed_cart_line_items_removed": line_removed,
         "cart_contact_associations_ensured": contact_links,
+        "cart_contact_associations_by_easystore_customer_id": contact_links_by_customer,
         "cart_contact_associations_by_mobile": contact_links_by_mobile,
         "cart_contact_associations_by_email": contact_links_by_email,
         "cart_order_associations_ensured": order_links,

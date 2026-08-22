@@ -256,6 +256,7 @@ class CartOrderAssociationRegressionTests(unittest.TestCase):
             "cart_token": "cart-uuid",
             "financial_status": "unpaid",
             "currency_code": "SGD",
+            "email": "shopper@example.com",
             "line_items": [
                 {
                     "sku": "SKU-A",
@@ -271,7 +272,9 @@ class CartOrderAssociationRegressionTests(unittest.TestCase):
             upserts.append((existing_id, properties))
             return "cart-hs", False
 
-        contact_index = SimpleNamespace(by_phone={}, by_email={}, lifecycle_by_id={})
+        contact_index = SimpleNamespace(
+            by_phone={}, by_email={}, by_easystore_customer_id={}, lifecycle_by_id={}
+        )
         with mock.patch.object(
             carts, "cart_object_available", lambda *_: True
         ), mock.patch.object(
@@ -439,6 +442,7 @@ class UnpaidCartSubsetTests(unittest.TestCase):
         return {
             "cart_token": token,
             "currency_code": "SGD",
+            "email": f"{token}@example.com",
             "line_items": [
                 {"sku": "SKU-A", "product_name": "Alpha", "quantity": 1, "price": "10"}
             ],
@@ -452,7 +456,9 @@ class UnpaidCartSubsetTests(unittest.TestCase):
             upserted.append(properties)
             return f"cart-{len(upserted)}", True
 
-        contact_index = SimpleNamespace(by_phone={}, by_email={}, lifecycle_by_id={})
+        contact_index = SimpleNamespace(
+            by_phone={}, by_email={}, by_easystore_customer_id={}, lifecycle_by_id={}
+        )
         with mock.patch.object(
             carts, "cart_object_available", lambda *_: True
         ), mock.patch.object(
@@ -552,9 +558,14 @@ class CartContactAssociationConsistencyTests(unittest.TestCase):
 
     @staticmethod
     def _checkout(token: str, **extra: object) -> dict:
-        return {"cart_token": token, "line_items": [], "financial_status": "unpaid", **extra}
+        return {
+            "cart_token": token,
+            "financial_status": "unpaid",
+            "line_items": [{"sku": "SKU-A", "quantity": 1, "price": "10"}],
+            **extra,
+        }
 
-    def _run(self, checkouts: list[dict], contacts) -> tuple[dict, list[tuple]]:
+    def _run(self, checkouts: list[dict], contacts, **kwargs) -> tuple[dict, list[tuple]]:
         links: list[tuple] = []
         counter = {"n": 0}
 
@@ -599,6 +610,7 @@ class CartContactAssociationConsistencyTests(unittest.TestCase):
                 easystore_access_token="es",
                 hubspot_access_token="hs",
                 fallback_dial_code="65",
+                **kwargs,
             )
         return summary, links
 
@@ -606,6 +618,7 @@ class CartContactAssociationConsistencyTests(unittest.TestCase):
         contacts = SimpleNamespace(
             by_phone={},
             by_email={"shopper@example.com": {"contact-9"}},
+            by_easystore_customer_id={},
             lifecycle_by_id={},
         )
         summary, links = self._run(
@@ -624,6 +637,7 @@ class CartContactAssociationConsistencyTests(unittest.TestCase):
         contacts = SimpleNamespace(
             by_phone={"+6591234567": {"by-phone"}},
             by_email={"shopper@example.com": {"by-email"}},
+            by_easystore_customer_id={},
             lifecycle_by_id={},
         )
         summary, links = self._run(
@@ -643,6 +657,7 @@ class CartContactAssociationConsistencyTests(unittest.TestCase):
         contacts = SimpleNamespace(
             by_phone={},
             by_email={"shared@example.com": {"contact-1", "contact-2"}},
+            by_easystore_customer_id={},
             lifecycle_by_id={},
         )
         summary, links = self._run(
@@ -660,6 +675,7 @@ class CartContactAssociationConsistencyTests(unittest.TestCase):
                 "known@example.com": {"c-email"},
                 "shared@example.com": {"c-x", "c-y"},
             },
+            by_easystore_customer_id={},
             lifecycle_by_id={},
         )
         summary, links = self._run(
@@ -672,6 +688,7 @@ class CartContactAssociationConsistencyTests(unittest.TestCase):
                 self._checkout("c6", email="stranger@example.com"),
             ],
             contacts,
+            recoverable_only=False,
         )
 
         self.assertEqual(len(links), 2)
@@ -708,6 +725,193 @@ class CartContactAssociationConsistencyTests(unittest.TestCase):
         self.assertIn("email", requested[0])
         self.assertEqual(index.by_email["shopper@example.com"], {"contact-1"})
         self.assertEqual(index.by_phone["+6591234567"], {"contact-1"})
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+
+class RecoverableCartFilterTests(unittest.TestCase):
+    """1267 API records against 15 in EasyStore's own abandoned checkout list.
+
+    ``checkouts.json`` serves every session the storefront opened, most of them
+    anonymous or empty: of the 1267 in run 32539291543, 717 held line items and
+    41 carried an email. EasyStore's admin list is the recoverable subset - it
+    has a billing name, email, phone and item columns on every row - so a Cart
+    is written only when there is something in it and someone to send it to.
+    """
+
+    def _run(self, checkouts: list[dict], **kwargs) -> tuple[dict, list[str]]:
+        written: list[str] = []
+
+        def fake_upsert(_token, _existing_id, properties):
+            written.append(properties["hs_external_cart_id"])
+            return f"cart-{len(written)}", True
+
+        contacts = SimpleNamespace(
+            by_phone={}, by_email={}, by_easystore_customer_id={}, lifecycle_by_id={}
+        )
+        with mock.patch.object(
+            carts, "cart_object_available", lambda *_: True
+        ), mock.patch.object(
+            carts, "iter_orders_for_cart_links", lambda *a, **k: iter(())
+        ), mock.patch.object(
+            carts, "iter_documented_checkouts", lambda *a, **k: iter(checkouts)
+        ), mock.patch.object(
+            carts, "hubspot_contact_index", lambda *a, **k: contacts
+        ), mock.patch.object(
+            carts,
+            "resolve_fields",
+            lambda **k: dict(carts.cart_mapping.DEFAULT_CART_FIELD_PROPERTIES),
+        ), mock.patch.object(
+            carts, "resolve_line_item_fields", lambda *a, **k: {}
+        ), mock.patch.object(
+            carts, "hubspot_product_index", lambda *a, **k: {}
+        ), mock.patch.object(
+            carts, "hubspot_cart_index", lambda *a, **k: {"already-there": "cart-old"}
+        ), mock.patch.object(
+            carts, "hubspot_order_index", lambda *a, **k: {}
+        ), mock.patch.object(
+            carts, "upsert_cart", fake_upsert
+        ), mock.patch.object(
+            carts, "associate_cart", lambda *a, **k: None
+        ), mock.patch.object(
+            carts, "sync_cart_line_items", lambda **k: (0, 0, 0)
+        ), mock.patch.object(
+            carts, "link_carts_to_orders", lambda **k: 0
+        ):
+            summary = carts.sync(
+                store_domain="shop.example",
+                easystore_access_token="es",
+                hubspot_access_token="hs",
+                fallback_dial_code="65",
+                **kwargs,
+            )
+        return summary, written
+
+    @staticmethod
+    def _sessions() -> list[dict]:
+        line = [{"sku": "SKU-A", "quantity": 1, "price": "10"}]
+        return [
+            {"cart_token": "real", "email": "shopper@example.com", "line_items": line},
+            {"cart_token": "empty-cart", "email": "shopper@example.com", "line_items": []},
+            {"cart_token": "anonymous", "line_items": line},
+        ]
+
+    def test_only_a_cart_with_items_and_a_shopper_is_written(self) -> None:
+        summary, written = self._run(self._sessions())
+
+        self.assertEqual(written, ["real"])
+        self.assertEqual(summary["easystore_checkouts_scanned"], 3)
+        self.assertEqual(summary["easystore_checkouts_recoverable"], 1)
+        self.assertEqual(summary["checkouts_without_line_items"], 1)
+        self.assertEqual(summary["checkouts_without_a_contactable_buyer"], 1)
+        self.assertTrue(summary["abandoned_cart_filter_applied"])
+
+    def test_carts_left_over_from_earlier_runs_are_reported_not_deleted(self) -> None:
+        summary, _ = self._run(self._sessions())
+
+        self.assertEqual(summary["hubspot_carts_not_qualified_by_this_run"], 1)
+        self.assertEqual(summary["stale_product_backed_cart_line_items_removed"], 0)
+
+    def test_the_filter_can_be_turned_off(self) -> None:
+        summary, written = self._run(self._sessions(), recoverable_only=False)
+
+        self.assertEqual(sorted(written), ["anonymous", "empty-cart", "real"])
+        self.assertEqual(summary["checkouts_without_line_items"], 0)
+        self.assertFalse(summary["abandoned_cart_filter_applied"])
+
+
+class DirectCustomerAssociationTests(unittest.TestCase):
+    """A store without guest checkout should not have to guess the shopper."""
+
+    def test_an_easystore_customer_id_is_read_from_either_shape(self) -> None:
+        self.assertEqual(carts.checkout_customer_id({"customer_id": 4321}), "4321")
+        self.assertEqual(
+            carts.checkout_customer_id({"customer": {"id": 4321}}), "4321"
+        )
+        self.assertIsNone(carts.checkout_customer_id({"email": "a@b.co"}))
+
+    def test_the_customer_id_wins_over_the_typed_email_and_phone(self) -> None:
+        links: list[str] = []
+        contacts = SimpleNamespace(
+            by_phone={"+6591234567": {"by-phone"}},
+            by_email={"typed@example.com": {"by-email"}},
+            by_easystore_customer_id={"4321": {"by-customer-id"}},
+            lifecycle_by_id={},
+        )
+        checkout = {
+            "cart_token": "cart-1",
+            "customer": {"id": 4321},
+            "email": "typed@example.com",
+            "phone": "91234567",
+            "line_items": [{"sku": "SKU-A", "quantity": 1, "price": "10"}],
+        }
+
+        with mock.patch.object(
+            carts, "cart_object_available", lambda *_: True
+        ), mock.patch.object(
+            carts, "iter_orders_for_cart_links", lambda *a, **k: iter(())
+        ), mock.patch.object(
+            carts, "iter_documented_checkouts", lambda *a, **k: iter((checkout,))
+        ), mock.patch.object(
+            carts, "hubspot_contact_index", lambda *a, **k: contacts
+        ), mock.patch.object(
+            carts,
+            "resolve_fields",
+            lambda **k: dict(carts.cart_mapping.DEFAULT_CART_FIELD_PROPERTIES),
+        ), mock.patch.object(
+            carts, "resolve_line_item_fields", lambda *a, **k: {}
+        ), mock.patch.object(
+            carts, "hubspot_product_index", lambda *a, **k: {}
+        ), mock.patch.object(
+            carts, "hubspot_cart_index", lambda *a, **k: {}
+        ), mock.patch.object(
+            carts, "hubspot_order_index", lambda *a, **k: {}
+        ), mock.patch.object(
+            carts, "upsert_cart", lambda *a, **k: ("cart-hs", True)
+        ), mock.patch.object(
+            carts,
+            "associate_cart",
+            lambda _t, _c, _type, object_id, _id: links.append(object_id),
+        ), mock.patch.object(
+            carts, "sync_cart_line_items", lambda **k: (0, 0, 0)
+        ), mock.patch.object(
+            carts, "link_carts_to_orders", lambda **k: 0
+        ):
+            summary = carts.sync(
+                store_domain="shop.example",
+                easystore_access_token="es",
+                hubspot_access_token="hs",
+                fallback_dial_code="65",
+            )
+
+        self.assertEqual(links, ["by-customer-id"])
+        self.assertEqual(
+            summary["cart_contact_associations_by_easystore_customer_id"], 1
+        )
+        self.assertEqual(summary["cart_contact_associations_by_email"], 0)
+        self.assertEqual(summary["cart_contact_associations_by_mobile"], 0)
+
+    def test_the_contact_index_reads_the_easystore_customer_id(self) -> None:
+        def fake_objects(_url, _token, properties):
+            self.assertIn(orders.CONTACT_EASYSTORE_ID_PROPERTY, properties)
+            return iter(
+                (
+                    {
+                        "id": "contact-1",
+                        "properties": {
+                            orders.CONTACT_EASYSTORE_ID_PROPERTY: "4321",
+                            "email": "shopper@example.com",
+                        },
+                    },
+                )
+            )
+
+        with mock.patch.object(orders, "iter_hubspot_objects", fake_objects):
+            index = orders.hubspot_contact_index("hs", "65")
+
+        self.assertEqual(index.by_easystore_customer_id["4321"], {"contact-1"})
 
 
 if __name__ == "__main__":
