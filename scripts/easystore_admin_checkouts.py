@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read EasyStore's real abandoned checkout list from its admin API.
+"""Read EasyStore's abandoned checkout list from its admin API.
 
 The public ``/api/3.0/checkouts.json`` route is not the abandoned checkout list
 the EasyStore admin shows. It serves every session the storefront ever opened:
@@ -20,14 +20,16 @@ The admin route the EasyStore UI itself calls does better on every count:
   one. The public payload has no such field, which is why every Cart it produced
   read ``unpaid``.
 
-What it does not carry is line items, so those are hydrated per ``cart_token``
-from the documented detail route - a bounded cost at this collection size.
+The two EasyStore API surfaces deliberately use different credentials. Public
+``/api/3.0`` requests use ``EASYSTORE_ACCESS_TOKEN`` elsewhere in the sync;
+``api.easystore.co/admin/v2`` requests in this module use only
+``EASYSTORE_ADMIN_TOKEN``. The public token is never sent to the admin host.
 
-Authentication is the open question this module is written to answer rather than
-assume. The route was observed from an authenticated admin session, so it may
-not accept the app access token the public API uses. Each candidate scheme is
-tried in turn and the outcome of each is reported; a route that will not
-authenticate is not fatal, it simply leaves the public collection in place.
+The admin checkout collection does not include line items. Admin records are
+therefore carried to HubSpot without re-fetching the same cart through the
+public Checkout detail route. They are marked as having unavailable line items
+so existing HubSpot Cart Line Items are preserved instead of being deleted on
+an empty read.
 
 Only Python's standard library is used.
 """
@@ -48,6 +50,7 @@ from easystore_hubspot_schema import nonempty
 ADMIN_CHECKOUTS_URL = "https://api.easystore.co/admin/v2/store/checkouts"
 ADMIN_PAGE_SIZE = 50
 ADMIN_SORT = "created_at.desc"
+LINE_ITEMS_UNAVAILABLE_KEY = "easystore_line_items_unavailable"
 
 # A backstop, not an expectation: this collection is the abandoned-cart list, so
 # 2000 records is already far past anything a store should hold. It exists so a
@@ -61,8 +64,8 @@ ADMIN_READ_TIMEOUT_SECONDS = 30
 ADMIN_READ_RETRIES = 2
 
 # Statuses that mean "this credential is not accepted here", as opposed to a
-# transport failure. They rule out one authentication scheme rather than the
-# whole route.
+# transport failure. They rule out one authentication header shape rather than
+# the whole route.
 UNAUTHORIZED_STATUSES = {401, 403, 404}
 
 
@@ -95,19 +98,27 @@ def _authentication_schemes(
     access_token: str,
     admin_access_token: str | None,
 ) -> tuple[tuple[str, dict[str, str]], ...]:
-    """Return each credential and header shape to try, in order.
+    """Return admin-token header shapes to try.
 
-    A dedicated admin token is tried first when one is configured, because a
-    store that needed one has said so explicitly.
+    ``access_token`` remains in the signature because the checkout sync already
+    passes it for the public API, but it is intentionally ignored here. The
+    admin host must only ever receive ``EASYSTORE_ADMIN_TOKEN``.
     """
 
-    schemes: list[tuple[str, dict[str, str]]] = []
-    for label, token in (("admin token", admin_access_token), ("app token", access_token)):
-        if not token:
-            continue
-        schemes.append((f"{label} as EasyStore-Access-Token", {"EasyStore-Access-Token": token}))
-        schemes.append((f"{label} as Bearer", {"Authorization": f"Bearer {token}"}))
-    return tuple(schemes)
+    del access_token
+    token = nonempty(admin_access_token)
+    if token is None:
+        return ()
+    return (
+        (
+            "admin token as EasyStore-Access-Token",
+            {"EasyStore-Access-Token": token},
+        ),
+        (
+            "admin token as Bearer",
+            {"Authorization": f"Bearer {token}"},
+        ),
+    )
 
 
 def _page_url(page: int, limit: int = ADMIN_PAGE_SIZE) -> str:
@@ -171,16 +182,16 @@ def read_admin_checkouts(
 ) -> AdminCheckoutRead:
     """Read every abandoned checkout the admin collection serves.
 
-    Raises :class:`AdminSourceUnavailable` naming each credential tried when
-    none of them is accepted, which the caller treats as "use the public
-    collection" rather than as a failure.
+    The public EasyStore access token is accepted only for call-site
+    compatibility and is never used here. ``EASYSTORE_ADMIN_TOKEN`` is required
+    for this API surface.
     """
 
     attempts: list[str] = []
     schemes = _authentication_schemes(access_token, admin_access_token)
     if not schemes:
         raise AdminSourceUnavailable(
-            "No EasyStore credential was available for the admin checkout list."
+            "EASYSTORE_ADMIN_TOKEN is required for EasyStore's admin checkout list."
         )
 
     for label, headers in schemes:
@@ -251,7 +262,7 @@ def read_admin_checkouts(
         )
 
     raise AdminSourceUnavailable(
-        "No credential was accepted by EasyStore's admin checkout list.",
+        "EASYSTORE_ADMIN_TOKEN was not accepted by EasyStore's admin checkout list.",
         tuple(attempts),
     )
 
@@ -272,6 +283,11 @@ def as_checkout(record: dict[str, Any]) -> dict[str, Any]:
     payment state is expressed as ``financial_status`` so the one abandoned-cart
     predicate keeps deciding what is abandoned, rather than this module deciding
     it a second way.
+
+    The admin collection does not provide line items. An empty ``line_items``
+    list prevents the downstream Cart helper from attempting a public Checkout
+    detail request for this admin-only record, while the unavailable marker tells
+    the HubSpot writer to preserve any line items it already has.
     """
 
     customer_id = nonempty(record.get("customer_id"))
@@ -292,6 +308,8 @@ def as_checkout(record: dict[str, Any]) -> dict[str, Any]:
         "total_line_items_price": record.get("total_line_items_price"),
         "url": record.get("url"),
         "financial_status": "recovered" if record.get("is_recovered") else "unpaid",
+        "line_items": [],
+        LINE_ITEMS_UNAVAILABLE_KEY: True,
     }
     for key in (
         "email",
@@ -333,13 +351,13 @@ def admin_access_token_from_environment() -> str | None:
 def main(argv: list[str] | None = None) -> int:
     """Report what the admin checkout list answers with, and with which credential."""
 
-    access_token = nonempty(os.getenv("EASYSTORE_ACCESS_TOKEN"))
-    if access_token is None:
-        print("ERROR: EASYSTORE_ACCESS_TOKEN is required", file=sys.stderr)
+    admin_access_token = admin_access_token_from_environment()
+    if admin_access_token is None:
+        print("ERROR: EASYSTORE_ADMIN_TOKEN is required", file=sys.stderr)
         return 1
 
     try:
-        read = read_admin_checkouts(access_token, admin_access_token_from_environment())
+        read = read_admin_checkouts("", admin_access_token)
     except AdminSourceUnavailable as error:
         print(
             json.dumps(
