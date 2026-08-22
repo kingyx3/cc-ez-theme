@@ -76,37 +76,40 @@ class AdminCollectionRequestTests(unittest.TestCase):
         self.assertIn("sort=created_at.desc", url)
 
     def test_each_admin_token_header_shape_is_tried_until_one_is_accepted(self) -> None:
-        seen: list[dict] = []
+        seen: list[tuple[str, dict]] = []
 
-        def refuse_then_accept(_url, *, headers, **_kwargs):
-            seen.append(headers)
-            if len(seen) == 1:
+        def refuse_then_accept(url, *, headers, **_kwargs):
+            seen.append((url, headers))
+            admin_calls = [call for call in seen if call[0].startswith(admin.ADMIN_CHECKOUTS_URL)]
+            if len(admin_calls) == 1:
                 return None  # 401/403/404 come back as None
             return _body([_record()])
 
         with mock.patch.object(admin, "_http_json", refuse_then_accept):
             read = admin.read_admin_checkouts("app-token", "admin-token")
 
+        admin_calls = [call for call in seen if call[0].startswith(admin.ADMIN_CHECKOUTS_URL)]
         self.assertEqual(len(read.records), 1)
-        self.assertEqual(seen[0]["EasyStore-Access-Token"], "admin-token")
-        self.assertEqual(seen[1]["Authorization"], "Bearer admin-token")
+        self.assertEqual(admin_calls[0][1]["EasyStore-Access-Token"], "admin-token")
+        self.assertEqual(admin_calls[1][1]["Authorization"], "Bearer admin-token")
         self.assertEqual(read.authentication, "admin token as Bearer")
         self.assertIn("refused the credential", read.attempts[0])
-        self.assertNotIn("app-token", repr(seen))
+        self.assertNotIn("app-token", repr(admin_calls))
 
     def test_the_public_access_token_is_never_sent_to_the_admin_host(self) -> None:
-        seen: list[dict] = []
+        seen: list[tuple[str, dict]] = []
 
-        def accept(_url, *, headers, **_kwargs):
-            seen.append(headers)
+        def accept(url, *, headers, **_kwargs):
+            seen.append((url, headers))
             return _body([_record()])
 
         with mock.patch.object(admin, "_http_json", accept):
             read = admin.read_admin_checkouts("app-token", "admin-token")
 
-        self.assertEqual(seen[0]["EasyStore-Access-Token"], "admin-token")
+        admin_calls = [call for call in seen if call[0].startswith(admin.ADMIN_CHECKOUTS_URL)]
+        self.assertEqual(admin_calls[0][1]["EasyStore-Access-Token"], "admin-token")
         self.assertEqual(read.authentication, "admin token as EasyStore-Access-Token")
-        self.assertNotIn("app-token", repr(seen))
+        self.assertNotIn("app-token", repr(admin_calls))
 
     def test_missing_admin_token_is_reported_without_trying_the_public_token(self) -> None:
         http = mock.Mock()
@@ -198,7 +201,8 @@ class AdminCollectionPaginationTests(unittest.TestCase):
         with mock.patch.object(admin, "_http_json", serve):
             read = admin.read_admin_checkouts("app-token", "admin-token")
 
-        self.assertEqual(len(calls), 2)
+        admin_calls = [url for url in calls if url.startswith(admin.ADMIN_CHECKOUTS_URL)]
+        self.assertEqual(len(admin_calls), 2)
         self.assertEqual(len(read.records), 1)
         self.assertTrue(any("repeated records" in line for line in read.attempts))
 
