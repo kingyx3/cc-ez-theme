@@ -36,11 +36,13 @@ def liquid_code(source: str) -> str:
 
 
 class ProfileCompletionGateTests(unittest.TestCase):
-    def test_incomplete_means_platform_flag_or_missing_human_fields(self) -> None:
+    def test_incomplete_means_missing_required_human_fields_only(self) -> None:
         boot = read(BOOT)
         code = liquid_code(boot)
 
-        self.assertIn("customer.is_optional_fields_filled == false", code)
+        # EasyStore's aggregate optional-fields flag can remain false because of
+        # unrelated optional/custom fields. It must never keep this gate locked.
+        self.assertNotIn("customer.is_optional_fields_filled", code)
         for field in (
             "customer.first_name == blank",
             "customer.last_name == blank",
@@ -74,6 +76,21 @@ class ProfileCompletionGateTests(unittest.TestCase):
         self.assertIn("previous.origin !== window.location.origin", boot)
         self.assertIn("if (/^\\/account(\\/|$)/i.test(target)) return '';", boot)
         self.assertIn("window.sessionStorage.setItem(KEY", boot)
+
+    def test_completed_profile_returns_to_the_saved_storefront_target(self) -> None:
+        boot = read(BOOT)
+        landing = boot[boot.index("// The landing page") :]
+
+        # Once none of the four required human fields are blank, the gate is not
+        # rendered. The account landing path then consumes the target that was
+        # deliberately preserved during signup/profile completion and replaces
+        # /account/details with the original storefront page.
+        self.assertIn("window.sessionStorage.removeItem('cc:pending-login-redirect');", landing)
+        self.assertIn("window.location.replace(target);", landing)
+        self.assertLess(
+            landing.index("window.sessionStorage.removeItem('cc:pending-login-redirect');"),
+            landing.index("window.location.replace(target);"),
+        )
 
     def test_details_form_requires_the_human_profile_fields(self) -> None:
         boot = read(BOOT)
@@ -149,6 +166,8 @@ class ProfileCompletionGateTests(unittest.TestCase):
         self.assertIn("/account/register", documentation)
         self.assertIn("normal account-details", documentation)
         self.assertIn("update_success", documentation)
+        self.assertIn("is_optional_fields_filled", documentation)
+        self.assertIn("does not keep the gate locked", documentation)
         self.assertIn("product or prior storefront page", documentation)
 
     def test_navigation_is_locked_until_a_valid_details_post(self) -> None:

@@ -11,11 +11,24 @@ When an unauthenticated shopper starts from a product or another storefront page
 1. The theme remembers the product or prior storefront page in `sessionStorage`.
 2. Visiting `/account/register` starts a tab-scoped signup marker for the password step.
 3. The customer enters their mobile number and completes EasyStore OTP verification. The signup marker survives those platform-owned OTP pages.
-4. If the authenticated customer profile is incomplete, the theme routes them to `/account/details` before the originally requested storefront page can paint.
+4. If any required human profile field is still blank, the theme routes the authenticated customer to `/account/details` before the originally requested storefront page can paint.
 5. The completion form always requires first name, last name, gender and date of birth. **Set password is shown and required only when the customer arrived through the active signup trip.**
 6. The Click ID attribution field remains hidden and automatic; it never replaces or satisfies a human profile field.
-7. The customer cannot use in-store navigation to leave the completion form while required fields are missing. Browser Back/Reload/leave receives the browser's native leave-page protection, and another in-store page immediately gates the customer back to `/account/details` while the profile is incomplete.
-8. After EasyStore accepts the details/password save, its existing `update_success` acknowledgement clears the signup marker. The pending redirect then resumes to the remembered product or prior storefront page once profile completion is satisfied.
+7. The customer cannot use in-store navigation to leave the completion form while one of the four required human fields is still missing. Browser Back/Reload/leave receives the browser's native leave-page protection, and another in-store page immediately gates the customer back to `/account/details` while those required fields remain incomplete.
+8. After EasyStore accepts the details/password save, its existing `update_success` acknowledgement clears the signup password marker. Once first name, last name, gender and date of birth are all present, the profile gate releases and the pending redirect resumes to the remembered product or prior storefront page.
+
+## Profile-completion rule
+
+The mandatory gate is based only on the four human fields this store requires:
+
+- first name;
+- last name;
+- gender;
+- date of birth.
+
+EasyStore also exposes `customer.is_optional_fields_filled`. That value is **not** used as a hard completion requirement. It can remain false because of unrelated optional or custom fields even after this store's required profile fields have been saved. Using it as a gate can create an indefinite `/account/details` loop.
+
+Therefore, when all four required human fields are present, `customer.is_optional_fields_filled == false` does not keep the gate locked. Click ID still cannot make a profile complete because the gate checks these four customer properties explicitly and does not use customer attributes.
 
 ## Password rule
 
@@ -32,18 +45,27 @@ The signup trip is identified with `cc:signup-password-setup` in `sessionStorage
 
 Outside an active signup trip, `/account/details` does **not** move, relabel, or require `details[password2]`. Normal account-details visits keep both password controls in EasyStore's hidden **Change password** panel. Customers who deliberately want to change a password later use that normal account feature.
 
-This means the theme no longer needs to guess whether a customer "has a password" from profile completeness or keep a long-lived browser-side password-state marker. The only browser state is the short-lived, tab-scoped fact that the shopper is currently finishing signup.
+This means the theme does not guess whether a customer "has a password" from profile completeness or keep a long-lived browser-side password-state marker. The only browser state is the short-lived, tab-scoped fact that the shopper is currently finishing signup.
+
+## Return to the page before signup
+
+The page the shopper was on before entering login/signup is stored under `cc:pending-login-redirect` in `sessionStorage`. A Buy Now flow preserves its product URL; a signup/login opened from another storefront page preserves that prior same-origin storefront page instead.
+
+The profile gate never consumes this value while required fields are missing. As soon as the four required human profile fields are complete, the account landing code consumes the saved target once and navigates there with `window.location.replace(target)`. This means completing `/account/details` returns the shopper to the product or storefront page they were on before signup rather than leaving them in the account area.
+
+Unsafe, stale, off-site, or `/account` targets are not followed. The saved target expires after 30 minutes.
 
 ## Completion and return-target invariants
 
 The signup/profile gate must preserve these behaviors:
 
 - an incomplete authenticated customer cannot bypass `/account/details` by following the stored Buy Now redirect;
-- the pending product/prior-page target is not consumed until profile completion succeeds;
+- the pending product/prior-page target is not consumed until the four required human profile fields are complete;
+- `customer.is_optional_fields_filled` does not keep the gate locked after those required fields are present;
 - a machine-only Click ID cannot make a human profile complete;
 - **Set password appears only during signup** and stays hidden for later mandatory-profile or normal account-details visits;
 - signup never asks for a current password;
 - leaving signup for normal login clears the signup-only password marker;
-- once EasyStore accepts the completed profile, the customer returns to the product or prior storefront page they were trying to continue from.
+- once EasyStore accepts the completed required profile, the customer returns to the product or prior storefront page they were trying to continue from.
 
 The implementation lives in `theme/snippets/login-redirect-boot.liquid`, with regression coverage in `tests/test_profile_completion_gate.py` and the login-redirect browser suite.
