@@ -4,10 +4,26 @@ This is the endpoint and data-contract reference for the Cart stage of the CRM s
 
 ## Source of truth
 
-EasyStore exposes cart / checkout sessions through the **Checkout** resource:
+Two EasyStore collections serve checkouts, and they are not the same list. The **admin** collection is tried first because it is the abandoned checkout list itself; the **public** collection is the fallback.
+
+| | admin | public |
+| --- | --- | --- |
+| route | `GET https://api.easystore.co/admin/v2/store/checkouts` | `GET /api/3.0/checkouts.json` |
+| what it serves | the abandoned checkouts — `total_count: 15` for this store | every session the storefront ever opened — 1267 for the same store |
+| declares its size | yes: `params.total_count`, `params.page_count` | no; `page` is ignored entirely |
+| names the customer | yes: `customer_id` on every record | no |
+| conversion signal | `is_recovered` | none, which is why every Cart it produces reads `unpaid` |
+| line items | not included — hydrated per `cart_token` | included |
+| reliability | answers | answered roughly one attempt in eight |
+
+Admin records carry `id`, `created_at`, `customer_id`, `cart_token`, `amount`, `total_line_items_price`, `currency`, `first_name`, `last_name`, `email`, `phone`, `url`, `landing_site`, `referring_site`, `source_name`, `source_type`, `channel`, `client_info`, `credit_used`, `credit_earn`, `is_processed`, `is_recovered` and `is_deleted`. They are renamed into the shape the Cart mapping already reads (`amount` → `total_price`, `currency` → `currency_code`, the shopper's fields gathered under `customer`, and `is_recovered` expressed as `financial_status` so the one abandoned-cart predicate still decides what is abandoned). A record flagged `is_deleted` is dropped.
+
+Authentication is the open question, so it is probed rather than assumed: the route was observed from an authenticated admin session and may not accept the app access token. Each credential and header shape is tried in turn — a dedicated `EASYSTORE_ADMIN_ACCESS_TOKEN` first when the store configured one, then the app token, each as `EasyStore-Access-Token` and as `Authorization: Bearer` — and the outcome of each is reported as `easystore_admin_checkout_attempts`. A collection that refuses every credential is not fatal: the run annotates itself, falls back to the public collection, and names what it tried.
+
+Everything below about page sizes, patience and unusable pagination describes the **public** collection, which is still the fallback:
 
 - `GET /api/3.0/checkouts.json` — list Checkout sessions
-- `GET /api/3.0/checkouts/:cart_token.json` — retrieve one Checkout
+- `GET /api/3.0/checkouts/:cart_token.json` — retrieve one Checkout, and the route that itemizes an admin record
 
 EasyStore's Checkout resource includes `id`, `token`, `cart_token`, `email`, `currency_code`, `subtotal_price`, `total_discount`, `total_price`, `total_amount_include_transaction`, `financial_status`, `line_items`, addresses, `created_at`, and `checkout_url`.
 
@@ -36,7 +52,7 @@ Because EasyStore's own word for that state differs per store, the abandoned sub
 
 ### Why every Cart in the CRM reads `unpaid`
 
-This is the source, not the mapping. `checkouts.json` serves open sessions only:
+This is the public collection, not the mapping. The admin collection reports `is_recovered` and so distinguishes a converted session from an abandoned one; the public one has no such field. On the public route:
 
 - `financial_status` is the **only** state field on the payload. Run 32539291543 observed exactly 18 keys across 1267 records, and `status`, `state`, `checkout_status`, `completed_at` and `order_id` are all absent — the endpoint has no notion of completion to report.
 - a session that converts leaves the collection rather than changing status inside it. That run classified 1267 of 1267 as abandoned and 0 as converted, and none of the store's 27 orders shared a `cart_token` with any listed Checkout (`cart_order_associations_ensured: 0`).
@@ -151,9 +167,9 @@ Association IDs used by the sync:
 
 The shopper is resolved by **EasyStore customer ID first**, then by **normalized mobile**, because that is the CRM's contact identity, and then by **email**.
 
-The customer ID is the direct link a store without guest checkout should have: an identity EasyStore assigned, not a value the shopper typed into a form. The contact carries it as `easystore_customer_id`, written by the customer stage. The catch is that `checkouts.json` does not expose it — run 32539291543 observed 18 keys across 1267 records and none of them referenced a customer — so the checkout stage probes up to `CHECKOUT_CUSTOMER_PROBE_LIMIT` recoverable sessions on the detail route and reports what it found as `easystore_checkout_customer_reference`, alongside the keys it saw in `easystore_checkout_detail_keys_seen`. The probe is diagnostic: it never fails the stage, and the lookup is already wired, so the direct association starts working the moment a reference appears in the payload.
+The customer ID is the direct link a store without guest checkout should have: an identity EasyStore assigned, not a value the shopper typed into a form. The contact carries it as `easystore_customer_id`, written by the customer stage, and the admin collection names it on every abandoned checkout — which is the main reason that collection is preferred.
 
-Failing that, the typed values are what there is. An abandoned Checkout is usually a session that got as far as an email and no phone, so mobile alone leaves Carts unlinked that HubSpot could resolve: run 32539291543 linked 26 of 1267 Carts, with a phone present on only 31 of them and an email on 41.
+The public collection does not expose it (18 keys across 1267 records, none of them a customer reference). When the sync has fallen back to it, up to `CHECKOUT_CUSTOMER_PROBE_LIMIT` recoverable sessions are probed on the detail route and the outcome is reported as `easystore_checkout_customer_reference`, with the keys seen in `easystore_checkout_detail_keys_seen`. The probe is diagnostic — it never fails the stage — and the lookup is the same one either way, so the direct association works as soon as a reference is present. Failing that, the typed values are what there is. An abandoned Checkout is usually a session that got as far as an email and no phone, so mobile alone leaves Carts unlinked that HubSpot could resolve: run 32539291543 linked 26 of 1267 Carts, with a phone present on only 31 of them and an email on 41.
 
 Email is an association key only. Contacts are still created and deduplicated by mobile in the customer stage, and this stage never creates a Contact from a Checkout — an anonymous cart has no shopper to record.
 
@@ -199,6 +215,9 @@ The existing SKU mapper also supports EasyStore lines without a literal SKU when
 - `hubspot_cart_line_items_created`
 - `hubspot_cart_line_items_updated`
 - `easystore_checkout_status_counts` and `easystore_checkout_status_field_read`
+- `easystore_admin_checkout_status`, `easystore_admin_checkout_authentication`, `easystore_admin_checkouts_declared` and `easystore_admin_checkout_attempts`
+- `easystore_checkout_line_item_hydration`
+- `carts_whose_line_items_could_not_be_read`
 - `easystore_checkout_customer_reference` and `easystore_checkout_detail_keys_seen`
 - `easystore_checkouts_recoverable`, `checkouts_without_line_items`, `checkouts_without_a_contactable_buyer` and `abandoned_cart_filter_applied`
 - `hubspot_carts_not_qualified_by_this_run`
@@ -209,4 +228,6 @@ The existing SKU mapper also supports EasyStore lines without a literal SKU when
 - `cart_lines_without_a_hubspot_product`, `carts_with_lines_without_a_hubspot_product` and `cart_line_skus_without_a_hubspot_product`
 - `cart_source_is_orders`
 
-The expected production values include `easystore_checkout_source: public_api_checkouts`, `easystore_checkout_collection_query: page,limit only`, and `cart_source_is_orders: false`.
+The expected production values are `easystore_checkout_source: admin_api_abandoned_checkouts` with `easystore_admin_checkout_status: available` and `cart_source_is_orders: false`. A run reporting `easystore_checkout_source: public_api_checkouts` has fallen back, and `easystore_admin_checkout_attempts` says which credential was refused.
+
+A Cart whose line items could not be read is still written, and marked so the writer leaves any Line Items an earlier run wrote alone: "the shopper removed them" and "the detail route did not answer" are indistinguishable from here, and deleting on that guess loses real data.

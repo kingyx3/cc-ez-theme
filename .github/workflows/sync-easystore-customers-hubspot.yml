@@ -187,11 +187,18 @@ jobs:
       # HubSpot Carts untouched instead of failing the CRM sync that already
       # wrote Products, Customers and Orders. Set EASYSTORE_CHECKOUTS_REQUIRED
       # to 1 to make that outage fail this step instead.
+      # EASYSTORE_ADMIN_ACCESS_TOKEN is optional. EasyStore's admin collection
+      # is the abandoned checkout list itself - 15 records against the public
+      # route's 1267 sessions - and names the customer each one belongs to, so
+      # it is tried first. The app token is tried against it, and this secret is
+      # only needed if that credential is refused; without it the sync falls
+      # back to the public collection and says so.
       - name: Sync EasyStore checkouts to HubSpot carts and cart line items
         id: carts
         continue-on-error: true
         env:
           EASYSTORE_ACCESS_TOKEN: ${{ secrets.EASYSTORE_ACCESS_TOKEN }}
+          EASYSTORE_ADMIN_ACCESS_TOKEN: ${{ secrets.EASYSTORE_ADMIN_ACCESS_TOKEN }}
           HUBSPOT_ACCESS_TOKEN: ${{ secrets.HUBSPOT_ACCESS_TOKEN }}
         shell: bash
         run: |
@@ -224,7 +231,8 @@ jobs:
             echo "- Cart status evidence: \`easystore_checkout_status_counts\` in the cart summary is the distribution of the raw status values EasyStore served, so an unexpected paid session shows up in the run itself"
             echo "- Cart to Contact: resolved by EasyStore customer ID first, then normalized mobile, then email; an identity matching two Contacts is reported, never guessed. Every Cart written lands in exactly one outcome and those outcomes sum to the Carts written, so an unlinked Cart always has a stated reason"
             echo "- Direct customer link: checkouts.json names no customer, so a couple of recoverable sessions are probed on the detail route and the result is reported as \`easystore_checkout_customer_reference\`. The ID lookup is already wired and starts working the moment a reference appears"
-            echo "- Recoverable carts only: checkouts.json serves every session the storefront ever opened, not the admin's abandoned checkout list, so a Cart is written only for a session holding line items and naming a shopper. Each exclusion is counted, and Carts HubSpot already holds are never deleted - only reported"
+            echo "- Checkout source: EasyStore's admin collection (api.easystore.co/admin/v2/store/checkouts) is tried first. It is the abandoned checkout list itself, declares total_count, names customer_id on every record, and reports is_recovered; line items are hydrated per cart_token from the public detail route"
+            echo "- Fallback: if that collection refuses the credential, the public /api/3.0/checkouts.json is used instead. It serves every session the storefront ever opened, so a Cart is then written only for a session holding line items and naming a shopper. Each exclusion is counted, and Carts HubSpot already holds are never deleted - only reported"
             echo "- Checkout list request: /api/3.0/checkouts.json with page + limit only; no sort/date/Product-style filters. Largest limit first (250, then 50, then 1), four attempts of 60s each, because this endpoint answers roughly one attempt in eight"
             echo "- Checkout pagination: page 2 is unusable (repeats page 1, or hangs), so a larger limit on page 1 proves the snapshot; the page that answered is kept either way, and a snapshot EasyStore will not prove complete is still synchronized and annotated"
             echo "- Checkout outage: Cart and Cart Line Item writes pause and the run is annotated; existing Cart→Order links still refresh from order.cart_token"

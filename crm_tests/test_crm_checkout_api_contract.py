@@ -163,7 +163,26 @@ BIGGER_LIMIT = next(
 )
 
 
-class IgnoredPageParameterTests(unittest.TestCase):
+class PublicCollectionOnly(unittest.TestCase):
+    """Base for tests of the public collection path.
+
+    EasyStore's admin collection is tried first in production, so a test about
+    the public one starts from an admin route that refused the credential. It
+    also keeps the suite off the network.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        patcher = mock.patch.object(
+            checkouts,
+            "read_admin_snapshot",
+            return_value=(None, {"easystore_admin_checkout_status": "unavailable"}),
+        )
+        self.addCleanup(patcher.stop)
+        patcher.start()
+
+
+class IgnoredPageParameterTests(PublicCollectionOnly):
     """This store's checkouts.json answers but serves page 2 identical to page 1.
 
     Failing there means never syncing a Cart, and looping on it never
@@ -431,7 +450,7 @@ class EasyStoreCheckoutDetailTests(unittest.TestCase):
                 checkouts.read_checkout_snapshot("shop.example", "secret")
 
 
-class HubSpotCartProjectionTests(unittest.TestCase):
+class HubSpotCartProjectionTests(PublicCollectionOnly):
     def test_the_whole_snapshot_reaches_the_writer_but_only_unpaid_is_written(
         self,
     ) -> None:

@@ -55,6 +55,12 @@ CART_SCHEMA_OBJECT_TYPE = cart_mapping.CART_OBJECT_TYPE
 HUBSPOT_CARTS_URL = f"{HUBSPOT_BASE}/crm/v3/objects/carts"
 CART_EXTERNAL_ID_PROPERTY = cart_mapping.CART_EXTERNAL_ID_PROPERTY
 EASYSTORE_PAGE_SIZE = 50
+# Set on a checkout whose line items could not be read. The Cart is still
+# written, but its existing Line Items are left alone: "the shopper removed
+# them" and "the detail route did not answer" look identical from here, and
+# deleting on that guess throws away lines a previous run read successfully.
+LINE_ITEMS_UNAVAILABLE_KEY = "easystore_line_items_unavailable"
+
 CART_CONTACT_ASSOCIATION_TYPE_ID = 586
 CART_LINE_ITEM_ASSOCIATION_TYPE_ID = 590
 CART_ORDER_ASSOCIATION_TYPE_ID = 592
@@ -597,7 +603,7 @@ def sync(
 
     validated: list[tuple[dict[str, Any], str, dict[str, dict[str, str]], bool]] = []
     scanned = completed = without_cart_token = 0
-    without_lines = without_buyer = 0
+    without_lines = without_buyer = carts_without_readable_lines = 0
     abandoned_carts = converted_carts = 0
     carts_with_unmatched_lines = unmatched_line_count = 0
     unmatched_skus: set[str] = set()
@@ -671,7 +677,12 @@ def sync(
             carts_with_unmatched_lines += 1
             unmatched_line_count += len(unmatched)
             unmatched_skus.update(unmatched)
-        validated.append((checkout, cart_token, desired, bool(unmatched)))
+        keep_existing_lines = bool(unmatched) or bool(
+            checkout.get(LINE_ITEMS_UNAVAILABLE_KEY)
+        )
+        if checkout.get(LINE_ITEMS_UNAVAILABLE_KEY):
+            carts_without_readable_lines += 1
+        validated.append((checkout, cart_token, desired, keep_existing_lines))
 
     existing = hubspot_cart_index(hubspot_access_token)
     hubspot_orders = hubspot_order_index(hubspot_access_token)
@@ -690,7 +701,7 @@ def sync(
     carts_without_identity = carts_without_a_contact = 0
     line_created = line_updated = line_removed = 0
 
-    for checkout, cart_token, desired, had_unmatched in validated:
+    for checkout, cart_token, desired, keep_existing_lines in validated:
         existing_id = existing.get(cart_token)
         if existing_id is None:
             existing_id = _legacy_cart_owner(checkout, existing)
@@ -718,7 +729,7 @@ def sync(
             access_token=hubspot_access_token,
             cart_id=cart_id,
             desired=desired,
-            remove_stale=not had_unmatched,
+            remove_stale=not keep_existing_lines,
         )
         line_created += c
         line_updated += u
@@ -818,6 +829,7 @@ def sync(
         "completed_checkouts_kept_as_carts": include_completed,
         "checkouts_without_cart_token": without_cart_token,
         "checkouts_without_line_items": without_lines,
+        "carts_whose_line_items_could_not_be_read": carts_without_readable_lines,
         "checkouts_without_a_contactable_buyer": without_buyer,
         "easystore_checkouts_recoverable": len(validated),
         "abandoned_cart_filter_applied": recoverable_only,

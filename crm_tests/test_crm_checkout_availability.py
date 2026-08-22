@@ -18,7 +18,26 @@ OUTAGE = checkouts.CheckoutSourceUnavailable(
 )
 
 
-class CheckoutOutageBehaviorTests(unittest.TestCase):
+class PublicCollectionOnly(unittest.TestCase):
+    """Base for tests of the public collection path.
+
+    EasyStore's admin collection is tried first in production, so a test about
+    the public one starts from an admin route that refused the credential. It
+    also keeps the suite off the network.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        patcher = mock.patch.object(
+            checkouts,
+            "read_admin_snapshot",
+            return_value=(None, {"easystore_admin_checkout_status": "unavailable"}),
+        )
+        self.addCleanup(patcher.stop)
+        patcher.start()
+
+
+class CheckoutOutageBehaviorTests(PublicCollectionOnly):
     """One unreachable EasyStore endpoint must not fail the whole CRM sync.
 
     Products, Customers, Orders and reconciliation have already written to
@@ -226,7 +245,7 @@ if __name__ == "__main__":
     unittest.main()
 
 
-class UnpaidSubsetOnlyTests(unittest.TestCase):
+class UnpaidSubsetOnlyTests(PublicCollectionOnly):
     def test_the_production_entrypoint_asks_for_the_unpaid_subset_only(self) -> None:
         snapshot = checkouts.CheckoutSnapshot(
             records=({"cart_token": "c1", "financial_status": "unpaid"},),

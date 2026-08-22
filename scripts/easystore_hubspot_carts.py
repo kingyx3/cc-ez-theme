@@ -419,6 +419,8 @@ SETTLED_STATUSES = frozenset(
         "partially_paid",
         "partially_refunded",
         "authorized",
+        # EasyStore's admin collection reports a converted session as recovered.
+        "recovered",
     }
 )
 
