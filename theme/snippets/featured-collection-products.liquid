@@ -1,0 +1,99 @@
+{% if collection_id != blank and products_to_display > 0 %}
+  <slider-component class="slider-mobile-gutter">
+    <ul class="sales-collection__grid grid grid--2-col grid--3-col-tablet grid--{{ section.settings.products_per_row }}-col-desktop product-grid{% if products_to_display > 2 and section.settings.swipe_on_mobile and products_to_show > 2 %} slider slider--tablet grid--peek{% endif %}{% if section.settings.show_view_all == false or products_to_display < products_to_show %} negative-margin{% endif %}{% if section.settings.show_view_all and products_to_display > products_to_show %} negative-margin--small{% endif %}" role="list">
+      {% for product in collection.products limit: products_to_show %}
+        <li class="grid__item{% if products_to_display > 2 and section.settings.swipe_on_mobile and products_to_show > 2 %} slider__slide{% endif %}">
+          {% include 'product-card', show_secondary_image: section.settings.show_secondary_image, show_add_to_cart_button: false, image_ratio: section.settings.image_ratio, show_product_info: section.settings.show_product_info %}
+        </li>
+      {% endfor %}
+    </ul>
+    {% if products_to_display > 2 and section.settings.swipe_on_mobile and products_to_show > 2 %}
+      <div class="slider-buttons no-js-hidden{% if products_to_display < 4 %} medium-hide{% endif %}{% if products_to_display < 3 %} small-hide{% endif %}">
+        <button
+          type="button"
+          class="slider-button slider-button--prev"
+          name="previous"
+          aria-label="{{ 'accessibility.previous_slide' | t }}">{% include 'svg-definitions' with 'icon-caret' %}</button>
+        <div class="slider-counter caption">
+          <span class="slider-counter--current">1</span>
+          <span aria-hidden="true">
+            /
+          </span>
+          <span class="slider-counter--total">{{ products_to_display }}</span>
+        </div>
+        <button
+          type="button"
+          class="slider-button slider-button--next"
+          name="next"
+          aria-label="{{ 'accessibility.next_slide' | t }}">{% include 'svg-definitions' with 'icon-caret' %}</button>
+      </div>
+    {% endif %}
+  </slider-component>
+{% else %}
+  <!-- Placeholder -->
+  <style>
+    .collection-placeholder-wrapper {
+      position: relative;
+    }
+    .collection-placeholder-wrapper .card {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -40%);
+      padding: 30px;
+      background: #F8F9FA;
+      color: #000;
+      box-shadow: 0 5px 30px #bbb;
+      opacity: 0;
+      z-index: 10;
+      transition: all 200ms ease-out;
+      width: 650px;
+      max-width: 90%;
+    }
+    .collection-placeholder-wrapper .collection-placeholder-grid {
+      transition: all 200ms ease-out;
+    }
+    .collection-placeholder-wrapper:hover .collection-placeholder-grid {
+      opacity: 0.4;
+    }
+    .collection-placeholder-wrapper:hover .card {
+      opacity: 1;
+      transform: translate(-50%, -50%);
+    }
+    @media screen and (max-width: 500px) {
+      .collection-placeholder-wrapper .collection-placeholder-grid {
+        opacity: 0.4;
+      }
+      .collection-placeholder-wrapper .card {
+        opacity: 1;
+        transform: translate(-50%, -50%);
+      }
+    }
+  </style>
+  <div class="collection-placeholder-wrapper">
+    <ul class="collection-placeholder-grid grid grid--2-col grid--{{ section.settings.products_per_row }}-col-desktop">
+      {% for i in (1..products_to_show) %}
+        <li class="grid__item text-center">
+          {% capture placeholder_image_url %}https://themes.easystore.co/onboarding/placeholder/products/frame/product-frame-{{ i }}.png{% endcapture %}
+          <a href="https://{{GLOBALS.ADMIN_DOMAIN}}/products/" class="full-unstyled-link">
+            <img src="{{ placeholder_image_url }}" alt="" width="550" height="550" loading="lazy">
+            <div>
+              {{ 'home_page.onboarding.product_title' | t: i }}
+            </div>
+            <div>
+              {{ shop.money_prefix }} 19.99 {{ shop.money_suffix }}
+            </div>
+          </a>
+        </li>
+      {% endfor %}
+    </ul>
+
+    <div class="card card--outline text-center">
+      <h3>{{ 'home_page.onboarding.modal_title' | t }}</h3>
+      <p>{{ 'home_page.onboarding.no_product_html' | t }}</p>
+      <p>
+        <a class="btn btn--primary" href="https://{{GLOBALS.ADMIN_DOMAIN}}/products/new">{{ 'home_page.onboarding.add_product' | t }}</a>
+      </p>
+    </div>
+  </div>
+{% endif %}
