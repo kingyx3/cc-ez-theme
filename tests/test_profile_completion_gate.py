@@ -7,6 +7,7 @@ so the target must stay pending until the human profile fields are accepted.
 
 from __future__ import annotations
 
+import re
 import unittest
 from pathlib import Path
 
@@ -22,11 +23,21 @@ def read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def liquid_code(source: str) -> str:
+    return re.sub(
+        r"{%-?\s*comment\s*-?%}.*?{%-?\s*endcomment\s*-?%}",
+        "",
+        source,
+        flags=re.DOTALL,
+    )
+
+
 class ProfileCompletionGateTests(unittest.TestCase):
     def test_incomplete_means_platform_flag_or_missing_human_fields(self) -> None:
         boot = read(BOOT)
+        code = liquid_code(boot)
 
-        self.assertIn("customer.is_optional_fields_filled == false", boot)
+        self.assertIn("customer.is_optional_fields_filled == false", code)
         for field in (
             "customer.first_name == blank",
             "customer.last_name == blank",
@@ -34,11 +45,11 @@ class ProfileCompletionGateTests(unittest.TestCase):
             "customer.birthdate == blank",
         ):
             with self.subTest(field=field):
-                self.assertIn(field, boot)
+                self.assertIn(field, code)
 
         # This runs from the layout head on every storefront page.  The source
         # attribution incident proved that attribute settings are not safe here.
-        self.assertNotIn("shop.attribute_settings", boot)
+        self.assertNotIn("shop.attribute_settings", code)
 
     def test_incomplete_customer_is_forced_to_details_before_returning(self) -> None:
         boot = read(BOOT)
