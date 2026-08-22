@@ -18,7 +18,7 @@
   the storefront errored on deploy. The lookup belongs on the pages that already
   do it.
 
-  Three deliberate rules:
+  Four deliberate rules:
 
   * **Only ever filled when empty.** The cookie is last-touch - a shopper who
     comes back through a new link gets a new id - but the attribute records how
@@ -26,6 +26,11 @@
     overwrites it. `details` and `account` repopulate the field from
     `customer.attributes` while the page parses, so a value present by the time
     this runs is one EasyStore already recorded.
+  * **Only filled at submit time.** EasyStore uses its customer fields to decide
+    whether a new customer's profile is complete. A machine-only Click ID must
+    never be the value that makes the profile look complete before the shopper
+    has supplied their own details. On signup/activation, the human fields are
+    required first and the Click ID is injected only when the valid form submits.
   * **The field is hidden, never removed.** Hiding it by id leaves the shared
     attribute loop untouched, so an admin who renames or deletes the attribute
     gets the ordinary field back rather than a broken form.
@@ -66,7 +71,33 @@
 
       var SETTING_ID = '{{ attribution_click_id_setting }}';
 
-      function fill() {
+      function requireHumanProfileFields(form) {
+        if (!form || (form.id !== 'form-register' && form.id !== 'form-activate')) return;
+
+        [
+          'customer[first_name]',
+          'customer[last_name]',
+          'customer[gender]',
+          'customer[birthdate]',
+          'customer[password]'
+        ].forEach(function (name) {
+          var input = form.querySelector('[name="' + name + '"]');
+          if (input) input.setAttribute('required', 'required');
+        });
+      }
+
+      function submitClickId(field) {
+        var clickId = window.ccSourceClickId;
+        if (!clickId) return;
+
+        // Acquisition, not last touch: a value already here is one EasyStore
+        // recorded when the account was created.
+        if (!String(field.value || '').trim()) {
+          field.value = clickId;
+        }
+      }
+
+      function prepare() {
         var field = document.getElementById('DetailAttribute' + SETTING_ID);
         if (!field) return;
 
@@ -82,20 +113,24 @@
         }
         field.removeAttribute('required');
 
-        var clickId = window.ccSourceClickId;
-        if (!clickId) return;
+        var form = field.form || field.closest('form');
+        requireHumanProfileFields(form);
 
-        // Acquisition, not last touch: a value already here is one EasyStore
-        // recorded when the account was created.
-        if (!String(field.value || '').trim()) {
-          field.value = clickId;
+        if (form) {
+          // Capture phase is deliberate. The account page has its own submit
+          // handler that builds FormData immediately; this must run before it.
+          form.addEventListener('submit', function () {
+            submitClickId(field);
+          }, true);
+        } else {
+          submitClickId(field);
         }
       }
 
       if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', fill);
+        document.addEventListener('DOMContentLoaded', prepare);
       } else {
-        fill();
+        prepare();
       }
     })();
   </script>
