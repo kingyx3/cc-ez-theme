@@ -26,6 +26,11 @@
   explicit name/gender/birthdate checks also rescue customers whose old Click ID
   made that flag look complete before the human fields were actually filled.
 
+  The Liquid decision is rendered as a meta marker rather than interpolated into
+  JavaScript. `e2e/login-redirect.spec.js` executes this first script directly as
+  JavaScript, matching the browser after Liquid has rendered it; keeping Liquid
+  tags outside the script preserves that useful behavioural harness.
+
   The stored target and its half-hour window belong to the deferred module; both
   are named here as well, and tests/test_login_redirect_completion.py pins the two
   copies together.
@@ -42,12 +47,15 @@
 {% endif %}
 
 {% if customer %}
+  {% if cc_profile_completion_required %}
+    <meta name="cc-profile-completion-required" content="true">
+  {% endif %}
   <script>
     (function () {
       'use strict';
 
       var path = String(window.location.pathname || '');
-      var profileRequired = {% if cc_profile_completion_required %}true{% else %}false{% endif %};
+      var profileRequired = Boolean(document.querySelector('meta[name="cc-profile-completion-required"]'));
 
       if (profileRequired) {
         window.ccProfileCompletionRequired = true;
