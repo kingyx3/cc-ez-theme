@@ -10,24 +10,181 @@
   This runs in the head instead, before the body is parsed, so the trip finishes
   without that page appearing. Being inline is the point: an external script
   early enough to beat the paint would block parsing on every page of the store
-  to serve one, and this is around twenty lines.
+  to serve one, and this stays small enough to run synchronously.
 
-  The body is not parsed yet, so the markup check that keeps a half-authenticated
-  shopper on the one-time-code step cannot run here. This therefore acts on one
-  page only - an `/account` page that is not one of EasyStore's sign-in steps,
-  which is where it lands a customer whose sign-in has finished. Every other page
-  is left to the deferred module, which reads the markup and decides properly.
+  Profile completion is a stronger condition than the return redirect. A newly
+  authenticated customer who still owes the store their details is sent to
+  `/account/details`, while the product/prior-page target remains in
+  sessionStorage untouched. The details page is locked until its required human
+  fields submit successfully; the following page load then sees a complete
+  profile and the ordinary return redirect resumes.
 
-  The stored target and its half-hour window belong to that module; both are
-  named here as well, and tests/test_login_redirect_completion.py pins the two
+  The customer-field checks deliberately use only `customer`. An earlier source
+  attribution implementation read `shop.attribute_settings` from the layout head
+  and broke non-customer storefront pages, so the global gate must never repeat
+  that lookup. EasyStore's own optional-fields flag covers its profile state;
+  explicit name/gender/birthdate checks also rescue customers whose old Click ID
+  made that flag look complete before the human fields were actually filled.
+
+  The stored target and its half-hour window belong to the deferred module; both
+  are named here as well, and tests/test_login_redirect_completion.py pins the two
   copies together.
 {% endcomment %}
+
+{% assign cc_profile_completion_required = false %}
+{% if customer %}
+  {% if customer.is_optional_fields_filled == false %}
+    {% assign cc_profile_completion_required = true %}
+  {% endif %}
+  {% if customer.first_name == blank or customer.last_name == blank or customer.gender == blank or customer.birthdate == blank %}
+    {% assign cc_profile_completion_required = true %}
+  {% endif %}
+{% endif %}
+
 {% if customer %}
   <script>
     (function () {
       'use strict';
 
       var path = String(window.location.pathname || '');
+      var profileRequired = {% if cc_profile_completion_required %}true{% else %}false{% endif %};
+
+      if (profileRequired) {
+        window.ccProfileCompletionRequired = true;
+
+        var PROFILE_PATH = '/account/details';
+        var KEY = 'cc:pending-login-redirect';
+        var MAX_AGE_MS = 1800000;
+        var AUTH_PATH = /^\/account\/(login|register|recover|auth|activate|reset)/i;
+
+        // Authentication/OTP is an even earlier mandatory step. Do not leave it
+        // or interfere with the target the login module is already carrying.
+        if (AUTH_PATH.test(path)) return;
+
+        function safeTarget(value) {
+          var target = String(value || '').trim();
+          if (!target || target.charAt(0) !== '/') return '';
+          if (/^\/[\/\\]/.test(target)) return '';
+          if (/[\u0000-\u001f\u007f]/.test(target)) return '';
+          if (/^\/account(\/|$)/i.test(target)) return '';
+          return target;
+        }
+
+        function pendingTarget() {
+          var raw = null;
+          try {
+            raw = window.sessionStorage.getItem(KEY);
+          } catch (error) {
+            return '';
+          }
+          if (!raw) return '';
+          try {
+            var pending = JSON.parse(raw);
+            var storedAt = Number(pending && pending.storedAt);
+            if (!isFinite(storedAt)) return '';
+            if (new Date().getTime() - storedAt > MAX_AGE_MS) return '';
+            return safeTarget(pending && pending.target);
+          } catch (error) {
+            return '';
+          }
+        }
+
+        function referrerTarget() {
+          var referrer = String(document.referrer || '');
+          if (!referrer) return '';
+          var previous = null;
+          try {
+            previous = new URL(referrer, window.location.href);
+          } catch (error) {
+            return '';
+          }
+          if (previous.origin !== window.location.origin) return '';
+          return safeTarget(previous.pathname + previous.search);
+        }
+
+        function rememberWhereTheyWere() {
+          // A Buy Now/login trip has already stored the product page. Never
+          // replace it with `/account`, `/account/details`, or a later click.
+          if (pendingTarget()) return;
+
+          var target = safeTarget(path + String(window.location.search || '')) || referrerTarget();
+          if (!target) return;
+
+          try {
+            window.sessionStorage.setItem(KEY, JSON.stringify({
+              target: target,
+              storedAt: new Date().getTime()
+            }));
+          } catch (error) {
+            /* navigation is still gated even if storage is unavailable */
+          }
+        }
+
+        rememberWhereTheyWere();
+
+        var normalizedPath = path.replace(/\/+$/, '') || '/';
+        if (normalizedPath !== PROFILE_PATH) {
+          window.location.replace(PROFILE_PATH);
+          return;
+        }
+
+        function lockProfileForm() {
+          var form = document.getElementById('details_form');
+          if (!form) return;
+
+          [
+            'details[first_name]',
+            'details[last_name]',
+            'details[gender]',
+            'details[birthdate]'
+          ].forEach(function (name) {
+            var field = form.querySelector('[name="' + name + '"]');
+            if (field) field.setAttribute('required', 'required');
+          });
+
+          var allowUnload = false;
+
+          // All storefront navigation stays behind the profile checkpoint. The
+          // browser's own back/reload/external-leave controls also get its native
+          // confirmation prompt; if the shopper confirms a move to another store
+          // page, this head gate immediately returns them here before it paints.
+          document.addEventListener('click', function (event) {
+            var target = event.target;
+            if (!target || !target.closest) return;
+            var navigation = target.closest('a[href], [data-theme-action="history-back"]');
+            if (!navigation) return;
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            if (form.reportValidity) form.reportValidity();
+          }, true);
+
+          window.addEventListener('beforeunload', function (event) {
+            if (allowUnload) return;
+            event.preventDefault();
+            event.returnValue = '';
+          });
+
+          form.addEventListener('submit', function (event) {
+            if (form.checkValidity && !form.checkValidity()) {
+              event.preventDefault();
+              if (form.reportValidity) form.reportValidity();
+              return;
+            }
+            // The details form performs a normal POST. Only that valid POST may
+            // leave this page without a warning. If EasyStore rejects it, the
+            // next response is still incomplete and this guard is installed again.
+            allowUnload = true;
+          }, true);
+        }
+
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', lockProfileForm);
+        } else {
+          lockProfileForm();
+        }
+        return;
+      }
+
       // The landing page, and never a step: /account/auth carries the one-time
       // code, and a shopper there is a customer to EasyStore but not yet to us.
       if (!/^\/account(\/|$)/i.test(path)) return;
