@@ -327,7 +327,7 @@ def as_checkouts(records: tuple[dict[str, Any], ...]) -> tuple[dict[str, Any], .
 def admin_access_token_from_environment() -> str | None:
     """Return the dedicated admin credential when the store configured one."""
 
-    return nonempty(os.getenv("EASYSTORE_ADMIN_ACCESS_TOKEN"))
+    return nonempty(os.getenv("EASYSTORE_ADMIN_TOKEN"))
 
 
 def main(argv: list[str] | None = None) -> int:

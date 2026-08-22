@@ -187,7 +187,7 @@ jobs:
       # HubSpot Carts untouched instead of failing the CRM sync that already
       # wrote Products, Customers and Orders. Set EASYSTORE_CHECKOUTS_REQUIRED
       # to 1 to make that outage fail this step instead.
-      # EASYSTORE_ADMIN_ACCESS_TOKEN is optional. EasyStore's admin collection
+      # EASYSTORE_ADMIN_TOKEN is optional. EasyStore's admin collection
       # is the abandoned checkout list itself - 15 records against the public
       # route's 1267 sessions - and names the customer each one belongs to, so
       # it is tried first. The app token is tried against it, and this secret is
@@ -198,7 +198,7 @@ jobs:
         continue-on-error: true
         env:
           EASYSTORE_ACCESS_TOKEN: ${{ secrets.EASYSTORE_ACCESS_TOKEN }}
-          EASYSTORE_ADMIN_ACCESS_TOKEN: ${{ secrets.EASYSTORE_ADMIN_ACCESS_TOKEN }}
+          EASYSTORE_ADMIN_TOKEN: ${{ secrets.EASYSTORE_ADMIN_TOKEN }}
           HUBSPOT_ACCESS_TOKEN: ${{ secrets.HUBSPOT_ACCESS_TOKEN }}
         shell: bash
         run: |
