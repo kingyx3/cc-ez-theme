@@ -38,9 +38,9 @@
   EasyStore's documented Liquid customer object does not expose whether a
   password already exists. To avoid making the shopper set it repeatedly when
   the completion page renders again, the browser records the password only after
-  a valid completion submit returns to `/account/details` with the profile no
-  longer incomplete. The marker is namespaced to the rendered customer id and is
-  kept in localStorage with a sessionStorage fallback. A failed/incomplete POST
+  EasyStore renders its existing `update_success` acknowledgement for the
+  `/account/details` save. The marker is namespaced to the rendered customer id
+  and is kept in localStorage with a sessionStorage fallback. A rejected POST
   never promotes the marker, so the first-time password remains required.
 
   The Liquid decision is rendered as meta markers rather than interpolated into
@@ -68,12 +68,16 @@
   {% if cc_profile_completion_required %}
     <meta name="cc-profile-completion-required" content="true">
   {% endif %}
+  {% if update_success %}
+    <meta name="cc-profile-update-success" content="true">
+  {% endif %}
   <script>
     (function () {
       'use strict';
 
       var path = String(window.location.pathname || '');
       var profileRequired = Boolean(document.querySelector('meta[name="cc-profile-completion-required"]'));
+      var profileUpdateSucceeded = Boolean(document.querySelector('meta[name="cc-profile-update-success"]'));
       var customerMarker = document.querySelector('meta[name="cc-profile-customer-id"]');
       var customerId = String((customerMarker && customerMarker.getAttribute('content')) || '').trim();
       var PASSWORD_SET_PREFIX = 'cc:profile-password-set:';
@@ -81,17 +85,18 @@
       var passwordSetKey = customerId ? PASSWORD_SET_PREFIX + customerId : '';
       var passwordSubmitKey = customerId ? PASSWORD_SUBMIT_PREFIX + customerId : '';
 
-      function storageHas(storage, key) {
-        if (!storage || !key) return false;
+      function storageHas(storageName, key) {
+        if (!key) return false;
         try {
-          return storage.getItem(key) === '1';
+          var storage = window[storageName];
+          return Boolean(storage) && storage.getItem(key) === '1';
         } catch (error) {
           return false;
         }
       }
 
       function passwordWasSet() {
-        return storageHas(window.localStorage, passwordSetKey) || storageHas(window.sessionStorage, passwordSetKey);
+        return storageHas('localStorage', passwordSetKey) || storageHas('sessionStorage', passwordSetKey);
       }
 
       function rememberPasswordSubmit() {
@@ -104,7 +109,7 @@
       }
 
       function passwordSubmitPending() {
-        return storageHas(window.sessionStorage, passwordSubmitKey);
+        return storageHas('sessionStorage', passwordSubmitKey);
       }
 
       function markPasswordSet() {
@@ -123,11 +128,10 @@
       }
 
       // A valid first-time completion submit sets a pending marker before the
-      // normal POST. Only the following server-rendered response may promote it:
-      // if EasyStore now considers the profile complete, this details response
-      // proves the password/profile save succeeded. A rejected/incomplete POST
-      // stays in the profileRequired branch and therefore never reaches here.
-      if (!profileRequired && /^\/account\/details\/?$/i.test(path) && passwordSubmitPending()) {
+      // normal POST. Only EasyStore's server-rendered `update_success` response
+      // promotes it, so merely clicking Save or receiving a validation error can
+      // never make the one-time password requirement disappear.
+      if (profileUpdateSucceeded && passwordSubmitPending()) {
         markPasswordSet();
       }
 
@@ -225,8 +229,8 @@
           });
 
           // Only the first successful completion needs a password. Once that
-          // save has been proven on a subsequent server response, leave the
-          // normal password-change controls hidden and do not ask again.
+          // save has been acknowledged by EasyStore, leave the normal password-
+          // change controls hidden and do not ask again on this mandatory form.
           var needsFirstPassword = !passwordWasSet();
           var password = form.querySelector('[name="details[password2]"]');
           var saveRow = form.querySelector('p.text-right');
