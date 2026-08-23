@@ -13,6 +13,11 @@ that happens, this production entrypoint enriches the customer by customer ID
 from the nested Customer object only. The Order API is therefore only a transport
 for a Customer object in this fallback path; top-level Order note fields are never
 read when populating a HubSpot Contact.
+
+HubSpot's native ``phone`` property is the authoritative Contact identity.
+``mobilephone`` still receives the normalized EasyStore number as a convenience
+mirror, but it is hidden from the base sync's identity index so a secondary mobile
+value on another Contact cannot create a false duplicate.
 """
 
 from __future__ import annotations
@@ -22,7 +27,7 @@ import json
 import os
 import sys
 from functools import lru_cache
-from typing import Any
+from typing import Any, Iterator
 from urllib.parse import quote, urlencode
 
 import easystore_hubspot_sync as base
@@ -36,6 +41,7 @@ from easystore_hubspot_schema import (
 CUSTOMER_NOTE_SOURCES = ("note", "note2")
 EASYSTORE_ORDER_PAGE_SIZE = 50
 _BASE_COMPLETE_CUSTOMER = base.complete_customer
+_BASE_ITER_HUBSPOT_CONTACTS = base.iter_hubspot_contacts
 _FALLBACK_CUSTOMER_IDS_USED: set[str] = set()
 
 
@@ -167,11 +173,36 @@ def complete_customer(
     return merged
 
 
+def iter_hubspot_contacts_by_primary_phone(
+    access_token: str,
+) -> Iterator[dict[str, Any]]:
+    """Yield Contacts with ``mobilephone`` excluded from identity matching.
+
+    The base customer sync historically indexed both ``phone`` and ``mobilephone``
+    into one namespace. That can turn two otherwise distinct Contacts into a false
+    duplicate whenever a secondary mobile happens to equal another Contact's
+    primary Phone. Production matching is intentionally narrower: ``phone`` is
+    authoritative, while ``mobilephone`` remains synchronized output only.
+    """
+
+    for contact in _BASE_ITER_HUBSPOT_CONTACTS(access_token):
+        properties = contact.get("properties")
+        if not isinstance(properties, dict) or "mobilephone" not in properties:
+            yield contact
+            continue
+        primary_only = dict(contact)
+        primary_properties = dict(properties)
+        primary_properties.pop("mobilephone", None)
+        primary_only["properties"] = primary_properties
+        yield primary_only
+
+
 def _install_refinements() -> None:
     base.NOTE_SOURCES = CUSTOMER_NOTE_SOURCES
     base.customer_note = customer_note
     base.customer_needs_detail = customer_needs_detail
     base.complete_customer = complete_customer
+    base.iter_hubspot_contacts = iter_hubspot_contacts_by_primary_phone
     base.CONTACT_FIELD_DERIVATIONS["note"] = customer_note
 
 
@@ -191,6 +222,7 @@ def sync(
         hubspot_access_token=hubspot_access_token,
         fallback_dial_code=fallback_dial_code,
     )
+    summary["hubspot_contact_identity_property"] = "phone"
     summary["easystore_customer_note_fields"] = list(CUSTOMER_NOTE_SOURCES)
     summary["customer_notes_enriched_from_nested_customer_object"] = len(
         _FALLBACK_CUSTOMER_IDS_USED
