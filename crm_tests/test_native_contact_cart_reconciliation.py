@@ -78,6 +78,64 @@ class NativeDateOfBirthTests(unittest.TestCase):
         self.assertNotIn("easystore_customer_birthday", properties)
 
 
+class ContactSourceDateTests(unittest.TestCase):
+    def test_contact_source_dates_have_explicit_easystore_destinations(self) -> None:
+        original = customer_sync.base.CONTACT_FIELDS
+        try:
+            customer_sync._install_contact_source_date_fields()
+            fields = {field.key: field for field in customer_sync.base.CONTACT_FIELDS}
+            created = fields["source_created_at"]
+            modified = fields["source_modified_at"]
+
+            self.assertEqual(created.fallback, "easystore_customer_created_at")
+            self.assertEqual(created.sources[0], "created_at")
+            self.assertEqual(modified.fallback, "easystore_customer_modified_at")
+            self.assertEqual(modified.sources[0], "updated_at")
+            self.assertEqual(created.native, ())
+            self.assertEqual(modified.native, ())
+        finally:
+            customer_sync.base.CONTACT_FIELDS = original
+
+    def test_legacy_customer_since_destination_is_no_longer_written(self) -> None:
+        with mock.patch.object(
+            customer_sync,
+            "_BASE_RESOLVE_CONTACT_FIELDS",
+            return_value={
+                "customer_since": "easystore_customer_since",
+                "source_created_at": "easystore_customer_created_at",
+                "source_modified_at": "easystore_customer_modified_at",
+            },
+        ), mock.patch.object(customer_sync, "_NATIVE_DOB_STRING", False):
+            resolved = customer_sync.resolve_contact_fields("hs")
+
+        self.assertNotIn("customer_since", resolved)
+        self.assertEqual(
+            resolved["source_created_at"],
+            "easystore_customer_created_at",
+        )
+        self.assertEqual(
+            resolved["source_modified_at"],
+            "easystore_customer_modified_at",
+        )
+
+    def test_customer_field_values_use_easystore_created_and_updated_timestamps(self) -> None:
+        original = customer_sync.base.CONTACT_FIELDS
+        try:
+            customer_sync._install_contact_source_date_fields()
+            values = customer_sync.base.customer_field_values(
+                {
+                    "created_at": "2024-01-02T03:04:05Z",
+                    "updated_at": "2024-06-07T08:09:10Z",
+                }
+            )
+        finally:
+            customer_sync.base.CONTACT_FIELDS = original
+
+        self.assertIn("source_created_at", values)
+        self.assertIn("source_modified_at", values)
+        self.assertNotEqual(values["source_created_at"], values["source_modified_at"])
+
+
 class NativeCartStatusTests(unittest.TestCase):
     def test_open_unpaid_checkout_uses_native_abandoned_status(self) -> None:
         with mock.patch.object(
@@ -147,6 +205,45 @@ class NativeCartStatusTests(unittest.TestCase):
 
         self.assertEqual(properties["easystore_cart_status"], "unpaid")
         self.assertNotIn("hs_external_status", properties)
+
+
+class CartSourceDateTests(unittest.TestCase):
+    def test_cart_created_and_modified_dates_use_native_external_fields(self) -> None:
+        original = checkout_sync.commerce.cart_mapping.CART_FIELDS
+        try:
+            checkout_sync._install_native_cart_source_date_fields()
+            fields = {
+                field.key: field
+                for field in checkout_sync.commerce.cart_mapping.CART_FIELDS
+            }
+            created = fields["created_at"]
+            modified = fields["modified_at"]
+            abandoned = fields["abandoned_at"]
+
+            self.assertEqual(created.native, ("hs_external_created_date",))
+            self.assertEqual(modified.native, ("hs_external_modified_date",))
+            self.assertEqual(modified.sources[0], "updated_at")
+            self.assertEqual(abandoned.native, ())
+            self.assertEqual(abandoned.sources, ("abandoned_at",))
+            self.assertEqual(abandoned.fallback, "easystore_cart_abandoned_at")
+        finally:
+            checkout_sync.commerce.cart_mapping.CART_FIELDS = original
+
+    def test_admin_checkout_preserves_source_modified_and_abandoned_timestamps(self) -> None:
+        with mock.patch.object(
+            checkout_sync,
+            "_BASE_ADMIN_AS_CHECKOUT",
+            return_value={"created_at": "2024-01-02T03:04:05Z"},
+        ):
+            checkout = checkout_sync.admin_checkout_with_source_dates(
+                {
+                    "updated_at": "2024-06-07T08:09:10Z",
+                    "abandoned_at": "2024-06-01T02:03:04Z",
+                }
+            )
+
+        self.assertEqual(checkout["updated_at"], "2024-06-07T08:09:10Z")
+        self.assertEqual(checkout["abandoned_at"], "2024-06-01T02:03:04Z")
 
 
 class ConvertedCartReconciliationTests(unittest.TestCase):
