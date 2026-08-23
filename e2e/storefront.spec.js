@@ -29,12 +29,13 @@ test.describe('storefront navigation and discovery', () => {
       await menu.click();
       await expect(page.locator('#menu-drawer')).toBeVisible();
       await expect(page.locator('#menu-drawer a[href="/collections/the-hobbit"]:visible').first()).toBeVisible();
+      await expect(page.locator('#menu-drawer a[href="/collections/secrets-of-strixhaven"]')).toHaveCount(0);
     } else {
       const desktopNav = page.locator('header nav:visible').first();
       await expect(desktopNav).toBeVisible();
       await expect(desktopNav.locator('a[href="/collections/the-hobbit"]:visible').first()).toBeVisible();
       await expect(desktopNav.locator('a[href="/collections/marvel-super-heroes"]:visible').first()).toBeVisible();
-      await expect(desktopNav.locator('a[href="/collections/secrets-of-strixhaven"]:visible').first()).toBeVisible();
+      await expect(desktopNav.locator('a[href="/collections/secrets-of-strixhaven"]')).toHaveCount(0);
     }
   });
 
