@@ -23,6 +23,10 @@ If EasyStore checkout settings or the theme later permit guest purchase, revisit
 
 That remains the deterministic acquisition answer for links served by `cc-attribution`.
 
+**Deployment prerequisite:** EasyStore must have a non-required text customer attribute titled **`Click ID`**. The theme hides and fills that attribute during registration, the customer sync exposes it to HubSpot as `easystore_attr_click_id`, and only then can the Cloudflare attribution job provision/write `cc_acquisition_*`.
+
+As of 24 August 2026, the connected HubSpot portal exposes `easystore_customer_id` and `easystore_attr_how_did_you_find_us`, but not `easystore_attr_click_id` or `cc_acquisition_*`. That means the code path is present but the manual EasyStore `Click ID` attribute has not yet completed the production data path. Do not call deterministic registration attribution live until a tracked registration has produced `easystore_attr_click_id` and the attribution sync resolves it against D1.
+
 ### Browser/session attribution: HubSpot tracking code
 
 The EasyStore theme loads the HubSpot tracking code for portal `246919056` on every storefront page. This is what allows HubSpot to see landing-page UTMs and browser sessions from deployment day forward. It is not retroactive: traffic before the code was installed cannot be reconstructed by HubSpot browser analytics.
