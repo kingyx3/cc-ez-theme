@@ -4,6 +4,7 @@ import sys
 import unittest
 from pathlib import Path
 from unittest import mock
+from urllib.parse import parse_qs, urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -127,6 +128,32 @@ class ProductPublicationTests(unittest.TestCase):
         self.assertFalse(products.easystore_product_published({"published_at": None}))
         self.assertFalse(products.easystore_product_published({"published_at": ""}))
         self.assertIsNone(products.easystore_product_published({"title": "No signal"}))
+
+    def test_product_reader_requests_both_publication_states(self) -> None:
+        calls: list[str] = []
+
+        def http_json(url: str, **_: object) -> object:
+            calls.append(url)
+            query = parse_qs(urlparse(url).query)
+            visibility = query.get("visibility", [None])[0]
+            if visibility == "published":
+                return {"products": [{"id": 1, "title": "Published"}]}
+            if visibility == "unpublished":
+                return {"products": [{"id": 2, "title": "Unpublished"}]}
+            self.fail(f"unexpected visibility filter: {visibility!r}")
+
+        with mock.patch.object(products, "_http_json", side_effect=http_json):
+            found = list(products.iter_easystore_products("shop.easy.co", "token"))
+
+        self.assertEqual([item["id"] for item in found], [1, 2])
+        self.assertEqual(
+            [products.easystore_product_published(item) for item in found],
+            [True, False],
+        )
+        self.assertEqual(
+            [parse_qs(urlparse(url).query)["visibility"][0] for url in calls],
+            ["published", "unpublished"],
+        )
 
     def test_native_product_status_uses_portal_option_values(self) -> None:
         portal = {
