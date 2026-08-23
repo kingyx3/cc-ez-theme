@@ -171,5 +171,41 @@ class HubSpotOrderStatusTests(unittest.TestCase):
                 self.assertEqual(mapped["hs_external_order_status"], "paid")
 
 
+class HubSpotShippingRecipientTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.original_fields = orders.ORDER_FIELDS
+        self.original_defaults = dict(orders.DEFAULT_ORDER_FIELD_PROPERTIES)
+        production_orders.configure_shipping_recipient_mapping()
+
+    def tearDown(self) -> None:
+        orders.ORDER_FIELDS = self.original_fields
+        orders.DEFAULT_ORDER_FIELD_PROPERTIES = self.original_defaults
+
+    def test_shipping_recipient_uses_native_shipping_address_customer_name(self) -> None:
+        recipient_field = next(
+            field for field in orders.ORDER_FIELDS if field.key == "shipping_recipient"
+        )
+        self.assertEqual(recipient_field.native, ("hs_shipping_address_name",))
+        self.assertIsNone(recipient_field.fallback)
+        self.assertEqual(
+            orders.DEFAULT_ORDER_FIELD_PROPERTIES["shipping_recipient"],
+            "hs_shipping_address_name",
+        )
+
+        mapped = orders.order_properties(
+            {
+                "shipping_address": {
+                    "name": "Reception Desk",
+                    "address1": "1 Example Road",
+                    "city": "Singapore",
+                }
+            },
+            external_id="1002",
+            store_domain="cardboardcollective.easy.co",
+        )
+        self.assertEqual(mapped["hs_shipping_address_name"], "Reception Desk")
+        self.assertNotIn("easystore_shipping_recipient", mapped)
+
+
 if __name__ == "__main__":
     unittest.main()

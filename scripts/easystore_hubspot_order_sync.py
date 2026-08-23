@@ -11,6 +11,7 @@ from easystore_hubspot_schema import first_present, nonempty
 
 
 HUBSPOT_EXTERNAL_ORDER_STATUS = "hs_external_order_status"
+HUBSPOT_SHIPPING_ADDRESS_NAME = "hs_shipping_address_name"
 
 ORDER_STATUS_SOURCES = (
     "status_label",
@@ -125,6 +126,14 @@ def easystore_order_status(order: dict[str, Any]) -> str | None:
     return order_state or fulfillment_state
 
 
+def _refresh_default_order_field_properties() -> None:
+    orders.DEFAULT_ORDER_FIELD_PROPERTIES = {
+        field.key: field.native[0] if field.native else field.fallback
+        for field in orders.ORDER_FIELDS
+        if field.native or field.fallback
+    }
+
+
 def configure_order_status_mapping() -> None:
     """Point the generic Order mapper at HubSpot's actual native Status field."""
 
@@ -145,19 +154,39 @@ def configure_order_status_mapping() -> None:
 
     orders.ORDER_FIELDS = tuple(configured)
     orders.ORDER_FIELD_DERIVATIONS["order_status"] = easystore_order_status
-    orders.DEFAULT_ORDER_FIELD_PROPERTIES = {
-        field.key: field.native[0] if field.native else field.fallback
-        for field in orders.ORDER_FIELDS
-        if field.native or field.fallback
-    }
+    _refresh_default_order_field_properties()
+
+
+def configure_shipping_recipient_mapping() -> None:
+    """Write EasyStore's delivery recipient into HubSpot's native address name."""
+
+    configured = []
+    for field in orders.ORDER_FIELDS:
+        if field.key == "shipping_recipient":
+            configured.append(
+                field._replace(
+                    native=(HUBSPOT_SHIPPING_ADDRESS_NAME,),
+                    fallback=None,
+                    description=(
+                        "Name EasyStore records on the delivery address, written "
+                        "to HubSpot Shipping Address Customer Name."
+                    ),
+                )
+            )
+        else:
+            configured.append(field)
+
+    orders.ORDER_FIELDS = tuple(configured)
+    _refresh_default_order_field_properties()
 
 
 def main(argv: list[str] | None = None) -> int:
     # Keep the generic mapping implementation in easystore_hubspot_orders, but
     # inject the same authoritative Contact identity used by preflight/customer
-    # sync and the portal's actual native Order Status property.
+    # sync plus the portal's actual native Order fields.
     orders.hubspot_contact_index = hubspot_contact_index
     configure_order_status_mapping()
+    configure_shipping_recipient_mapping()
     return orders.main(argv)
 
 
