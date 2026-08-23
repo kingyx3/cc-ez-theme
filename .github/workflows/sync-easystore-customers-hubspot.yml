@@ -20,13 +20,10 @@ on:
 permissions:
   contents: read
 
-# CRM writes use the same GitHub Environment convention as theme deployment:
-# main (including scheduled runs) targets prod; a manually-dispatched non-main
-# branch targets dev. Environment-scoped vars/secrets therefore select the store
-# and credentials without PROD_/DEV_ prefixes in the workflow.
-concurrency:
-  group: easystore-hubspot-crm-sync-${{ github.event_name == 'pull_request' && github.event.pull_request.number || (github.ref == 'refs/heads/main' && 'prod' || 'dev') }}
-  cancel-in-progress: false
+# CRM writes use GitHub Environments to select the store and credentials.
+# Scheduled runs fan out to both prod and dev at the same cadence. Manual runs
+# keep branch semantics: main targets prod and a non-main branch targets dev.
+# Environment-scoped vars/secrets avoid PROD_/DEV_ prefixes in the workflow.
 
 jobs:
   validate:
@@ -62,22 +59,33 @@ jobs:
         run: python -m unittest discover -s crm_tests -v
 
   sync:
-    name: Upsert EasyStore CRM data
+    name: Upsert EasyStore CRM data (${{ matrix.deployment_env }})
     if: github.event_name != 'pull_request'
     needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        # Schedules execute from the default branch, so explicitly fan out to
+        # both environment-scoped stores. A manual run keeps branch targeting:
+        # main -> prod, non-main -> dev.
+        deployment_env: ${{ fromJSON(github.event_name == 'schedule' && '["prod","dev"]' || (github.ref == 'refs/heads/main' && '["prod"]' || '["dev"]')) }}
     runs-on: ubuntu-latest
-    environment: ${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }}
+    environment: ${{ matrix.deployment_env }}
+    concurrency:
+      group: easystore-hubspot-crm-sync-${{ matrix.deployment_env }}
+      cancel-in-progress: false
     # Environment variables are deliberately resolved at the job level, after
     # GitHub has selected dev/prod. EASYSTORE_STORE_DOMAIN has no repository-wide
     # fallback because pointing a CRM sync at the wrong store is unsafe.
     env:
-      DEPLOYMENT_ENV: ${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }}
+      DEPLOYMENT_ENV: ${{ matrix.deployment_env }}
       EASYSTORE_STORE_DOMAIN: ${{ vars.EASYSTORE_STORE_DOMAIN }}
     # Phone normalization uses the scripts' built-in Singapore +65 default.
     # This is store-wide behavior, not deployment-specific configuration.
     # This store's Checkout collection is 1246 sessions, so the Cart stage writes
-    # thousands of HubSpot requests on a first full run. The concurrency group
-    # above already stops two of these overlapping within the same environment.
+    # thousands of HubSpot requests on a first full run. The environment-specific
+    # concurrency group above stops overlapping writes to the same target while
+    # allowing dev and prod to sync independently.
     timeout-minutes: 90
 
     steps:
@@ -237,7 +245,7 @@ jobs:
             echo "### EasyStore → HubSpot CRM sync"
             echo
             echo "- GitHub environment: \`${DEPLOYMENT_ENV}\`"
-            echo "- Schedule: 00:00, 06:00, 12:00, 18:00 Asia/Singapore"
+            echo "- Schedule: 00:00, 06:00, 12:00, 18:00 Asia/Singapore (both dev and prod)"
             echo "- Products: one HubSpot Product per EasyStore variant, keyed by SKU"
             echo "- Customers: keyed by normalized mobile number; ambiguous ownership fails before writes"
             echo "- Source attribution: Cloudflare click ids on contacts resolved against D1; an acquisition is written once and never overwritten"
@@ -322,13 +330,13 @@ jobs:
                 ;;
               *)
                 echo "FAILED   ${stage} (${outcome})"
-                echo "::error::The ${stage} stage of the CRM sync failed. Every other stage still ran; see this run's summary for what each one wrote."
+                echo "::error::The ${stage} stage of the ${DEPLOYMENT_ENV} CRM sync failed. Every other stage still ran; see this run's summary for what each one wrote."
                 failed+=("${stage}")
                 ;;
             esac
           done
           if (( ${#failed[@]} > 0 )); then
-            echo "::error::CRM sync finished with ${#failed[@]} failed stage(s): ${failed[*]}."
+            echo "::error::${DEPLOYMENT_ENV} CRM sync finished with ${#failed[@]} failed stage(s): ${failed[*]}."
             exit 1
           fi
-          echo "Every CRM sync stage that ran succeeded."
+          echo "Every ${DEPLOYMENT_ENV} CRM sync stage that ran succeeded."
