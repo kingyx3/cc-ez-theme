@@ -39,6 +39,7 @@ from easystore_hubspot_schema import (
 HUBSPOT_PRODUCTS_URL = "https://api.hubapi.com/crm/v3/objects/products"
 PRODUCT_OBJECT_TYPE = "products"
 EASYSTORE_PAGE_SIZE = 50
+EASYSTORE_PRODUCT_VISIBILITIES = ("published", "unpublished")
 BATCH_SIZE = 100
 
 PRODUCT_FIELDS: tuple[FieldSpec, ...] = (
@@ -135,20 +136,41 @@ def _extract_list(document: Any, *keys: str) -> list[dict[str, Any]]:
 def iter_easystore_products(store_domain: str, access_token: str) -> Iterator[dict[str, Any]]:
     domain = store_domain.strip().removeprefix("https://").removeprefix("http://").rstrip("/")
 
-    def fetch(page: int) -> list[dict[str, Any]]:
-        query = urlencode({"page": page, "limit": EASYSTORE_PAGE_SIZE, "sort": "id.asc"})
-        document = _http_json(
-            f"https://{domain}/api/3.0/products.json?{query}",
-            headers={"EasyStore-Access-Token": access_token},
-        )
-        return _extract_list(document, "products", "data", "results")
+    # EasyStore documents visibility as two separate Product-list filters rather
+    # than an "all" value. Read both complete, disjoint snapshots so an
+    # unpublished product cannot disappear from the source and leave a stale
+    # Active Product behind in HubSpot.
+    for visibility in EASYSTORE_PRODUCT_VISIBILITIES:
+        def fetch(page: int, *, _visibility: str = visibility) -> list[dict[str, Any]]:
+            query = urlencode(
+                {
+                    "page": page,
+                    "limit": EASYSTORE_PAGE_SIZE,
+                    "sort": "id.asc",
+                    "visibility": _visibility,
+                }
+            )
+            document = _http_json(
+                f"https://{domain}/api/3.0/products.json?{query}",
+                headers={"EasyStore-Access-Token": access_token},
+            )
+            return _extract_list(document, "products", "data", "results")
 
-    yield from iter_easystore_pages(
-        fetch,
-        page_size=EASYSTORE_PAGE_SIZE,
-        what="products.json",
-        error=SyncError,
-    )
+        for product in iter_easystore_pages(
+            fetch,
+            page_size=EASYSTORE_PAGE_SIZE,
+            what=f"products.json visibility={visibility}",
+            error=SyncError,
+        ):
+            # The visibility filter itself is an explicit publication signal.
+            # Some list payloads may omit published_at, so preserve that signal
+            # without overriding a publication field EasyStore did return.
+            if not any(
+                key in product for key in ("is_published", "published", "published_at")
+            ):
+                product = dict(product)
+                product["published"] = visibility == "published"
+            yield product
 
 
 def product_variants(
