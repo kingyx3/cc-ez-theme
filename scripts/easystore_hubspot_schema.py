@@ -1,25 +1,16 @@
 #!/usr/bin/env python3
 """Resolve EasyStore facts onto writable HubSpot properties.
 
-HubSpot's native schema is not identical between portals: a property can be
-absent, calculated from other records, read-only, or defined as an enumeration
-that rejects the free-form labels a storefront reports. Guessing a property name
-either fails the write or silently drops the value, so every field a sync stage
-wants to fill is declared as a :class:`FieldSpec` and resolved against the live
-schema before any write:
+The resolver is deliberately native-first. A declared HubSpot property wins when
+it exists, is writable, and has the same storage type. If a declared name is not
+present, a custom fallback is avoided when the live portal exposes exactly one
+HubSpot-defined property with the same semantic words and storage type. Only
+then, when no lossless native destination can be identified, is the deterministic
+``easystore_*`` fallback provisioned.
 
-* the first native property that exists, is writable and has the expected type
-  wins;
-* otherwise a deterministic ``easystore_*`` property is provisioned in the
-  ``easystore_sync`` group, so the value still lands somewhere;
-* a field declared without a fallback is native-only and is skipped when the
-  portal has no suitable property, rather than adding CRM clutter.
-
-The module holds no HTTP client of its own. Each stage passes its own
-``_http_json`` and its own error class, so requests keep that stage's user agent,
-retry policy and error reporting.
-
-Only Python's standard library is used.
+Enumeration properties are never treated as a string destination: forcing a
+storefront's free-form text into a closed HubSpot option set is data loss (or a
+rejected write), not a native mapping.
 """
 
 from __future__ import annotations
@@ -34,7 +25,6 @@ HUBSPOT_BASE = "https://api.hubapi.com"
 PROPERTY_GROUP = "easystore_sync"
 PROPERTY_GROUP_LABEL = "EasyStore Sync"
 
-# HubSpot property type -> the field type used when provisioning one.
 PROPERTY_FIELD_TYPES = {
     "string": "text",
     "number": "number",
@@ -43,26 +33,33 @@ PROPERTY_FIELD_TYPES = {
 }
 
 _MONEY_PATTERN = re.compile(r"-?\d+(?:\.\d+)?")
-# A compact ISO 8601 calendar date, e.g. 19930420. Read as an epoch it would come
-# out as a day in 1970, so it is recognised before the epoch heuristic.
 _COMPACT_DATE_PATTERN = re.compile(r"^(\d{4})(\d{2})(\d{2})$")
-
-# Tokens that describe every field rather than any one of them, so they make
-# useless search keywords when looking for a portal's property by name.
 _GENERIC_TOKENS = {"amount", "at", "of", "the", "value"}
-# How many candidate property names to report per unresolved field.
 _HINT_LIMIT = 8
+_TOKEN_PATTERN = re.compile(r"[a-z0-9]+")
+
+# Conservative equivalents used only while looking for a HubSpot-defined native
+# property. Every non-generic word in a field key still has to match, and the
+# candidate must be unique and have the exact same HubSpot storage type.
+_SEMANTIC_ALIASES: dict[str, tuple[str, ...]] = {
+    "cancel": ("cancel",),
+    "cancelled": ("cancel",),
+    "canceled": ("cancel",),
+    "cancellation": ("cancel",),
+    "fulfilled": ("fulfill", "fulfil"),
+    "fulfillment": ("fulfill", "fulfil"),
+    "fulfilment": ("fulfill", "fulfil"),
+    "paid": ("paid", "payment"),
+    "refund": ("refund",),
+    "refunded": ("refund",),
+    "buyer": ("buyer", "customer"),
+    "codes": ("code", "codes"),
+    "tags": ("tag", "tags"),
+}
 
 
 class FieldSpec(NamedTuple):
-    """One EasyStore fact and the HubSpot property it should land in.
-
-    ``sources`` are the record keys to read, most preferred first; a field whose
-    value needs assembling instead supplies a derivation callable. ``native``
-    lists the HubSpot properties to prefer. ``fallback`` is the ``easystore_*``
-    property to provision when no native property fits, or ``None`` for a
-    native-only field that is simply skipped in a portal without one.
-    """
+    """One EasyStore fact and the HubSpot property it should land in."""
 
     key: str
     sources: tuple[str, ...] = ()
@@ -76,14 +73,6 @@ class FieldSpec(NamedTuple):
 
 
 def nonempty(value: Any) -> str | None:
-    """Return a scalar value as trimmed text, or ``None``.
-
-    A list or a mapping is never text: ``str([])`` is ``"[]"`` and a list of note
-    records stringifies to a Python repr, either of which would land in the CRM
-    as garbage. A field whose value arrives as a container needs a derivation
-    that knows its shape, so one is reported absent here rather than mangled.
-    """
-
     if value is None or isinstance(value, (list, tuple, set, dict)):
         return None
     text = str(value).strip()
@@ -91,28 +80,15 @@ def nonempty(value: Any) -> str | None:
 
 
 def note_text(value: Any) -> str | None:
-    """Return free text however a storefront wrapped it.
-
-    A note arrives as a string, as a record holding the words, or as a list of
-    note records with their own timestamps. All three are read, and several notes
-    are joined in the order given.
-    """
-
     if isinstance(value, dict):
         return first_present(value, ("note", "body", "content", "text", "message", "value"))
     if isinstance(value, (list, tuple)):
-        notes = [
-            found
-            for found in (note_text(item) for item in value)
-            if found is not None
-        ]
+        notes = [found for found in (note_text(item) for item in value) if found is not None]
         return "\n".join(dict.fromkeys(notes)) if notes else None
     return nonempty(value)
 
 
 def first_present(record: Any, keys: Iterable[str]) -> str | None:
-    """Return the first non-empty value among ``keys``, honouring their order."""
-
     if not isinstance(record, dict):
         return None
     for key in keys:
@@ -123,14 +99,6 @@ def first_present(record: Any, keys: Iterable[str]) -> str | None:
 
 
 def money_value(value: Any, *, absolute: bool = False) -> str | None:
-    """Return a plain decimal string for a monetary value, or ``None``.
-
-    EasyStore reports amounts as numbers or as strings that may carry a currency
-    prefix or thousands separators. HubSpot number properties need a bare
-    decimal, so anything without a parseable amount is dropped rather than
-    written as text.
-    """
-
     if value is None:
         return None
     text = str(value).strip().replace(",", "")
@@ -149,8 +117,6 @@ def money_value(value: Any, *, absolute: bool = False) -> str | None:
 
 
 def iso_datetime(value: Any) -> datetime | None:
-    """Return the datetime an ISO 8601 value denotes, or ``None``."""
-
     text = nonempty(value)
     if text is None:
         return None
@@ -162,22 +128,12 @@ def iso_datetime(value: Any) -> datetime | None:
 
 
 def timestamp_value(value: Any) -> str | None:
-    """Return epoch milliseconds for a timestamp, or ``None``.
-
-    HubSpot datetime properties accept epoch milliseconds, so ISO 8601 values are
-    converted. EasyStore sends offsets for store-local timestamps; a value
-    without an offset is read as UTC rather than guessed at.
-    """
-
     text = nonempty(value)
     if text is None:
         return None
-
     if text.isdigit():
         epoch = int(text)
-        # Ten digits or fewer is a seconds-precision epoch, otherwise milliseconds.
         return str(epoch * 1000 if len(text) <= 10 else epoch)
-
     moment = iso_datetime(text)
     if moment is None:
         return None
@@ -195,18 +151,6 @@ def _utc_midnight(year: int, month: int, day: int) -> str | None:
 
 
 def date_value(value: Any) -> str | None:
-    """Return UTC midnight epoch milliseconds for a calendar date, or ``None``.
-
-    HubSpot date properties store a day, not an instant, and reject a value that
-    is not midnight UTC. A value that does not parse as a date is dropped rather
-    than rounded to today.
-
-    A date keeps the calendar day it was written with. Converting an
-    offset-bearing midnight to UTC first would move a birthday to the previous
-    day for every store east of Greenwich, and a compact ``19930420`` read as an
-    epoch would land in 1970, so both are handled before the epoch heuristic.
-    """
-
     text = nonempty(value)
     if text is None:
         return None
@@ -233,8 +177,6 @@ def field_value(
     field: FieldSpec,
     derivations: dict[str, Callable[[dict[str, Any]], str | None]] | None = None,
 ) -> str | None:
-    """Return the HubSpot-ready value of one field, or ``None`` when absent."""
-
     derive = (derivations or {}).get(field.key)
     raw = derive(record) if derive is not None else first_present(record, field.sources)
     if raw is None:
@@ -253,8 +195,6 @@ def field_values(
     fields: Iterable[FieldSpec],
     derivations: dict[str, Callable[[dict[str, Any]], str | None]] | None = None,
 ) -> dict[str, str]:
-    """Return every mapped value for ``record``, keyed by field key."""
-
     values: dict[str, str] = {}
     for field in fields:
         value = field_value(record, field, derivations)
@@ -268,8 +208,6 @@ def apply_fields(
     values: dict[str, str],
     field_properties: dict[str, str],
 ) -> dict[str, str]:
-    """Write resolved field values onto a HubSpot property payload."""
-
     for key, value in values.items():
         target = field_properties.get(key)
         if target is not None:
@@ -278,8 +216,6 @@ def apply_fields(
 
 
 def writable_property(prop: Any, kind: str) -> bool:
-    """Report whether a HubSpot property accepts a written value of ``kind``."""
-
     if not isinstance(prop, dict):
         return False
     if bool(prop.get("calculated")) or bool(prop.get("archived")):
@@ -287,23 +223,75 @@ def writable_property(prop: Any, kind: str) -> bool:
     metadata = prop.get("modificationMetadata")
     if isinstance(metadata, dict) and bool(metadata.get("readOnlyValue")):
         return False
-    # An enumeration only accepts its own defined options while EasyStore sends
-    # free-form labels, so matching the type keeps the write from being rejected.
     return str(prop.get("type") or "") == kind
 
 
 def select_native(field: FieldSpec, schema: dict[str, dict[str, Any]]) -> str | None:
-    """Return the native HubSpot property to use for ``field``, if any fits."""
-
     for name in field.native:
         if writable_property(schema.get(name), field.kind):
             return name
     return None
 
 
-def describe_property(name: str, prop: dict[str, Any]) -> str:
-    """Return a compact ``name:type`` rendering, flagging what cannot be written."""
+def _semantic_groups(field: FieldSpec) -> tuple[tuple[str, ...], ...]:
+    groups: list[tuple[str, ...]] = []
+    for token in sorted(field_keywords(field)):
+        groups.append(_SEMANTIC_ALIASES.get(token, (token,)))
+    return tuple(groups)
 
+
+def _property_tokens(name: str, prop: dict[str, Any]) -> set[str]:
+    text = f"{name} {prop.get('label') or ''}".casefold()
+    return set(_TOKEN_PATTERN.findall(text))
+
+
+def _group_matches(group: tuple[str, ...], tokens: set[str]) -> bool:
+    return any(
+        token == term or token.startswith(term)
+        for term in group
+        for token in tokens
+    )
+
+
+def semantic_native_candidates(
+    field: FieldSpec,
+    schema: dict[str, dict[str, Any]],
+) -> list[str]:
+    """Return lossless HubSpot-defined properties that semantically fit a field.
+
+    This is intentionally stricter than the diagnostic hint search. A candidate
+    must be HubSpot-defined, writable, exactly the same storage type, and match
+    every meaningful word in the field key. The caller only uses a candidate
+    when exactly one survives, so ambiguity always falls back to a dedicated
+    EasyStore property instead of guessing.
+    """
+
+    groups = _semantic_groups(field)
+    if not groups:
+        return []
+
+    candidates: list[str] = []
+    for name in sorted(schema):
+        prop = schema[name]
+        if not bool(prop.get("hubspotDefined")):
+            continue
+        if not writable_property(prop, field.kind):
+            continue
+        tokens = _property_tokens(name, prop)
+        if all(_group_matches(group, tokens) for group in groups):
+            candidates.append(name)
+    return candidates
+
+
+def select_semantic_native(
+    field: FieldSpec,
+    schema: dict[str, dict[str, Any]],
+) -> str | None:
+    candidates = semantic_native_candidates(field, schema)
+    return candidates[0] if len(candidates) == 1 else None
+
+
+def describe_property(name: str, prop: dict[str, Any]) -> str:
     kind = str(prop.get("type") or "?")
     notes = []
     if bool(prop.get("calculated")):
@@ -315,9 +303,7 @@ def describe_property(name: str, prop: dict[str, Any]) -> str:
 
 
 def field_keywords(field: FieldSpec) -> set[str]:
-    """Return the words worth searching a portal's schema for."""
-
-    tokens = {token for token in field.key.split("_") if token}
+    tokens = {token for token in field.key.casefold().split("_") if token}
     return {token for token in tokens if token not in _GENERIC_TOKENS} or tokens
 
 
@@ -327,17 +313,11 @@ def matching_properties(
     *,
     limit: int = _HINT_LIMIT,
 ) -> list[str]:
-    """Return portal properties whose name or label mentions any keyword.
-
-    This is the answer to "the value landed in a custom property, so what is the
-    native one called here?" — the portal names it rather than the sync guessing.
-    """
-
     wanted = {keyword.casefold() for keyword in keywords}
     found: list[str] = []
     for name in sorted(schema):
         if name.startswith(PROPERTY_GROUP.split("_")[0] + "_"):
-            continue  # Skip this sync's own easystore_* properties.
+            continue
         prop = schema[name]
         haystack = f"{name} {prop.get('label') or ''}".casefold()
         if any(keyword in haystack for keyword in wanted):
@@ -355,13 +335,6 @@ def property_schema(
     error: type[Exception],
     optional: bool = False,
 ) -> dict[str, dict[str, Any]] | None:
-    """Return the portal's properties for ``object_type``, keyed by name.
-
-    ``optional`` tolerates a portal whose token lacks the matching
-    ``crm.schemas.*`` scope: the caller receives ``None`` and can carry on
-    without the fields that depend on the schema.
-    """
-
     document = http_json(
         f"{HUBSPOT_BASE}/crm/v3/properties/{object_type}",
         headers={"Authorization": f"Bearer {access_token}"},
@@ -393,13 +366,6 @@ def ensure_property_group(
     group: str = PROPERTY_GROUP,
     group_label: str = PROPERTY_GROUP_LABEL,
 ) -> None:
-    """Create the property group a provisioned field will live in, if missing.
-
-    ``group`` defaults to ``easystore_sync`` because every EasyStore stage writes
-    there. A stage carrying facts from somewhere else names its own group, so a
-    CRM user reading a contact can tell which system reported a value.
-    """
-
     headers = {"Authorization": f"Bearer {access_token}"}
     allowed = {404, 403} if optional else {404}
     existing = http_json(
@@ -433,19 +399,7 @@ def resolve_fields(
     group: str = PROPERTY_GROUP,
     group_label: str = PROPERTY_GROUP_LABEL,
 ) -> dict[str, str]:
-    """Map every field key onto the HubSpot property that will carry it.
-
-    Fields with no usable native property and no fallback are left out of the
-    result, so a caller writes only what the portal can actually store. With
-    ``optional`` set, a portal that will not disclose its schema yields an empty
-    mapping instead of failing the stage.
-
-    Pass ``report`` to collect diagnostics: ``inventory`` lists every property the
-    portal has, and ``hints`` names the properties that look related to each field
-    that did not find a native home. A value landing in an ``easystore_*``
-    property is usually a native property this sync does not know the name of, and
-    these hints are how that name gets found.
-    """
+    """Map field keys onto lossless native properties, then custom fallbacks."""
 
     fields = tuple(fields)
     schema = property_schema(
@@ -462,6 +416,7 @@ def resolve_fields(
         report["inventory"] = [
             describe_property(name, schema[name]) for name in sorted(schema)
         ]
+        report["semantic_native"] = {}
 
     resolved: dict[str, str] = {}
     missing: list[FieldSpec] = []
@@ -469,11 +424,15 @@ def resolve_fields(
 
     for field in fields:
         native = select_native(field, schema)
+        if native is None and field.fallback is not None:
+            native = select_semantic_native(field, schema)
+            if native is not None and report is not None:
+                report["semantic_native"][field.key] = native
+
         if native is not None:
             resolved[field.key] = native
             continue
 
-        # No native property fitted, so this field is a naming question.
         unresolved.append(field)
         if field.fallback is None:
             continue
@@ -500,6 +459,7 @@ def resolve_fields(
             group=group,
             group_label=group_label,
         )
+
     if report is not None:
         report["hints"] = {
             field.key: hints
@@ -521,8 +481,6 @@ def resolve_fields(
                 "fieldType": field.field_type or PROPERTY_FIELD_TYPES[field.kind],
                 "formField": False,
             },
-            # An optional stage may hold the schema read scope without the write
-            # scope. Dropping the field beats failing a sync over an extra.
             allow_statuses={403} if optional else None,
         )
         if created is None and optional:
@@ -539,20 +497,6 @@ def iter_easystore_pages(
     what: str,
     error: type[Exception],
 ) -> Iterable[dict[str, Any]]:
-    """Yield every record of an EasyStore ``page`` + ``limit`` collection.
-
-    EasyStore's Checkout collection is known to ignore ``page``: it serves page 2
-    identical to page 1. A ``while True`` that only stops on a short page would
-    then never stop, spending the whole job timeout re-reading the first page and
-    rewriting those same records in HubSpot on every lap. Since one endpoint on
-    this API already behaves that way, every list read gets the same guard: a
-    page whose records repeat a page already served ends the read with an error
-    naming the endpoint.
-
-    ``fetch`` is given the page number and returns that page's records, so this
-    holds no HTTP client of its own and each stage keeps its own request policy.
-    """
-
     seen: set[tuple[str, ...]] = set()
     page = 1
     while True:
@@ -577,19 +521,11 @@ def iter_easystore_pages(
 
 
 def observed_keys(seen: set[str], record: Any) -> None:
-    """Record which keys a source record carried, for run diagnostics.
-
-    Only key names are collected, never values, so the summary stays free of
-    customer data while still answering "what does EasyStore actually send?".
-    """
-
     if isinstance(record, dict):
         seen.update(str(key) for key in record)
 
 
 def describe_mapping(field_properties: dict[str, str]) -> str:
-    """Return a one-line, log-friendly rendering of a resolved mapping."""
-
     if not field_properties:
         return "none"
     return ", ".join(

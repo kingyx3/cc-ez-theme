@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
 """Sync EasyStore product variants into HubSpot's Product library.
 
-Each EasyStore variant becomes one HubSpot Product. HubSpot products have one SKU
-and one unit price, so variant-level records preserve the exact SKU/price used by
-order line items. The EasyStore SKU is the HubSpot ``hs_sku`` identity when
-present. Variants without a SKU receive a deterministic ``ES-<product>-<variant>``
-SKU so reruns remain idempotent.
-
-Only Python's standard library is used.
+Each EasyStore variant becomes one HubSpot Product. Product publication state is
+also synchronized onto HubSpot's native Product Status/active property when the
+live schema exposes a lossless Active/Inactive mapping: an EasyStore product with
+no ``published_at`` value is inactive, and a published product is active.
 """
 
 from __future__ import annotations
@@ -20,7 +17,7 @@ import re
 import sys
 import time
 from collections import defaultdict
-from typing import Any, Callable, Iterable, Iterator
+from typing import Any, Callable, Iterable, Iterator, NamedTuple
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -32,8 +29,11 @@ from easystore_hubspot_schema import (
     field_values,
     first_present,
     iter_easystore_pages,
+    nonempty,
     observed_keys,
+    property_schema,
     resolve_fields,
+    writable_property,
 )
 
 HUBSPOT_PRODUCTS_URL = "https://api.hubapi.com/crm/v3/objects/products"
@@ -41,9 +41,6 @@ PRODUCT_OBJECT_TYPE = "products"
 EASYSTORE_PAGE_SIZE = 50
 BATCH_SIZE = 100
 
-# Catalogue detail beyond name, SKU, price, description and cost. All three are
-# native-only: a HubSpot product card renders these itself, and a portal without
-# them gains nothing from a custom copy.
 PRODUCT_FIELDS: tuple[FieldSpec, ...] = (
     FieldSpec(key="url", native=("hs_url",)),
     FieldSpec(key="image", native=("hs_images",)),
@@ -55,15 +52,14 @@ PRODUCT_FIELDS: tuple[FieldSpec, ...] = (
 )
 
 
+class ProductStatusMapping(NamedTuple):
+    property_name: str
+    active_value: str
+    inactive_value: str
+
+
 class SyncError(RuntimeError):
     """Raised when a remote API or identity invariant prevents a safe sync."""
-
-
-def nonempty(value: Any) -> str | None:
-    if value is None:
-        return None
-    text = str(value).strip()
-    return text or None
 
 
 def _http_json(
@@ -96,7 +92,6 @@ def _http_json(
             if allow_statuses and error.code in allow_statuses:
                 error.read()
                 return None
-
             detail = error.read().decode("utf-8", errors="replace")
             retryable = error.code == 429 or 500 <= error.code < 600
             if retryable and attempt < retries:
@@ -203,14 +198,11 @@ def iter_hubspot_products(access_token: str) -> Iterator[dict[str, Any]]:
 
 
 def _plain_description(product: dict[str, Any]) -> str | None:
-    text = nonempty(product.get("description"))
-    if text is None:
-        text = nonempty(product.get("body_html"))
+    text = nonempty(product.get("description")) or nonempty(product.get("body_html"))
     if text is None:
         return None
     text = re.sub(r"<[^>]+>", " ", text)
-    text = html.unescape(text)
-    return " ".join(text.split()) or None
+    return " ".join(html.unescape(text).split()) or None
 
 
 def variant_sku(product_id: str, variant: dict[str, Any]) -> tuple[str, bool]:
@@ -224,12 +216,9 @@ def variant_sku(product_id: str, variant: dict[str, Any]) -> tuple[str, bool]:
 
 
 def _product_url(product: dict[str, Any], store_domain: str | None = None) -> str | None:
-    """Return the storefront URL of a product, building it from a handle if needed."""
-
     direct = first_present(product, ("url", "permalink", "online_store_url", "link"))
     if direct is not None:
         return direct if direct.startswith("http") else None
-
     handle = first_present(product, ("handle", "slug", "seo_url"))
     if handle is None or not store_domain:
         return None
@@ -238,39 +227,33 @@ def _product_url(product: dict[str, Any], store_domain: str | None = None) -> st
 
 
 def _product_image(product: dict[str, Any]) -> str | None:
-    """Return one image URL for the product, however EasyStore nests it."""
-
     image = product.get("image")
     if isinstance(image, dict):
         found = first_present(image, ("src", "url", "image_url"))
         if found is not None:
             return found
-
     images = product.get("images")
     if isinstance(images, dict):
         images = [images]
     if isinstance(images, list):
         for candidate in images:
-            if isinstance(candidate, dict):
-                found = first_present(candidate, ("src", "url", "image_url"))
-            else:
-                found = nonempty(candidate)
+            found = (
+                first_present(candidate, ("src", "url", "image_url"))
+                if isinstance(candidate, dict)
+                else nonempty(candidate)
+            )
             if found is not None:
                 return found
-
     return first_present(product, ("image_url", "featured_image", "thumbnail"))
 
 
 def _product_type(product: dict[str, Any]) -> str | None:
-    """Return the product's type, or the category EasyStore filed it under."""
-
     direct = first_present(
         product,
         ("product_type", "type", "category_name", "category_title"),
     )
     if direct is not None:
         return direct
-
     for key in ("category", "categories", "collection", "collections"):
         value = product.get(key)
         if isinstance(value, dict):
@@ -293,8 +276,6 @@ def product_field_values(
     product: dict[str, Any],
     store_domain: str | None = None,
 ) -> dict[str, str]:
-    """Return the catalogue detail fields for a product, keyed by field key."""
-
     derivations: dict[str, Callable[[dict[str, Any]], str | None]] = {
         "url": lambda item: _product_url(item, store_domain),
         "image": _product_image,
@@ -307,13 +288,6 @@ def resolve_product_fields(
     access_token: str,
     report: dict[str, Any] | None = None,
 ) -> dict[str, str]:
-    """Map catalogue detail onto native HubSpot product properties.
-
-    Reading the product schema needs ``crm.schemas.products.read``. It is not
-    needed to synchronize SKU, name, price, description and cost, so a token
-    without it logs a warning and those extra fields are skipped.
-    """
-
     resolved = resolve_fields(
         http_json=_http_json,
         access_token=access_token,
@@ -324,9 +298,7 @@ def resolve_product_fields(
         report=report,
     )
     if len(resolved) < len(PRODUCT_FIELDS):
-        missing = sorted(
-            field.key for field in PRODUCT_FIELDS if field.key not in resolved
-        )
+        missing = sorted(field.key for field in PRODUCT_FIELDS if field.key not in resolved)
         print(
             "WARNING: catalogue fields not synchronized because HubSpot did not "
             "provide a writable property (add crm.schemas.products.read to the "
@@ -336,14 +308,130 @@ def resolve_product_fields(
     return resolved
 
 
+def _boolish(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    text = nonempty(value)
+    if text is None:
+        return None
+    folded = text.casefold()
+    if folded in {"true", "1", "yes", "published", "active"}:
+        return True
+    if folded in {"false", "0", "no", "unpublished", "inactive"}:
+        return False
+    return None
+
+
+def easystore_product_published(product: dict[str, Any]) -> bool | None:
+    """Return EasyStore publication state without confusing it with inventory.
+
+    EasyStore's documented Product payload carries ``published_at``. Null/blank
+    means unpublished and a timestamp means published. Explicit boolean-style
+    publication fields are accepted when a portal supplies them. If none of
+    these fields exists the sync leaves HubSpot status untouched instead of
+    inventing a state from availability or stock.
+    """
+
+    for key in ("is_published", "published"):
+        if key in product:
+            parsed = _boolish(product.get(key))
+            if parsed is not None:
+                return parsed
+    if "published_at" in product:
+        return nonempty(product.get("published_at")) is not None
+    return None
+
+
+def _status_option_values(prop: dict[str, Any]) -> tuple[str, str] | None:
+    options = prop.get("options")
+    if not isinstance(options, list):
+        return None
+    active: str | None = None
+    inactive: str | None = None
+    for option in options:
+        if not isinstance(option, dict):
+            continue
+        value = nonempty(option.get("value"))
+        if value is None:
+            continue
+        labels = {
+            text.casefold()
+            for text in (
+                nonempty(option.get("label")),
+                value,
+            )
+            if text is not None
+        }
+        if "active" in labels:
+            active = value
+        if "inactive" in labels:
+            inactive = value
+    if active is None or inactive is None:
+        return None
+    return active, inactive
+
+
+def _status_tokens(name: str, prop: dict[str, Any]) -> set[str]:
+    return set(re.findall(r"[a-z0-9]+", f"{name} {prop.get('label') or ''}".casefold()))
+
+
+def resolve_product_status_mapping(access_token: str) -> ProductStatusMapping | None:
+    """Resolve HubSpot's native Active/Inactive product property losslessly."""
+
+    schema = property_schema(
+        http_json=_http_json,
+        access_token=access_token,
+        object_type=PRODUCT_OBJECT_TYPE,
+        error=SyncError,
+        optional=True,
+    )
+    if schema is None:
+        return None
+
+    # Prefer the known native names, but read the portal's actual option values.
+    for name in ("hs_product_status", "hs_active"):
+        prop = schema.get(name)
+        if not isinstance(prop, dict):
+            continue
+        if writable_property(prop, "enumeration"):
+            values = _status_option_values(prop)
+            if values is not None:
+                return ProductStatusMapping(name, values[0], values[1])
+        if name == "hs_active" and writable_property(prop, "bool"):
+            return ProductStatusMapping(name, "true", "false")
+
+    # Portals can expose a different internal name. Only accept one unambiguous
+    # HubSpot-defined property whose semantics and option set say Product Status.
+    enum_candidates: list[ProductStatusMapping] = []
+    bool_candidates: list[ProductStatusMapping] = []
+    for name, prop in schema.items():
+        if not bool(prop.get("hubspotDefined")):
+            continue
+        tokens = _status_tokens(name, prop)
+        if writable_property(prop, "enumeration") and "status" in tokens:
+            values = _status_option_values(prop)
+            if values is not None and ("product" in tokens or name.startswith("hs_product")):
+                enum_candidates.append(ProductStatusMapping(name, values[0], values[1]))
+        if writable_property(prop, "bool") and "active" in tokens and "product" in tokens:
+            bool_candidates.append(ProductStatusMapping(name, "true", "false"))
+
+    candidates = enum_candidates or bool_candidates
+    return candidates[0] if len(candidates) == 1 else None
+
+
 def variant_properties(
     product: dict[str, Any],
     variant: dict[str, Any],
     sku: str,
     field_properties: dict[str, str] | None = None,
     store_domain: str | None = None,
+    status_mapping: ProductStatusMapping | None = None,
 ) -> dict[str, str]:
-    title = nonempty(product.get("title")) or nonempty(product.get("name")) or f"EasyStore product {product.get('id')}"
+    title = (
+        nonempty(product.get("title"))
+        or nonempty(product.get("name"))
+        or f"EasyStore product {product.get('id')}"
+    )
     variant_name = nonempty(variant.get("name")) or nonempty(variant.get("title"))
     if variant_name and variant_name.casefold() not in {"default", "default title"}:
         name = f"{title} — {variant_name}"
@@ -362,10 +450,12 @@ def variant_properties(
         props["hs_cost_of_goods_sold"] = cost
 
     if field_properties:
-        apply_fields(
-            props,
-            product_field_values(product, store_domain),
-            field_properties,
+        apply_fields(props, product_field_values(product, store_domain), field_properties)
+
+    published = easystore_product_published(product)
+    if status_mapping is not None and published is not None:
+        props[status_mapping.property_name] = (
+            status_mapping.active_value if published else status_mapping.inactive_value
         )
     return props
 
@@ -381,8 +471,6 @@ def assert_batch_success(
     action: str,
     expected_count: int,
 ) -> None:
-    """Reject HubSpot batch responses that contain partial or pending failures."""
-
     if not isinstance(document, dict):
         raise SyncError(f"HubSpot product batch {action} returned an invalid response")
 
@@ -391,7 +479,6 @@ def assert_batch_success(
         num_errors = int(document.get("numErrors") or 0)
     except (TypeError, ValueError):
         num_errors = 1
-
     if num_errors or (isinstance(errors, list) and errors):
         detail = json.dumps(errors[:3], ensure_ascii=False) if isinstance(errors, list) else repr(errors)
         raise SyncError(
@@ -401,16 +488,13 @@ def assert_batch_success(
 
     status = str(document.get("status") or "").upper()
     if status and status != "COMPLETE":
-        raise SyncError(
-            f"HubSpot product batch {action} did not complete synchronously: {status}"
-        )
+        raise SyncError(f"HubSpot product batch {action} did not complete synchronously: {status}")
 
     results = document.get("results")
     if not isinstance(results, list) or len(results) != expected_count:
         actual = len(results) if isinstance(results, list) else "missing"
         raise SyncError(
-            f"HubSpot product batch {action} returned {actual} results for "
-            f"{expected_count} inputs"
+            f"HubSpot product batch {action} returned {actual} results for {expected_count} inputs"
         )
 
 
@@ -420,9 +504,7 @@ def _batch_write(access_token: str, action: str, inputs: list[dict[str, Any]]) -
         traced: list[dict[str, Any]] = []
         for item_number, item in enumerate(batch, start=1):
             traced_item = dict(item)
-            traced_item["objectWriteTraceId"] = (
-                f"products-{action}-{batch_number}-{item_number}"
-            )
+            traced_item["objectWriteTraceId"] = f"products-{action}-{batch_number}-{item_number}"
             traced.append(traced_item)
 
         response = _http_json(
@@ -431,11 +513,7 @@ def _batch_write(access_token: str, action: str, inputs: list[dict[str, Any]]) -
             headers=headers,
             payload={"inputs": traced},
         )
-        assert_batch_success(
-            response,
-            action=action,
-            expected_count=len(traced),
-        )
+        assert_batch_success(response, action=action, expected_count=len(traced))
 
 
 def sync(
@@ -445,15 +523,25 @@ def sync(
     hubspot_access_token: str,
 ) -> dict[str, Any]:
     schema_report: dict[str, Any] = {}
-    product_field_properties = resolve_product_fields(
-        hubspot_access_token,
-        schema_report,
-    )
+    product_field_properties = resolve_product_fields(hubspot_access_token, schema_report)
+    status_mapping = resolve_product_status_mapping(hubspot_access_token)
     print(
-        "Catalogue fields mapped to HubSpot properties: "
-        + describe_mapping(product_field_properties),
+        "Catalogue fields mapped to HubSpot properties: " + describe_mapping(product_field_properties),
         file=sys.stderr,
     )
+    if status_mapping is None:
+        print(
+            "WARNING: HubSpot native Product Status could not be resolved losslessly; "
+            "publication status will be left unchanged. crm.schemas.products.read is "
+            "required to inspect the native status options.",
+            file=sys.stderr,
+        )
+    else:
+        print(
+            f"EasyStore publication mapped to HubSpot {status_mapping.property_name} "
+            f"({status_mapping.active_value!r}/{status_mapping.inactive_value!r}).",
+            file=sys.stderr,
+        )
 
     hubspot_by_sku: dict[str, set[str]] = defaultdict(set)
     hubspot_total = 0
@@ -474,10 +562,21 @@ def sync(
     easystore_variants = 0
     synthetic_skus = 0
     duplicate_easystore_skus = 0
+    published_products = 0
+    unpublished_products = 0
+    publication_unknown_products = 0
 
     for product in iter_easystore_products(store_domain, easystore_access_token):
         easystore_products += 1
         observed_keys(product_keys, product)
+        publication = easystore_product_published(product)
+        if publication is True:
+            published_products += 1
+        elif publication is False:
+            unpublished_products += 1
+        else:
+            publication_unknown_products += 1
+
         product_id = nonempty(product.get("id"))
         if product_id is None:
             continue
@@ -502,8 +601,9 @@ def sync(
     creates: list[dict[str, Any]] = []
     updates: list[dict[str, Any]] = []
     ambiguous_hubspot_skus = 0
-    # How many synchronized variants carried each catalogue field. A zero means
-    # EasyStore did not report it, not that HubSpot rejected it.
+    active_variants = 0
+    inactive_variants = 0
+    status_unknown_variants = 0
     field_coverage: dict[str, int] = {field.key: 0 for field in PRODUCT_FIELDS}
 
     for key, (product, variant, sku) in easystore_by_sku.items():
@@ -515,12 +615,22 @@ def sync(
                 file=sys.stderr,
             )
             continue
+
+        publication = easystore_product_published(product)
+        if publication is True:
+            active_variants += 1
+        elif publication is False:
+            inactive_variants += 1
+        else:
+            status_unknown_variants += 1
+
         properties = variant_properties(
             product,
             variant,
             sku,
             product_field_properties,
             store_domain,
+            status_mapping,
         )
         for field_key in product_field_values(product, store_domain):
             field_coverage[field_key] += 1
@@ -541,15 +651,20 @@ def sync(
     return {
         "easystore_products": easystore_products,
         "easystore_variants": easystore_variants,
+        "easystore_published_products": published_products,
+        "easystore_unpublished_products": unpublished_products,
+        "easystore_publication_unknown_products": publication_unknown_products,
         "hubspot_products_scanned": hubspot_total,
         "updated": len(updates),
         "created": len(creates),
+        "hubspot_product_status_property": status_mapping.property_name if status_mapping else None,
+        "hubspot_variants_marked_active": active_variants if status_mapping else 0,
+        "hubspot_variants_marked_inactive": inactive_variants if status_mapping else 0,
+        "hubspot_variants_publication_unknown": status_unknown_variants,
         "synthetic_skus_for_blank_easystore_skus": synthetic_skus,
         "duplicate_easystore_skus": duplicate_easystore_skus,
         "ambiguous_hubspot_skus": ambiguous_hubspot_skus,
-        "hubspot_catalogue_field_properties": dict(
-            sorted(product_field_properties.items())
-        ),
+        "hubspot_catalogue_field_properties": dict(sorted(product_field_properties.items())),
         "easystore_catalogue_field_coverage": dict(sorted(field_coverage.items())),
         "easystore_product_keys_seen": sorted(product_keys),
         "easystore_variant_keys_seen": sorted(variant_keys),
