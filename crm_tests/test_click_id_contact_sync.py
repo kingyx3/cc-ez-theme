@@ -46,19 +46,18 @@ class ClickIdPropertyContractTests(unittest.TestCase):
 
 class ClickIdSchemaProvisioningTests(unittest.TestCase):
     def test_click_id_property_is_provisioned_before_any_customer_has_a_value(self) -> None:
-        with (
-            mock.patch.object(
-                production,
-                "_BASE_RESOLVE_CONTACT_FIELDS",
-                return_value={"customer_id": "easystore_customer_id"},
-            ),
-            mock.patch.object(
-                production,
-                "resolve_fields",
-                return_value={
-                    production.CLICK_ID_FIELD_KEY: production.CLICK_ID_HUBSPOT_PROPERTY
+        resolver = mock.Mock(
+            side_effect=[
+                {"customer_id": "easystore_customer_id"},
+                {
+                    production.CLICK_ID_FIELD_KEY: production.CLICK_ID_HUBSPOT_PROPERTY,
                 },
-            ) as resolve_click,
+            ]
+        )
+        with mock.patch.object(
+            production,
+            "_BASE_RESOLVE_CONTACT_FIELDS",
+            resolver,
         ):
             resolved = production.resolve_contact_fields(
                 "hub-token",
@@ -70,28 +69,50 @@ class ClickIdSchemaProvisioningTests(unittest.TestCase):
             resolved[production.CLICK_ID_FIELD_KEY],
             production.CLICK_ID_HUBSPOT_PROPERTY,
         )
-        resolve_click.assert_called_once()
-        call = resolve_click.call_args.kwargs
-        self.assertEqual(call["object_type"], base.CONTACT_OBJECT_TYPE)
-        self.assertEqual(call["fields"], (production.CLICK_ID_FIELD,))
-        self.assertTrue(call["optional"])
+        self.assertEqual(resolver.call_count, 2)
+        self.assertEqual(resolver.call_args_list[0].args[1], ())
+        self.assertEqual(
+            resolver.call_args_list[1].args[1],
+            (production.CLICK_ID_ATTRIBUTE_LABEL,),
+        )
+        self.assertIsNone(resolver.call_args_list[1].args[2])
 
     def test_canonical_click_id_mapping_wins_over_a_legacy_discovery(self) -> None:
-        with (
-            mock.patch.object(
-                production,
-                "_BASE_RESOLVE_CONTACT_FIELDS",
-                return_value={
+        resolver = mock.Mock(
+            side_effect=[
+                {
                     production.CLICK_ID_FIELD_KEY: "easystore_attr_clickid",
                 },
-            ),
-            mock.patch.object(
-                production,
-                "resolve_fields",
-                return_value={
-                    production.CLICK_ID_FIELD_KEY: production.CLICK_ID_HUBSPOT_PROPERTY
+                {
+                    production.CLICK_ID_FIELD_KEY: production.CLICK_ID_HUBSPOT_PROPERTY,
                 },
-            ),
+            ]
+        )
+        with mock.patch.object(
+            production,
+            "_BASE_RESOLVE_CONTACT_FIELDS",
+            resolver,
+        ):
+            resolved = production.resolve_contact_fields("hub-token")
+
+        self.assertEqual(
+            resolved[production.CLICK_ID_FIELD_KEY],
+            production.CLICK_ID_HUBSPOT_PROPERTY,
+        )
+
+    def test_missing_schema_scope_keeps_any_mapping_the_main_pass_resolved(self) -> None:
+        resolver = mock.Mock(
+            side_effect=[
+                {
+                    production.CLICK_ID_FIELD_KEY: production.CLICK_ID_HUBSPOT_PROPERTY,
+                },
+                {},
+            ]
+        )
+        with mock.patch.object(
+            production,
+            "_BASE_RESOLVE_CONTACT_FIELDS",
+            resolver,
         ):
             resolved = production.resolve_contact_fields("hub-token")
 
