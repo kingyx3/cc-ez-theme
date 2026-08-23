@@ -16,17 +16,23 @@ on:
     - cron: "0 */6 * * *"
       timezone: "Asia/Singapore"
   workflow_dispatch:
+    inputs:
+      deployment_env:
+        description: GitHub environment to sync
+        required: true
+        default: dev
+        type: choice
+        options:
+          - dev
+          - prod
 
 permissions:
   contents: read
 
-concurrency:
-  group: easystore-hubspot-crm-sync-${{ github.event_name == 'pull_request' && github.event.pull_request.number || 'production' }}
-  cancel-in-progress: false
-
-env:
-  EASYSTORE_STORE_DOMAIN: ${{ vars.EASYSTORE_STORE_DOMAIN || 'cardboardcollective.easy.co' }}
-  CUSTOMER_SYNC_DEFAULT_DIAL_CODE: ${{ vars.CUSTOMER_SYNC_DEFAULT_DIAL_CODE || '65' }}
+# CRM writes use GitHub Environments to select the store and credentials.
+# Scheduled runs fan out to both prod and dev at the same cadence. Manual runs
+# explicitly select dev/prod (default dev), regardless of the branch/ref used to
+# dispatch the workflow. Environment-scoped vars/secrets avoid PROD_/DEV_ prefixes.
 
 jobs:
   validate:
@@ -62,13 +68,33 @@ jobs:
         run: python -m unittest discover -s crm_tests -v
 
   sync:
-    name: Upsert EasyStore CRM data
+    name: Upsert EasyStore CRM data (${{ matrix.deployment_env }})
     if: github.event_name != 'pull_request'
     needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        # Schedules execute from the default branch, so explicitly fan out to
+        # both environment-scoped stores. workflow_dispatch uses the selected
+        # input instead of inferring the environment from the chosen branch.
+        deployment_env: ${{ fromJSON(github.event_name == 'schedule' && '["prod","dev"]' || format('["{0}"]', inputs.deployment_env || 'dev')) }}
     runs-on: ubuntu-latest
+    environment: ${{ matrix.deployment_env }}
+    concurrency:
+      group: easystore-hubspot-crm-sync-${{ matrix.deployment_env }}
+      cancel-in-progress: false
+    # Environment variables are deliberately resolved at the job level, after
+    # GitHub has selected dev/prod. EASYSTORE_STORE_DOMAIN has no repository-wide
+    # fallback because pointing a CRM sync at the wrong store is unsafe.
+    env:
+      DEPLOYMENT_ENV: ${{ matrix.deployment_env }}
+      EASYSTORE_STORE_DOMAIN: ${{ vars.EASYSTORE_STORE_DOMAIN }}
+    # Phone normalization uses the scripts' built-in Singapore +65 default.
+    # This is store-wide behavior, not deployment-specific configuration.
     # This store's Checkout collection is 1246 sessions, so the Cart stage writes
-    # thousands of HubSpot requests on a first full run. The concurrency group
-    # above already stops two of these overlapping.
+    # thousands of HubSpot requests on a first full run. The environment-specific
+    # concurrency group above stops overlapping writes to the same target while
+    # allowing dev and prod to sync independently.
     timeout-minutes: 90
 
     steps:
@@ -80,7 +106,7 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Check CRM sync credentials
+      - name: Check CRM sync environment
         env:
           EASYSTORE_ACCESS_TOKEN: ${{ secrets.EASYSTORE_ACCESS_TOKEN }}
           EASYSTORE_ADMIN_TOKEN: ${{ secrets.EASYSTORE_ADMIN_TOKEN }}
@@ -88,18 +114,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if [[ -z "${EASYSTORE_STORE_DOMAIN}" ]]; then
+            echo "::error::EASYSTORE_STORE_DOMAIN is required as a variable in the ${DEPLOYMENT_ENV} GitHub environment."
+            exit 1
+          fi
           if [[ -z "${EASYSTORE_ACCESS_TOKEN}" ]]; then
-            echo "::error::EASYSTORE_ACCESS_TOKEN is required for EasyStore's public /api/3.0 endpoints."
+            echo "::error::EASYSTORE_ACCESS_TOKEN is required as a secret in the ${DEPLOYMENT_ENV} GitHub environment for EasyStore's public /api/3.0 endpoints."
             exit 1
           fi
           if [[ -z "${EASYSTORE_ADMIN_TOKEN}" ]]; then
-            echo "::error::EASYSTORE_ADMIN_TOKEN is required for EasyStore's admin/v2 checkout endpoint."
+            echo "::error::EASYSTORE_ADMIN_TOKEN is required as a secret in the ${DEPLOYMENT_ENV} GitHub environment for EasyStore's admin/v2 checkout endpoint."
             exit 1
           fi
           if [[ -z "${HUBSPOT_ACCESS_TOKEN}" ]]; then
-            echo "::error::HUBSPOT_ACCESS_TOKEN is required with product/contact/order/cart/line-item read+write scopes and CRM schema read/write scopes."
+            echo "::error::HUBSPOT_ACCESS_TOKEN is required as a secret in the ${DEPLOYMENT_ENV} GitHub environment with product/contact/order/cart/line-item read+write scopes and CRM schema read/write scopes."
             exit 1
           fi
+          echo "Using GitHub environment ${DEPLOYMENT_ENV} for store ${EASYSTORE_STORE_DOMAIN}."
 
       # Preflight is the one stage that must stop the others. It proves the
       # mobile number identifying a customer is unambiguous, and writing
@@ -158,7 +189,7 @@ jobs:
         run: |
           set -euo pipefail
           if [[ -z "${CLOUDFLARE_ACCOUNT_ID}" || -z "${CLOUDFLARE_API_TOKEN}" ]]; then
-            echo "::notice::Cloudflare credentials are not configured; source attribution was skipped."
+            echo "::notice::Cloudflare credentials are not configured in ${DEPLOYMENT_ENV}; source attribution was skipped."
             exit 0
           fi
           python scripts/cloudflare_hubspot_attribution.py | tee attribution-summary.json
@@ -222,7 +253,8 @@ jobs:
           {
             echo "### EasyStore → HubSpot CRM sync"
             echo
-            echo "- Schedule: 00:00, 06:00, 12:00, 18:00 Asia/Singapore"
+            echo "- GitHub environment: \`${DEPLOYMENT_ENV}\`"
+            echo "- Schedule: 00:00, 06:00, 12:00, 18:00 Asia/Singapore (both dev and prod)"
             echo "- Products: one HubSpot Product per EasyStore variant, keyed by SKU"
             echo "- Customers: keyed by normalized mobile number; ambiguous ownership fails before writes"
             echo "- Source attribution: Cloudflare click ids on contacts resolved against D1; an acquisition is written once and never overwritten"
@@ -307,13 +339,13 @@ jobs:
                 ;;
               *)
                 echo "FAILED   ${stage} (${outcome})"
-                echo "::error::The ${stage} stage of the CRM sync failed. Every other stage still ran; see this run's summary for what each one wrote."
+                echo "::error::The ${stage} stage of the ${DEPLOYMENT_ENV} CRM sync failed. Every other stage still ran; see this run's summary for what each one wrote."
                 failed+=("${stage}")
                 ;;
             esac
           done
           if (( ${#failed[@]} > 0 )); then
-            echo "::error::CRM sync finished with ${#failed[@]} failed stage(s): ${failed[*]}."
+            echo "::error::${DEPLOYMENT_ENV} CRM sync finished with ${#failed[@]} failed stage(s): ${failed[*]}."
             exit 1
           fi
-          echo "Every CRM sync stage that ran succeeded."
+          echo "Every ${DEPLOYMENT_ENV} CRM sync stage that ran succeeded."
