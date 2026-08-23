@@ -73,7 +73,8 @@ jobs:
     env:
       DEPLOYMENT_ENV: ${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }}
       EASYSTORE_STORE_DOMAIN: ${{ vars.EASYSTORE_STORE_DOMAIN }}
-      CUSTOMER_SYNC_DEFAULT_DIAL_CODE: ${{ vars.CUSTOMER_SYNC_DEFAULT_DIAL_CODE || '65' }}
+    # Phone normalization uses the scripts' built-in Singapore +65 default.
+    # This is store-wide behavior, not deployment-specific configuration.
     # This store's Checkout collection is 1246 sessions, so the Cart stage writes
     # thousands of HubSpot requests on a first full run. The concurrency group
     # above already stops two of these overlapping within the same environment.
