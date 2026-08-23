@@ -1,18 +1,23 @@
 #!/usr/bin/env python3
-"""Production Checkout/Cart sync with native HubSpot Cart lifecycle status.
+"""Production Checkout/Cart sync with native HubSpot lifecycle and source dates.
 
 HubSpot exposes one native Cart lifecycle field in this portal:
-``hs_external_status`` (label: Status). It is the authoritative human-readable
-state of the shopping session, so the production sync writes the normalized CRM
-states ``Abandoned`` and ``Recovered`` there instead of leaking EasyStore's raw
-``unpaid`` value into the HubSpot card.
+``hs_external_status`` (label: Status). It is the authoritative abandonment /
+recovery marker for the shopping session, so production writes only the
+normalized CRM states ``Abandoned`` and ``Recovered`` there. No EasyStore custom
+abandoned boolean or abandoned timestamp is provisioned or written.
+
+HubSpot also exposes native external source timestamps for Carts:
+``hs_external_created_date`` (Created Date) and ``hs_external_modified_date``
+(Modified Date). Those properties carry EasyStore's own ``created_at`` and latest
+update timestamp. HubSpot's system ``hs_createdate`` / ``hs_lastmodifieddate``
+remain CRM metadata and are never treated as EasyStore source dates.
 
 Cart records remain associated to their Contact for history. When the checkout
 has become an EasyStore Order, the existing Cart→Order linker is also the point
 where the Cart becomes recovered: the same HubSpot Cart is retained, native
-``hs_external_status`` is set to ``Recovered``, the EasyStore-specific abandoned
-flag is cleared as supplemental source data, and no Contact→Cart association is
-removed.
+``hs_external_status`` is set to ``Recovered``, and no Contact→Cart association
+is removed.
 """
 
 from __future__ import annotations
@@ -24,20 +29,96 @@ import easystore_hubspot_checkouts as checkouts
 import easystore_hubspot_commerce as commerce
 import easystore_hubspot_orders as orders
 from easystore_hubspot_contact_identity import hubspot_contact_index
+from easystore_hubspot_schema import FieldSpec
 
 
 NATIVE_CART_STATUS_PROPERTY = "hs_external_status"
+NATIVE_CART_CREATED_PROPERTY = "hs_external_created_date"
+NATIVE_CART_MODIFIED_PROPERTY = "hs_external_modified_date"
 ABANDONED_STATUS = "Abandoned"
 RECOVERED_STATUS = "Recovered"
 
 _BASE_CART_PROPERTIES = commerce.cart_properties
 _BASE_LINK_CARTS_TO_ORDERS = commerce.link_carts_to_orders
+_BASE_ADMIN_AS_CHECKOUT = checkouts.admin_source.as_checkout
 
 
 def semantic_cart_status(checkout: dict[str, Any]) -> str:
     """Return the normalized HubSpot Cart lifecycle state for one checkout."""
 
     return ABANDONED_STATUS if commerce.is_abandoned(checkout) else RECOVERED_STATUS
+
+
+def _install_native_cart_source_date_fields() -> None:
+    """Use native HubSpot Cart status and external source timestamps only."""
+
+    updated: list[FieldSpec] = []
+    found_modified = False
+    for spec in commerce.cart_mapping.CART_FIELDS:
+        # HubSpot has no native Cart abandoned boolean or abandoned-at timestamp.
+        # Native hs_external_status is the sole abandonment/recovery marker.
+        if spec.key in {"abandoned_at", "is_abandoned"}:
+            continue
+        if spec.key == "created_at":
+            updated.append(
+                spec._replace(
+                    native=(NATIVE_CART_CREATED_PROPERTY,),
+                    fallback="easystore_cart_created_at",
+                    label="EasyStore Cart Started",
+                )
+            )
+            continue
+        if spec.key == "modified_at":
+            found_modified = True
+            updated.append(
+                spec._replace(
+                    sources=(
+                        "updated_at",
+                        "modified_at",
+                        "last_modified_at",
+                        "last_activity_at",
+                    ),
+                    native=(NATIVE_CART_MODIFIED_PROPERTY,),
+                    fallback="easystore_cart_modified_at",
+                    label="EasyStore Cart Modified",
+                )
+            )
+            continue
+        updated.append(spec)
+
+    if not found_modified:
+        updated.append(
+            FieldSpec(
+                key="modified_at",
+                sources=(
+                    "updated_at",
+                    "modified_at",
+                    "last_modified_at",
+                    "last_activity_at",
+                ),
+                native=(NATIVE_CART_MODIFIED_PROPERTY,),
+                fallback="easystore_cart_modified_at",
+                label="EasyStore Cart Modified",
+                description="Date and time the cart was last modified in EasyStore.",
+                kind="datetime",
+            )
+        )
+    commerce.cart_mapping.CART_FIELDS = tuple(updated)
+
+
+def admin_checkout_with_source_dates(record: dict[str, Any]) -> dict[str, Any]:
+    """Preserve EasyStore source modification timestamps in the normalized checkout."""
+
+    checkout = _BASE_ADMIN_AS_CHECKOUT(record)
+    for key in (
+        "updated_at",
+        "modified_at",
+        "last_modified_at",
+        "last_activity_at",
+    ):
+        if record.get(key) is not None:
+            checkout[key] = record[key]
+    return checkout
 
 
 def cart_properties_with_native_status(
@@ -48,13 +129,7 @@ def cart_properties_with_native_status(
     field_properties: dict[str, str],
     fallback_dial_code: str,
 ) -> dict[str, str]:
-    """Map a checkout and make HubSpot's native Status lifecycle-authoritative.
-
-    The low-level mapper retains EasyStore-specific source fields for diagnostics,
-    including ``easystore_cart_is_abandoned``. When the portal resolves the
-    standard Cart Status field, however, its value is normalized to the CRM
-    lifecycle a person actually needs to see: Abandoned or Recovered.
-    """
+    """Map a checkout and make native HubSpot Status lifecycle-authoritative."""
 
     properties = _BASE_CART_PROPERTIES(
         checkout,
@@ -63,6 +138,10 @@ def cart_properties_with_native_status(
         field_properties=field_properties,
         fallback_dial_code=fallback_dial_code,
     )
+    # Defensive cleanup for records mapped by older field tables: production no
+    # longer writes either EasyStore custom abandonment property.
+    properties.pop("easystore_cart_is_abandoned", None)
+    properties.pop("easystore_cart_abandoned_at", None)
     if field_properties.get("status") == NATIVE_CART_STATUS_PROPERTY:
         properties[NATIVE_CART_STATUS_PROPERTY] = semantic_cart_status(checkout)
     return properties
@@ -75,12 +154,7 @@ def link_carts_to_orders_and_reconcile(
     carts_by_token: dict[str, str],
     hubspot_orders: dict[str, str],
 ) -> int:
-    """Link converted Carts to Orders and mark native Status as Recovered.
-
-    A Cart remains a historical shopping-session record after payment, so the
-    Contact association is intentionally untouched. Only Carts for which both the
-    EasyStore cart token and the synchronized HubSpot Order resolve are changed.
-    """
+    """Link converted Carts to Orders and mark native Status as Recovered."""
 
     linked = _BASE_LINK_CARTS_TO_ORDERS(
         orders=orders,
@@ -107,7 +181,6 @@ def link_carts_to_orders_and_reconcile(
             payload={
                 "properties": {
                     NATIVE_CART_STATUS_PROPERTY: RECOVERED_STATUS,
-                    "easystore_cart_is_abandoned": "false",
                 }
             },
         )
@@ -126,6 +199,11 @@ def link_carts_to_orders_and_reconcile(
 def main(argv: list[str] | None = None) -> int:
     # commerce imported these helpers by name, so patch its module globals before
     # the checkout entrypoint starts mapping Carts or resolving associations.
+    _install_native_cart_source_date_fields()
+    # The admin reader previously forced EasyStore created_at into a custom
+    # property. Production now keeps native hs_external_created_date authoritative.
+    checkouts.admin_source._prefer_easystore_cart_started_property = lambda: None
+    checkouts.admin_source.as_checkout = admin_checkout_with_source_dates
     orders.hubspot_contact_index = hubspot_contact_index
     commerce.hubspot_contact_index = hubspot_contact_index
     commerce.cart_properties = cart_properties_with_native_status
