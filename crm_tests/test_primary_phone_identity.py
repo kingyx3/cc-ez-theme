@@ -8,6 +8,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
+import easystore_hubspot_contact_identity as contact_identity
 import easystore_hubspot_customer_sync as customer_sync
 import easystore_hubspot_preflight as preflight
 import easystore_hubspot_sync as base
@@ -104,6 +105,46 @@ class PrimaryPhoneCustomerSyncTests(unittest.TestCase):
         )
         self.assertEqual(properties["phone"], "+6591234567")
         self.assertEqual(properties["mobilephone"], "+6591234567")
+
+
+class PrimaryPhoneCommerceIdentityTests(unittest.TestCase):
+    def test_orders_and_carts_index_only_hubspot_phone(self) -> None:
+        seen_properties: list[str] = []
+        contacts = [
+            {
+                "id": "100",
+                "properties": {
+                    "phone": "+6591234567",
+                    "email": "buyer@example.com",
+                    "easystore_customer_id": "7",
+                    "lifecyclestage": "lead",
+                },
+            },
+            {
+                "id": "200",
+                "properties": {
+                    "mobilephone": "+6591234567",
+                    "email": "other@example.com",
+                },
+            },
+        ]
+
+        def fake_iter(_url: str, _token: str, properties: str):
+            seen_properties.append(properties)
+            return iter(contacts)
+
+        with mock.patch.object(
+            contact_identity.orders,
+            "iter_hubspot_objects",
+            fake_iter,
+        ):
+            index = contact_identity.hubspot_contact_index("hs", "65")
+
+        self.assertEqual(index.by_phone["+6591234567"], {"100"})
+        self.assertEqual(index.by_easystore_customer_id["7"], {"100"})
+        self.assertEqual(index.by_email["buyer@example.com"], {"100"})
+        self.assertEqual(index.lifecycle_by_id["100"], "lead")
+        self.assertNotIn("mobilephone", seen_properties[0])
 
 
 if __name__ == "__main__":
