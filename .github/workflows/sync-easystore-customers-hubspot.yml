@@ -16,14 +16,23 @@ on:
     - cron: "0 */6 * * *"
       timezone: "Asia/Singapore"
   workflow_dispatch:
+    inputs:
+      deployment_env:
+        description: GitHub environment to sync
+        required: true
+        default: dev
+        type: choice
+        options:
+          - dev
+          - prod
 
 permissions:
   contents: read
 
 # CRM writes use GitHub Environments to select the store and credentials.
 # Scheduled runs fan out to both prod and dev at the same cadence. Manual runs
-# keep branch semantics: main targets prod and a non-main branch targets dev.
-# Environment-scoped vars/secrets avoid PROD_/DEV_ prefixes in the workflow.
+# explicitly select dev/prod (default dev), regardless of the branch/ref used to
+# dispatch the workflow. Environment-scoped vars/secrets avoid PROD_/DEV_ prefixes.
 
 jobs:
   validate:
@@ -66,9 +75,9 @@ jobs:
       fail-fast: false
       matrix:
         # Schedules execute from the default branch, so explicitly fan out to
-        # both environment-scoped stores. A manual run keeps branch targeting:
-        # main -> prod, non-main -> dev.
-        deployment_env: ${{ fromJSON(github.event_name == 'schedule' && '["prod","dev"]' || (github.ref == 'refs/heads/main' && '["prod"]' || '["dev"]')) }}
+        # both environment-scoped stores. workflow_dispatch uses the selected
+        # input instead of inferring the environment from the chosen branch.
+        deployment_env: ${{ fromJSON(github.event_name == 'schedule' && '["prod","dev"]' || format('["{0}"]', inputs.deployment_env || 'dev')) }}
     runs-on: ubuntu-latest
     environment: ${{ matrix.deployment_env }}
     concurrency:
