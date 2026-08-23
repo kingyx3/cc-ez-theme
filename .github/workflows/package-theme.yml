@@ -4,17 +4,6 @@ on:
   push:
     branches:
       - "**"
-    # Theme sources and the tooling, tests and dependencies that gate them.
-    # CRM sync changes have their own workflow and must not repackage, import
-    # or republish the storefront theme.
-    paths:
-      - "theme/**"
-      - "tests/**"
-      - "scripts/theme_ci.py"
-      - "scripts/easystore_publish.py"
-      - "requirements-dev.txt"
-      - ".coveragerc"
-      - ".github/workflows/package-theme.yml"
   workflow_dispatch:
 
 permissions:
@@ -23,9 +12,6 @@ permissions:
 env:
   EASYSTORE_API_URL: https://api.easystore.co/admin/v2/store/themes/assets/import
   EASYSTORE_THEMES_API_URL: https://api.easystore.co/admin/v2/store/themes
-  EASYSTORE_POD_ID: ${{ vars.EASYSTORE_POD_ID || '1007' }}
-  EASYSTORE_STORE_DOMAIN: ${{ vars.EASYSTORE_STORE_DOMAIN || 'cardboardcollective.easy.co' }}
-  EASYSTORE_PUBLISH: ${{ vars.EASYSTORE_PUBLISH || 'true' }}
 
 jobs:
   test:
@@ -88,9 +74,9 @@ jobs:
             echo "SHA-256: \`$(sha256sum cc-ez-theme.zip | cut -d ' ' -f 1)\`"
             echo
             if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
-              echo "This run is on \`main\`, so the automatic EasyStore import and publish job also runs."
+              echo "This run deploys through the GitHub \`prod\` environment because the source branch is \`main\`."
             else
-              echo "This run is not on \`main\`, so the workflow stops after packaging. Automatic EasyStore import and publish only happens on \`main\`."
+              echo "This run deploys through the GitHub \`dev\` environment because the source branch is not \`main\`."
             fi
           } >> "${GITHUB_STEP_SUMMARY}"
 
@@ -105,11 +91,15 @@ jobs:
   deploy:
     name: Import and publish packaged theme in EasyStore
     needs: package
-    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    environment: ${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }}
     concurrency:
-      group: easystore-theme-import
+      group: easystore-theme-import-${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }}
       cancel-in-progress: false
+    env:
+      EASYSTORE_POD_ID: ${{ vars.EASYSTORE_POD_ID }}
+      EASYSTORE_STORE_DOMAIN: ${{ vars.EASYSTORE_STORE_DOMAIN }}
+      EASYSTORE_PUBLISH: ${{ vars.EASYSTORE_PUBLISH || 'true' }}
 
     steps:
       - name: Check out repository
@@ -120,18 +110,31 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Check EasyStore credential
+      - name: Check EasyStore credential and environment variables
         id: credential
         env:
           EASYSTORE_ADMIN_TOKEN: ${{ secrets.EASYSTORE_ADMIN_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
+          configured=true
+
           if [[ -z "${EASYSTORE_ADMIN_TOKEN}" ]]; then
-            echo "configured=false" >> "${GITHUB_OUTPUT}"
-            echo "::warning::EASYSTORE_ADMIN_TOKEN is not configured; package succeeded but automatic EasyStore import is skipped."
-          else
-            echo "configured=true" >> "${GITHUB_OUTPUT}"
+            echo "::warning::EASYSTORE_ADMIN_TOKEN is not configured in the selected GitHub environment."
+            configured=false
+          fi
+          if [[ -z "${EASYSTORE_POD_ID}" ]]; then
+            echo "::warning::EASYSTORE_POD_ID is not configured in the selected GitHub environment."
+            configured=false
+          fi
+          if [[ -z "${EASYSTORE_STORE_DOMAIN}" ]]; then
+            echo "::warning::EASYSTORE_STORE_DOMAIN is not configured in the selected GitHub environment."
+            configured=false
+          fi
+
+          echo "configured=${configured}" >> "${GITHUB_OUTPUT}"
+          if [[ "${configured}" != "true" ]]; then
+            echo "::warning::Package succeeded but automatic EasyStore import is skipped."
           fi
 
       - name: Derive deployment identity
@@ -262,6 +265,7 @@ jobs:
           {
             echo "### EasyStore automatic theme import"
             echo
+            echo "- GitHub environment: \`${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }}\`"
             echo "- Theme identity: \`${THEME_DISPLAY_NAME}\`"
             echo "- Theme version: \`${THEME_VERSION}\`"
             echo "- Source branch: \`${GITHUB_REF_NAME}\`"
@@ -372,6 +376,7 @@ jobs:
           {
             echo "### EasyStore automatic theme publish"
             echo
+            echo "- GitHub environment: \`${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }}\`"
             echo "- Theme id: \`${THEME_ID}\`"
             echo "- Theme id source: \`${THEME_ID_SOURCE}\`"
             echo "- Theme identity: \`${THEME_DISPLAY_NAME}\`"
@@ -388,7 +393,7 @@ jobs:
               --theme-id "${THEME_ID}"
             echo '```'
             echo
-            echo "This theme is now live on the storefront."
+            echo "This theme is now live on the configured storefront."
           } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Report skipped publish
@@ -400,6 +405,6 @@ jobs:
           {
             echo "### EasyStore automatic theme publish"
             echo
-            echo "Skipped because the \`EASYSTORE_PUBLISH\` repository variable is set to \`false\`."
+            echo "Skipped because the \`EASYSTORE_PUBLISH\` variable in the selected GitHub environment is set to \`false\`."
             echo "The imported theme stays an unpublished preview candidate."
           } >> "${GITHUB_STEP_SUMMARY}"
