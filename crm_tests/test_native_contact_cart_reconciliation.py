@@ -78,8 +78,79 @@ class NativeDateOfBirthTests(unittest.TestCase):
         self.assertNotIn("easystore_customer_birthday", properties)
 
 
+class NativeCartStatusTests(unittest.TestCase):
+    def test_open_unpaid_checkout_uses_native_abandoned_status(self) -> None:
+        with mock.patch.object(
+            checkout_sync,
+            "_BASE_CART_PROPERTIES",
+            return_value={
+                "hs_external_status": "unpaid",
+                "easystore_cart_is_abandoned": "true",
+            },
+        ), mock.patch.object(
+            checkout_sync.commerce,
+            "is_abandoned",
+            return_value=True,
+        ):
+            properties = checkout_sync.cart_properties_with_native_status(
+                {"financial_status": "unpaid"},
+                cart_token="cart-abc",
+                store_domain="shop.example",
+                field_properties={"status": "hs_external_status"},
+                fallback_dial_code="65",
+            )
+
+        self.assertEqual(properties["hs_external_status"], "Abandoned")
+        self.assertEqual(properties["easystore_cart_is_abandoned"], "true")
+
+    def test_recovered_checkout_uses_native_recovered_status(self) -> None:
+        with mock.patch.object(
+            checkout_sync,
+            "_BASE_CART_PROPERTIES",
+            return_value={
+                "hs_external_status": "recovered",
+                "easystore_cart_is_abandoned": "false",
+            },
+        ), mock.patch.object(
+            checkout_sync.commerce,
+            "is_abandoned",
+            return_value=False,
+        ):
+            properties = checkout_sync.cart_properties_with_native_status(
+                {"financial_status": "recovered"},
+                cart_token="cart-abc",
+                store_domain="shop.example",
+                field_properties={"status": "hs_external_status"},
+                fallback_dial_code="65",
+            )
+
+        self.assertEqual(properties["hs_external_status"], "Recovered")
+        self.assertEqual(properties["easystore_cart_is_abandoned"], "false")
+
+    def test_non_native_status_fallback_is_not_rewritten(self) -> None:
+        with mock.patch.object(
+            checkout_sync,
+            "_BASE_CART_PROPERTIES",
+            return_value={"easystore_cart_status": "unpaid"},
+        ), mock.patch.object(
+            checkout_sync.commerce,
+            "is_abandoned",
+            return_value=True,
+        ):
+            properties = checkout_sync.cart_properties_with_native_status(
+                {"financial_status": "unpaid"},
+                cart_token="cart-abc",
+                store_domain="shop.example",
+                field_properties={"status": "easystore_cart_status"},
+                fallback_dial_code="65",
+            )
+
+        self.assertEqual(properties["easystore_cart_status"], "unpaid")
+        self.assertNotIn("hs_external_status", properties)
+
+
 class ConvertedCartReconciliationTests(unittest.TestCase):
-    def test_linked_order_marks_existing_cart_not_abandoned(self) -> None:
+    def test_linked_order_marks_existing_cart_recovered_on_native_status(self) -> None:
         calls: list[tuple[str, str, dict]] = []
 
         def fake_http(url: str, *, method: str = "GET", payload=None, **kwargs):
@@ -110,7 +181,12 @@ class ConvertedCartReconciliationTests(unittest.TestCase):
         self.assertEqual(method, "PATCH")
         self.assertEqual(
             payload,
-            {"properties": {"easystore_cart_is_abandoned": "false"}},
+            {
+                "properties": {
+                    "hs_external_status": "Recovered",
+                    "easystore_cart_is_abandoned": "false",
+                }
+            },
         )
 
     def test_cart_is_not_changed_without_a_resolved_hubspot_order(self) -> None:
