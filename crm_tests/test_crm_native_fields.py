@@ -155,6 +155,26 @@ class ProductPublicationTests(unittest.TestCase):
             ["published", "unpublished"],
         )
 
+    def test_live_hubspot_hs_status_is_preferred(self) -> None:
+        portal = {
+            "hs_status": {
+                "name": "hs_status",
+                "label": "Status",
+                "type": "enumeration",
+                "hubspotDefined": True,
+                "options": [
+                    {"label": "Active", "value": "active"},
+                    {"label": "Inactive", "value": "inactive"},
+                ],
+            }
+        }
+        with mock.patch.object(products, "property_schema", return_value=portal):
+            mapping = products.resolve_product_status_mapping("token")
+        self.assertEqual(
+            mapping,
+            products.ProductStatusMapping("hs_status", "active", "inactive"),
+        )
+
     def test_native_product_status_uses_portal_option_values(self) -> None:
         portal = {
             "hs_product_status": {

@@ -410,8 +410,10 @@ def resolve_product_status_mapping(access_token: str) -> ProductStatusMapping | 
     if schema is None:
         return None
 
-    # Prefer the known native names, but read the portal's actual option values.
-    for name in ("hs_product_status", "hs_active"):
+    # Prefer known native names, including the standard HubSpot Product Status
+    # field used by the Product library UI, but always read the portal's actual
+    # option values instead of assuming their internal representation.
+    for name in ("hs_status", "hs_product_status", "hs_active"):
         prop = schema.get(name)
         if not isinstance(prop, dict):
             continue
