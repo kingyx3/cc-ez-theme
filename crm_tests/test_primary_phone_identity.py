@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import easystore_hubspot_contact_identity as contact_identity
+import easystore_hubspot_contact_repair as contact_repair
 import easystore_hubspot_customer_sync as customer_sync
 import easystore_hubspot_preflight as preflight
 import easystore_hubspot_sync as base
@@ -25,6 +26,14 @@ class PrimaryPhonePreflightTests(unittest.TestCase):
         ]
 
         with mock.patch.object(preflight, "check_api_access", lambda **_: None), mock.patch.object(
+            preflight,
+            "repair_form_duplicates",
+            lambda **_: {
+                "hubspot_normalized_phone_collisions_seen": 0,
+                "hubspot_form_duplicates_merged": 0,
+                "hubspot_phone_collisions_left_for_preflight": 0,
+            },
+        ), mock.patch.object(
             preflight,
             "iter_easystore_customers",
             lambda *args, **kwargs: iter(easystore),
@@ -43,7 +52,7 @@ class PrimaryPhonePreflightTests(unittest.TestCase):
         self.assertEqual(summary["ambiguous_hubspot_mobile_numbers"], 0)
         self.assertEqual(summary["hubspot_contact_identity_property"], "phone")
 
-    def test_duplicate_primary_phone_still_fails_closed(self) -> None:
+    def test_duplicate_primary_phone_still_fails_closed_after_repair_pass(self) -> None:
         easystore = [
             {"id": 1, "phone": "9123 4567", "country_code": "SG"},
         ]
@@ -54,6 +63,14 @@ class PrimaryPhonePreflightTests(unittest.TestCase):
 
         with mock.patch.object(preflight, "check_api_access", lambda **_: None), mock.patch.object(
             preflight,
+            "repair_form_duplicates",
+            lambda **_: {
+                "hubspot_normalized_phone_collisions_seen": 1,
+                "hubspot_form_duplicates_merged": 0,
+                "hubspot_phone_collisions_left_for_preflight": 1,
+            },
+        ), mock.patch.object(
+            preflight,
             "iter_easystore_customers",
             lambda *args, **kwargs: iter(easystore),
         ), mock.patch.object(
@@ -61,13 +78,113 @@ class PrimaryPhonePreflightTests(unittest.TestCase):
             "iter_hubspot_contacts",
             lambda *args, **kwargs: iter(hubspot),
         ):
-            with self.assertRaisesRegex(base.SyncError, "primary phone property"):
+            with self.assertRaisesRegex(base.SyncError, "after the safe form-duplicate repair"):
                 preflight.check_identity(
                     store_domain="shop.example",
                     easystore_access_token="es",
                     hubspot_access_token="hs",
                     fallback_dial_code="65",
                 )
+
+
+class FormDuplicateRepairTests(unittest.TestCase):
+    def _integration(self) -> dict:
+        return {
+            "id": "539244172021",
+            "properties": {
+                "phone": "+6591735876",
+                "mobilephone": "+6591735876",
+                "easystore_customer_id": "41900089",
+                "hs_object_source_label": "INTEGRATION",
+                "hs_object_source_detail_1": "EasyStore_Integration",
+            },
+        }
+
+    def _form(self) -> dict:
+        return {
+            "id": "539344382693",
+            "properties": {
+                "phone": "6591735876",
+                "email": "shopper@example.com",
+                "hs_object_source_label": "FORM",
+                "hs_object_source_detail_1": "#details_form",
+            },
+        }
+
+    def test_exact_observed_integration_plus_form_shape_is_mergeable(self) -> None:
+        pair = contact_repair.safe_form_merge_pair(
+            customer_id="41900089",
+            normalized_phone="+6591735876",
+            contacts=[self._integration(), self._form()],
+        )
+        self.assertEqual(pair, ("539244172021", "539344382693"))
+
+    def test_form_contact_without_email_is_not_auto_merged(self) -> None:
+        form = self._form()
+        form["properties"].pop("email")
+        self.assertIsNone(
+            contact_repair.safe_form_merge_pair(
+                customer_id="41900089",
+                normalized_phone="+6591735876",
+                contacts=[self._integration(), form],
+            )
+        )
+
+    def test_two_integration_records_are_not_auto_merged(self) -> None:
+        duplicate = self._integration()
+        duplicate["id"] = "200"
+        self.assertIsNone(
+            contact_repair.safe_form_merge_pair(
+                customer_id="41900089",
+                normalized_phone="+6591735876",
+                contacts=[self._integration(), duplicate],
+            )
+        )
+
+    def test_wrong_easystore_customer_id_is_not_auto_merged(self) -> None:
+        self.assertIsNone(
+            contact_repair.safe_form_merge_pair(
+                customer_id="different",
+                normalized_phone="+6591735876",
+                contacts=[self._integration(), self._form()],
+            )
+        )
+
+    def test_repair_calls_hubspot_merge_with_integration_as_primary(self) -> None:
+        calls: list[tuple[str, str, dict]] = []
+
+        def fake_http(url: str, *, method: str = "GET", headers=None, payload=None, **kwargs):
+            calls.append((url, method, payload or {}))
+            return {"id": "merged"}
+
+        easystore = [{"id": "41900089", "phone": "91735876", "country_code": "SG"}]
+        with mock.patch.object(
+            contact_repair.base,
+            "iter_easystore_customers",
+            lambda *args, **kwargs: iter(easystore),
+        ), mock.patch.object(
+            contact_repair,
+            "iter_hubspot_contacts_for_repair",
+            lambda _token: iter([self._integration(), self._form()]),
+        ), mock.patch.object(contact_repair.base, "_http_json", fake_http):
+            summary = contact_repair.repair_form_duplicates(
+                store_domain="shop.example",
+                easystore_access_token="es",
+                hubspot_access_token="hs",
+                fallback_dial_code="65",
+            )
+
+        self.assertEqual(summary["hubspot_form_duplicates_merged"], 1)
+        merge_calls = [call for call in calls if call[0].endswith("/merge")]
+        self.assertEqual(len(merge_calls), 1)
+        self.assertEqual(merge_calls[0][1], "POST")
+        self.assertEqual(
+            merge_calls[0][2],
+            {
+                "primaryObjectId": "539244172021",
+                "objectIdToMerge": "539344382693",
+            },
+        )
 
 
 class PrimaryPhoneCustomerSyncTests(unittest.TestCase):
