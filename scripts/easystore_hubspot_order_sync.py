@@ -1,8 +1,23 @@
 #!/usr/bin/env python3
-"""Production Order sync entrypoint with portal-specific HubSpot mappings."""
+"""Production Order sync entrypoint with portal-specific HubSpot mappings.
+
+The storefront does not permit guest checkout. EasyStore customer ID is therefore
+also the strongest Order -> Contact association key: it is assigned by EasyStore,
+survives phone/email edits, and is already synchronized onto HubSpot Contacts as
+``easystore_customer_id``.
+
+The generic order sync keeps its conservative mobile association for backwards
+compatibility. This production entrypoint follows it with an idempotent
+customer-ID association pass so every registered checkout can be joined to the
+same Contact that carries Cloudflare/HubSpot acquisition data.
+"""
 
 from __future__ import annotations
 
+import argparse
+import json
+import os
+import sys
 from typing import Any
 
 import easystore_hubspot_orders as orders
@@ -180,6 +195,119 @@ def configure_shipping_recipient_mapping() -> None:
     _refresh_default_order_field_properties()
 
 
+def easystore_order_customer_id(order: dict[str, Any]) -> str | None:
+    """Return the registered EasyStore customer ID carried by an order."""
+
+    direct = nonempty(order.get("customer_id"))
+    if direct is not None:
+        return direct
+
+    customer = order.get("customer")
+    if isinstance(customer, dict):
+        return first_present(customer, ("id", "customer_id"))
+    return None
+
+
+def ensure_registered_customer_order_associations(
+    *,
+    store_domain: str,
+    easystore_access_token: str,
+    hubspot_access_token: str,
+    fallback_dial_code: str,
+) -> dict[str, int]:
+    """Associate orders to Contacts by EasyStore customer ID.
+
+    Guest checkout is disabled in the storefront UI, so a real checkout belongs
+    to a registered EasyStore customer. The customer sync writes that immutable
+    EasyStore ID onto the HubSpot Contact. This pass uses that trusted key first,
+    independently of whether the shopper later changed phone/email details.
+
+    The generic order sync already associated any unique mobile match. Repeating
+    the same HubSpot association with PUT is idempotent, so this pass safely
+    upgrades mobile-based matches and fills orders whose mobile was missing or
+    changed.
+    """
+
+    contacts = hubspot_contact_index(hubspot_access_token, fallback_dial_code)
+    hubspot_orders = orders.hubspot_order_index(hubspot_access_token)
+
+    with_customer_id = 0
+    without_customer_id = 0
+    associations_ensured = 0
+    unmatched_customer_id = 0
+    ambiguous_customer_id = 0
+    missing_hubspot_order = 0
+
+    for listed in orders.iter_easystore_orders(store_domain, easystore_access_token):
+        # The list payload normally carries the customer reference. Only pay for
+        # an order-detail request when it does not; the primary sync has already
+        # done the expensive commerce hydration once in this run.
+        order = listed
+        customer_id = easystore_order_customer_id(order)
+        if customer_id is None:
+            order = orders.complete_order(
+                store_domain,
+                easystore_access_token,
+                listed,
+            )
+            customer_id = easystore_order_customer_id(order)
+
+        external_id = nonempty(order.get("id"))
+        if external_id is None:
+            # The primary order sync rejects this before this pass can run.
+            continue
+
+        if customer_id is None:
+            without_customer_id += 1
+            continue
+
+        with_customer_id += 1
+        hubspot_order_id = hubspot_orders.get(external_id)
+        if hubspot_order_id is None:
+            missing_hubspot_order += 1
+            continue
+
+        matching_contacts = contacts.by_easystore_customer_id.get(customer_id, set())
+        if len(matching_contacts) == 1:
+            contact_id = next(iter(matching_contacts))
+            orders._associate_order(
+                hubspot_access_token,
+                hubspot_order_id,
+                "contact",
+                contact_id,
+                orders.ORDER_CONTACT_ASSOCIATION_TYPE_ID,
+            )
+            associations_ensured += 1
+        elif len(matching_contacts) > 1:
+            ambiguous_customer_id += 1
+        else:
+            unmatched_customer_id += 1
+
+    if without_customer_id:
+        print(
+            "WARNING: storefront checkout requires a registered customer, but "
+            f"{without_customer_id} EasyStore orders exposed no customer ID; "
+            "those orders keep the generic mobile association only.",
+            file=sys.stderr,
+        )
+    if unmatched_customer_id or ambiguous_customer_id:
+        print(
+            "WARNING: some registered EasyStore order customer IDs could not be "
+            "resolved to exactly one HubSpot Contact: "
+            f"unmatched={unmatched_customer_id}, ambiguous={ambiguous_customer_id}.",
+            file=sys.stderr,
+        )
+
+    return {
+        "orders_with_easystore_customer_id": with_customer_id,
+        "orders_without_easystore_customer_id": without_customer_id,
+        "order_customer_id_associations_ensured": associations_ensured,
+        "orders_with_unmatched_easystore_customer_id": unmatched_customer_id,
+        "orders_with_ambiguous_easystore_customer_id": ambiguous_customer_id,
+        "orders_missing_hubspot_order_for_customer_id_join": missing_hubspot_order,
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     # Keep the generic mapping implementation in easystore_hubspot_orders, but
     # inject the same authoritative Contact identity used by preflight/customer
@@ -187,7 +315,45 @@ def main(argv: list[str] | None = None) -> int:
     orders.hubspot_contact_index = hubspot_contact_index
     configure_order_status_mapping()
     configure_shipping_recipient_mapping()
-    return orders.main(argv)
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--store-domain", default=os.getenv("EASYSTORE_STORE_DOMAIN"))
+    parser.add_argument("--easystore-token", default=os.getenv("EASYSTORE_ACCESS_TOKEN"))
+    parser.add_argument("--hubspot-token", default=os.getenv("HUBSPOT_ACCESS_TOKEN"))
+    parser.add_argument(
+        "--fallback-dial-code",
+        default=os.getenv("CUSTOMER_SYNC_DEFAULT_DIAL_CODE", "65"),
+    )
+    args = parser.parse_args(argv)
+
+    try:
+        store_domain = orders._required(args.store_domain, "EASYSTORE_STORE_DOMAIN")
+        easystore_token = orders._required(
+            args.easystore_token,
+            "EASYSTORE_ACCESS_TOKEN",
+        )
+        hubspot_token = orders._required(args.hubspot_token, "HUBSPOT_ACCESS_TOKEN")
+
+        summary = orders.sync(
+            store_domain=store_domain,
+            easystore_access_token=easystore_token,
+            hubspot_access_token=hubspot_token,
+            fallback_dial_code=args.fallback_dial_code,
+        )
+        summary.update(
+            ensure_registered_customer_order_associations(
+                store_domain=store_domain,
+                easystore_access_token=easystore_token,
+                hubspot_access_token=hubspot_token,
+                fallback_dial_code=args.fallback_dial_code,
+            )
+        )
+    except orders.SyncError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+
+    print(json.dumps(summary, indent=2, sort_keys=True))
+    return 0
 
 
 if __name__ == "__main__":
