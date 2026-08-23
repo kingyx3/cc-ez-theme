@@ -4,6 +4,17 @@ on:
   push:
     branches:
       - "**"
+    # Theme sources and the tooling, tests and dependencies that gate them.
+    # CRM sync changes have their own workflow and must not repackage, import
+    # or republish the storefront theme.
+    paths:
+      - "theme/**"
+      - "tests/**"
+      - "scripts/theme_ci.py"
+      - "scripts/easystore_publish.py"
+      - "requirements-dev.txt"
+      - ".coveragerc"
+      - ".github/workflows/package-theme.yml"
   workflow_dispatch:
 
 permissions:
@@ -99,7 +110,6 @@ jobs:
     env:
       EASYSTORE_POD_ID: ${{ vars.EASYSTORE_POD_ID }}
       EASYSTORE_STORE_DOMAIN: ${{ vars.EASYSTORE_STORE_DOMAIN }}
-      EASYSTORE_PUBLISH: ${{ vars.EASYSTORE_PUBLISH || 'true' }}
 
     steps:
       - name: Check out repository
@@ -281,7 +291,7 @@ jobs:
       # in a browser session belongs to whichever theme owns it today, and
       # publishing that would take the wrong theme live.
       - name: Resolve the imported theme id
-        if: steps.credential.outputs.configured == 'true' && env.EASYSTORE_PUBLISH != 'false'
+        if: steps.credential.outputs.configured == 'true'
         id: theme
         env:
           EASYSTORE_ADMIN_TOKEN: ${{ secrets.EASYSTORE_ADMIN_TOKEN }}
@@ -322,7 +332,7 @@ jobs:
             --github-output "${GITHUB_OUTPUT}"
 
       - name: Publish theme in EasyStore
-        if: steps.credential.outputs.configured == 'true' && env.EASYSTORE_PUBLISH != 'false'
+        if: steps.credential.outputs.configured == 'true'
         env:
           EASYSTORE_ADMIN_TOKEN: ${{ secrets.EASYSTORE_ADMIN_TOKEN }}
           THEME_ID: ${{ steps.theme.outputs.theme_id }}
@@ -394,17 +404,4 @@ jobs:
             echo '```'
             echo
             echo "This theme is now live on the configured storefront."
-          } >> "${GITHUB_STEP_SUMMARY}"
-
-      - name: Report skipped publish
-        if: steps.credential.outputs.configured == 'true' && env.EASYSTORE_PUBLISH == 'false'
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "::warning::EASYSTORE_PUBLISH is set to false; the theme was imported but not published."
-          {
-            echo "### EasyStore automatic theme publish"
-            echo
-            echo "Skipped because the \`EASYSTORE_PUBLISH\` variable in the selected GitHub environment is set to \`false\`."
-            echo "The imported theme stays an unpublished preview candidate."
           } >> "${GITHUB_STEP_SUMMARY}"
