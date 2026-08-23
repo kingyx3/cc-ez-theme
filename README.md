@@ -16,6 +16,9 @@ shopping on desktop and mobile.
 - [Source attribution](docs/SOURCE_ATTRIBUTION.md) — how a Cloudflare click
   becomes the acquisition channel on a HubSpot contact, what that claim covers,
   and the one manual EasyStore setup step it needs
+- [Attribution runtime constraints](docs/ATTRIBUTION_RUNTIME_CONSTRAINTS.md) —
+  production checkout/account assumptions, HubSpot storefront tracking, and the
+  temporary Reality Fracture Worker handover
 
 ## Repository layout
 
