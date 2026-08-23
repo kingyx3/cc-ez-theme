@@ -107,6 +107,8 @@ jobs:
     concurrency:
       group: easystore-theme-import-${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }}
       cancel-in-progress: false
+    # These values are required by the EasyStore admin requests and belong to
+    # the selected GitHub environment so dev and prod can target different stores.
     env:
       EASYSTORE_POD_ID: ${{ vars.EASYSTORE_POD_ID }}
       EASYSTORE_STORE_DOMAIN: ${{ vars.EASYSTORE_STORE_DOMAIN }}
