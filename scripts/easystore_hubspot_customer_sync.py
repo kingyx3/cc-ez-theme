@@ -18,6 +18,14 @@ HubSpot's native ``phone`` property is the authoritative Contact identity.
 ``mobilephone`` still receives the normalized EasyStore number as a convenience
 mirror, but it is hidden from the base sync's identity index so a secondary mobile
 value on another Contact cannot create a false duplicate.
+
+HubSpot portals do not expose ``date_of_birth`` consistently: some type it as a
+CRM date while this portal exposes the native property as a writable string. The
+shared schema resolver deliberately requires exact storage types, so this
+entrypoint adapts only that known native property. A real EasyStore birth date is
+serialized as ``YYYY-MM-DD`` into native ``date_of_birth`` when HubSpot exposes it
+as a string, and the legacy ``easystore_customer_birthday`` fallback is not
+written on those runs. The shared resolver stays strict for every other field.
 """
 
 from __future__ import annotations
@@ -27,7 +35,7 @@ import json
 import os
 import sys
 from functools import lru_cache
-from typing import Any, Iterator
+from typing import Any, Iterable, Iterator
 from urllib.parse import quote, urlencode
 
 import easystore_hubspot_sync as base
@@ -40,9 +48,16 @@ from easystore_hubspot_schema import (
 
 CUSTOMER_NOTE_SOURCES = ("note", "note2")
 EASYSTORE_ORDER_PAGE_SIZE = 50
+NATIVE_DATE_OF_BIRTH_PROPERTY = "date_of_birth"
+NATIVE_DATE_OF_BIRTH_SCHEMA_URL = (
+    "https://api.hubapi.com/crm/v3/properties/contacts/date_of_birth"
+)
 _BASE_COMPLETE_CUSTOMER = base.complete_customer
 _BASE_ITER_HUBSPOT_CONTACTS = base.iter_hubspot_contacts
+_BASE_RESOLVE_CONTACT_FIELDS = base.resolve_contact_fields
+_BASE_CUSTOMER_PROPERTIES = base.customer_properties
 _FALLBACK_CUSTOMER_IDS_USED: set[str] = set()
+_NATIVE_DOB_STRING = False
 
 
 def customer_note(customer: dict[str, Any]) -> str | None:
@@ -197,12 +212,81 @@ def iter_hubspot_contacts_by_primary_phone(
         yield primary_only
 
 
-def _install_refinements() -> None:
+def native_date_of_birth_storage_type(access_token: str) -> str | None:
+    """Return the writable native DOB storage type this portal exposes.
+
+    The normal schema resolver handles a real HubSpot ``date`` property already.
+    Only a writable ``string`` needs the production adapter below. Unknown,
+    archived, calculated and read-only shapes are deliberately left to the normal
+    fallback behavior rather than guessed.
+    """
+
+    document = base._http_json(
+        NATIVE_DATE_OF_BIRTH_SCHEMA_URL,
+        headers={"Authorization": f"Bearer {access_token}"},
+        allow_statuses={403, 404},
+    )
+    if not isinstance(document, dict):
+        return None
+    if document.get("archived") or document.get("calculated"):
+        return None
+    metadata = document.get("modificationMetadata")
+    if isinstance(metadata, dict) and metadata.get("readOnlyValue"):
+        return None
+    storage_type = str(document.get("type") or "")
+    return storage_type if storage_type in {"date", "string"} else None
+
+
+def resolve_contact_fields(
+    access_token: str,
+    attribute_labels: Iterable[str] = (),
+    report: dict[str, Any] | None = None,
+) -> dict[str, str]:
+    """Keep the legacy birthday fallback out when native DOB is writable text."""
+
+    resolved = _BASE_RESOLVE_CONTACT_FIELDS(
+        access_token,
+        attribute_labels,
+        report,
+    )
+    if not _NATIVE_DOB_STRING:
+        return resolved
+    adapted = dict(resolved)
+    adapted.pop("birthday", None)
+    return adapted
+
+
+def customer_properties(
+    customer: dict[str, Any],
+    mobile: str,
+    field_properties: dict[str, str] | None = None,
+    attribute_titles: dict[str, str] | None = None,
+) -> dict[str, str]:
+    """Write a verified EasyStore birth date to native string ``date_of_birth``."""
+
+    properties = _BASE_CUSTOMER_PROPERTIES(
+        customer,
+        mobile,
+        field_properties,
+        attribute_titles,
+    )
+    if _NATIVE_DOB_STRING:
+        birth_date = base.customer_birthday(customer)
+        if birth_date is not None:
+            properties[NATIVE_DATE_OF_BIRTH_PROPERTY] = birth_date
+    return properties
+
+
+def _install_refinements(native_dob_type: str | None = None) -> None:
+    global _NATIVE_DOB_STRING
+    _NATIVE_DOB_STRING = native_dob_type == "string"
     base.NOTE_SOURCES = CUSTOMER_NOTE_SOURCES
     base.customer_note = customer_note
     base.customer_needs_detail = customer_needs_detail
     base.complete_customer = complete_customer
     base.iter_hubspot_contacts = iter_hubspot_contacts_by_primary_phone
+    base.resolve_contact_fields = resolve_contact_fields
+    base.customer_properties = customer_properties
     base.CONTACT_FIELD_DERIVATIONS["note"] = customer_note
 
 
@@ -215,7 +299,8 @@ def sync(
 ) -> dict[str, Any]:
     _FALLBACK_CUSTOMER_IDS_USED.clear()
     customer_note_fallback_index.cache_clear()
-    _install_refinements()
+    native_dob_type = native_date_of_birth_storage_type(hubspot_access_token)
+    _install_refinements(native_dob_type)
     summary = base.sync(
         store_domain=store_domain,
         easystore_access_token=easystore_access_token,
@@ -227,6 +312,11 @@ def sync(
     summary["customer_notes_enriched_from_nested_customer_object"] = len(
         _FALLBACK_CUSTOMER_IDS_USED
     )
+    summary["hubspot_native_date_of_birth_storage_type"] = native_dob_type
+    if native_dob_type == "string":
+        mapping = dict(summary.get("hubspot_contact_field_properties") or {})
+        mapping["birthday"] = NATIVE_DATE_OF_BIRTH_PROPERTY
+        summary["hubspot_contact_field_properties"] = dict(sorted(mapping.items()))
     return summary
 
 
