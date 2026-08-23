@@ -55,11 +55,14 @@ jobs:
           python -m py_compile scripts/easystore_hubspot_products.py
           python -m py_compile scripts/easystore_hubspot_sync.py
           python -m py_compile scripts/easystore_hubspot_customer_sync.py
+          python -m py_compile scripts/easystore_hubspot_contact_identity.py
           python -m py_compile scripts/easystore_hubspot_orders.py
+          python -m py_compile scripts/easystore_hubspot_order_sync.py
           python -m py_compile scripts/easystore_hubspot_carts.py
           python -m py_compile scripts/easystore_hubspot_commerce.py
           python -m py_compile scripts/easystore_admin_checkouts.py
           python -m py_compile scripts/easystore_hubspot_checkouts.py
+          python -m py_compile scripts/easystore_hubspot_checkout_sync.py
           python -m py_compile scripts/easystore_hubspot_preflight.py
           python -m py_compile scripts/easystore_hubspot_reconcile.py
           python -m py_compile scripts/cloudflare_hubspot_attribution.py
@@ -133,11 +136,11 @@ jobs:
           echo "Using GitHub environment ${DEPLOYMENT_ENV} for store ${EASYSTORE_STORE_DOMAIN}."
 
       # Preflight is the one stage that must stop the others. It proves the
-      # mobile number identifying a customer is unambiguous, and writing
-      # Contacts, Orders or Carts against an ambiguous identity would merge two
-      # people's records. Everything after it runs independently: a stage that
-      # fails is reported and the rest of the CRM still syncs, because one
-      # unreachable upstream endpoint is not a reason to leave Products,
+      # normalized EasyStore mobile maps unambiguously through HubSpot's primary
+      # Phone property. mobilephone is a synchronized mirror, not a second
+      # identity namespace. Everything after preflight runs independently: a
+      # stage that fails is reported and the rest of the CRM still syncs, because
+      # one unreachable upstream endpoint is not a reason to leave Products,
       # Contacts, Orders and Carts a day stale. The final step fails the run.
       - name: Preflight customer mobile identity
         id: preflight
@@ -203,7 +206,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python scripts/easystore_hubspot_orders.py | tee order-sync-summary.json
+          python scripts/easystore_hubspot_order_sync.py | tee order-sync-summary.json
 
       - name: Reconcile removed EasyStore order lines
         id: reconcile
@@ -236,7 +239,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python scripts/easystore_hubspot_checkouts.py | tee cart-sync-summary.json
+          python scripts/easystore_hubspot_checkout_sync.py | tee cart-sync-summary.json
 
       - name: Publish run summary
         if: always()
@@ -256,14 +259,14 @@ jobs:
             echo "- GitHub environment: \`${DEPLOYMENT_ENV}\`"
             echo "- Schedule: 00:00, 06:00, 12:00, 18:00 Asia/Singapore (both dev and prod)"
             echo "- Products: one HubSpot Product per EasyStore variant, keyed by SKU"
-            echo "- Customers: keyed by normalized mobile number; ambiguous ownership fails before writes"
+            echo "- Customers: keyed by normalized HubSpot phone; mobilephone is mirror-only; ambiguous primary-phone ownership fails before writes"
             echo "- Source attribution: Cloudflare click ids on contacts resolved against D1; an acquisition is written once and never overwritten"
             echo "- Customer notes: Customer.note + Customer.note2 only; Order notes remain separate"
             echo "- Orders: keyed by immutable EasyStore order ID with product-backed Line Items"
             echo "- Carts: the unpaid, open EasyStore Checkout subset is synchronized to a HubSpot Cart using checkout.cart_token; a paid or converted Checkout is skipped because the Order stage already carries it"
             echo "- Abandoned carts: every Cart written by this stage is abandoned and flagged as such. checkouts.json serves open sessions only - its sole state field is financial_status, which reads unpaid throughout, and a session that converts leaves the collection instead of changing status - so all-unpaid Carts are the source, not a mapping fault"
             echo "- Cart status evidence: \`easystore_checkout_status_counts\` in the cart summary is the distribution of the raw status values EasyStore served, so an unexpected paid session shows up in the run itself"
-            echo "- Cart to Contact: resolved by EasyStore customer ID first, then normalized mobile, then email; an identity matching two Contacts is reported, never guessed. Every Cart written lands in exactly one outcome and those outcomes sum to the Carts written, so an unlinked Cart always has a stated reason"
+            echo "- Cart to Contact: resolved by EasyStore customer ID first, then normalized HubSpot phone, then email; an identity matching two Contacts is reported, never guessed. Every Cart written lands in exactly one outcome and those outcomes sum to the Carts written, so an unlinked Cart always has a stated reason"
             echo "- Checkout credentials: public /api/3.0 requests use EASYSTORE_ACCESS_TOKEN; api.easystore.co/admin/v2 requests use EASYSTORE_ADMIN_TOKEN. The tokens are not exchanged between API surfaces"
             echo "- Checkout source: EasyStore's admin collection (api.easystore.co/admin/v2/store/checkouts) is tried first. It is the abandoned checkout list itself, declares total_count, names customer_id on every record, and reports is_recovered"
             echo "- Admin cart lines: the admin collection does not expose line_items, so Admin-source Carts are synchronized without a public Checkout-detail re-fetch; existing HubSpot Cart Line Items are preserved"

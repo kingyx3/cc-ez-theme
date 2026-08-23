@@ -2,9 +2,11 @@
 """Fail before CRM writes when API access or mobile identity is unsafe.
 
 Customer mobile number is the authoritative Contact identity for this integration.
+HubSpot's native ``phone`` property is the authoritative CRM identity field;
+``mobilephone`` may mirror the same value but never participates in deduplication.
 Before any Product, Contact, Order, or Line Item mutation, this preflight verifies
 that the configured tokens can read every API surface used by the production sync
-and then checks that mobile ownership is unambiguous.
+and then checks that primary-phone ownership is unambiguous.
 """
 
 from __future__ import annotations
@@ -122,7 +124,7 @@ def check_identity(
     easystore_access_token: str,
     hubspot_access_token: str,
     fallback_dial_code: str,
-) -> dict[str, int]:
+) -> dict[str, Any]:
     check_api_access(
         store_domain=store_domain,
         easystore_access_token=easystore_access_token,
@@ -167,19 +169,22 @@ def check_identity(
         if contact_id is None or not isinstance(properties, dict):
             continue
 
-        for field in ("mobilephone", "phone"):
-            mobile = normalize_mobile(
-                properties.get(field),
-                fallback_dial_code=fallback_dial_code,
-            )
-            if mobile in wanted_mobiles:
-                hubspot_owners[mobile].add(contact_id)
+        # HubSpot's primary Phone number is the authoritative CRM identity. A
+        # secondary mobilephone value can legitimately repeat another Contact's
+        # Phone and therefore must not manufacture a duplicate-identity failure.
+        mobile = normalize_mobile(
+            properties.get("phone"),
+            fallback_dial_code=fallback_dial_code,
+        )
+        if mobile in wanted_mobiles:
+            hubspot_owners[mobile].add(contact_id)
 
     duplicate_hubspot = ambiguous_owners(hubspot_owners)
     if duplicate_hubspot:
         raise SyncError(
-            "Multiple HubSpot Contacts own an EasyStore normalized mobile number. "
-            "No writes were made; reconcile the duplicate Contacts first. "
+            "Multiple HubSpot Contacts own an EasyStore normalized mobile number "
+            "in HubSpot's primary phone property. No writes were made; reconcile "
+            "the duplicate primary Phone values first. "
             + _sample(duplicate_hubspot)
         )
 
@@ -188,6 +193,7 @@ def check_identity(
         "easystore_customers_scanned": easystore_customers,
         "unique_mobile_customers": len(easystore_owners),
         "hubspot_contacts_scanned": hubspot_contacts,
+        "hubspot_contact_identity_property": "phone",
         "skipped_without_mobile": skipped_without_mobile,
         "ambiguous_easystore_mobile_numbers": 0,
         "ambiguous_hubspot_mobile_numbers": 0,
