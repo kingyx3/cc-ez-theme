@@ -34,6 +34,14 @@ entrypoint adapts only that known native property. A real EasyStore birth date i
 serialized as ``YYYY-MM-DD`` into native ``date_of_birth`` when HubSpot exposes it
 as a string, and the legacy ``easystore_customer_birthday`` fallback is not
 written on those runs. The shared resolver stays strict for every other field.
+
+The Cloudflare attribution join has one required customer attribute: EasyStore's
+``Click ID``. Generic merchant attributes are normally provisioned in HubSpot only
+after a customer carrying a value is observed. Production cannot wait for that
+first value because the attribution stage runs immediately after Customers and
+expects ``easystore_attr_click_id`` to exist. This wrapper therefore resolves that
+one canonical attribute independently on every run, while the generic attribute
+mapper continues to own copying each customer's value into it.
 """
 
 from __future__ import annotations
@@ -62,6 +70,9 @@ NATIVE_DATE_OF_BIRTH_SCHEMA_URL = (
     "https://api.hubapi.com/crm/v3/properties/contacts/date_of_birth"
 )
 LEGACY_CUSTOMER_SINCE_KEY = "customer_since"
+CLICK_ID_ATTRIBUTE_LABEL = "Click ID"
+CLICK_ID_FIELD_KEY = f"{base.ATTRIBUTE_KEY_PREFIX}{CLICK_ID_ATTRIBUTE_LABEL}"
+CLICK_ID_HUBSPOT_PROPERTY = "easystore_attr_click_id"
 CONTACT_SOURCE_DATE_FIELDS: tuple[FieldSpec, ...] = (
     FieldSpec(
         key="source_created_at",
@@ -281,7 +292,7 @@ def resolve_contact_fields(
     attribute_labels: Iterable[str] = (),
     report: dict[str, Any] | None = None,
 ) -> dict[str, str]:
-    """Prefer explicit EasyStore source dates and native DOB where available."""
+    """Prefer source fields and always provision the Click ID destination."""
 
     resolved = _BASE_RESOLVE_CONTACT_FIELDS(
         access_token,
@@ -289,6 +300,19 @@ def resolve_contact_fields(
         report,
     )
     adapted = dict(resolved)
+
+    # Resolve Click ID separately through the same customer-field abstraction.
+    # A one-label pass cannot lose the field to the generic 25-attribute limit,
+    # and existing tests/integrations can mock this resolver in one place.
+    click_mapping = _BASE_RESOLVE_CONTACT_FIELDS(
+        access_token,
+        (CLICK_ID_ATTRIBUTE_LABEL,),
+        None,
+    )
+    click_property = click_mapping.get(CLICK_ID_FIELD_KEY)
+    if click_property is not None:
+        adapted[CLICK_ID_FIELD_KEY] = click_property
+
     # ``easystore_customer_since`` was the old source-created destination. Keep
     # the property in the portal for compatibility, but stop updating it now that
     # the source timestamp has an explicit EasyStore Created Date field.
@@ -362,6 +386,18 @@ def sync(
         mapping = dict(summary.get("hubspot_contact_field_properties") or {})
         mapping["birthday"] = NATIVE_DATE_OF_BIRTH_PROPERTY
         summary["hubspot_contact_field_properties"] = dict(sorted(mapping.items()))
+
+    field_mapping = dict(summary.get("hubspot_contact_field_properties") or {})
+    field_coverage = dict(summary.get("easystore_customer_field_coverage") or {})
+    click_property = field_mapping.get(CLICK_ID_FIELD_KEY)
+    summary["easystore_click_id_attribute_label"] = CLICK_ID_ATTRIBUTE_LABEL
+    summary["easystore_click_id_hubspot_property"] = click_property
+    summary["easystore_click_id_property_ready"] = (
+        click_property == CLICK_ID_HUBSPOT_PROPERTY
+    )
+    summary["easystore_click_id_contacts"] = int(
+        field_coverage.get(CLICK_ID_FIELD_KEY, 0) or 0
+    )
     return summary
 
 
