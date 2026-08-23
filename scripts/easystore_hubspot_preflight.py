@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
-"""Fail before CRM writes when API access or mobile identity is unsafe.
+"""Repair proven form duplicates, then fail before CRM writes if identity is unsafe.
 
 Customer mobile number is the authoritative Contact identity for this integration.
 HubSpot's native ``phone`` property is the authoritative CRM identity field;
 ``mobilephone`` may mirror the same value but never participates in deduplication.
-Before any Product, Contact, Order, or Line Item mutation, this preflight verifies
-that the configured tokens can read every API surface used by the production sync
-and then checks that primary-phone ownership is unambiguous.
+
+HubSpot forms deduplicate Contacts by email rather than by Phone. If this
+integration first creates a phone-only EasyStore Contact, a later HubSpot form can
+therefore create a second Contact for the same shopper. Before the read-only
+identity check below, the preflight repairs only that exact, provenance-proven
+pattern by merging the form Contact into the EasyStore integration Contact. Any
+other collision remains fail-closed.
 """
 
 from __future__ import annotations
@@ -18,6 +22,7 @@ import sys
 from collections import defaultdict
 from typing import Any, Iterable
 
+from easystore_hubspot_contact_repair import repair_form_duplicates
 from easystore_hubspot_orders import (
     HUBSPOT_BASE,
     HUBSPOT_LINE_ITEMS_URL,
@@ -131,6 +136,13 @@ def check_identity(
         hubspot_access_token=hubspot_access_token,
     )
 
+    repair_summary = repair_form_duplicates(
+        store_domain=store_domain,
+        easystore_access_token=easystore_access_token,
+        hubspot_access_token=hubspot_access_token,
+        fallback_dial_code=fallback_dial_code,
+    )
+
     easystore_owners: dict[str, set[str]] = defaultdict(set)
     easystore_customers = 0
     skipped_without_mobile = 0
@@ -162,6 +174,8 @@ def check_identity(
     hubspot_contacts = 0
     wanted_mobiles = set(easystore_owners)
 
+    # Re-scan after any merge. HubSpot can return a new object ID for the merged
+    # record, so using a pre-merge identity index here would be unsafe.
     for contact in iter_hubspot_contacts(hubspot_access_token):
         hubspot_contacts += 1
         contact_id = _nonempty(contact.get("id"))
@@ -182,9 +196,9 @@ def check_identity(
     duplicate_hubspot = ambiguous_owners(hubspot_owners)
     if duplicate_hubspot:
         raise SyncError(
-            "Multiple HubSpot Contacts own an EasyStore normalized mobile number "
-            "in HubSpot's primary phone property. No writes were made; reconcile "
-            "the duplicate primary Phone values first. "
+            "Multiple HubSpot Contacts still own an EasyStore normalized mobile "
+            "number after the safe form-duplicate repair pass. No further guess "
+            "was made. "
             + _sample(duplicate_hubspot)
         )
 
@@ -197,6 +211,7 @@ def check_identity(
         "skipped_without_mobile": skipped_without_mobile,
         "ambiguous_easystore_mobile_numbers": 0,
         "ambiguous_hubspot_mobile_numbers": 0,
+        **repair_summary,
     }
 
 
