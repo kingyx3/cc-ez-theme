@@ -39,9 +39,9 @@ The Cloudflare attribution join has one required customer attribute: EasyStore's
 ``Click ID``. Generic merchant attributes are normally provisioned in HubSpot only
 after a customer carrying a value is observed. Production cannot wait for that
 first value because the attribution stage runs immediately after Customers and
-expects ``easystore_attr_click_id`` to exist. This wrapper therefore provisions
-that one canonical property on every run, while the generic attribute mapper
-continues to own copying each customer's value into it.
+expects ``easystore_attr_click_id`` to exist. This wrapper therefore resolves that
+one canonical attribute independently on every run, while the generic attribute
+mapper continues to own copying each customer's value into it.
 """
 
 from __future__ import annotations
@@ -61,7 +61,6 @@ from easystore_hubspot_schema import (
     iter_easystore_pages,
     nonempty,
     note_text,
-    resolve_fields,
 )
 
 CUSTOMER_NOTE_SOURCES = ("note", "note2")
@@ -74,15 +73,6 @@ LEGACY_CUSTOMER_SINCE_KEY = "customer_since"
 CLICK_ID_ATTRIBUTE_LABEL = "Click ID"
 CLICK_ID_FIELD_KEY = f"{base.ATTRIBUTE_KEY_PREFIX}{CLICK_ID_ATTRIBUTE_LABEL}"
 CLICK_ID_HUBSPOT_PROPERTY = "easystore_attr_click_id"
-CLICK_ID_FIELD = FieldSpec(
-    key=CLICK_ID_FIELD_KEY,
-    fallback=CLICK_ID_HUBSPOT_PROPERTY,
-    label="EasyStore: Click ID",
-    description=(
-        "Cloudflare attribution click ID captured in EasyStore when the customer "
-        "registered."
-    ),
-)
 CONTACT_SOURCE_DATE_FIELDS: tuple[FieldSpec, ...] = (
     FieldSpec(
         key="source_created_at",
@@ -311,21 +301,17 @@ def resolve_contact_fields(
     )
     adapted = dict(resolved)
 
-    # Generic attributes are normally resolved only after at least one customer
-    # carries a value. Attribution cannot depend on that timing: the next stage
-    # searches this exact HubSpot property in the same workflow run. Resolve the
-    # canonical field explicitly so it exists before the first tagged signup,
-    # and prefer that mapping even if a legacy spelling was discovered earlier.
-    click_mapping = resolve_fields(
-        http_json=base._http_json,
-        access_token=access_token,
-        object_type=base.CONTACT_OBJECT_TYPE,
-        fields=(CLICK_ID_FIELD,),
-        error=base.SyncError,
-        optional=True,
+    # Resolve Click ID separately through the same customer-field abstraction.
+    # A one-label pass cannot lose the field to the generic 25-attribute limit,
+    # and existing tests/integrations can mock this resolver in one place.
+    click_mapping = _BASE_RESOLVE_CONTACT_FIELDS(
+        access_token,
+        (CLICK_ID_ATTRIBUTE_LABEL,),
+        None,
     )
-    if click_mapping:
-        adapted.update(click_mapping)
+    click_property = click_mapping.get(CLICK_ID_FIELD_KEY)
+    if click_property is not None:
+        adapted[CLICK_ID_FIELD_KEY] = click_property
 
     # ``easystore_customer_since`` was the old source-created destination. Keep
     # the property in the portal for compatibility, but stop updating it now that
