@@ -61,7 +61,7 @@ is deliberately not used as a publication signal.
 
 | EasyStore value | HubSpot Contact property |
 | --- | --- |
-| normalized phone | `phone`, `mobilephone` |
+| normalized phone | `phone` (authoritative identity), `mobilephone` (mirror only) |
 | `first_name` | `firstname` |
 | `last_name` | `lastname` |
 | `email` | `email` |
@@ -74,6 +74,14 @@ is deliberately not used as a publication signal.
 | EasyStore-account lifecycle | `lifecyclestage` (`lead`; order stage may promote to `customer`) |
 | birthday/date of birth | `date_of_birth` when writable and lossless |
 | gender | `gender` when writable and lossless |
+
+The normalized EasyStore number is still written to both native phone fields for
+usability in HubSpot, but identity matching is deliberately narrower. Preflight
+and the production Customer upsert use only HubSpot `phone` as the Contact
+identity. A value present only in another Contact's `mobilephone` is not a
+second owner of that identity and must not stop the sync. Two Contacts whose
+primary `phone` values normalize to the same EasyStore number are still a real
+ambiguity and fail closed before writes.
 
 ### Contact custom/fallback properties
 
