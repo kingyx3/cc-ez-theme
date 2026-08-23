@@ -70,10 +70,20 @@ class HubSpotOrderStatusTests(unittest.TestCase):
         )
         self.assertEqual(mapped["hs_external_order_status"], "cancelled")
 
-    def test_refunded_state_wins_even_when_order_is_cancelled(self) -> None:
+    def test_cancelled_state_wins_over_refund(self) -> None:
         mapped = self._properties(
             {
                 "status": "cancelled",
+                "financial_status_label": "Refunded",
+                "fulfillment_status": "restocked",
+            }
+        )
+        self.assertEqual(mapped["hs_external_order_status"], "cancelled")
+
+    def test_refunded_state_is_used_when_order_is_not_cancelled(self) -> None:
+        mapped = self._properties(
+            {
+                "status": "closed",
                 "financial_status_label": "Refunded",
                 "fulfillment_status": "restocked",
             }
@@ -93,15 +103,72 @@ class HubSpotOrderStatusTests(unittest.TestCase):
             "partially_fulfilled",
         )
 
-    def test_cancelled_flag_is_used_when_order_status_is_missing(self) -> None:
-        mapped = self._properties(
-            {
-                "is_cancelled": True,
-                "financial_status": "paid",
-                "fulfillment_status": "unfulfilled",
-            }
+    def test_every_known_cancellation_flag_shape_is_detected(self) -> None:
+        signals = (
+            {"is_cancelled": True},
+            {"is_cancelled": 1},
+            {"is_cancelled": "1"},
+            {"cancelled": True},
+            {"cancelled": 1},
+            {"canceled": "true"},
         )
-        self.assertEqual(mapped["hs_external_order_status"], "cancelled")
+        for signal in signals:
+            with self.subTest(signal=signal):
+                mapped = self._properties(
+                    {
+                        "status": "open",
+                        "financial_status": "paid",
+                        "fulfillment_status": "unfulfilled",
+                        **signal,
+                    }
+                )
+                self.assertEqual(mapped["hs_external_order_status"], "cancelled")
+
+    def test_cancellation_timestamp_is_detected(self) -> None:
+        for key in ("cancelled_at", "canceled_at", "cancellation_date"):
+            with self.subTest(key=key):
+                mapped = self._properties(
+                    {
+                        "status": "open",
+                        "financial_status": "paid",
+                        "fulfillment_status": "unfulfilled",
+                        key: "2026-08-23T10:20:30+08:00",
+                    }
+                )
+                self.assertEqual(mapped["hs_external_order_status"], "cancelled")
+
+    def test_cancelled_payment_or_fulfillment_label_is_detected(self) -> None:
+        for signal in (
+            {"financial_status_label": "Cancelled"},
+            {"financial_status": "canceled"},
+            {"fulfillment_status_label": "Cancelled"},
+            {"fulfillment_status": "canceled"},
+        ):
+            with self.subTest(signal=signal):
+                mapped = self._properties({"status": "open", **signal})
+                self.assertIn(
+                    mapped["hs_external_order_status"].casefold(),
+                    {"cancelled", "canceled"},
+                )
+
+    def test_false_cancellation_signals_do_not_cancel_an_order(self) -> None:
+        for signal in (
+            {"is_cancelled": False},
+            {"is_cancelled": 0},
+            {"cancelled": "false"},
+            {"cancelled_at": "0"},
+            {"cancelled_at": "null"},
+        ):
+            with self.subTest(signal=signal):
+                mapped = self._properties(
+                    {
+                        "status": "open",
+                        "financial_status": "paid",
+                        "fulfillment_status": "unfulfilled",
+                        **signal,
+                    }
+                )
+                self.assertEqual(mapped["hs_external_order_status"], "paid")
 
 
 if __name__ == "__main__":
