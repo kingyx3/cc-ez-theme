@@ -137,13 +137,14 @@ class ContactSourceDateTests(unittest.TestCase):
 
 
 class NativeCartStatusTests(unittest.TestCase):
-    def test_open_unpaid_checkout_uses_native_abandoned_status(self) -> None:
+    def test_open_unpaid_checkout_uses_only_native_abandoned_status(self) -> None:
         with mock.patch.object(
             checkout_sync,
             "_BASE_CART_PROPERTIES",
             return_value={
                 "hs_external_status": "unpaid",
                 "easystore_cart_is_abandoned": "true",
+                "easystore_cart_abandoned_at": "1717207384000",
             },
         ), mock.patch.object(
             checkout_sync.commerce,
@@ -159,9 +160,10 @@ class NativeCartStatusTests(unittest.TestCase):
             )
 
         self.assertEqual(properties["hs_external_status"], "Abandoned")
-        self.assertEqual(properties["easystore_cart_is_abandoned"], "true")
+        self.assertNotIn("easystore_cart_is_abandoned", properties)
+        self.assertNotIn("easystore_cart_abandoned_at", properties)
 
-    def test_recovered_checkout_uses_native_recovered_status(self) -> None:
+    def test_recovered_checkout_uses_only_native_recovered_status(self) -> None:
         with mock.patch.object(
             checkout_sync,
             "_BASE_CART_PROPERTIES",
@@ -183,7 +185,7 @@ class NativeCartStatusTests(unittest.TestCase):
             )
 
         self.assertEqual(properties["hs_external_status"], "Recovered")
-        self.assertEqual(properties["easystore_cart_is_abandoned"], "false")
+        self.assertNotIn("easystore_cart_is_abandoned", properties)
 
     def test_non_native_status_fallback_is_not_rewritten(self) -> None:
         with mock.patch.object(
@@ -218,18 +220,16 @@ class CartSourceDateTests(unittest.TestCase):
             }
             created = fields["created_at"]
             modified = fields["modified_at"]
-            abandoned = fields["abandoned_at"]
 
             self.assertEqual(created.native, ("hs_external_created_date",))
             self.assertEqual(modified.native, ("hs_external_modified_date",))
             self.assertEqual(modified.sources[0], "updated_at")
-            self.assertEqual(abandoned.native, ())
-            self.assertEqual(abandoned.sources, ("abandoned_at",))
-            self.assertEqual(abandoned.fallback, "easystore_cart_abandoned_at")
+            self.assertNotIn("abandoned_at", fields)
+            self.assertNotIn("is_abandoned", fields)
         finally:
             checkout_sync.commerce.cart_mapping.CART_FIELDS = original
 
-    def test_admin_checkout_preserves_source_modified_and_abandoned_timestamps(self) -> None:
+    def test_admin_checkout_preserves_modified_but_not_abandoned_timestamp(self) -> None:
         with mock.patch.object(
             checkout_sync,
             "_BASE_ADMIN_AS_CHECKOUT",
@@ -243,7 +243,7 @@ class CartSourceDateTests(unittest.TestCase):
             )
 
         self.assertEqual(checkout["updated_at"], "2024-06-07T08:09:10Z")
-        self.assertEqual(checkout["abandoned_at"], "2024-06-01T02:03:04Z")
+        self.assertNotIn("abandoned_at", checkout)
 
 
 class ConvertedCartReconciliationTests(unittest.TestCase):
@@ -281,7 +281,6 @@ class ConvertedCartReconciliationTests(unittest.TestCase):
             {
                 "properties": {
                     "hs_external_status": "Recovered",
-                    "easystore_cart_is_abandoned": "false",
                 }
             },
         )
