@@ -1,0 +1,179 @@
+name: Apply primary phone identity fix
+
+on:
+  push:
+    branches:
+      - crm/primary-phone-identity
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[primary-phone-applied]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: crm/primary-phone-identity
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Apply primary phone identity fix
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace(path: str, old: str, new: str, *, expected: int = 1) -> None:
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != expected:
+                  raise SystemExit(f"{path}: expected {expected} occurrence(s), found {count}: {old[:120]!r}")
+              p.write_text(text.replace(old, new))
+
+          # Preflight must validate the same identity HubSpot itself presents as
+          # the primary Phone number. mobilephone is useful contact data, but it
+          # is not a second identity namespace and must not create false clashes.
+          replace(
+              "scripts/easystore_hubspot_preflight.py",
+              '''        for field in ("mobilephone", "phone"):\n            mobile = normalize_mobile(\n                properties.get(field),\n                fallback_dial_code=fallback_dial_code,\n            )\n            if mobile in wanted_mobiles:\n                hubspot_owners[mobile].add(contact_id)\n''',
+              '''        # HubSpot's native Phone number is the authoritative CRM identity.\n        # mobilephone may legitimately repeat another Contact's Phone and is\n        # therefore never allowed to manufacture an identity collision.\n        mobile = normalize_mobile(\n            properties.get("phone"),\n            fallback_dial_code=fallback_dial_code,\n        )\n        if mobile in wanted_mobiles:\n            hubspot_owners[mobile].add(contact_id)\n''',
+          )
+          replace(
+              "scripts/easystore_hubspot_preflight.py",
+              '"Multiple HubSpot Contacts own an EasyStore normalized mobile number. "',
+              '"Multiple HubSpot Contacts own an EasyStore normalized mobile number in HubSpot\'s primary phone property. "',
+          )
+          replace(
+              "scripts/easystore_hubspot_preflight.py",
+              '        "hubspot_contacts_scanned": hubspot_contacts,\n',
+              '        "hubspot_contacts_scanned": hubspot_contacts,\n        "hubspot_contact_identity_property": "phone",\n',
+          )
+
+          # Customer upsert uses the same primary Phone-only identity index. The
+          # existing behavior of mirroring the normalized value to mobilephone is
+          # retained, but mobilephone no longer participates in record matching.
+          replace(
+              "scripts/easystore_hubspot_sync.py",
+              '''The normalized mobile number is the identity key. Existing HubSpot contacts are\nindexed by both ``mobilephone`` and ``phone`` after applying the same\nnormalization rules used for EasyStore. A unique match is updated; no match is\ncreated; ambiguous HubSpot matches are left untouched and make the run fail.\n''',
+              '''The normalized mobile number is the identity key. HubSpot's native ``phone``\nproperty is the one authoritative Contact identity field; ``mobilephone`` is\nsynchronized as a convenience mirror but is never indexed as a competing\nidentity. A unique ``phone`` match is updated; no match is created; ambiguous\nprimary-phone matches are left untouched and make the run fail.\n''',
+          )
+          replace(
+              "scripts/easystore_hubspot_sync.py",
+              '''        for field in ("mobilephone", "phone"):\n            normalized = normalize_mobile(\n                properties.get(field),\n                fallback_dial_code=fallback_dial_code,\n            )\n            if normalized:\n                hubspot_phone_ids[normalized].add(contact_id)\n''',
+              '''        # Match only HubSpot's primary Phone property. mobilephone is\n        # synchronized as a mirror but cannot compete with another Contact's Phone.\n        normalized = normalize_mobile(\n            properties.get("phone"),\n            fallback_dial_code=fallback_dial_code,\n        )\n        if normalized:\n            hubspot_phone_ids[normalized].add(contact_id)\n''',
+          )
+          replace(
+              "scripts/easystore_hubspot_sync.py",
+              '        "hubspot_contacts_scanned": hubspot_contacts,\n',
+              '        "hubspot_contacts_scanned": hubspot_contacts,\n        "hubspot_contact_identity_property": "phone",\n',
+          )
+
+          # Orders and carts share this ContactIndex, so their associations must
+          # follow the exact same identity rule as preflight/customer upsert.
+          replace(
+              "scripts/easystore_hubspot_orders.py",
+              '        "phone,mobilephone,email,"\n',
+              '        "phone,email,"\n',
+          )
+          replace(
+              "scripts/easystore_hubspot_orders.py",
+              '''        for field in ("mobilephone", "phone"):\n            mobile = normalize_mobile(\n                properties.get(field),\n                fallback_dial_code=fallback_dial_code,\n            )\n            if mobile:\n                by_phone[mobile].add(contact_id)\n''',
+              '''        # Contact association uses the same authoritative HubSpot Phone\n        # property as customer preflight/upsert. mobilephone is not an identity.\n        mobile = normalize_mobile(\n            properties.get("phone"),\n            fallback_dial_code=fallback_dial_code,\n        )\n        if mobile:\n            by_phone[mobile].add(contact_id)\n''',
+          )
+          replace(
+              "scripts/easystore_hubspot_orders.py",
+              '    # created and deduplicated by normalized mobile. Abandoned checkouts often\n',
+              '    # created and deduplicated by normalized HubSpot Phone. Abandoned checkouts often\n',
+          )
+
+          # Existing tests used mobilephone-only fixtures because the old code
+          # treated it as identity. Move those fixtures to the authoritative field.
+          test_path = Path("crm_tests/test_crm_sync.py")
+          test_text = test_path.read_text()
+          existing_mobile_keys = test_text.count('"mobilephone":')
+          if existing_mobile_keys < 4:
+              raise SystemExit(f"crm_tests/test_crm_sync.py: expected >=4 mobilephone fixtures, found {existing_mobile_keys}")
+          test_text = test_text.replace('"mobilephone":', '"phone":')
+          test_path.write_text(test_text)
+
+          replace(
+              "crm_tests/test_crm_sync.py",
+              '''class IdentityPreflightTests(unittest.TestCase):\n    def test_duplicate_owners_only_returns_real_collisions(self) -> None:\n        owners = {\n            "+6591111111": {"1"},\n            "+6592222222": {"2", "3"},\n            "+6593333333": {"4", "4"},\n        }\n        self.assertEqual(\n            preflight.ambiguous_owners(owners),\n            {"+6592222222": {"2", "3"}},\n        )\n''',
+              '''class IdentityPreflightTests(unittest.TestCase):\n    def test_duplicate_owners_only_returns_real_collisions(self) -> None:\n        owners = {\n            "+6591111111": {"1"},\n            "+6592222222": {"2", "3"},\n            "+6593333333": {"4", "4"},\n        }\n        self.assertEqual(\n            preflight.ambiguous_owners(owners),\n            {"+6592222222": {"2", "3"}},\n        )\n\n    def test_mobilephone_on_another_contact_is_not_a_primary_phone_duplicate(self) -> None:\n        easystore = [{"id": 1, "phone": "9173 5876", "country_code": "SG"}]\n        hubspot = [\n            {"id": "100", "properties": {"phone": "+6591735876"}},\n            {"id": "200", "properties": {"mobilephone": "+6591735876"}},\n        ]\n        with mock.patch.object(preflight, "check_api_access", lambda **_: None), mock.patch.object(\n            preflight, "iter_easystore_customers", lambda *a, **k: iter(easystore)\n        ), mock.patch.object(\n            preflight, "iter_hubspot_contacts", lambda *a, **k: iter(hubspot)\n        ):\n            summary = preflight.check_identity(\n                store_domain="shop.example",\n                easystore_access_token="es",\n                hubspot_access_token="hs",\n                fallback_dial_code="65",\n            )\n\n        self.assertEqual(summary["ambiguous_hubspot_mobile_numbers"], 0)\n        self.assertEqual(summary["hubspot_contact_identity_property"], "phone")\n\n    def test_two_primary_phone_owners_still_fail_closed(self) -> None:\n        easystore = [{"id": 1, "phone": "9173 5876", "country_code": "SG"}]\n        hubspot = [\n            {"id": "100", "properties": {"phone": "+6591735876"}},\n            {"id": "200", "properties": {"phone": "+65 9173 5876"}},\n        ]\n        with mock.patch.object(preflight, "check_api_access", lambda **_: None), mock.patch.object(\n            preflight, "iter_easystore_customers", lambda *a, **k: iter(easystore)\n        ), mock.patch.object(\n            preflight, "iter_hubspot_contacts", lambda *a, **k: iter(hubspot)\n        ):\n            with self.assertRaisesRegex(customers.SyncError, "primary phone property"):\n                preflight.check_identity(\n                    store_domain="shop.example",\n                    easystore_access_token="es",\n                    hubspot_access_token="hs",\n                    fallback_dial_code="65",\n                )\n''',
+          )
+
+          replace(
+              "crm_tests/test_crm_sync.py",
+              'class CustomerSyncBatchTests(unittest.TestCase):\n    def test_only_customers_with_a_mobile_are_written_as_leads(self) -> None:\n',
+              '''class CustomerSyncBatchTests(unittest.TestCase):\n    def test_secondary_mobilephone_does_not_compete_with_primary_phone(self) -> None:\n        easystore = [\n            {\n                "id": 1,\n                "phone": "9173 5876",\n                "country_code": "SG",\n                "birthdate": "",\n                "attributes": [],\n                "note": "",\n            }\n        ]\n        hubspot = [\n            {"id": "100", "properties": {"phone": "+6591735876"}},\n            {"id": "200", "properties": {"mobilephone": "+6591735876"}},\n        ]\n        contact_schema = {\n            "results": [\n                {"name": field.fallback, "type": field.kind}\n                for field in customers.CONTACT_FIELDS\n            ]\n        }\n        written: dict[str, list[dict]] = {"create": [], "update": []}\n\n        with mock.patch.object(\n            customers, "iter_easystore_customers", lambda *a, **k: iter(easystore)\n        ), mock.patch.object(\n            customers, "iter_hubspot_contacts", lambda *a, **k: iter(hubspot)\n        ), mock.patch.object(\n            customers, "_http_json", _hubspot_only(contact_schema)\n        ), mock.patch.object(\n            customers,\n            "_batch_write",\n            lambda token, action, inputs: written[action].extend(inputs),\n        ):\n            summary = customers.sync(\n                store_domain="shop.example",\n                easystore_access_token="es",\n                hubspot_access_token="hs",\n                fallback_dial_code="65",\n            )\n\n        self.assertEqual([item["id"] for item in written["update"]], ["100"])\n        self.assertEqual(written["create"], [])\n        self.assertEqual(summary["ambiguous_hubspot_mobile_numbers"], 0)\n        self.assertEqual(summary["hubspot_contact_identity_property"], "phone")\n\n    def test_only_customers_with_a_mobile_are_written_as_leads(self) -> None:\n''',
+          )
+
+          replace(
+              "crm_tests/test_crm_commerce_sync.py",
+              'class CartIdentityRegressionTests(unittest.TestCase):\n',
+              '''class HubSpotContactIdentityRegressionTests(unittest.TestCase):\n    def test_contact_index_uses_phone_not_mobilephone(self) -> None:\n        seen_properties: list[str] = []\n        hubspot = [\n            {"id": "100", "properties": {"phone": "+6591735876"}},\n            {"id": "200", "properties": {"mobilephone": "+6591735876"}},\n        ]\n\n        def fake_iter(_url, _token, properties):\n            seen_properties.append(properties)\n            return iter(hubspot)\n\n        with mock.patch.object(orders, "iter_hubspot_objects", fake_iter):\n            index = orders.hubspot_contact_index("hs", "65")\n\n        self.assertEqual(index.by_phone["+6591735876"], {"100"})\n        self.assertNotIn("mobilephone", seen_properties[0])\n\n\nclass CartIdentityRegressionTests(unittest.TestCase):\n''',
+          )
+
+          replace(
+              "docs/CUSTOMER_CRM_SYNC.md",
+              'If more than one EasyStore customer owns the same normalized mobile, or an EasyStore mobile already maps to multiple HubSpot Contacts, the entire run stops before writes.',
+              'If more than one EasyStore customer owns the same normalized mobile, or an EasyStore mobile maps to multiple HubSpot Contacts through the native `phone` property, the entire run stops before writes.',
+          )
+          replace(
+              "docs/CUSTOMER_CRM_SYNC.md",
+              'The normalized value is written to both HubSpot `mobilephone` and `phone`. Existing HubSpot Contacts are normalized with the same function before matching, so formatting differences do not create a second Contact.',
+              'The normalized value is written to both HubSpot `phone` and `mobilephone`, but only the native `phone` property is authoritative for identity matching. `mobilephone` is a convenience mirror and is never allowed to make a second Contact look like an identity collision. Existing HubSpot `phone` values are normalized with the same function before matching, so formatting differences do not create a second Contact.',
+          )
+          replace(
+              "docs/CUSTOMER_CRM_SYNC.md",
+              'Duplicate ownership is **not** resolved by "latest record wins" in production. The preflight stops the entire run before writes when two distinct EasyStore customer IDs normalize to the same mobile or when one EasyStore mobile maps to multiple HubSpot Contacts. Those duplicates must be reconciled deliberately because mobile number is the authoritative identity.',
+              'Duplicate ownership is **not** resolved by "latest record wins" in production. The preflight stops the entire run before writes when two distinct EasyStore customer IDs normalize to the same mobile or when one EasyStore mobile maps to multiple HubSpot Contacts via the native `phone` property. A value present only in another Contact\'s `mobilephone` is not a duplicate identity. Real duplicate primary-phone ownership must still be reconciled deliberately.',
+          )
+
+          replace(
+              "docs/CRM_FIELD_MAPPING.md",
+              '| normalized phone | `phone`, `mobilephone` |\n',
+              '| normalized phone | `phone` (identity) and `mobilephone` (mirror only) |\n',
+          )
+          replace(
+              "docs/CRM_FIELD_MAPPING.md",
+              '| gender | `gender` when writable and lossless |\n\n### Contact custom/fallback properties\n',
+              '| gender | `gender` when writable and lossless |\n\n`phone` is the only HubSpot Contact identity property used by preflight, customer upsert, Order association, and Cart association. `mobilephone` receives the same normalized value for convenience, but is deliberately ignored for identity matching so a secondary mobile field on another Contact cannot create a false duplicate.\n\n### Contact custom/fallback properties\n',
+          )
+
+          replace(
+              ".github/workflows/sync-easystore-customers-hubspot.yml",
+              '            echo "- Customers: keyed by normalized mobile number; ambiguous ownership fails before writes"\n',
+              '            echo "- Customers: keyed by normalized HubSpot phone; mobilephone is mirror-only; ambiguous primary-phone ownership fails before writes"\n',
+          )
+          PY
+
+      - name: Compile CRM sync scripts
+        run: |
+          python -m py_compile scripts/easystore_hubspot_schema.py
+          python -m py_compile scripts/easystore_hubspot_products.py
+          python -m py_compile scripts/easystore_hubspot_sync.py
+          python -m py_compile scripts/easystore_hubspot_customer_sync.py
+          python -m py_compile scripts/easystore_hubspot_orders.py
+          python -m py_compile scripts/easystore_hubspot_carts.py
+          python -m py_compile scripts/easystore_hubspot_commerce.py
+          python -m py_compile scripts/easystore_hubspot_preflight.py
+
+      - name: Run CRM sync unit tests
+        run: python -m unittest discover -s crm_tests -v
+
+      - name: Commit fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts/easystore_hubspot_preflight.py scripts/easystore_hubspot_sync.py scripts/easystore_hubspot_orders.py crm_tests/test_crm_sync.py crm_tests/test_crm_commerce_sync.py docs/CUSTOMER_CRM_SYNC.md docs/CRM_FIELD_MAPPING.md .github/workflows/sync-easystore-customers-hubspot.yml
+          git commit -m "Use HubSpot primary phone as contact identity [primary-phone-applied]"
+          git push origin HEAD:crm/primary-phone-identity
