@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
-"""Production Checkout/Cart sync entrypoint with primary-Phone Contact identity.
+"""Production Checkout/Cart sync with native HubSpot Cart lifecycle status.
+
+HubSpot exposes one native Cart lifecycle field in this portal:
+``hs_external_status`` (label: Status). It is the authoritative human-readable
+state of the shopping session, so the production sync writes the normalized CRM
+states ``Abandoned`` and ``Recovered`` there instead of leaking EasyStore's raw
+``unpaid`` value into the HubSpot card.
 
 Cart records remain associated to their Contact for history. When the checkout
 has become an EasyStore Order, the existing Cart→Order linker is also the point
-where the Cart stops being abandoned: the same HubSpot Cart is retained, its
-``easystore_cart_is_abandoned`` flag is set to ``false``, and no Contact→Cart
-association is removed.
+where the Cart becomes recovered: the same HubSpot Cart is retained, native
+``hs_external_status`` is set to ``Recovered``, the EasyStore-specific abandoned
+flag is cleared as supplemental source data, and no Contact→Cart association is
+removed.
 """
 
 from __future__ import annotations
@@ -19,7 +26,46 @@ import easystore_hubspot_orders as orders
 from easystore_hubspot_contact_identity import hubspot_contact_index
 
 
+NATIVE_CART_STATUS_PROPERTY = "hs_external_status"
+ABANDONED_STATUS = "Abandoned"
+RECOVERED_STATUS = "Recovered"
+
+_BASE_CART_PROPERTIES = commerce.cart_properties
 _BASE_LINK_CARTS_TO_ORDERS = commerce.link_carts_to_orders
+
+
+def semantic_cart_status(checkout: dict[str, Any]) -> str:
+    """Return the normalized HubSpot Cart lifecycle state for one checkout."""
+
+    return ABANDONED_STATUS if commerce.is_abandoned(checkout) else RECOVERED_STATUS
+
+
+def cart_properties_with_native_status(
+    checkout: dict[str, Any],
+    *,
+    cart_token: str,
+    store_domain: str,
+    field_properties: dict[str, str],
+    fallback_dial_code: str,
+) -> dict[str, str]:
+    """Map a checkout and make HubSpot's native Status lifecycle-authoritative.
+
+    The low-level mapper retains EasyStore-specific source fields for diagnostics,
+    including ``easystore_cart_is_abandoned``. When the portal resolves the
+    standard Cart Status field, however, its value is normalized to the CRM
+    lifecycle a person actually needs to see: Abandoned or Recovered.
+    """
+
+    properties = _BASE_CART_PROPERTIES(
+        checkout,
+        cart_token=cart_token,
+        store_domain=store_domain,
+        field_properties=field_properties,
+        fallback_dial_code=fallback_dial_code,
+    )
+    if field_properties.get("status") == NATIVE_CART_STATUS_PROPERTY:
+        properties[NATIVE_CART_STATUS_PROPERTY] = semantic_cart_status(checkout)
+    return properties
 
 
 def link_carts_to_orders_and_reconcile(
@@ -29,7 +75,7 @@ def link_carts_to_orders_and_reconcile(
     carts_by_token: dict[str, str],
     hubspot_orders: dict[str, str],
 ) -> int:
-    """Link converted Carts to Orders and clear their abandoned state.
+    """Link converted Carts to Orders and mark native Status as Recovered.
 
     A Cart remains a historical shopping-session record after payment, so the
     Contact association is intentionally untouched. Only Carts for which both the
@@ -60,6 +106,7 @@ def link_carts_to_orders_and_reconcile(
             headers={"Authorization": f"Bearer {hubspot_access_token}"},
             payload={
                 "properties": {
+                    NATIVE_CART_STATUS_PROPERTY: RECOVERED_STATUS,
                     "easystore_cart_is_abandoned": "false",
                 }
             },
@@ -69,18 +116,19 @@ def link_carts_to_orders_and_reconcile(
     if reconciled_cart_ids:
         print(
             "Reconciled "
-            f"{len(reconciled_cart_ids)} converted HubSpot Cart(s) to "
-            "easystore_cart_is_abandoned=false after Cart→Order linking.",
+            f"{len(reconciled_cart_ids)} converted HubSpot Cart(s) to native "
+            f"{NATIVE_CART_STATUS_PROPERTY}={RECOVERED_STATUS} after Cart→Order linking.",
             file=sys.stderr,
         )
     return linked
 
 
 def main(argv: list[str] | None = None) -> int:
-    # commerce imported the low-level Contact index by name, so patch both module
-    # globals before the checkout entrypoint starts resolving Cart associations.
+    # commerce imported these helpers by name, so patch its module globals before
+    # the checkout entrypoint starts mapping Carts or resolving associations.
     orders.hubspot_contact_index = hubspot_contact_index
     commerce.hubspot_contact_index = hubspot_contact_index
+    commerce.cart_properties = cart_properties_with_native_status
     commerce.link_carts_to_orders = link_carts_to_orders_and_reconcile
     return checkouts.main(argv)
 
