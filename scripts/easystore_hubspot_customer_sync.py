@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the EasyStore customer sync with authoritative customer-note semantics.
+"""Run the EasyStore customer sync with authoritative source semantics.
 
 EasyStore exposes two different concepts that must not be mixed:
 
@@ -18,6 +18,14 @@ HubSpot's native ``phone`` property is the authoritative Contact identity.
 ``mobilephone`` still receives the normalized EasyStore number as a convenience
 mirror, but it is hidden from the base sync's identity index so a secondary mobile
 value on another Contact cannot create a false duplicate.
+
+HubSpot's Contact ``createdate`` and ``lastmodifieddate`` are CRM system metadata:
+they describe when the HubSpot record was created or changed, not when the
+EasyStore customer was created or changed. Contacts do not expose writable native
+external-created/external-modified properties, so production writes the EasyStore
+source timestamps to explicit ``easystore_customer_created_at`` and
+``easystore_customer_modified_at`` properties instead. The legacy
+``easystore_customer_since`` destination is no longer written.
 
 HubSpot portals do not expose ``date_of_birth`` consistently: some type it as a
 CRM date while this portal exposes the native property as a writable string. The
@@ -41,6 +49,7 @@ from urllib.parse import quote, urlencode
 import easystore_hubspot_sync as base
 from easystore_hubspot_orders import _extract_list, _http_json, _shop_domain
 from easystore_hubspot_schema import (
+    FieldSpec,
     iter_easystore_pages,
     nonempty,
     note_text,
@@ -51,6 +60,25 @@ EASYSTORE_ORDER_PAGE_SIZE = 50
 NATIVE_DATE_OF_BIRTH_PROPERTY = "date_of_birth"
 NATIVE_DATE_OF_BIRTH_SCHEMA_URL = (
     "https://api.hubapi.com/crm/v3/properties/contacts/date_of_birth"
+)
+LEGACY_CUSTOMER_SINCE_KEY = "customer_since"
+CONTACT_SOURCE_DATE_FIELDS: tuple[FieldSpec, ...] = (
+    FieldSpec(
+        key="source_created_at",
+        sources=("created_at", "created_on", "registered_at"),
+        fallback="easystore_customer_created_at",
+        label="EasyStore Created Date",
+        description="Date and time the customer record was created in EasyStore.",
+        kind="datetime",
+    ),
+    FieldSpec(
+        key="source_modified_at",
+        sources=("updated_at", "modified_at", "updated_on", "modified_on"),
+        fallback="easystore_customer_modified_at",
+        label="EasyStore Modified Date",
+        description="Date and time the customer record was last modified in EasyStore.",
+        kind="datetime",
+    ),
 )
 _BASE_COMPLETE_CUSTOMER = base.complete_customer
 _BASE_ITER_HUBSPOT_CONTACTS = base.iter_hubspot_contacts
@@ -237,22 +265,36 @@ def native_date_of_birth_storage_type(access_token: str) -> str | None:
     return storage_type if storage_type in {"date", "string"} else None
 
 
+def _install_contact_source_date_fields() -> None:
+    """Add explicit EasyStore source timestamps without duplicating them."""
+
+    existing = {field.key for field in base.CONTACT_FIELDS}
+    additions = tuple(
+        field for field in CONTACT_SOURCE_DATE_FIELDS if field.key not in existing
+    )
+    if additions:
+        base.CONTACT_FIELDS = base.CONTACT_FIELDS + additions
+
+
 def resolve_contact_fields(
     access_token: str,
     attribute_labels: Iterable[str] = (),
     report: dict[str, Any] | None = None,
 ) -> dict[str, str]:
-    """Keep the legacy birthday fallback out when native DOB is writable text."""
+    """Prefer explicit EasyStore source dates and native DOB where available."""
 
     resolved = _BASE_RESOLVE_CONTACT_FIELDS(
         access_token,
         attribute_labels,
         report,
     )
-    if not _NATIVE_DOB_STRING:
-        return resolved
     adapted = dict(resolved)
-    adapted.pop("birthday", None)
+    # ``easystore_customer_since`` was the old source-created destination. Keep
+    # the property in the portal for compatibility, but stop updating it now that
+    # the source timestamp has an explicit EasyStore Created Date field.
+    adapted.pop(LEGACY_CUSTOMER_SINCE_KEY, None)
+    if _NATIVE_DOB_STRING:
+        adapted.pop("birthday", None)
     return adapted
 
 
@@ -280,6 +322,7 @@ def customer_properties(
 def _install_refinements(native_dob_type: str | None = None) -> None:
     global _NATIVE_DOB_STRING
     _NATIVE_DOB_STRING = native_dob_type == "string"
+    _install_contact_source_date_fields()
     base.NOTE_SOURCES = CUSTOMER_NOTE_SOURCES
     base.customer_note = customer_note
     base.customer_needs_detail = customer_needs_detail
@@ -313,6 +356,8 @@ def sync(
         _FALLBACK_CUSTOMER_IDS_USED
     )
     summary["hubspot_native_date_of_birth_storage_type"] = native_dob_type
+    summary["easystore_contact_source_created_property"] = "easystore_customer_created_at"
+    summary["easystore_contact_source_modified_property"] = "easystore_customer_modified_at"
     if native_dob_type == "string":
         mapping = dict(summary.get("hubspot_contact_field_properties") or {})
         mapping["birthday"] = NATIVE_DATE_OF_BIRTH_PROPERTY
