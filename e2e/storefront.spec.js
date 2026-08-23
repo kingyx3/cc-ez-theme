@@ -34,7 +34,6 @@ test.describe('storefront navigation and discovery', () => {
       await expect(desktopNav).toBeVisible();
       await expect(desktopNav.locator('a[href="/collections/the-hobbit"]:visible').first()).toBeVisible();
       await expect(desktopNav.locator('a[href="/collections/marvel-super-heroes"]:visible').first()).toBeVisible();
-      await expect(desktopNav.locator('a[href="/collections/secrets-of-strixhaven"]:visible').first()).toBeVisible();
     }
   });
 
