@@ -34,6 +34,8 @@ FULFILLMENT_STATUS_SOURCES = (
     "shipment_status",
     "shipping_status",
 )
+CANCELLED_STATUS_KEYS = {"cancelled", "canceled", "deleted"}
+FALSEY_CANCELLATION_KEYS = {"", "0", "false", "nil", "null", "none"}
 
 
 def _status_key(value: Any) -> str:
@@ -43,6 +45,42 @@ def _status_key(value: Any) -> str:
     return "_".join(text.casefold().replace("-", " ").split())
 
 
+def _positive_cancellation_flag(value: Any) -> bool:
+    """Accept EasyStore's boolean/integer/string cancellation flag shapes."""
+
+    return _status_key(value) in {"1", "true", "yes"}
+
+
+def _cancellation_status(
+    order: dict[str, Any],
+    order_state: str | None,
+    payment_state: str | None,
+    fulfillment_state: str | None,
+) -> str | None:
+    """Return EasyStore's cancellation label when any known signal cancels it.
+
+    The storefront receives several EasyStore order shapes. Depending on the
+    route, cancellation can be a status label, an integer/boolean flag, or a
+    timestamp. Treat only positive signals as cancellation so missing/false
+    fields never invent a cancelled state.
+    """
+
+    for state in (order_state, payment_state, fulfillment_state):
+        if _status_key(state) in CANCELLED_STATUS_KEYS:
+            return state
+
+    for key in ("is_cancelled", "cancelled", "canceled"):
+        if _positive_cancellation_flag(order.get(key)):
+            return "cancelled"
+
+    for key in ("cancelled_at", "canceled_at", "cancellation_date"):
+        value = nonempty(order.get(key))
+        if value is not None and _status_key(value) not in FALSEY_CANCELLATION_KEYS:
+            return "cancelled"
+
+    return None
+
+
 def easystore_order_status(order: dict[str, Any]) -> str | None:
     """Return one actionable EasyStore state for HubSpot's native Status field.
 
@@ -50,31 +88,35 @@ def easystore_order_status(order: dict[str, Any]) -> str | None:
     ``hs_external_order_status`` is one source-system status, so the production
     sync rolls those source facts up without inventing HubSpot-only states:
 
-    * refunded/partially-refunded payment state wins;
-    * cancellation/deletion wins next;
+    * any explicit cancellation signal wins, including flags/timestamps;
+    * refunded/partially-refunded payment state wins next;
     * fulfilled/partially-fulfilled/restocked wins over paid;
     * otherwise payment state wins, then the raw EasyStore order state.
 
-    The original EasyStore label/value is returned so casing and wording remain
-    source-authentic. Payment and fulfilment are still synchronized separately to
-    ``hs_payment_status`` and ``hs_fulfillment_status``.
+    Cancellation is intentionally first: EasyStore can refund an order as part of
+    cancelling it, but HubSpot Status should still say Cancelled when the order is
+    explicitly cancelled. Payment and fulfilment remain synchronized separately
+    to ``hs_payment_status`` and ``hs_fulfillment_status``.
     """
 
     order_state = first_present(order, ORDER_STATUS_SOURCES)
     payment_state = first_present(order, PAYMENT_STATUS_SOURCES)
     fulfillment_state = first_present(order, FULFILLMENT_STATUS_SOURCES)
 
+    cancellation = _cancellation_status(
+        order,
+        order_state,
+        payment_state,
+        fulfillment_state,
+    )
+    if cancellation is not None:
+        return cancellation
+
     payment_key = _status_key(payment_state)
-    order_key = _status_key(order_state)
     fulfillment_key = _status_key(fulfillment_state)
 
     if "refund" in payment_key:
         return payment_state
-
-    if order_key in {"cancelled", "canceled", "deleted"}:
-        return order_state
-    if order_state is None and order.get("is_cancelled") is True:
-        return "cancelled"
 
     if fulfillment_key and fulfillment_key not in {"unfulfilled", "pending"}:
         return fulfillment_state
