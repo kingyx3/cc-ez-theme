@@ -24,13 +24,19 @@ async function apiRequest(fetchImpl, token, url, options = {}) {
   }
 
   if (!response.ok || payload?.success === false) {
-    const details = Array.isArray(payload?.errors)
+    const errors = Array.isArray(payload?.errors)
       ? payload.errors.map((item) => item?.message || JSON.stringify(item)).join("; ")
+      : "";
+    const directError = payload?.error ? String(payload.error) : "";
+    const code = payload?.code ? `code ${payload.code}` : "";
+    const details = [errors, directError, code].filter(Boolean).join("; ");
+    const permissionHint = response.status === 403
+      ? " Cloudflare token needs Account > Access: Apps and Policies > Edit."
       : "";
     throw new Error(
       `Cloudflare API ${options.method || "GET"} ${url} failed (${response.status})${
         details ? `: ${details}` : ""
-      }`,
+      }.${permissionHint}`,
     );
   }
 
@@ -89,7 +95,7 @@ export async function ensureWorkerPublic({
     const body = {
       name: `${workerId} - public`,
       type: "self_hosted",
-      destination: { type: "worker", worker_id: workerId },
+      destinations: [{ type: "worker", worker_id: workerId }],
       policies: [
         {
           name: `Public ${workerId}`,
