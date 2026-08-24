@@ -20,6 +20,10 @@
   {% endcomment %}
   {% include 'attribution-click-id' %}
 
+  {% if settings.favicon_img %}
+  <link rel="icon" href="{{ settings.favicon_img }}" />
+  {% endif %}
+
   <!-- Title and description ================================================== -->
   <title>
   {{ page_title | escape }}{% if current_tags %}{% assign meta_tags = current_tags | join: ', ' %} &ndash; {{ 'general.meta.tags' | t: meta_tags }}{% endif %}{% if current_page != 1 and current_page != blank %} &ndash; {{ 'general.meta.page' | t: current_page }}{% endif %}{% unless page_title contains shop.name %} &ndash; {{ shop.name | escape }}{% endunless %}
@@ -50,12 +54,6 @@
   
   <!-- Header hook for plugins ================================================== -->
   {{ content_for_header }}
-
-  {% comment %}
-    Keep the favicon in theme assets so code deployments cannot restore a stale
-    EasyStore editor favicon from settings_data.json.
-  {% endcomment %}
-  <link rel="icon" type="image/svg+xml" href="{{ 'cc-favicon.svg' | asset_url }}" />
   
   
   <script src="{{ 'global.js' | asset_url }}" defer="defer"></script>
