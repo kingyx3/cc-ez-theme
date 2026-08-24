@@ -12,6 +12,7 @@ import easystore_hubspot_schema as schema
 
 class CustomerPaginationBoundaryTests(unittest.TestCase):
     def test_repeated_full_customer_page_is_terminal_not_fatal(self) -> None:
+        # Exactly 50 customers fills page 1; EasyStore then repeats it for page 2.
         records = [{"id": str(index)} for index in range(1, 51)]
         calls: list[int] = []
 
