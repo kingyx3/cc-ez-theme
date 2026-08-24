@@ -71,16 +71,9 @@ test("existing /go links remain valid on the custom domain", async () => {
   assert.equal(location.searchParams.get("utm_content"), "vip");
 });
 
-test("Reality Fracture vanity links keep their canonical labels", async () => {
-  const normal = await tracked("/rf");
-  const bump = await tracked("/rf-bump");
-
-  const first = new URL(normal.response.headers.get("location"));
-  const second = new URL(bump.response.headers.get("location"));
-  assert.equal(first.pathname, "/collections/reality-fracture");
-  assert.equal(first.searchParams.get("utm_campaign"), "rf");
-  assert.equal(first.searchParams.get("utm_content"), "grp-aug26");
-  assert.equal(second.searchParams.get("utm_content"), "grp-bump-aug26");
+test("legacy RF vanity paths are no longer reserved", async () => {
+  assert.equal((await tracked("/rf")).response.status, 404);
+  assert.equal((await tracked("/rf-bump")).response.status, 404);
 });
 
 test("destination input cannot become an open redirect", () => {
