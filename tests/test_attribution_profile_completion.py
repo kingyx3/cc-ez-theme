@@ -1,4 +1,4 @@
-"""Regression tests for Click ID versus customer profile completion."""
+"""Regression tests for retiring the old machine-only Click ID customer field."""
 
 from __future__ import annotations
 
@@ -16,10 +16,24 @@ def source() -> str:
     return FIELD_SNIPPET.read_text(encoding="utf-8")
 
 
-class ClickIdDoesNotCompleteTheHumanProfileTests(unittest.TestCase):
-    def test_signup_and_activation_require_the_human_fields(self) -> None:
+class RetiredClickIdDoesNotParticipateInProfileTests(unittest.TestCase):
+    def test_it_never_injects_a_value_into_customer_submission(self) -> None:
         snippet = source()
+        self.assertNotIn("field.value =", snippet)
+        self.assertNotIn("submitClickId", snippet)
+        self.assertNotIn("window.ccSourceClickId", snippet)
+        self.assertNotIn("form.addEventListener('submit'", snippet)
 
+    def test_legacy_field_is_disabled_hidden_and_has_no_name(self) -> None:
+        snippet = source()
+        self.assertIn("display: none !important", snippet)
+        self.assertIn("wrapper.setAttribute('hidden', 'hidden')", snippet)
+        self.assertIn("field.removeAttribute('required')", snippet)
+        self.assertIn("field.setAttribute('disabled', 'disabled')", snippet)
+        self.assertIn("field.removeAttribute('name')", snippet)
+
+    def test_attribution_no_longer_changes_human_profile_requirements(self) -> None:
+        snippet = source()
         for field_name in (
             "customer[first_name]",
             "customer[last_name]",
@@ -27,28 +41,8 @@ class ClickIdDoesNotCompleteTheHumanProfileTests(unittest.TestCase):
             "customer[birthdate]",
             "customer[password]",
         ):
-            self.assertIn(f"'{field_name}'", snippet)
-
-        self.assertIn("form.id !== 'form-register'", snippet)
-        self.assertIn("form.id !== 'form-activate'", snippet)
-        self.assertIn("input.setAttribute('required', 'required')", snippet)
-
-    def test_click_id_is_injected_by_the_submit_listener(self) -> None:
-        snippet = source()
-
-        listener = snippet.index("form.addEventListener('submit'")
-        injected_from_listener = snippet.index("submitClickId(field);", listener)
-        capture_phase = snippet.index("}, true);", injected_from_listener)
-
-        self.assertLess(listener, injected_from_listener)
-        self.assertLess(injected_from_listener, capture_phase)
-
-    def test_click_id_stays_hidden_and_is_not_required(self) -> None:
-        snippet = source()
-
-        self.assertIn("display: none !important", snippet)
-        self.assertIn("wrapper.setAttribute('hidden', 'hidden')", snippet)
-        self.assertIn("field.removeAttribute('required')", snippet)
+            self.assertNotIn(field_name, snippet)
+        self.assertNotIn("setAttribute('required', 'required')", snippet)
 
 
 if __name__ == "__main__":
