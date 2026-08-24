@@ -1,4 +1,12 @@
 {% comment %}
+  Give search engines a stable favicon URL that survives EasyStore theme
+  republishing. This explicit PNG is declared after the legacy EasyStore
+  favicon setting so browsers/crawlers can prefer the stable candidate.
+{% endcomment %}
+<link rel="icon" type="image/png" sizes="96x96" href="https://raw.githubusercontent.com/kingyx3/cc-ez-theme/main/search-assets/cc-favicon-96.png">
+<link rel="shortcut icon" type="image/png" href="https://raw.githubusercontent.com/kingyx3/cc-ez-theme/main/search-assets/cc-favicon-96.png">
+
+{% comment %}
   Add Facebook and Pinterest Open Graph meta tags to product pages
   for friendly Facebook sharing and Pinterest pinning.
 
