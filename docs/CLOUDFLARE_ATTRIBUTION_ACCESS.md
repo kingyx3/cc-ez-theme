@@ -15,12 +15,17 @@ The Worker workflow runs in this order:
 
 ```text
 validate/tests
+→ preflight/enforce Worker-level Access bypass for Everyone
 → apply D1 migrations
 → rerun D1 migrations to prove idempotence
 → deploy cc-attribution
-→ ensure Worker-level Access bypass for Everyone
+→ confirm the Access bypass again
 → verify https://go.cardboard.sg/health publicly reaches cc-attribution
 ```
+
+The Access mutation deliberately runs before D1 migration or Worker deployment.
+If the Access token is present but lacks write permission, production state is not
+changed before the workflow fails.
 
 If the Access API step fails, or the public health URL still redirects to an
 Access login, the deployment fails instead of reporting success.
@@ -28,7 +33,7 @@ Access login, the deployment fails instead of reporting success.
 The Access step is idempotent:
 
 - if no Worker-specific Access application exists, it creates one with a bypass
-  policy;
+  policy using Cloudflare's current `destinations` Worker API shape;
 - if the application exists without a public bypass, it adds the bypass policy;
 - if a bypass-for-Everyone policy already exists, it makes no change.
 
@@ -38,11 +43,16 @@ Worker unit tests.
 
 ## Required Cloudflare API permission
 
-The token used for the Access step needs:
+In the Cloudflare API-token UI, the token used for this step needs the account
+permission:
 
 ```text
-Access: Apps and Policies Write
+Account → Access: Apps and Policies → Edit
 ```
+
+The Access application API describes the accepted permission as
+`Access: Apps and Policies Write`; Cloudflare's token UI labels the writable
+permission `Edit`.
 
 Preferred setup:
 
@@ -50,15 +60,19 @@ Preferred setup:
 GitHub repository secret: CLOUDFLARE_ACCESS_API_TOKEN
 ```
 
-Use a Cloudflare API token scoped to the Cardboard Cloudflare account with only
-that Access permission where possible.
+Scope the token to the Cardboard Cloudflare account. No Worker/D1 permissions are
+needed on this dedicated token.
 
 For backwards compatibility, the workflow falls back to the existing
 `CLOUDFLARE_API_TOKEN` if `CLOUDFLARE_ACCESS_API_TOKEN` is not configured. That
-fallback only works when the existing token also has `Access: Apps and Policies
-Write` in addition to its Worker/D1 permissions.
+fallback only works when the existing token also has the writable Access Apps and
+Policies permission in addition to its Worker/D1 permissions.
 
 `CLOUDFLARE_ACCOUNT_ID` is shared with the existing Worker deployment.
+
+A 403 response containing `auth.forbidden` means the token exists and can reach
+the API, but does not have the required write permission for the account/resource.
+Replace or edit the GitHub secret, then rerun the failed deployment job.
 
 ## Expected public health response
 
