@@ -13,13 +13,12 @@ shopping on desktop and mobile.
 - [EasyStore API deployment](docs/EASYSTORE_API_DEPLOYMENT.md) — automatic
   post-package imports and publishing, theme id resolution, branch/version
   naming, token setup, and troubleshooting
-- [Source attribution](docs/SOURCE_ATTRIBUTION.md) — the clean
-  `source_clicks → customer_touches → EasyStore customer_id` model used to
-  attribute account creation without an EasyStore Click ID customer attribute or
-  a click UUID in HubSpot
+- [Source attribution](docs/SOURCE_ATTRIBUTION.md) — how `source_clicks` and
+  `customer_touches` resolve acquisition onto HubSpot Contacts through EasyStore
+  customer identity, without a Click ID customer/HubSpot handoff
 - [Order source attribution](docs/ORDER_SOURCE_ATTRIBUTION.md) — per-order
-  last-tracked-touch attribution, dynamic campaign URL conventions, deployment
-  steps, HubSpot Order fields, and production smoke tests
+  last-tracked-touch attribution, campaign URL conventions, deployment steps,
+  HubSpot Order fields, and production smoke tests
 
 ## Repository layout
 
@@ -35,6 +34,11 @@ shopping on desktop and mobile.
 Only supported files below `theme/` are copied into the upload ZIP. Repository
 documentation, tests, scripts, workflow files, build output, and other
 development files are deliberately excluded.
+
+The storefront and editor configuration mirrors (`theme/config/settings_data.json`
+and `theme/editor_config/settings_data.json`) must remain byte-for-byte identical;
+the theme test suite enforces that invariant so editor defaults cannot drift from
+runtime defaults.
 
 ## Quick validation
 
