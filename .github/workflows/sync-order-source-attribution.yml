@@ -11,6 +11,7 @@ on:
       - "cloudflare/attribution-worker/**"
       - "theme/snippets/attribution-click-id.liquid"
       - "tests/test_order_touch_capture.py"
+      - "tests/test_source_attribution_capture.py"
       - "docs/ORDER_SOURCE_ATTRIBUTION.md"
   # The main CRM workflow starts at 00:00/06:00/12:00/18:00 Singapore time.
   # Run an hour later so HubSpot Orders exist before this snapshot stage starts.
@@ -50,8 +51,10 @@ jobs:
         run: python -m py_compile scripts/cloudflare_hubspot_order_attribution.py
       - name: Run order attribution tests
         run: python -m unittest discover -s crm_tests -p 'test_order_source_attribution.py' -v
-      - name: Run theme attribution tests
-        run: python -m unittest discover -s tests -v
+      - name: Run order touch theme tests
+        run: python -m unittest discover -s tests -p 'test_order_touch_capture.py' -v
+      - name: Run acquisition regression tests
+        run: python -m unittest discover -s tests -p 'test_source_attribution_capture.py' -v
       - name: Run Worker tests
         working-directory: cloudflare/attribution-worker
         run: npm test
