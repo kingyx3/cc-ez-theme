@@ -1,3 +1,9 @@
+-- The old customer_attribution table is not part of the current attribution
+-- model. Contact and Order attribution both resolve directly from append-only
+-- customer_touches joined to source_clicks, so keeping a denormalized legacy
+-- customer attribution table only leaves stale production state behind.
+DROP TABLE IF EXISTS customer_attribution;
+
 -- `clicked_at` is the canonical click event timestamp used by both Contact and
 -- Order attribution. The write-time `created_at` default from the original
 -- schema is never read, so keeping it duplicates timestamp storage on every row.
