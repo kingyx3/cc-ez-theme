@@ -1,0 +1,83 @@
+name: Live favicon probe
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/live-favicon-probe.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: Verify cardboard.sg favicon
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Fetch live storefront and favicon
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          target="https://cardboard.sg/?favicon_probe=${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          echo "Fetching fresh storefront HTML: ${target}"
+          curl --location --fail --silent --show-error \
+            --header 'Cache-Control: no-cache' \
+            --header 'Pragma: no-cache' \
+            --user-agent 'cc-ez-theme-live-favicon-probe/1.0' \
+            --output storefront.html \
+            "${target}"
+
+          python - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          from urllib.parse import urljoin
+
+          class IconParser(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.icons = []
+
+              def handle_starttag(self, tag, attrs):
+                  if tag.lower() != "link":
+                      return
+                  values = {key.lower(): value for key, value in attrs if key}
+                  rel = (values.get("rel") or "").lower().split()
+                  href = values.get("href")
+                  if "icon" in rel and href:
+                      self.icons.append(href)
+
+          html = Path("storefront.html").read_text(encoding="utf-8", errors="replace")
+          parser = IconParser()
+          parser.feed(html)
+          print("Icon links returned by live storefront:")
+          for href in parser.icons:
+              print(f"- {href}")
+
+          matches = [href for href in parser.icons if "cc-favicon.svg" in href]
+          if not matches:
+              raise SystemExit("Live storefront does not reference cc-favicon.svg")
+
+          favicon_url = urljoin("https://cardboard.sg/", matches[-1])
+          Path("favicon-url.txt").write_text(favicon_url, encoding="utf-8")
+          print(f"Matched codebase favicon: {favicon_url}")
+          PY
+
+          favicon_url="$(cat favicon-url.txt)"
+          curl --location --fail --silent --show-error \
+            --header 'Cache-Control: no-cache' \
+            --header 'Pragma: no-cache' \
+            --user-agent 'cc-ez-theme-live-favicon-probe/1.0' \
+            --dump-header favicon-headers.txt \
+            --output favicon.svg \
+            "${favicon_url}"
+
+          grep -q '<svg' favicon.svg
+          grep -q 'data:image/png;base64,' favicon.svg
+
+          echo "Live favicon verification passed."
+          echo "Favicon URL: ${favicon_url}"
+          echo "Response headers:"
+          cat favicon-headers.txt
