@@ -16,6 +16,9 @@ shopping on desktop and mobile.
 - [Source attribution](docs/SOURCE_ATTRIBUTION.md) — how a Cloudflare click
   becomes the acquisition channel on a HubSpot contact, what that claim covers,
   and the one manual EasyStore setup step it needs
+- [Order source attribution](docs/ORDER_SOURCE_ATTRIBUTION.md) — per-order
+  last-tracked-touch attribution, campaign URL conventions, deployment steps,
+  HubSpot Order fields, and production smoke tests
 
 ## Repository layout
 
