@@ -52,6 +52,14 @@ jobs:
       - name: Run Worker behaviour tests
         run: npm test
 
+      - name: Prove D1 migrations are rerunnable
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .wrangler/state
+          npm run d1:migrate:local
+          npm run d1:migrate:local
+
   deploy:
     name: Migrate D1 and deploy Worker
     if: github.event_name != 'pull_request'
@@ -100,10 +108,16 @@ jobs:
       - name: Validate Wrangler deployment bundle
         run: npx wrangler deploy --dry-run
 
-      - name: Apply pending D1 migrations
+      # Deployment ordering is deliberate: Wrangler's D1 migration ledger makes
+      # this safe to rerun, and the Worker must never be deployed before its
+      # schema is ready.
+      - name: Apply pending D1 migrations before deployment
         run: npm run d1:migrate:remote
 
-      - name: Deploy Worker
+      - name: Confirm D1 migration step is idempotent
+        run: npm run d1:migrate:remote
+
+      - name: Deploy Worker only after migrations succeed
         run: npm run deploy
 
       - name: Write deployment summary
@@ -115,6 +129,6 @@ jobs:
             echo
             echo "- Worker: \`cc-attribution\`"
             echo "- Source commit: \`${GITHUB_SHA}\`"
-            echo "- D1 migrations: applied"
+            echo "- D1 migrations: applied before deployment and safe to rerun"
             echo "- Worker deployment: successful"
           } >> "${GITHUB_STEP_SUMMARY}"

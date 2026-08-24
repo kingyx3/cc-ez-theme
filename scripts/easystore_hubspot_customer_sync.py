@@ -35,13 +35,10 @@ serialized as ``YYYY-MM-DD`` into native ``date_of_birth`` when HubSpot exposes 
 as a string, and the legacy ``easystore_customer_birthday`` fallback is not
 written on those runs. The shared resolver stays strict for every other field.
 
-The Cloudflare attribution join has one required customer attribute: EasyStore's
-``Click ID``. Generic merchant attributes are normally provisioned in HubSpot only
-after a customer carrying a value is observed. Production cannot wait for that
-first value because the attribution stage runs immediately after Customers and
-expects ``easystore_attr_click_id`` to exist. This wrapper therefore resolves that
-one canonical attribute independently on every run, while the generic attribute
-mapper continues to own copying each customer's value into it.
+The old machine-only EasyStore ``Click ID`` customer attribute is retired. It is
+filtered out of merchant-defined attributes here so it is neither provisioned nor
+written to HubSpot. Cloudflare attribution now joins D1 ``customer_touches`` to
+the existing ``easystore_customer_id`` and source creation timestamp instead.
 """
 
 from __future__ import annotations
@@ -70,9 +67,15 @@ NATIVE_DATE_OF_BIRTH_SCHEMA_URL = (
     "https://api.hubapi.com/crm/v3/properties/contacts/date_of_birth"
 )
 LEGACY_CUSTOMER_SINCE_KEY = "customer_since"
-CLICK_ID_ATTRIBUTE_LABEL = "Click ID"
-CLICK_ID_FIELD_KEY = f"{base.ATTRIBUTE_KEY_PREFIX}{CLICK_ID_ATTRIBUTE_LABEL}"
-CLICK_ID_HUBSPOT_PROPERTY = "easystore_attr_click_id"
+RETIRED_CLICK_ID_ATTRIBUTE_TITLES = frozenset(
+    {
+        "click id",
+        "clickid",
+        "cb_click_id",
+        "source click id",
+        "attribution click id",
+    }
+)
 CONTACT_SOURCE_DATE_FIELDS: tuple[FieldSpec, ...] = (
     FieldSpec(
         key="source_created_at",
@@ -95,6 +98,7 @@ _BASE_COMPLETE_CUSTOMER = base.complete_customer
 _BASE_ITER_HUBSPOT_CONTACTS = base.iter_hubspot_contacts
 _BASE_RESOLVE_CONTACT_FIELDS = base.resolve_contact_fields
 _BASE_CUSTOMER_PROPERTIES = base.customer_properties
+_BASE_CUSTOMER_ATTRIBUTES = base.customer_attributes
 _FALLBACK_CUSTOMER_IDS_USED: set[str] = set()
 _NATIVE_DOB_STRING = False
 
@@ -230,14 +234,7 @@ def complete_customer(
 def iter_hubspot_contacts_by_primary_phone(
     access_token: str,
 ) -> Iterator[dict[str, Any]]:
-    """Yield Contacts with ``mobilephone`` excluded from identity matching.
-
-    The base customer sync historically indexed both ``phone`` and ``mobilephone``
-    into one namespace. That can turn two otherwise distinct Contacts into a false
-    duplicate whenever a secondary mobile happens to equal another Contact's
-    primary Phone. Production matching is intentionally narrower: ``phone`` is
-    authoritative, while ``mobilephone`` remains synchronized output only.
-    """
+    """Yield Contacts with ``mobilephone`` excluded from identity matching."""
 
     for contact in _BASE_ITER_HUBSPOT_CONTACTS(access_token):
         properties = contact.get("properties")
@@ -251,14 +248,25 @@ def iter_hubspot_contacts_by_primary_phone(
         yield primary_only
 
 
-def native_date_of_birth_storage_type(access_token: str) -> str | None:
-    """Return the writable native DOB storage type this portal exposes.
+def _normalized_attribute_title(value: Any) -> str:
+    return " ".join(str(value or "").strip().casefold().split())
 
-    The normal schema resolver handles a real HubSpot ``date`` property already.
-    Only a writable ``string`` needs the production adapter below. Unknown,
-    archived, calculated and read-only shapes are deliberately left to the normal
-    fallback behavior rather than guessed.
-    """
+
+def customer_attributes_without_click_id(
+    customer: dict[str, Any],
+    attribute_titles: dict[str, str] | None = None,
+) -> dict[str, str]:
+    """Return merchant attributes except the retired machine-only Click ID."""
+
+    return {
+        label: answer
+        for label, answer in _BASE_CUSTOMER_ATTRIBUTES(customer, attribute_titles).items()
+        if _normalized_attribute_title(label) not in RETIRED_CLICK_ID_ATTRIBUTE_TITLES
+    }
+
+
+def native_date_of_birth_storage_type(access_token: str) -> str | None:
+    """Return the writable native DOB storage type this portal exposes."""
 
     document = base._http_json(
         NATIVE_DATE_OF_BIRTH_SCHEMA_URL,
@@ -277,8 +285,6 @@ def native_date_of_birth_storage_type(access_token: str) -> str | None:
 
 
 def _install_contact_source_date_fields() -> None:
-    """Add explicit EasyStore source timestamps without duplicating them."""
-
     existing = {field.key for field in base.CONTACT_FIELDS}
     additions = tuple(
         field for field in CONTACT_SOURCE_DATE_FIELDS if field.key not in existing
@@ -292,30 +298,15 @@ def resolve_contact_fields(
     attribute_labels: Iterable[str] = (),
     report: dict[str, Any] | None = None,
 ) -> dict[str, str]:
-    """Prefer source fields and always provision the Click ID destination."""
+    """Prefer explicit EasyStore source timestamps and ordinary merchant fields."""
 
-    resolved = _BASE_RESOLVE_CONTACT_FIELDS(
-        access_token,
-        attribute_labels,
-        report,
+    adapted = dict(
+        _BASE_RESOLVE_CONTACT_FIELDS(
+            access_token,
+            attribute_labels,
+            report,
+        )
     )
-    adapted = dict(resolved)
-
-    # Resolve Click ID separately through the same customer-field abstraction.
-    # A one-label pass cannot lose the field to the generic 25-attribute limit,
-    # and existing tests/integrations can mock this resolver in one place.
-    click_mapping = _BASE_RESOLVE_CONTACT_FIELDS(
-        access_token,
-        (CLICK_ID_ATTRIBUTE_LABEL,),
-        None,
-    )
-    click_property = click_mapping.get(CLICK_ID_FIELD_KEY)
-    if click_property is not None:
-        adapted[CLICK_ID_FIELD_KEY] = click_property
-
-    # ``easystore_customer_since`` was the old source-created destination. Keep
-    # the property in the portal for compatibility, but stop updating it now that
-    # the source timestamp has an explicit EasyStore Created Date field.
     adapted.pop(LEGACY_CUSTOMER_SINCE_KEY, None)
     if _NATIVE_DOB_STRING:
         adapted.pop("birthday", None)
@@ -328,8 +319,6 @@ def customer_properties(
     field_properties: dict[str, str] | None = None,
     attribute_titles: dict[str, str] | None = None,
 ) -> dict[str, str]:
-    """Write a verified EasyStore birth date to native string ``date_of_birth``."""
-
     properties = _BASE_CUSTOMER_PROPERTIES(
         customer,
         mobile,
@@ -352,6 +341,7 @@ def _install_refinements(native_dob_type: str | None = None) -> None:
     base.customer_needs_detail = customer_needs_detail
     base.complete_customer = complete_customer
     base.iter_hubspot_contacts = iter_hubspot_contacts_by_primary_phone
+    base.customer_attributes = customer_attributes_without_click_id
     base.resolve_contact_fields = resolve_contact_fields
     base.customer_properties = customer_properties
     base.CONTACT_FIELD_DERIVATIONS["note"] = customer_note
@@ -382,22 +372,13 @@ def sync(
     summary["hubspot_native_date_of_birth_storage_type"] = native_dob_type
     summary["easystore_contact_source_created_property"] = "easystore_customer_created_at"
     summary["easystore_contact_source_modified_property"] = "easystore_customer_modified_at"
+    summary["retired_customer_attributes_not_synced"] = sorted(
+        RETIRED_CLICK_ID_ATTRIBUTE_TITLES
+    )
     if native_dob_type == "string":
         mapping = dict(summary.get("hubspot_contact_field_properties") or {})
         mapping["birthday"] = NATIVE_DATE_OF_BIRTH_PROPERTY
         summary["hubspot_contact_field_properties"] = dict(sorted(mapping.items()))
-
-    field_mapping = dict(summary.get("hubspot_contact_field_properties") or {})
-    field_coverage = dict(summary.get("easystore_customer_field_coverage") or {})
-    click_property = field_mapping.get(CLICK_ID_FIELD_KEY)
-    summary["easystore_click_id_attribute_label"] = CLICK_ID_ATTRIBUTE_LABEL
-    summary["easystore_click_id_hubspot_property"] = click_property
-    summary["easystore_click_id_property_ready"] = (
-        click_property == CLICK_ID_HUBSPOT_PROPERTY
-    )
-    summary["easystore_click_id_contacts"] = int(
-        field_coverage.get(CLICK_ID_FIELD_KEY, 0) or 0
-    )
     return summary
 
 
