@@ -7,16 +7,17 @@
   touch arrives, so the browser copy represents the latest marketing touch.
 
   `attribution-click-id-field` still treats the customer's EasyStore `Click ID`
-  as write-once, preserving account acquisition. Separately, when EasyStore says
-  a customer is logged in, this snippet posts the latest click id plus the scalar
-  `customer.id` to `go.cardboard.sg/touch`. D1 keeps those bindings append-only;
-  the order-attribution job later chooses the latest eligible binding before each
-  order timestamp. No customer name, email, phone, IP address or other profile
-  data is sent to the Worker.
+  as write-once, preserving account acquisition. Separately, the documented
+  scalar `customer.id` is rendered as JSON (or an empty string for a guest) and
+  posted with the latest click id to `go.cardboard.sg/touch`. D1 keeps those
+  bindings append-only; the order-attribution job later chooses the latest
+  eligible binding before each order timestamp. No customer name, email, phone,
+  IP address or other profile data is sent to the Worker.
 
-  This snippet intentionally does not resolve `shop.attribute_settings` or any
-  settings object from the layout head. That lookup previously broke storefront
-  pages and remains isolated to the customer templates that already render it.
+  This snippet intentionally contains no Liquid control-flow and never resolves
+  `shop.attribute_settings` or any settings object from the layout head. That
+  lookup previously broke storefront pages and remains isolated to the customer
+  templates that already render it.
 {% endcomment %}
 <script>
   (function () {
@@ -28,7 +29,7 @@
     var TOUCH_ENDPOINT = 'https://go.cardboard.sg/touch';
     var NINETY_DAYS_SECONDS = 7776000;
     var CLICK_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    var customerId = {% if customer %}{{ customer.id | json }}{% else %}null{% endif %};
+    var customerId = {{ customer.id | default: '' | json }};
 
     function valid(value) {
       var text = String(value || '').trim();
