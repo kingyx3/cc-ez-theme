@@ -1,0 +1,131 @@
+name: Sync order source attribution
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/sync-order-source-attribution.yml"
+      - "scripts/cloudflare_hubspot_order_attribution.py"
+      - "crm_tests/test_order_source_attribution.py"
+      - "cloudflare/attribution-worker/**"
+      - "theme/snippets/attribution-click-id.liquid"
+      - "tests/test_order_touch_capture.py"
+      - "docs/ORDER_SOURCE_ATTRIBUTION.md"
+  # The main CRM workflow starts at 00:00/06:00/12:00/18:00 Singapore time.
+  # Run an hour later so HubSpot Orders exist before this snapshot stage starts.
+  schedule:
+    - cron: "0 1,7,13,19 * * *"
+      timezone: "Asia/Singapore"
+  workflow_dispatch:
+    inputs:
+      deployment_env:
+        description: GitHub environment to attribute
+        required: true
+        default: dev
+        type: choice
+        options:
+          - dev
+          - prod
+      window_days:
+        description: Last tracked touch window in days
+        required: true
+        default: "30"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate order attribution
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Compile order attribution
+        run: python -m py_compile scripts/cloudflare_hubspot_order_attribution.py
+      - name: Run order attribution tests
+        run: python -m unittest crm_tests.test_order_source_attribution -v
+      - name: Run theme touch tests
+        run: python -m unittest tests.test_order_touch_capture tests.test_source_attribution_capture -v
+      - name: Run Worker tests
+        working-directory: cloudflare/attribution-worker
+        run: npm test
+
+  sync:
+    name: Attribute orders (${{ matrix.deployment_env }})
+    if: github.event_name != 'pull_request'
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        deployment_env: ${{ fromJSON(github.event_name == 'schedule' && '["prod","dev"]' || format('["{0}"]', inputs.deployment_env || 'dev')) }}
+    runs-on: ubuntu-latest
+    environment: ${{ matrix.deployment_env }}
+    timeout-minutes: 30
+    concurrency:
+      group: order-source-attribution-${{ matrix.deployment_env }}
+      cancel-in-progress: false
+    env:
+      EASYSTORE_STORE_DOMAIN: ${{ vars.EASYSTORE_STORE_DOMAIN }}
+      ORDER_ATTRIBUTION_WINDOW_DAYS: ${{ github.event_name == 'workflow_dispatch' && inputs.window_days || vars.ORDER_ATTRIBUTION_WINDOW_DAYS || '30' }}
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Check attribution environment
+        env:
+          EASYSTORE_ACCESS_TOKEN: ${{ secrets.EASYSTORE_ACCESS_TOKEN }}
+          HUBSPOT_ACCESS_TOKEN: ${{ secrets.HUBSPOT_ACCESS_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in EASYSTORE_STORE_DOMAIN EASYSTORE_ACCESS_TOKEN HUBSPOT_ACCESS_TOKEN CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_TOKEN; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error::${name} is required in the ${DEPLOYMENT_ENV:-${{ matrix.deployment_env }}} GitHub environment."
+              exit 1
+            fi
+          done
+          echo "Attributing ${EASYSTORE_STORE_DOMAIN} orders with a ${ORDER_ATTRIBUTION_WINDOW_DAYS}-day last-touch window."
+
+      - name: Attribute HubSpot Orders to latest tracked touch
+        env:
+          EASYSTORE_ACCESS_TOKEN: ${{ secrets.EASYSTORE_ACCESS_TOKEN }}
+          HUBSPOT_ACCESS_TOKEN: ${{ secrets.HUBSPOT_ACCESS_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/cloudflare_hubspot_order_attribution.py | tee order-attribution-summary.json
+
+      - name: Publish attribution summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "### Order source attribution"
+            echo
+            echo "- Environment: \`${{ matrix.deployment_env }}\`"
+            echo "- Store: \`${EASYSTORE_STORE_DOMAIN}\`"
+            echo "- Model: latest tracked human touch before the order"
+            echo "- Window: ${ORDER_ATTRIBUTION_WINDOW_DAYS} days"
+            echo "- No fallback to Contact acquisition source"
+            echo
+            if [[ -s order-attribution-summary.json ]]; then
+              echo '```json'
+              cat order-attribution-summary.json
+              echo '```'
+            else
+              echo "No summary was produced; inspect the attribution step."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
