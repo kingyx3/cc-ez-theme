@@ -49,9 +49,9 @@ jobs:
       - name: Compile order attribution
         run: python -m py_compile scripts/cloudflare_hubspot_order_attribution.py
       - name: Run order attribution tests
-        run: python -m unittest crm_tests.test_order_source_attribution -v
-      - name: Run theme touch tests
-        run: python -m unittest tests.test_order_touch_capture tests.test_source_attribution_capture -v
+        run: python -m unittest discover -s crm_tests -p 'test_order_source_attribution.py' -v
+      - name: Run theme attribution tests
+        run: python -m unittest discover -s tests -v
       - name: Run Worker tests
         working-directory: cloudflare/attribution-worker
         run: npm test
@@ -91,7 +91,7 @@ jobs:
           set -euo pipefail
           for name in EASYSTORE_STORE_DOMAIN EASYSTORE_ACCESS_TOKEN HUBSPOT_ACCESS_TOKEN CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_TOKEN; do
             if [[ -z "${!name:-}" ]]; then
-              echo "::error::${name} is required in the ${DEPLOYMENT_ENV:-${{ matrix.deployment_env }}} GitHub environment."
+              echo "::error::${name} is required in the ${{ matrix.deployment_env }} GitHub environment."
               exit 1
             fi
           done
