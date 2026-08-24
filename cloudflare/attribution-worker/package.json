@@ -3,10 +3,11 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
-    "check": "node --check src/index.js",
+    "check": "node --check src/index.js && node --check scripts/ensure-public-access.js",
     "test": "node --test \"test/**/*.test.js\"",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
+    "access:public": "node scripts/ensure-public-access.js",
     "types": "wrangler types",
     "d1:migrate:local": "wrangler d1 migrations apply cc-attribution --local",
     "d1:migrate:remote": "wrangler d1 migrations apply cc-attribution --remote"
