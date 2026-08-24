@@ -8,23 +8,6 @@ const CHANNELS = Object.freeze({
   qr: Object.freeze({ source: "qr", medium: "offline" }),
 });
 
-// Stable vanity links can live here. Ordinary campaigns do not need code
-// changes: use /<channel>?campaign=...&content=...&to=/relative/path instead.
-const ALIASES = Object.freeze({
-  rf: Object.freeze({
-    channel: "fb",
-    campaign: "rf",
-    content: "grp-aug26",
-    to: "/collections/reality-fracture",
-  }),
-  "rf-bump": Object.freeze({
-    channel: "fb",
-    campaign: "rf",
-    content: "grp-bump-aug26",
-    to: "/collections/reality-fracture",
-  }),
-});
-
 const MAX_LABEL_LENGTH = 100;
 const CLICK_COOKIE = "cb_click_id";
 const CLICK_COOKIE_MAX_AGE = 60 * 60 * 24 * 90;
@@ -134,17 +117,6 @@ export default {
 };
 
 function trackingRoute(url, env) {
-  const aliasKey = url.pathname.replace(/^\/+|\/+$/g, "").toLowerCase();
-  const alias = ALIASES[aliasKey];
-  if (alias) {
-    return {
-      channel: CHANNELS[alias.channel],
-      campaign: sanitizeCampaign(alias.campaign),
-      content: sanitizeContent(alias.content, alias.channel),
-      to: alias.to,
-    };
-  }
-
   const match = /^\/(?:go\/)?([^/]+)\/?$/.exec(url.pathname);
   if (!match) return null;
 
