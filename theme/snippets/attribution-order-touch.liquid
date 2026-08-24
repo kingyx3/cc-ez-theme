@@ -1,0 +1,53 @@
+{% comment %}
+  Bind the browser's latest tracked marketing click to the logged-in EasyStore
+  customer. The binding is append-only in Cloudflare D1 and is later resolved
+  against each EasyStore order timestamp, so a new campaign click can influence
+  a future order without rewriting the customer's original acquisition source.
+
+  The click id comes from attribution-click-id.liquid in the document head. This
+  snippet runs near body_end, where using the global customer object is already
+  normal for the theme. A failed request is deliberately retried on the next
+  page; D1's (customer_id, click_id) primary key makes repeats idempotent.
+{% endcomment %}
+{% if customer %}
+<script>
+  (function () {
+    'use strict';
+
+    var ENDPOINT = 'https://go.cardboard.sg/touch';
+    var customerId = {{ customer.id | json }};
+    var clickId = String(window.ccSourceClickId || '').trim().toLowerCase();
+    var CLICK_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+    if (!customerId || !CLICK_ID.test(clickId) || !window.fetch) return;
+
+    var storageKey = 'cc:order-touch:' + String(customerId) + ':' + clickId;
+    try {
+      if (window.localStorage.getItem(storageKey) === '1') return;
+    } catch (error) {
+      /* D1 is idempotent, so browsers without localStorage may safely retry. */
+    }
+
+    window.fetch(ENDPOINT, {
+      method: 'POST',
+      mode: 'cors',
+      credentials: 'include',
+      keepalive: true,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        customer_id: String(customerId),
+        click_id: clickId
+      })
+    }).then(function (response) {
+      if (!response.ok) return;
+      try {
+        window.localStorage.setItem(storageKey, '1');
+      } catch (error) {
+        /* Nothing else to do; the server-side binding already succeeded. */
+      }
+    }).catch(function () {
+      /* Retry naturally on the next storefront page. */
+    });
+  })();
+</script>
+{% endif %}
