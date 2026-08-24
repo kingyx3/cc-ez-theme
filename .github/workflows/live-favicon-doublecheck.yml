@@ -1,0 +1,87 @@
+name: Live favicon double-check
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/live-favicon-doublecheck.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Inspect live favicon candidates
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="https://cardboard.sg/?favicon_doublecheck=${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          curl --location --fail --silent --show-error \
+            --header 'Cache-Control: no-cache' \
+            --header 'Pragma: no-cache' \
+            --user-agent 'cc-ez-theme-live-favicon-doublecheck/1.0' \
+            --output storefront.html \
+            "$target"
+
+          python - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          from urllib.parse import urljoin
+
+          class Parser(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.links = []
+              def handle_starttag(self, tag, attrs):
+                  if tag.lower() != 'link':
+                      return
+                  d = {k.lower(): v for k, v in attrs if k}
+                  rel = (d.get('rel') or '').lower().split()
+                  href = d.get('href')
+                  if href and any('icon' in token for token in rel):
+                      self.links.append((d.get('rel') or '', href, d.get('type') or ''))
+
+          html = Path('storefront.html').read_text(encoding='utf-8', errors='replace')
+          p = Parser(); p.feed(html)
+          print('LIVE ICON LINKS:')
+          for rel, href, typ in p.links:
+              print(f'- rel={rel!r} type={typ!r} href={href}')
+          matches = [href for _, href, _ in p.links if 'cc-favicon.svg' in href]
+          if not matches:
+              raise SystemExit('No cc-favicon.svg found in live HTML')
+          Path('live-favicon-url.txt').write_text(urljoin('https://cardboard.sg/', matches[-1]), encoding='utf-8')
+          PY
+
+          live_url="$(cat live-favicon-url.txt)"
+          curl --location --fail --silent --show-error \
+            --header 'Cache-Control: no-cache' \
+            --header 'Pragma: no-cache' \
+            --dump-header live-favicon-headers.txt \
+            --output live-favicon.svg \
+            "$live_url"
+
+          echo "EXPECTED_SHA256=$(sha256sum theme/assets/cc-favicon.svg | awk '{print $1}')"
+          echo "LIVE_SHA256=$(sha256sum live-favicon.svg | awk '{print $1}')"
+          cmp --silent theme/assets/cc-favicon.svg live-favicon.svg
+          echo "LIVE_MATCHES_REPO=true"
+
+          echo "--- /favicon.ico ---"
+          set +e
+          curl --location --silent --show-error \
+            --header 'Cache-Control: no-cache' \
+            --header 'Pragma: no-cache' \
+            --dump-header root-favicon-headers.txt \
+            --output root-favicon.bin \
+            "https://cardboard.sg/favicon.ico"
+          root_status=$?
+          set -e
+          echo "ROOT_FAVICON_CURL_STATUS=$root_status"
+          if [ -s root-favicon.bin ]; then
+            echo "ROOT_FAVICON_SHA256=$(sha256sum root-favicon.bin | awk '{print $1}')"
+            file root-favicon.bin || true
+          fi
+          cat root-favicon-headers.txt || true
