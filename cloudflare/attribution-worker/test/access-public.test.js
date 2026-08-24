@@ -19,7 +19,8 @@ test("creates a worker-level bypass application when none exists", async () => {
     }
     const body = JSON.parse(options.body);
     assert.equal(body.type, "self_hosted");
-    assert.deepEqual(body.destination, { type: "worker", worker_id: "cc-attribution" });
+    assert.deepEqual(body.destinations, [{ type: "worker", worker_id: "cc-attribution" }]);
+    assert.equal("destination" in body, false);
     assert.equal(body.policies[0].decision, "bypass");
     assert.deepEqual(body.policies[0].include, [{ everyone: {} }]);
     return jsonResponse({ success: true, result: { id: "app-new" } });
@@ -46,7 +47,7 @@ test("does nothing when a bypass-everyone policy already exists", async () => {
         result: [
           {
             id: "app-1",
-            destination: { type: "worker", worker_id: "cc-attribution" },
+            destinations: [{ type: "worker", worker_id: "cc-attribution" }],
           },
         ],
         result_info: { total_pages: 1 },
@@ -110,12 +111,11 @@ test("adds a bypass policy to an existing worker Access application", async () =
   assert.deepEqual(writes[0].include, [{ everyone: {} }]);
 });
 
-test("surfaces Cloudflare API failures", async () => {
-  const fetchImpl = async () =>
-    jsonResponse({ success: false, errors: [{ message: "permission denied" }] }, 403);
+test("surfaces Cloudflare API failures with an Access permission hint", async () => {
+  const fetchImpl = async () => jsonResponse({ code: 1010, error: "auth.forbidden" }, 403);
 
   await assert.rejects(
     ensureWorkerPublic({ accountId: "acct", token: "token", fetchImpl }),
-    /permission denied/,
+    /auth\.forbidden.*Access: Apps and Policies.*Edit/,
   );
 });
