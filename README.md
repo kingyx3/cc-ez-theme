@@ -19,6 +19,9 @@ shopping on desktop and mobile.
 - [Order source attribution](docs/ORDER_SOURCE_ATTRIBUTION.md) — per-order
   last-tracked-touch attribution, campaign URL conventions, deployment steps,
   HubSpot Order fields, and production smoke tests
+- [Cloudflare attribution Access](docs/CLOUDFLARE_ATTRIBUTION_ACCESS.md) — keeps
+  `cc-attribution` publicly reachable even when account-wide Worker Access is
+  enabled, and verifies `go.cardboard.sg/health` after deployment
 
 ## Repository layout
 

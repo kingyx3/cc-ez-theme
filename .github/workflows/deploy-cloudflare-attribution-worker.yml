@@ -72,7 +72,9 @@ jobs:
 
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCESS_API_TOKEN: ${{ secrets.CLOUDFLARE_ACCESS_API_TOKEN || secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_WORKER_ID: cc-attribution
 
     steps:
       - name: Check out repository
@@ -89,6 +91,10 @@ jobs:
           set -euo pipefail
           if [[ -z "${CLOUDFLARE_API_TOKEN}" ]]; then
             echo "::error::Repository secret CLOUDFLARE_API_TOKEN is not configured."
+            exit 1
+          fi
+          if [[ -z "${CLOUDFLARE_ACCESS_API_TOKEN}" ]]; then
+            echo "::error::Configure CLOUDFLARE_ACCESS_API_TOKEN, or give CLOUDFLARE_API_TOKEN Access: Apps and Policies Write permission."
             exit 1
           fi
           if [[ -z "${CLOUDFLARE_ACCOUNT_ID}" ]]; then
@@ -120,6 +126,37 @@ jobs:
       - name: Deploy Worker only after migrations succeed
         run: npm run deploy
 
+      # go.cardboard.sg is a public redirect/touch endpoint. Cloudflare account-
+      # wide Worker Access must never turn it into an OTP-protected application.
+      - name: Ensure attribution Worker bypasses Cloudflare Access
+        run: npm run access:public
+
+      - name: Verify public custom-domain health
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f health.headers health.json
+          for attempt in {1..12}; do
+            status="$(curl --silent --show-error --dump-header health.headers --output health.json --write-out '%{http_code}' --max-redirs 0 https://go.cardboard.sg/health || true)"
+            if [[ "${status}" == "200" ]] && node -e '
+              const fs = require("fs");
+              const body = JSON.parse(fs.readFileSync("health.json", "utf8"));
+              if (body.ok !== true || body.worker !== "cc-attribution") process.exit(1);
+            '; then
+              echo "Public health check passed on attempt ${attempt}."
+              exit 0
+            fi
+            echo "Public health check attempt ${attempt} returned HTTP ${status:-curl-error}; retrying..."
+            sleep 5
+          done
+          echo "::error::go.cardboard.sg/health did not reach cc-attribution without authentication."
+          echo "--- response headers ---"
+          cat health.headers || true
+          echo "--- response body (first 1000 bytes) ---"
+          head -c 1000 health.json || true
+          echo
+          exit 1
+
       - name: Write deployment summary
         if: success()
         shell: bash
@@ -131,4 +168,6 @@ jobs:
             echo "- Source commit: \`${GITHUB_SHA}\`"
             echo "- D1 migrations: applied before deployment and safe to rerun"
             echo "- Worker deployment: successful"
+            echo "- Cloudflare Access: worker-level public bypass enforced"
+            echo "- Public health: \`https://go.cardboard.sg/health\` reached \`cc-attribution\`"
           } >> "${GITHUB_STEP_SUMMARY}"
