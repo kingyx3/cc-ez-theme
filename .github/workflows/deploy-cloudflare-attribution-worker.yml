@@ -94,7 +94,7 @@ jobs:
             exit 1
           fi
           if [[ -z "${CLOUDFLARE_ACCESS_API_TOKEN}" ]]; then
-            echo "::error::Configure CLOUDFLARE_ACCESS_API_TOKEN, or give CLOUDFLARE_API_TOKEN Access: Apps and Policies Write permission."
+            echo "::error::Configure CLOUDFLARE_ACCESS_API_TOKEN, or give CLOUDFLARE_API_TOKEN Account > Access: Apps and Policies > Edit permission."
             exit 1
           fi
           if [[ -z "${CLOUDFLARE_ACCOUNT_ID}" ]]; then
@@ -111,6 +111,12 @@ jobs:
       - name: Run Worker behaviour tests
         run: npm test
 
+      # This is deliberately the first production mutation. It proves that the
+      # Access token can write the Worker-level bypass before D1 or Worker state
+      # is changed, and it also repairs a currently OTP-protected endpoint.
+      - name: Preflight and enforce public Cloudflare Access
+        run: npm run access:public
+
       - name: Validate Wrangler deployment bundle
         run: npx wrangler deploy --dry-run
 
@@ -126,9 +132,9 @@ jobs:
       - name: Deploy Worker only after migrations succeed
         run: npm run deploy
 
-      # go.cardboard.sg is a public redirect/touch endpoint. Cloudflare account-
-      # wide Worker Access must never turn it into an OTP-protected application.
-      - name: Ensure attribution Worker bypasses Cloudflare Access
+      # Re-run after deployment as an idempotent assertion that the Worker keeps
+      # its explicit public exception even when routes/domains are reconciled.
+      - name: Confirm attribution Worker bypasses Cloudflare Access
         run: npm run access:public
 
       - name: Verify public custom-domain health
@@ -166,8 +172,9 @@ jobs:
             echo
             echo "- Worker: \`cc-attribution\`"
             echo "- Source commit: \`${GITHUB_SHA}\`"
+            echo "- Cloudflare Access: public bypass permission verified before deployment"
             echo "- D1 migrations: applied before deployment and safe to rerun"
             echo "- Worker deployment: successful"
-            echo "- Cloudflare Access: worker-level public bypass enforced"
+            echo "- Cloudflare Access: worker-level public bypass confirmed after deployment"
             echo "- Public health: \`https://go.cardboard.sg/health\` reached \`cc-attribution\`"
           } >> "${GITHUB_STEP_SUMMARY}"
