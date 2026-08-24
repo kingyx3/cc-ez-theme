@@ -1,29 +1,22 @@
 {% comment %}
-  Stores the Cloudflare click id so a later sign-up can be attributed.
+  Stores the Cloudflare click id so a later sign-up or order can be attributed.
 
-  The `cc-attribution` Worker mints a random click id for every /go/* entry,
-  records the channel it came from in D1, and redirects here with the id both in
-  the URL as `cb_click_id` and in a first-party cookie. Without this the id dies
-  on the landing page: a shopper's first tap navigates away from the URL that
-  carried it, and `scripts/cloudflare_hubspot_attribution.py` has nothing to join.
+  The `cc-attribution` Worker mints a random click id for every tracked entry,
+  records the channel in D1, and redirects here with the id both in the URL as
+  `cb_click_id` and in a first-party cookie. The URL wins whenever a new tracked
+  touch arrives, so the browser copy represents the latest marketing touch.
 
-  This runs on every page of the store, from the head, because the landing page
-  is any page. **It therefore touches no Liquid object at all** - no `shop`, no
-  `customer`, no `settings`. Reading a shop object here is what broke the
-  storefront once already: `shop.attribute_settings` is populated on the customer
-  pages that ask for it, and iterating it from the layout head meant every page,
-  including the homepage, resolved it. Whatever this snippet needs, it reads from
-  the browser.
+  `attribution-click-id-field` still treats the customer's EasyStore `Click ID`
+  as write-once, preserving account acquisition. Separately, when EasyStore says
+  a customer is logged in, this snippet posts the latest click id plus the scalar
+  `customer.id` to `go.cardboard.sg/touch`. D1 keeps those bindings append-only;
+  the order-attribution job later chooses the latest eligible binding before each
+  order timestamp. No customer name, email, phone, IP address or other profile
+  data is sent to the Worker.
 
-  `attribution-click-id-field` does the other half - matching the EasyStore
-  customer attribute and filling it - and is included only by the four customer
-  templates that render attribute settings, which is where that lookup is known
-  to work.
-
-  The id is an opaque random value that identifies a click, not a person. It is
-  not joined to an IP address, and the Worker stores no personal data alongside
-  it. `tests/test_source_attribution_capture.py` pins the names this snippet, the
-  field snippet, the Worker and the join script have to agree on.
+  This snippet intentionally does not resolve `shop.attribute_settings` or any
+  settings object from the layout head. That lookup previously broke storefront
+  pages and remains isolated to the customer templates that already render it.
 {% endcomment %}
 <script>
   (function () {
@@ -32,11 +25,10 @@
     var COOKIE = 'cb_click_id';
     var STORAGE_KEY = 'cc:cb_click_id';
     var PARAM = 'cb_click_id';
+    var TOUCH_ENDPOINT = 'https://go.cardboard.sg/touch';
     var NINETY_DAYS_SECONDS = 7776000;
-    // The Worker mints a UUID and nothing else is accepted. A value from the
-    // query string is shopper-supplied, so anything that is not the shape the
-    // Worker produces is discarded rather than stored and shipped to the CRM.
     var CLICK_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    var customerId = {% if customer %}{{ customer.id | json }}{% else %}null{% endif %};
 
     function valid(value) {
       var text = String(value || '').trim();
@@ -59,9 +51,6 @@
     }
 
     function remember(clickId) {
-      // The cookie is what the Worker set and what a later page reads first;
-      // localStorage is the copy that survives a browser clearing cookies
-      // between the landing page and the eventual sign-up.
       var attributes =
         '; path=/; max-age=' + NINETY_DAYS_SECONDS + '; samesite=lax';
       if (window.location.protocol === 'https:') {
@@ -79,6 +68,38 @@
       }
     }
 
+    function bindTouch(clickId) {
+      if (!customerId || !clickId || !window.fetch) return;
+
+      var key = 'cc:order-touch:' + String(customerId) + ':' + clickId;
+      try {
+        if (window.localStorage.getItem(key) === '1') return;
+      } catch (error) {
+        /* D1 is idempotent, so browsers without storage may retry. */
+      }
+
+      window.fetch(TOUCH_ENDPOINT, {
+        method: 'POST',
+        mode: 'cors',
+        credentials: 'include',
+        keepalive: true,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customer_id: String(customerId),
+          click_id: clickId
+        })
+      }).then(function (response) {
+        if (!response.ok) return;
+        try {
+          window.localStorage.setItem(key, '1');
+        } catch (error) {
+          /* the D1 binding already succeeded */
+        }
+      }).catch(function () {
+        /* retry naturally on the next storefront page */
+      });
+    }
+
     var fromUrl = '';
     try {
       fromUrl = valid(new URLSearchParams(window.location.search).get(PARAM));
@@ -86,15 +107,14 @@
       fromUrl = '';
     }
 
-    // The URL wins: it is the click that is happening now, and it is what makes
-    // a returning shopper's stored id current again.
+    // The URL wins: it is the marketing touch happening now. The EasyStore
+    // acquisition field remains write-once, while D1 keeps every bound touch.
     var clickId = fromUrl || fromCookie() || fromStorage();
     if (fromUrl) {
       remember(fromUrl);
     }
 
-    // How `attribution-click-id-field` reads the value, so the resolution order
-    // above lives in exactly one place.
     window.ccSourceClickId = clickId || null;
+    bindTouch(clickId);
   })();
 </script>
