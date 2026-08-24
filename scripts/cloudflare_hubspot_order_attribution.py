@@ -2,19 +2,20 @@
 """Attribute each EasyStore order to its own latest tracked marketing touch.
 
 Customer acquisition and order conversion are deliberately separate facts. The
-existing contact attribution job writes the click under which an account was
-acquired. This job instead looks at append-only ``customer_touches`` rows in the
-Cloudflare D1 database and chooses the latest human marketing click that:
+Contact attribution job chooses the tracked touch before account creation. This
+job instead looks at append-only ``customer_touches`` rows in Cloudflare D1 and
+chooses the latest human marketing touch that:
 
 * belongs to the EasyStore customer on the order;
 * was bound to that customer before the order was created;
 * happened before the order was created; and
 * is inside the configured attribution window (30 days by default).
 
-The result is snapshotted onto the HubSpot Order. A later click can therefore
-influence a later purchase without rewriting either the Contact acquisition or an
-earlier Order. There is intentionally no fallback from an unattributed Order to
-the Contact's acquisition source.
+Click UUIDs remain an internal D1 join key. HubSpot receives only the marketing
+snapshot (source, medium, campaign, content, touch time, model and status). A
+later click can therefore influence a later purchase without rewriting either the
+Contact acquisition or an earlier Order. There is intentionally no fallback from
+an unattributed Order to the Contact's acquisition source.
 """
 
 from __future__ import annotations
@@ -27,7 +28,13 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable
 
 import easystore_hubspot_orders as orders
-from easystore_hubspot_schema import FieldSpec, describe_mapping, first_present, nonempty, resolve_fields
+from easystore_hubspot_schema import (
+    FieldSpec,
+    describe_mapping,
+    first_present,
+    nonempty,
+    resolve_fields,
+)
 
 
 CLOUDFLARE_BASE_URL = "https://api.cloudflare.com/client/v4"
@@ -68,12 +75,6 @@ FIELDS: tuple[FieldSpec, ...] = (
         description="Marketing content/post label of the latest tracked touch before this order.",
     ),
     FieldSpec(
-        key="click_id",
-        fallback="cc_order_click_id",
-        label="Order click ID",
-        description="Cloudflare click selected as the conversion touch for this order.",
-    ),
-    FieldSpec(
         key="clicked_at",
         fallback="cc_order_touch_at",
         label="Order marketing touch time",
@@ -101,6 +102,8 @@ FIELDS: tuple[FieldSpec, ...] = (
     ),
 )
 
+LOCK_KEYS = ("source", "medium", "campaign", "content", "clicked_at")
+
 
 def chunked(values: list[str], size: int) -> Iterable[list[str]]:
     for start in range(0, len(values), size):
@@ -118,12 +121,7 @@ def order_customer_id(order: dict[str, Any]) -> str | None:
 
 
 def epoch_millis(value: Any) -> int | None:
-    """Return an EasyStore timestamp as epoch milliseconds.
-
-    EasyStore normally returns ISO timestamps with an offset. If a legacy shape
-    omits the offset, the store's Singapore timezone is used instead of silently
-    treating local wall time as UTC.
-    """
+    """Return an EasyStore timestamp as epoch milliseconds."""
 
     text = str(value or "").strip()
     if not text:
@@ -134,7 +132,6 @@ def epoch_millis(value: Any) -> int | None:
     except ValueError:
         number = None
     if number is not None:
-        # Seconds are roughly 1e9; milliseconds are roughly 1e12.
         return int(number * 1000) if abs(number) < 100_000_000_000 else int(number)
 
     candidate = text.replace("Z", "+00:00")
@@ -165,7 +162,7 @@ def latest_touch_for_order(
     """Choose the latest eligible touch, never a touch learned after the order."""
 
     lower = order_at - window_days * MILLISECONDS_PER_DAY
-    eligible = []
+    eligible: list[dict[str, Any]] = []
     for touch in touches:
         try:
             clicked_at = int(touch.get("clicked_at"))
@@ -229,14 +226,12 @@ def fetch_customer_touches(
         sql = f"""
           SELECT
             ct.customer_id,
-            ct.click_id,
             ct.bound_at,
             sc.source,
             sc.medium,
             sc.campaign,
             sc.content,
-            sc.clicked_at,
-            sc.bot_reason
+            sc.clicked_at
           FROM customer_touches AS ct
           JOIN source_clicks AS sc ON sc.click_id = ct.click_id
           WHERE ct.customer_id IN ({placeholders})
@@ -308,13 +303,12 @@ def touch_values(
     if touch is None:
         return values
 
-    for key in ("source", "medium", "campaign", "content", "click_id"):
+    for key in ("source", "medium", "campaign", "content"):
         value = nonempty(touch.get(key))
         if value is not None:
             values[key] = value
-    clicked_at = touch.get("clicked_at")
     try:
-        values["clicked_at"] = str(int(clicked_at))
+        values["clicked_at"] = str(int(touch.get("clicked_at")))
     except (TypeError, ValueError):
         pass
     return values
@@ -329,6 +323,20 @@ def mapped_properties(
         for key, value in values.items()
         if key in field_properties
     }
+
+
+def attribution_locked(
+    existing: dict[str, Any],
+    field_properties: dict[str, str],
+) -> bool:
+    status_property = field_properties.get("status")
+    if status_property and nonempty(existing.get(status_property)) == "attributed":
+        return True
+    for key in LOCK_KEYS:
+        property_name = field_properties.get(key)
+        if property_name and nonempty(existing.get(property_name)) is not None:
+            return True
+    return False
 
 
 def batch_update_orders(access_token: str, inputs: list[dict[str, Any]]) -> int:
@@ -386,7 +394,7 @@ def sync(
         "orders_with_eligible_touch": 0,
         "orders_without_recent_tracked_touch": 0,
         "hubspot_orders_missing": 0,
-        "hubspot_orders_with_conflicting_click_id": 0,
+        "hubspot_orders_already_attributed": 0,
         "hubspot_orders_unchanged": 0,
     }
     print(
@@ -437,7 +445,6 @@ def sync(
     summary["customers_with_touch_history"] = len(touches_by_customer)
 
     hubspot_orders = hubspot_order_records(hubspot_access_token, field_properties)
-    click_property = field_properties.get("click_id")
     updates: list[dict[str, Any]] = []
 
     for source in source_orders:
@@ -449,6 +456,10 @@ def sync(
         existing = record.get("properties")
         if not isinstance(existing, dict):
             existing = {}
+
+        if attribution_locked(existing, field_properties):
+            summary["hubspot_orders_already_attributed"] += 1
+            continue
 
         customer_id = source["customer_id"]
         created_at = source["created_at"]
@@ -470,17 +481,6 @@ def sync(
                 status = "attributed"
                 summary["orders_with_eligible_touch"] += 1
 
-        current_click = nonempty(existing.get(click_property)) if click_property else None
-        desired_click = nonempty(touch.get("click_id")) if touch is not None else None
-        if current_click and desired_click and current_click != desired_click:
-            summary["hubspot_orders_with_conflicting_click_id"] += 1
-            continue
-        if current_click and desired_click is None:
-            # An Order attribution is a historical snapshot. Never downgrade it
-            # merely because a later run cannot find the touch again.
-            summary["hubspot_orders_unchanged"] += 1
-            continue
-
         desired = mapped_properties(
             touch_values(touch, window_days=window_days, status=status),
             field_properties,
@@ -496,6 +496,8 @@ def sync(
         updates.append({"id": str(record["id"]), "properties": changed})
 
     summary["hubspot_orders_updated"] = batch_update_orders(hubspot_access_token, updates)
+    if schema_report.get("hints"):
+        summary["hubspot_order_property_hints"] = schema_report["hints"]
     return summary
 
 
