@@ -1,47 +1,13 @@
 {% comment %}
-  Fills the EasyStore "Click ID" customer attribute, and hides it from shoppers.
+  Legacy rollout guard for the retired EasyStore "Click ID" customer attribute.
 
-  `attribution-click-id` has already stored the Cloudflare click id in the
-  browser and exposed it as `window.ccSourceClickId`. This is the other half:
-  putting that value somewhere EasyStore will keep, so the Contact sync can carry
-  it to HubSpot as `easystore_attr_click_id` and the join script can resolve it
-  against D1.
+  Attribution no longer reads or writes this field. Source clicks are bound
+  directly to EasyStore `customer.id` in Cloudflare D1, and HubSpot never receives
+  a click UUID. This snippet only prevents an old machine-only attribute from
+  appearing in customer forms while it is being removed from EasyStore admin.
 
-  A merchant-defined customer attribute is the only place a theme can write a
-  fact onto a customer that the EasyStore API hands back. So the store defines one
-  text attribute titled "Click ID", and this fills it during sign-up.
-
-  **Included only by the four templates that render `shop.attribute_settings`**
-  - `register`, `activate_account`, `details` and `account`. That is deliberate.
-  An earlier version did this lookup from the layout head, which made every page
-  in the store resolve a shop object that only the customer pages ask for, and
-  the storefront errored on deploy. The lookup belongs on the pages that already
-  do it.
-
-  Four deliberate rules:
-
-  * **Only ever filled when empty.** The cookie is last-touch - a shopper who
-    comes back through a new link gets a new id - but the attribute records how
-    the account was *acquired*, so once EasyStore holds a value nothing here
-    overwrites it. `details` and `account` repopulate the field from
-    `customer.attributes` while the page parses, so a value present by the time
-    this runs is one EasyStore already recorded.
-  * **Only filled at submit time.** EasyStore uses its customer fields to decide
-    whether a new customer's profile is complete. A machine-only Click ID must
-    never be the value that makes the profile look complete before the shopper
-    has supplied their own details. On signup/activation, the human fields are
-    required first and the Click ID is injected only when the valid form submits.
-  * **The field is hidden, never removed.** Hiding it by id leaves the shared
-    attribute loop untouched, so an admin who renames or deletes the attribute
-    gets the ordinary field back rather than a broken form.
-  * **A store with no such attribute is left completely alone.** No matching
-    title means `attribution_click_id_setting` stays blank and everything below
-    no-ops. The click id is still captured by the head snippet, so nothing is
-    lost if the attribute is created later.
-
-  Every filter chain here uses the same `default: '' | append: '' | downcase |
-  strip` coercion the rest of the theme uses, and matches with `==` rather than
-  testing an array with `contains`, which no other template in this theme does.
+  Once the legacy attribute has been deleted from EasyStore, this include becomes
+  a no-op and can be removed in a later theme cleanup.
 {% endcomment %}
 
 {% assign attribution_click_id_setting = '' %}
@@ -53,84 +19,28 @@
 {% endfor %}
 
 {% if attribution_click_id_setting != '' %}
-  {% comment %}
-    Hidden before first paint. A shopper must never be shown a machine id in the
-    middle of a sign-up form, and `:has()` reaches the wrapper that the shared
-    attribute loop built, which a stylesheet on its own cannot.
-  {% endcomment %}
   <style>
     .field:has(#DetailAttribute{{ attribution_click_id_setting }}),
     .grid__item:has(#DetailAttribute{{ attribution_click_id_setting }}) {
       display: none !important;
     }
   </style>
-
   <script>
     (function () {
       'use strict';
-
-      var SETTING_ID = '{{ attribution_click_id_setting }}';
-
-      function requireHumanProfileFields(form) {
-        if (!form || (form.id !== 'form-register' && form.id !== 'form-activate')) return;
-
-        [
-          'customer[first_name]',
-          'customer[last_name]',
-          'customer[gender]',
-          'customer[birthdate]',
-          'customer[password]'
-        ].forEach(function (name) {
-          var input = form.querySelector('[name="' + name + '"]');
-          if (input) input.setAttribute('required', 'required');
-        });
-      }
-
-      function submitClickId(field) {
-        var clickId = window.ccSourceClickId;
-        if (!clickId) return;
-
-        // Acquisition, not last touch: a value already here is one EasyStore
-        // recorded when the account was created.
-        if (!String(field.value || '').trim()) {
-          field.value = clickId;
-        }
-      }
-
-      function prepare() {
-        var field = document.getElementById('DetailAttribute' + SETTING_ID);
+      function retireLegacyField() {
+        var field = document.getElementById('DetailAttribute{{ attribution_click_id_setting }}');
         if (!field) return;
-
-        // Hidden by the stylesheet above; also hidden here so a browser lacking
-        // :has() still never shows the field, and un-required so a required
-        // attribute cannot block a sign-up on an invisible input. EasyStore may
-        // enforce `is_required` server-side regardless, which is why the
-        // attribute must not be marked required: an organic shopper has no click
-        // id to fill.
-        var wrapper = field.closest('.field, .grid__item');
-        if (wrapper) {
-          wrapper.setAttribute('hidden', 'hidden');
-        }
         field.removeAttribute('required');
-
-        var form = field.form || field.closest('form');
-        requireHumanProfileFields(form);
-
-        if (form) {
-          // Capture phase is deliberate. The account page has its own submit
-          // handler that builds FormData immediately; this must run before it.
-          form.addEventListener('submit', function () {
-            submitClickId(field);
-          }, true);
-        } else {
-          submitClickId(field);
-        }
+        field.setAttribute('disabled', 'disabled');
+        field.removeAttribute('name');
+        var wrapper = field.closest('.field, .grid__item');
+        if (wrapper) wrapper.setAttribute('hidden', 'hidden');
       }
-
       if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', prepare);
+        document.addEventListener('DOMContentLoaded', retireLegacyField);
       } else {
-        prepare();
+        retireLegacyField();
       }
     })();
   </script>
