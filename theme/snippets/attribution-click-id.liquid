@@ -1,23 +1,18 @@
 {% comment %}
-  Stores the Cloudflare click id so a later sign-up or order can be attributed.
+  Stores the latest Cloudflare source click in this browser and binds it to the
+  logged-in EasyStore customer when one exists.
 
   The `cc-attribution` Worker mints a random click id for every tracked entry,
-  records the channel in D1, and redirects here with the id both in the URL as
-  `cb_click_id` and in a first-party cookie. The URL wins whenever a new tracked
-  touch arrives, so the browser copy represents the latest marketing touch.
+  records the marketing facts in D1, and redirects here with `cb_click_id`. The
+  URL wins whenever a new tracked touch arrives, so the browser copy represents
+  the latest marketing touch.
 
-  `attribution-click-id-field` still treats the customer's EasyStore `Click ID`
-  as write-once, preserving account acquisition. Separately, the documented
-  scalar `customer.id` is rendered as JSON (or an empty string for a guest) and
-  posted with the latest click id to `go.cardboard.sg/touch`. D1 keeps those
-  bindings append-only; the order-attribution job later chooses the latest
-  eligible binding before each order timestamp. No customer name, email, phone,
-  IP address or other profile data is sent to the Worker.
-
-  This snippet intentionally contains no Liquid control-flow and never resolves
-  `shop.attribute_settings` or any settings object from the layout head. That
-  lookup previously broke storefront pages and remains isolated to the customer
-  templates that already render it.
+  The click id is only a transport key between the browser and Cloudflare. It is
+  not written into an EasyStore customer attribute and is not copied to HubSpot.
+  When EasyStore exposes `customer.id`, this snippet posts only that numeric id
+  plus the click UUID to `go.cardboard.sg/touch`. D1 keeps bindings append-only;
+  Contact acquisition and Order attribution later select the eligible touch by
+  timestamp. No customer name, email, phone or profile data is sent to the Worker.
 {% endcomment %}
 <script>
   (function () {
@@ -72,7 +67,7 @@
     function bindTouch(clickId) {
       if (!customerId || !clickId || !window.fetch) return;
 
-      var key = 'cc:order-touch:' + String(customerId) + ':' + clickId;
+      var key = 'cc:source-touch:' + String(customerId) + ':' + clickId;
       try {
         if (window.localStorage.getItem(key) === '1') return;
       } catch (error) {
@@ -108,14 +103,10 @@
       fromUrl = '';
     }
 
-    // The URL wins: it is the marketing touch happening now. The EasyStore
-    // acquisition field remains write-once, while D1 keeps every bound touch.
     var clickId = fromUrl || fromCookie() || fromStorage();
     if (fromUrl) {
       remember(fromUrl);
     }
-
-    window.ccSourceClickId = clickId || null;
     bindTouch(clickId);
   })();
 </script>
