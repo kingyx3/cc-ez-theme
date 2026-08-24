@@ -13,6 +13,9 @@ shopping on desktop and mobile.
 - [EasyStore API deployment](docs/EASYSTORE_API_DEPLOYMENT.md) — automatic
   post-package imports and publishing, theme id resolution, branch/version
   naming, token setup, and troubleshooting
+- [Marketing links](docs/MARKETING_LINKS.md) — how to create tracked Facebook,
+  Instagram, WhatsApp, email, QR, and other campaign links with campaign/content
+  labels and storefront destinations
 - [Source attribution](docs/SOURCE_ATTRIBUTION.md) — how `source_clicks` and
   `customer_touches` resolve acquisition onto HubSpot Contacts through EasyStore
   customer identity, without a Click ID customer/HubSpot handoff
