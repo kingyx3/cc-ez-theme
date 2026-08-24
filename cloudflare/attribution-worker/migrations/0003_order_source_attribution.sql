@@ -1,3 +1,7 @@
+-- This migration is applied through `wrangler d1 migrations apply`, which records
+-- the filename in D1's migration ledger and will not execute it a second time.
+-- The deploy workflow deliberately runs the migration command twice before any
+-- Worker deployment to prove reruns are a no-op at the supported migration layer.
 ALTER TABLE source_clicks
 ADD COLUMN content TEXT NOT NULL DEFAULT '';
 
