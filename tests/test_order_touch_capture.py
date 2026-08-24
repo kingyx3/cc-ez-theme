@@ -19,19 +19,20 @@ class OrderTouchCaptureTests(unittest.TestCase):
         self.assertNotIn("customer.phone", self.source)
         self.assertNotIn("customer.name", self.source)
 
-    def test_latest_click_is_bound_to_the_order_touch_endpoint(self) -> None:
+    def test_latest_click_is_bound_to_the_shared_touch_endpoint(self) -> None:
         self.assertIn("https://go.cardboard.sg/touch", self.source)
         self.assertIn("customer_id: String(customerId)", self.source)
         self.assertIn("click_id: clickId", self.source)
         self.assertIn("bindTouch(clickId)", self.source)
 
     def test_binding_is_retryable_and_idempotence_is_cached_per_customer_click(self) -> None:
-        self.assertIn("'cc:order-touch:' + String(customerId) + ':' + clickId", self.source)
+        self.assertIn("'cc:source-touch:' + String(customerId) + ':' + clickId", self.source)
         self.assertIn("window.localStorage.setItem(key, '1')", self.source)
         self.assertIn("keepalive: true", self.source)
 
-    def test_acquisition_handoff_name_is_unchanged(self) -> None:
-        self.assertIn("window.ccSourceClickId = clickId || null;", self.source)
+    def test_click_id_is_not_exported_for_an_easy_store_or_hubspot_field(self) -> None:
+        self.assertNotIn("window.ccSourceClickId", self.source)
+        self.assertNotIn("DetailAttribute", self.source)
 
 
 if __name__ == "__main__":
