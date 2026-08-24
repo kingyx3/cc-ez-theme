@@ -1,36 +1,20 @@
 #!/usr/bin/env python3
-"""Join Cloudflare source clicks to HubSpot contacts.
+"""Attribute HubSpot Contacts from Cloudflare customer touch history.
 
-The `cc-attribution` Worker records one D1 row per tracked /go/* entry and hands
-the browser the click id it minted. `theme/snippets/attribution-click-id.liquid`
-writes that id into an EasyStore customer attribute during sign-up, and the
-Contact sync copies the attribute to HubSpot as ``easystore_attr_click_id``.
+Click UUIDs are transport keys inside Cloudflare only. They are not copied through
+an EasyStore customer attribute and are not stored on HubSpot Contacts.
 
-This stage closes the loop: it reads the click ids HubSpot already holds, resolves
-them against D1, and writes the channel that produced each account onto the
-contact. It is the only part of the chain that knows both halves, and it is
-deliberately the only part that has to know the Cloudflare account.
+The storefront binds each tracked click to the logged-in EasyStore ``customer.id``
+in append-only D1 ``customer_touches`` history. The Customer sync separately writes
+the immutable EasyStore customer ID and source creation timestamp to HubSpot. This
+stage joins those two trusted facts and chooses the latest human tracked click that
+happened before account creation and inside the configured attribution window.
 
-What it will not do:
+A Contact acquisition is immutable once a real acquisition snapshot exists. A
+Contact with no eligible touch may carry ``no_recent_tracked_touch`` and can be
+upgraded on a later run if the browser binds the pre-signup touch after registration.
 
-* **Invent a match.** A click id with no D1 row writes nothing and is counted.
-* **Trust a shopper-supplied value.** The Worker mints a UUID; anything that is
-  not one never reaches a query, because the attribute is filled by a script
-  running in a browser and a browser is not a trusted source.
-* **Overwrite an acquisition.** How an account was acquired is a fact about a
-  moment that has passed. A contact already carrying a different click id is
-  reported as a conflict and left exactly as it is.
-* **Write HubSpot's own analytics properties.** ``hs_analytics_source`` and its
-  relatives belong to HubSpot's tracking code, are enumerated against HubSpot's
-  own channel list, and are not this integration's to define. Cloudflare facts
-  live in their own property group, so a CRM user can tell which system said so.
-
-The Worker flags link-preview crawlers and browser prefetches rather than
-dropping them, and that flag travels here too: a contact whose acquisition click
-was automated is still written, with the reason, because a human sign-up behind a
-prefetched link is real and the flag is what makes it reviewable.
-
-Only Python's standard library is used, so the scheduled workflow has no runtime
+Only Python's standard library is used so the scheduled workflow has no runtime
 package dependency.
 """
 
@@ -39,286 +23,132 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 import sys
 from collections import Counter, defaultdict
-from typing import Any, Iterator
+from datetime import datetime, timedelta, timezone
+from typing import Any, Iterable, Iterator
+from urllib.parse import urlencode
 
 from easystore_hubspot_schema import (
     FieldSpec,
     describe_mapping,
+    nonempty,
     property_schema,
     resolve_fields,
 )
-from easystore_hubspot_sync import (
-    SyncError,
-    _batch_write,
-    _http_json,
-    chunked,
-)
+from easystore_hubspot_sync import SyncError, _batch_write, _http_json
 
 
 CLOUDFLARE_BASE_URL = "https://api.cloudflare.com/client/v4"
 HUBSPOT_CONTACTS_URL = "https://api.hubapi.com/crm/v3/objects/contacts"
 CONTACT_OBJECT_TYPE = "contacts"
-
-# The D1 database that `cloudflare/attribution-worker/wrangler.jsonc` binds. It
-# is a resource identifier rather than a credential, which is why the Worker
-# config commits it too; `crm_tests/test_cloudflare_attribution.py` pins the two
-# copies together so a database replaced in one place cannot be missed here.
 D1_DATABASE_ID = "f7377a40-379a-4713-9126-e05636162c84"
-D1_TABLE = "source_clicks"
+D1_BATCH_SIZE = 80
+HUBSPOT_PAGE_SIZE = 100
+DEFAULT_WINDOW_DAYS = 30
+MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000
+SINGAPORE_TZ = timezone(timedelta(hours=8))
 
-# Cloudflare facts get their own group. Reusing `easystore_sync` would file a
-# click channel under the storefront's name and leave nobody able to tell where
-# the value came from.
+CUSTOMER_ID_PROPERTY = "easystore_customer_id"
+CUSTOMER_CREATED_AT_PROPERTY = "easystore_customer_created_at"
+
 PROPERTY_GROUP = "cloudflare_attribution"
 PROPERTY_GROUP_LABEL = "Cloudflare Attribution"
 
-# The HubSpot contact property the click id arrives in. The Contact sync names an
-# attribute property after its EasyStore label, so an attribute titled "Click ID"
-# lands in `easystore_attr_click_id`. A store whose attribute-setting titles were
-# not reachable syncs answers under the setting id instead, so that shape is
-# accepted as well and the first property a contact actually carries is used.
-DEFAULT_CLICK_ID_PROPERTIES = ("easystore_attr_click_id", "easystore_attr_clickid")
-
-CLICK_ID_PATTERN = re.compile(
-    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-)
-
-HUBSPOT_PAGE_SIZE = 100
-# HubSpot's search takes at most five filter groups, and reading "any of these
-# properties" needs one group each.
-MAX_CLICK_ID_PROPERTIES = 5
-# One D1 statement per batch of click ids. SQLite would take far more bound
-# parameters than this; the limit keeps a single request small enough to retry
-# cheaply when Cloudflare throttles.
-D1_BATCH_SIZE = 90
-
-CLICK_ID_FIELD = "click_id"
-
 FIELDS: tuple[FieldSpec, ...] = (
-    FieldSpec(
-        key=CLICK_ID_FIELD,
-        fallback="cc_acquisition_click_id",
-        label="Acquisition click ID",
-        description=(
-            "The Cloudflare click this account was created under. Written once "
-            "and never changed."
-        ),
-    ),
     FieldSpec(
         key="source",
         fallback="cc_acquisition_source",
         label="Acquisition source",
-        description="The channel of the tracked click that produced this account.",
+        description="Latest tracked marketing source before this EasyStore account was created.",
     ),
     FieldSpec(
         key="medium",
         fallback="cc_acquisition_medium",
         label="Acquisition medium",
-        description="The medium of the tracked click that produced this account.",
+        description="Latest tracked marketing medium before this EasyStore account was created.",
     ),
     FieldSpec(
         key="campaign",
         fallback="cc_acquisition_campaign",
         label="Acquisition campaign",
-        description="The campaign label carried by the tracked click.",
+        description="Campaign on the tracked touch that led into account creation.",
+    ),
+    FieldSpec(
+        key="content",
+        fallback="cc_acquisition_content",
+        label="Acquisition content",
+        description="Post, ad or message label on the tracked touch that led into account creation.",
     ),
     FieldSpec(
         key="path",
         fallback="cc_acquisition_entry_path",
         label="Acquisition entry path",
-        description="The /go/* entry URL the shopper arrived through.",
+        description="Tracking path used by the selected acquisition touch.",
     ),
     FieldSpec(
         key="country",
         fallback="cc_acquisition_country",
         label="Acquisition country",
-        description="The country Cloudflare reported for the tracked click.",
+        description="Country Cloudflare reported for the selected acquisition touch.",
     ),
     FieldSpec(
         key="clicked_at",
         fallback="cc_acquisition_at",
-        label="Acquisition click time",
-        description="When the tracked click happened.",
+        label="Acquisition touch time",
+        description="When the selected acquisition marketing touch happened.",
         kind="datetime",
     ),
     FieldSpec(
-        key="bot_reason",
-        fallback="cc_acquisition_automated",
-        label="Acquisition click flagged automated",
-        description=(
-            "Why the tracked click looked automated - a link-preview crawler or "
-            "a browser prefetch - or blank for an ordinary click."
-        ),
+        key="model",
+        fallback="cc_acquisition_attribution_model",
+        label="Acquisition attribution model",
+        description="Attribution rule used to select the Contact acquisition touch.",
+    ),
+    FieldSpec(
+        key="window_days",
+        fallback="cc_acquisition_attribution_window_days",
+        label="Acquisition attribution window (days)",
+        description="Maximum age of an eligible tracked touch before account creation.",
+        kind="number",
+    ),
+    FieldSpec(
+        key="status",
+        fallback="cc_acquisition_status",
+        label="Acquisition attribution status",
+        description="Whether a qualifying tracked marketing touch was found for this Contact.",
     ),
 )
 
-# The columns the join reads, and the legacy set for a database whose bot
-# migration has not been applied yet.
-CLICK_COLUMNS = (
-    "click_id",
-    "source",
-    "medium",
-    "campaign",
-    "path",
-    "country",
-    "clicked_at",
-    "bot",
-    "bot_reason",
-)
-LEGACY_CLICK_COLUMNS = CLICK_COLUMNS[:-2]
+LOCK_KEYS = ("source", "medium", "campaign", "content", "path", "country", "clicked_at")
 
 
-def valid_click_id(value: Any) -> str | None:
-    """Return a click id in the shape the Worker mints, or ``None``.
+def epoch_millis(value: Any) -> int | None:
+    """Return a HubSpot/EasyStore timestamp as epoch milliseconds."""
 
-    The value reached HubSpot from a form field filled in by a browser, so it is
-    shopper-reachable input. Only the Worker's own UUID shape is accepted, and it
-    is normalized to lower case because that is how ``crypto.randomUUID`` writes
-    one and therefore how D1 stores it.
-    """
-
-    if value is None or isinstance(value, (list, tuple, set, dict, bool)):
+    text = str(value or "").strip()
+    if not text:
         return None
-    text = str(value).strip().lower()
-    return text if CLICK_ID_PATTERN.fullmatch(text) else None
 
-
-def click_id_of(
-    contact: dict[str, Any],
-    candidates: tuple[str, ...],
-) -> tuple[str | None, bool]:
-    """Return a contact's click id and whether it carried an unusable value.
-
-    The second element separates "this contact was never tagged" from "this
-    contact carries something that is not a click id", because the first is the
-    normal state of a customer who signed up before the chain existed and the
-    second is a fault worth counting.
-    """
-
-    properties = contact.get("properties")
-    if not isinstance(properties, dict):
-        return None, False
-
-    for name in candidates:
-        raw = properties.get(name)
-        if raw is None or not str(raw).strip():
-            continue
-        click_id = valid_click_id(raw)
-        return (click_id, click_id is None)
-    return None, False
-
-
-def present_click_id_properties(
-    access_token: str,
-    candidates: tuple[str, ...],
-) -> tuple[str, ...]:
-    """Return the candidate click-id properties this portal actually defines.
-
-    Filtering on a property HubSpot has never heard of fails the entire search
-    with an HTTP 400, which is indistinguishable from a real outage in the log
-    and takes the whole CRM sync down with it. A portal that simply does not
-    record click ids should report that and move on.
-    """
-
-    schema = property_schema(
-        http_json=_http_json,
-        access_token=access_token,
-        object_type=CONTACT_OBJECT_TYPE,
-        error=SyncError,
-        optional=True,
-    )
-    if schema is None:
-        # The token cannot read the contact schema, so the names cannot be
-        # checked. Trust the caller rather than silently skipping attribution.
-        return candidates
-    return tuple(name for name in candidates if name in schema)
-
-
-def iter_hubspot_contacts(
-    access_token: str,
-    properties: tuple[str, ...],
-) -> Iterator[dict[str, Any]]:
-    """Yield every contact carrying one of the click-id properties.
-
-    HubSpot's search paging stops at 10,000 records however it is walked, so the
-    cursor here is the contact id itself: each page asks for the next ids above
-    the last one seen, in ascending order, which has no ceiling. Filtering in
-    HubSpot rather than locally also means a portal full of contacts that predate
-    this chain costs one empty page instead of a full scan.
-    """
-
-    if not properties:
-        raise SyncError("No HubSpot contact property was named to read click ids from")
-    if len(properties) > MAX_CLICK_ID_PROPERTIES:
-        raise SyncError(
-            f"At most {MAX_CLICK_ID_PROPERTIES} click-id properties can be read "
-            f"in one run; {len(properties)} were given"
-        )
-
-    headers = {"Authorization": f"Bearer {access_token}"}
-    requested = tuple(dict.fromkeys(properties + ("hs_object_id",)))
-    last_id = "0"
-
-    while True:
-        # HubSpot treats groups of filters as OR and filters inside a group as
-        # AND, so one group per candidate property is "has any of these", each
-        # anded with the id cursor.
-        filter_groups = [
-            {
-                "filters": [
-                    {"propertyName": name, "operator": "HAS_PROPERTY"},
-                    {
-                        "propertyName": "hs_object_id",
-                        "operator": "GT",
-                        "value": last_id,
-                    },
-                ]
-            }
-            for name in properties
-        ]
-        document = _http_json(
-            f"{HUBSPOT_CONTACTS_URL}/search",
-            method="POST",
-            headers=headers,
-            payload={
-                "filterGroups": filter_groups,
-                "properties": list(requested),
-                "sorts": [{"propertyName": "hs_object_id", "direction": "ASCENDING"}],
-                "limit": HUBSPOT_PAGE_SIZE,
-            },
-        )
-        results = document.get("results") if isinstance(document, dict) else None
-        if not isinstance(results, list) or not results:
-            return
-
-        highest = last_id
-        for contact in results:
-            if not isinstance(contact, dict):
-                continue
-            contact_id = str(contact.get("id") or "").strip()
-            if not contact_id:
-                continue
-            yield contact
-            if _as_int(contact_id) > _as_int(highest):
-                highest = contact_id
-
-        if highest == last_id:
-            # Nothing sortable came back, so another identical request would ask
-            # for the same page forever.
-            return
-        last_id = highest
-        if len(results) < HUBSPOT_PAGE_SIZE:
-            return
-
-
-def _as_int(value: str) -> int:
     try:
-        return int(value)
-    except (TypeError, ValueError):
-        return -1
+        number = float(text)
+    except ValueError:
+        number = None
+    if number is not None:
+        return int(number * 1000) if abs(number) < 100_000_000_000 else int(number)
+
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=SINGAPORE_TZ)
+    return int(parsed.timestamp() * 1000)
+
+
+def chunked(values: list[str], size: int) -> Iterable[list[str]]:
+    for start in range(0, len(values), size):
+        yield values[start : start + size]
 
 
 def d1_query(
@@ -327,107 +157,189 @@ def d1_query(
     api_token: str,
     database_id: str,
     sql: str,
-    params: list[str],
+    params: list[Any],
 ) -> list[dict[str, Any]]:
-    """Run one read against D1 and return its rows."""
-
     document = _http_json(
         f"{CLOUDFLARE_BASE_URL}/accounts/{account_id}/d1/database/{database_id}/query",
         method="POST",
         headers={"Authorization": f"Bearer {api_token}"},
         payload={"sql": sql, "params": params},
     )
-    if not isinstance(document, dict):
-        raise SyncError("Cloudflare D1 returned an invalid response")
-
-    if not document.get("success", False):
-        errors = document.get("errors")
-        detail = json.dumps(errors, ensure_ascii=False) if errors else "no detail"
-        raise SyncError(f"Cloudflare D1 query failed: {detail[:1000]}")
-
-    result = document.get("result")
-    if not isinstance(result, list):
-        raise SyncError("Cloudflare D1 returned no result set")
+    if not isinstance(document, dict) or not document.get("success", False):
+        detail = json.dumps(document.get("errors") if isinstance(document, dict) else document)
+        raise SyncError(f"Cloudflare D1 acquisition query failed: {detail[:1000]}")
 
     rows: list[dict[str, Any]] = []
-    for entry in result:
-        if not isinstance(entry, dict):
+    for result in document.get("result") or []:
+        if not isinstance(result, dict):
             continue
-        for row in entry.get("results") or []:
+        for row in result.get("results") or []:
             if isinstance(row, dict):
                 rows.append(row)
     return rows
 
 
-def fetch_clicks(
+def fetch_customer_touches(
     *,
     account_id: str,
     api_token: str,
     database_id: str,
-    click_ids: list[str],
-    summary: dict[str, Any],
-) -> dict[str, dict[str, Any]]:
-    """Return the D1 row for each click id that has one, keyed by click id."""
+    customer_ids: list[str],
+    earliest_signup_at: int,
+    latest_signup_at: int,
+    window_days: int,
+) -> tuple[dict[str, list[dict[str, Any]]], int]:
+    """Fetch human click history for candidate customers in bounded D1 batches.
 
-    columns = CLICK_COLUMNS
-    found: dict[str, dict[str, Any]] = {}
+    ``bound_at`` is deliberately not required to precede account creation. A new
+    account may bind its already-existing browser touch on the first authenticated
+    page after registration. The click itself must still precede account creation.
+    """
+
+    by_customer: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    lower = earliest_signup_at - window_days * MILLISECONDS_PER_DAY
     queries = 0
 
-    for batch in chunked(click_ids, D1_BATCH_SIZE):
+    for batch in chunked(sorted(set(customer_ids)), D1_BATCH_SIZE):
         placeholders = ", ".join("?" for _ in batch)
-        while True:
-            sql = (
-                f"SELECT {', '.join(columns)} FROM {D1_TABLE} "
-                f"WHERE click_id IN ({placeholders})"
-            )
-            try:
-                rows = d1_query(
-                    account_id=account_id,
-                    api_token=api_token,
-                    database_id=database_id,
-                    sql=sql,
-                    params=list(batch),
-                )
-            except SyncError as error:
-                # A database still on migration 0001 has no bot columns. Reading
-                # what it does have beats failing the stage over a flag.
-                if columns is CLICK_COLUMNS and "no such column" in str(error).lower():
-                    columns = LEGACY_CLICK_COLUMNS
-                    summary["d1_bot_columns_missing"] = True
-                    continue
-                raise
-            break
-
+        rows = d1_query(
+            account_id=account_id,
+            api_token=api_token,
+            database_id=database_id,
+            sql=f"""
+              SELECT
+                ct.customer_id,
+                ct.bound_at,
+                sc.source,
+                sc.medium,
+                sc.campaign,
+                sc.content,
+                sc.path,
+                sc.country,
+                sc.clicked_at
+              FROM customer_touches AS ct
+              JOIN source_clicks AS sc ON sc.click_id = ct.click_id
+              WHERE ct.customer_id IN ({placeholders})
+                AND sc.clicked_at >= ?
+                AND sc.clicked_at <= ?
+                AND COALESCE(sc.bot, 0) = 0
+              ORDER BY ct.customer_id, sc.clicked_at, ct.bound_at
+            """,
+            params=[*batch, lower, latest_signup_at],
+        )
         queries += 1
         for row in rows:
-            click_id = valid_click_id(row.get("click_id"))
-            if click_id is not None:
-                found[click_id] = row
+            customer_id = nonempty(row.get("customer_id"))
+            if customer_id is not None:
+                by_customer[customer_id].append(row)
 
-    summary["d1_queries"] = queries
-    return found
+    return dict(by_customer), queries
 
 
-def attribution_values(row: dict[str, Any]) -> dict[str, str]:
-    """Return the property values one D1 click row contributes."""
+def latest_touch_before_signup(
+    touches: list[dict[str, Any]],
+    *,
+    signup_at: int,
+    window_days: int,
+) -> dict[str, Any] | None:
+    lower = signup_at - window_days * MILLISECONDS_PER_DAY
+    eligible: list[dict[str, Any]] = []
+    for touch in touches:
+        try:
+            clicked_at = int(touch.get("clicked_at"))
+            bound_at = int(touch.get("bound_at"))
+        except (TypeError, ValueError):
+            continue
+        if lower <= clicked_at <= signup_at:
+            eligible.append(touch)
+    if not eligible:
+        return None
+    return max(
+        eligible,
+        key=lambda touch: (int(touch["clicked_at"]), int(touch.get("bound_at") or 0)),
+    )
 
-    values: dict[str, str] = {}
-    for key in ("click_id", "source", "medium", "campaign", "path", "country"):
-        text = str(row.get(key) or "").strip()
-        if text:
-            values[key] = text
 
-    clicked_at = row.get("clicked_at")
+def iter_hubspot_contacts(
+    access_token: str,
+    properties: tuple[str, ...],
+) -> Iterator[dict[str, Any]]:
+    after: str | None = None
+    requested = ",".join(dict.fromkeys(properties))
+    headers = {"Authorization": f"Bearer {access_token}"}
+
+    while True:
+        params = {
+            "limit": str(HUBSPOT_PAGE_SIZE),
+            "properties": requested,
+            "archived": "false",
+        }
+        if after is not None:
+            params["after"] = after
+        document = _http_json(
+            f"{HUBSPOT_CONTACTS_URL}?{urlencode(params)}",
+            headers=headers,
+        )
+        results = document.get("results") if isinstance(document, dict) else None
+        for contact in results or []:
+            if isinstance(contact, dict):
+                yield contact
+
+        paging = document.get("paging") if isinstance(document, dict) else None
+        next_page = paging.get("next") if isinstance(paging, dict) else None
+        next_after = next_page.get("after") if isinstance(next_page, dict) else None
+        if next_after is None:
+            return
+        after = str(next_after)
+
+
+def acquisition_locked(
+    properties: dict[str, Any],
+    field_properties: dict[str, str],
+) -> bool:
+    status_property = field_properties.get("status")
+    if status_property and nonempty(properties.get(status_property)) == "attributed":
+        return True
+    for key in LOCK_KEYS:
+        property_name = field_properties.get(key)
+        if property_name and nonempty(properties.get(property_name)) is not None:
+            return True
+    return False
+
+
+def acquisition_values(
+    touch: dict[str, Any] | None,
+    *,
+    window_days: int,
+) -> dict[str, str]:
+    values = {
+        "model": "last_tracked_touch_before_signup",
+        "window_days": str(window_days),
+        "status": "attributed" if touch is not None else "no_recent_tracked_touch",
+    }
+    if touch is None:
+        return values
+
+    for key in ("source", "medium", "campaign", "content", "path", "country"):
+        value = nonempty(touch.get(key))
+        if value is not None:
+            values[key] = value
     try:
-        # D1 holds epoch milliseconds, which is what a HubSpot datetime wants.
-        values["clicked_at"] = str(int(clicked_at))
+        values["clicked_at"] = str(int(touch.get("clicked_at")))
     except (TypeError, ValueError):
         pass
-
-    reason = str(row.get("bot_reason") or "").strip()
-    if reason:
-        values["bot_reason"] = reason
     return values
+
+
+def mapped_properties(
+    values: dict[str, str],
+    field_properties: dict[str, str],
+) -> dict[str, str]:
+    return {
+        field_properties[key]: value
+        for key, value in values.items()
+        if key in field_properties
+    }
 
 
 def sync(
@@ -436,215 +348,179 @@ def sync(
     api_token: str,
     database_id: str,
     hubspot_access_token: str,
-    click_id_properties: tuple[str, ...],
+    window_days: int = DEFAULT_WINDOW_DAYS,
 ) -> dict[str, Any]:
-    """Write the acquisition channel onto every contact that can be resolved."""
+    if not 1 <= window_days <= 365:
+        raise SyncError("ACQUISITION_ATTRIBUTION_WINDOW_DAYS must be between 1 and 365")
 
     summary: dict[str, Any] = {
-        "click_id_properties_requested": list(click_id_properties),
+        "attribution_model": "last_tracked_touch_before_signup",
+        "attribution_window_days": window_days,
         "d1_database_id": database_id,
-        "contacts_with_click_id": 0,
-        "contacts_with_unusable_click_id": 0,
+        "hubspot_contacts": 0,
+        "contacts_missing_easystore_customer_id": 0,
+        "contacts_missing_customer_created_at": 0,
+        "contacts_with_duplicate_easystore_customer_id": 0,
+        "contacts_already_attributed": 0,
+        "contacts_with_eligible_touch": 0,
+        "contacts_without_recent_tracked_touch": 0,
     }
 
-    # HubSpot's search rejects the whole request with an HTTP 400 when a filter
-    # names a property the portal does not have, and the click-id property names
-    # are a guess at where a storefront put them. So the portal's own schema
-    # decides which of them are real before anything is filtered on.
-    present = present_click_id_properties(hubspot_access_token, click_id_properties)
-    summary["click_id_properties_read"] = list(present)
-    if not present:
-        summary["attribution_status"] = "no click id property in this portal"
-        print(
-            "WARNING: none of the click-id properties "
-            f"({', '.join(click_id_properties)}) exist on HubSpot contacts in this "
-            "portal, so there are no tracked clicks to attribute. Set "
-            "ATTRIBUTION_CLICK_ID_PROPERTIES to the property that holds them.",
-            file=sys.stderr,
-        )
-        return summary
-
-    summary["attribution_status"] = "read"
-    contacts: list[tuple[str, str]] = []
-    unusable = 0
-    for contact in iter_hubspot_contacts(hubspot_access_token, present):
-        click_id, malformed = click_id_of(contact, present)
-        if malformed:
-            unusable += 1
-            continue
-        if click_id is None:
-            continue
-        contacts.append((str(contact["id"]), click_id))
-
-    summary["contacts_with_click_id"] = len(contacts)
-    summary["contacts_with_unusable_click_id"] = unusable
-
-    if not contacts:
-        # Nothing to join yet. This is the expected state until the EasyStore
-        # customer attribute exists and shoppers have signed up through a tracked
-        # link, so no properties are provisioned and no Cloudflare call is made.
-        summary["note"] = (
-            "No HubSpot contact carries a click id yet, so nothing was joined and "
-            "no HubSpot properties were created. Confirm the EasyStore customer "
-            "attribute exists and that the Contact sync has run since a shopper "
-            "registered through a /go/* link."
-        )
-        return summary
-
-    owners: dict[str, list[str]] = defaultdict(list)
-    for contact_id, click_id in contacts:
-        owners[click_id].append(contact_id)
-    summary["click_ids_unique"] = len(owners)
-    summary["click_ids_shared_by_multiple_contacts"] = sum(
-        1 for ids in owners.values() if len(ids) > 1
+    schema = property_schema(
+        http_json=_http_json,
+        access_token=hubspot_access_token,
+        object_type=CONTACT_OBJECT_TYPE,
+        error=SyncError,
+        optional=True,
     )
+    if schema is not None:
+        missing = [
+            name
+            for name in (CUSTOMER_ID_PROPERTY, CUSTOMER_CREATED_AT_PROPERTY)
+            if name not in schema
+        ]
+        if missing:
+            summary["attribution_status"] = "missing_customer_source_properties"
+            summary["missing_hubspot_contact_properties"] = missing
+            print(
+                "WARNING: Contact acquisition skipped because the Customer sync has "
+                "not provisioned: " + ", ".join(missing),
+                file=sys.stderr,
+            )
+            return summary
 
-    clicks = fetch_clicks(
-        account_id=account_id,
-        api_token=api_token,
-        database_id=database_id,
-        click_ids=sorted(owners),
-        summary=summary,
-    )
-    summary["click_ids_resolved"] = len(clicks)
-    summary["click_ids_not_found_in_d1"] = len(owners) - len(clicks)
-
-    report: dict[str, Any] = {}
-    properties = resolve_fields(
+    schema_report: dict[str, Any] = {}
+    field_properties = resolve_fields(
         http_json=_http_json,
         access_token=hubspot_access_token,
         object_type=CONTACT_OBJECT_TYPE,
         fields=FIELDS,
         error=SyncError,
-        report=report,
+        report=schema_report,
         group=PROPERTY_GROUP,
         group_label=PROPERTY_GROUP_LABEL,
     )
     summary["hubspot_contact_field_properties"] = {
-        field.key: properties[field.key] for field in FIELDS if field.key in properties
+        field.key: field_properties[field.key]
+        for field in FIELDS
+        if field.key in field_properties
     }
     print(
-        "Cloudflare attribution properties: "
-        f"{describe_mapping(summary['hubspot_contact_field_properties'])}",
+        "Cloudflare acquisition fields mapped to HubSpot properties: "
+        + describe_mapping(summary["hubspot_contact_field_properties"]),
         file=sys.stderr,
     )
 
-    click_id_property = properties.get(CLICK_ID_FIELD)
-    if click_id_property is None:
-        raise SyncError(
-            "HubSpot has nowhere to store the acquisition click id, so a rerun "
-            "could not tell an already-attributed contact from a new one."
+    requested = (
+        CUSTOMER_ID_PROPERTY,
+        CUSTOMER_CREATED_AT_PROPERTY,
+        *tuple(field_properties.values()),
+    )
+    candidates: list[dict[str, Any]] = []
+    owners: dict[str, list[str]] = defaultdict(list)
+
+    for contact in iter_hubspot_contacts(hubspot_access_token, requested):
+        summary["hubspot_contacts"] += 1
+        contact_id = nonempty(contact.get("id"))
+        properties = contact.get("properties")
+        if contact_id is None or not isinstance(properties, dict):
+            continue
+
+        customer_id = nonempty(properties.get(CUSTOMER_ID_PROPERTY))
+        if customer_id is None:
+            summary["contacts_missing_easystore_customer_id"] += 1
+            continue
+        owners[customer_id].append(contact_id)
+
+        signup_at = epoch_millis(properties.get(CUSTOMER_CREATED_AT_PROPERTY))
+        if signup_at is None:
+            summary["contacts_missing_customer_created_at"] += 1
+            continue
+        if acquisition_locked(properties, field_properties):
+            summary["contacts_already_attributed"] += 1
+            continue
+        candidates.append(
+            {
+                "contact_id": contact_id,
+                "customer_id": customer_id,
+                "signup_at": signup_at,
+                "properties": properties,
+            }
         )
 
-    # Only the contacts a write could touch. On a first run most click ids have
-    # no D1 row, and reading back a contact this stage will not write is a
-    # HubSpot request spent on nothing.
-    resolvable = [
-        contact_id for contact_id, click_id in contacts if click_id in clicks
-    ]
-    existing = _existing_click_ids(
-        hubspot_access_token,
-        resolvable,
-        click_id_property,
-    )
+    duplicate_customer_ids = {
+        customer_id for customer_id, contact_ids in owners.items() if len(set(contact_ids)) > 1
+    }
+    if duplicate_customer_ids:
+        summary["contacts_with_duplicate_easystore_customer_id"] = sum(
+            len(set(owners[customer_id])) for customer_id in duplicate_customer_ids
+        )
+        candidates = [
+            candidate
+            for candidate in candidates
+            if candidate["customer_id"] not in duplicate_customer_ids
+        ]
 
-    inputs: list[dict[str, Any]] = []
-    already_current = 0
-    conflicts = 0
-    automated = 0
+    touches_by_customer: dict[str, list[dict[str, Any]]] = {}
+    d1_queries = 0
+    if candidates:
+        signup_times = [int(candidate["signup_at"]) for candidate in candidates]
+        touches_by_customer, d1_queries = fetch_customer_touches(
+            account_id=account_id,
+            api_token=api_token,
+            database_id=database_id,
+            customer_ids=[str(candidate["customer_id"]) for candidate in candidates],
+            earliest_signup_at=min(signup_times),
+            latest_signup_at=max(signup_times),
+            window_days=window_days,
+        )
+    summary["d1_queries"] = d1_queries
+    summary["customers_with_touch_history"] = len(touches_by_customer)
+
+    updates: list[dict[str, Any]] = []
     by_source: Counter[str] = Counter()
     by_campaign: Counter[str] = Counter()
 
-    for contact_id, click_id in contacts:
-        row = clicks.get(click_id)
-        if row is None:
-            continue
+    for candidate in candidates:
+        touch = latest_touch_before_signup(
+            touches_by_customer.get(str(candidate["customer_id"]), []),
+            signup_at=int(candidate["signup_at"]),
+            window_days=window_days,
+        )
+        if touch is None:
+            summary["contacts_without_recent_tracked_touch"] += 1
+        else:
+            summary["contacts_with_eligible_touch"] += 1
+            by_source[nonempty(touch.get("source")) or "unknown"] += 1
+            by_campaign[nonempty(touch.get("campaign")) or "unknown"] += 1
 
-        recorded = valid_click_id(existing.get(contact_id))
-        if recorded == click_id:
-            already_current += 1
-            continue
-        if recorded is not None:
-            # Acquisition happened once. A second click id on the same contact is
-            # a question for a person, not something to overwrite silently.
-            conflicts += 1
-            continue
-
-        values = attribution_values(row)
-        payload = {
-            properties[key]: value
-            for key, value in values.items()
-            if key in properties
+        desired = mapped_properties(
+            acquisition_values(touch, window_days=window_days),
+            field_properties,
+        )
+        existing = candidate["properties"]
+        changed = {
+            key: value
+            for key, value in desired.items()
+            if str(existing.get(key) or "") != str(value)
         }
-        if not payload:
-            continue
+        if changed:
+            updates.append({"id": candidate["contact_id"], "properties": changed})
 
-        inputs.append({"id": contact_id, "properties": payload})
-        if values.get("bot_reason"):
-            automated += 1
-        by_source[values.get("source", "unknown")] += 1
-        by_campaign[values.get("campaign", "unknown")] += 1
-
-    _batch_write(hubspot_access_token, "update", inputs)
-
-    summary["contacts_updated"] = len(inputs)
-    summary["contacts_already_attributed"] = already_current
-    summary["contacts_with_conflicting_click_id"] = conflicts
-    summary["contacts_whose_click_was_automated"] = automated
+    _batch_write(hubspot_access_token, "update", updates)
+    summary["contacts_updated"] = len(updates)
     summary["attributed_by_source"] = dict(by_source.most_common())
     summary["attributed_by_campaign"] = dict(by_campaign.most_common())
-    if report.get("hints"):
-        summary["hubspot_contact_property_hints"] = report["hints"]
+    summary["attribution_status"] = "complete"
+    if schema_report.get("hints"):
+        summary["hubspot_contact_property_hints"] = schema_report["hints"]
     return summary
-
-
-def _existing_click_ids(
-    access_token: str,
-    contact_ids: list[str],
-    click_id_property: str,
-) -> dict[str, str]:
-    """Return the acquisition click id HubSpot already holds per contact."""
-
-    headers = {"Authorization": f"Bearer {access_token}"}
-    recorded: dict[str, str] = {}
-
-    for batch in chunked(contact_ids, HUBSPOT_PAGE_SIZE):
-        document = _http_json(
-            f"{HUBSPOT_CONTACTS_URL}/batch/read",
-            method="POST",
-            headers=headers,
-            payload={
-                "properties": [click_id_property],
-                "inputs": [{"id": contact_id} for contact_id in batch],
-            },
-        )
-        results = document.get("results") if isinstance(document, dict) else None
-        for contact in results or []:
-            if not isinstance(contact, dict):
-                continue
-            contact_id = str(contact.get("id") or "").strip()
-            props = contact.get("properties")
-            if not contact_id or not isinstance(props, dict):
-                continue
-            value = str(props.get(click_id_property) or "").strip()
-            if value:
-                recorded[contact_id] = value
-    return recorded
 
 
 def _required(value: str | None, name: str) -> str:
     if value and value.strip():
         return value.strip()
     raise SyncError(f"{name} is required")
-
-
-def _click_id_properties(value: str | None) -> tuple[str, ...]:
-    if not value or not value.strip():
-        return DEFAULT_CLICK_ID_PROPERTIES
-    names = tuple(
-        dict.fromkeys(part.strip() for part in value.split(",") if part.strip())
-    )
-    return names or DEFAULT_CLICK_ID_PROPERTIES
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -657,12 +533,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--hubspot-token", default=os.getenv("HUBSPOT_ACCESS_TOKEN"))
     parser.add_argument(
-        "--click-id-properties",
-        default=os.getenv("ATTRIBUTION_CLICK_ID_PROPERTIES"),
-        help=(
-            "Comma separated HubSpot contact properties that may carry the click "
-            f"id. Defaults to {', '.join(DEFAULT_CLICK_ID_PROPERTIES)}."
-        ),
+        "--window-days",
+        type=int,
+        default=int(os.getenv("ACQUISITION_ATTRIBUTION_WINDOW_DAYS") or DEFAULT_WINDOW_DAYS),
     )
     args = parser.parse_args(argv)
 
@@ -672,9 +545,9 @@ def main(argv: list[str] | None = None) -> int:
             api_token=_required(args.api_token, "CLOUDFLARE_API_TOKEN"),
             database_id=_required(args.database_id, "CLOUDFLARE_D1_DATABASE_ID"),
             hubspot_access_token=_required(args.hubspot_token, "HUBSPOT_ACCESS_TOKEN"),
-            click_id_properties=_click_id_properties(args.click_id_properties),
+            window_days=args.window_days,
         )
-    except SyncError as error:
+    except (SyncError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 1
 
