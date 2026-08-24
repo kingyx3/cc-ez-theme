@@ -2076,12 +2076,12 @@ class EasyStorePaginationGuardTests(unittest.TestCase):
 
     def test_the_error_names_the_endpoint(self) -> None:
         full = self._page(50)
-        with self.assertRaisesRegex(orders.SyncError, "customers.json"):
+        with self.assertRaisesRegex(orders.SyncError, "products.json"):
             list(
                 schema.iter_easystore_pages(
                     lambda page: full,
                     page_size=50,
-                    what="customers.json",
+                    what="products.json",
                     error=orders.SyncError,
                 )
             )

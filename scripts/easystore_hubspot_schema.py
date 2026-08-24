@@ -16,6 +16,7 @@ rejected write), not a native mapping.
 from __future__ import annotations
 
 import re
+import warnings
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any, Callable, Iterable, NamedTuple
@@ -507,6 +508,14 @@ def iter_easystore_pages(
                 for index, record in enumerate(records)
             )
             if signature in seen:
+                if what == "customers.json":
+                    warnings.warn(
+                        f"EasyStore {what} repeated page {page}; treating the "
+                        "repeat as the end of the customer collection.",
+                        RuntimeWarning,
+                        stacklevel=2,
+                    )
+                    return
                 raise error(
                     f"EasyStore {what} served page {page} with records already "
                     f"read, so its page parameter does nothing. Refusing to loop "
