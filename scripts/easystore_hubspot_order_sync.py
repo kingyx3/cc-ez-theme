@@ -13,6 +13,9 @@ from easystore_hubspot_schema import FieldSpec, first_present, nonempty
 HUBSPOT_EXTERNAL_ORDER_STATUS = "hs_external_order_status"
 HUBSPOT_EXTERNAL_ORDER_MODIFIED_DATE = "hs_external_modified_date"
 HUBSPOT_SHIPPING_ADDRESS_NAME = "hs_shipping_address_name"
+HUBSPOT_ORDER_PIPELINE = "hs_pipeline"
+HUBSPOT_ORDER_PIPELINE_STAGE = "hs_pipeline_stage"
+HUBSPOT_ORDER_IS_CLOSED = "hs_is_closed"
 
 ORDER_MODIFIED_SOURCES = (
     "updated_at",
@@ -44,7 +47,27 @@ FULFILLMENT_STATUS_SOURCES = (
 )
 CANCELLED_STATUS_KEYS = {"cancelled", "canceled", "deleted"}
 FALSEY_CANCELLATION_KEYS = {"", "0", "false", "nil", "null", "none"}
+
+# The production portal has one HubSpot Order pipeline. Resolve the IDs from the
+# live property option set rather than hard-coding portal-generated UUIDs.
+ORDER_STAGE_LABELS = {
+    "open": "Open",
+    "processed": "Processed",
+    "shipped": "Shipped",
+    "delivered": "Delivered",
+    "cancelled": "Cancelled",
+}
+EXPECTED_OPEN_STAGE_KEYS = {"open", "processed"}
+EXPECTED_CLOSED_STAGE_KEYS = {"shipped", "delivered", "cancelled"}
+
 _BASE_COMPLETE_ORDER = orders.complete_order
+_BASE_ORDER_PROPERTIES = orders.order_properties
+_BASE_UPSERT_HUBSPOT_ORDER = orders._upsert_hubspot_order
+_BASE_SYNC = orders.sync
+
+_PIPELINE_ID: str | None = None
+_STAGE_IDS: dict[str, str] = {}
+_VALIDATED_STAGE_IDS: set[str] = set()
 
 
 def _status_key(value: Any) -> str:
@@ -133,6 +156,235 @@ def easystore_order_status(order: dict[str, Any]) -> str | None:
     if payment_state is not None:
         return payment_state
     return order_state or fulfillment_state
+
+
+def easystore_order_pipeline_stage(order: dict[str, Any]) -> str:
+    """Map EasyStore commerce state onto the production HubSpot Order pipeline.
+
+    HubSpot's Orders API documents pipeline stages as the lifecycle mechanism and
+    distinguishes OPEN from CLOSED stages. The production portal intentionally
+    keeps payment-only orders open: a paid but unfulfilled order is Processed,
+    while only a full shipment/delivery or explicit cancellation closes it.
+
+    A standalone refund has no lossless target in the current portal because it
+    has no Refunded stage. Refusing that case is safer than calling a refund a
+    cancellation or pretending it is still merely processed.
+    """
+
+    order_state = first_present(order, ORDER_STATUS_SOURCES)
+    payment_state = first_present(order, PAYMENT_STATUS_SOURCES)
+    fulfillment_state = first_present(order, FULFILLMENT_STATUS_SOURCES)
+
+    if _cancellation_status(
+        order,
+        order_state,
+        payment_state,
+        fulfillment_state,
+    ) is not None:
+        return "cancelled"
+
+    fulfillment_key = _status_key(fulfillment_state)
+    if fulfillment_key == "delivered":
+        return "delivered"
+    if fulfillment_key in {"fulfilled", "shipped"}:
+        return "shipped"
+
+    payment_key = _status_key(payment_state)
+    if "refund" in payment_key:
+        raise orders.SyncError(
+            "EasyStore returned a refunded order that is not cancelled, but the "
+            "production HubSpot Order pipeline has no Refunded stage. Add a "
+            "lossless Refunded stage before syncing this order."
+        )
+    if payment_key in {"paid", "authorized", "partially_paid", "partial_paid"}:
+        return "processed"
+
+    order_key = _status_key(order_state)
+    if order_key in {"processed", "processing", "paid"}:
+        return "processed"
+    return "open"
+
+
+def _visible_options(document: Any, property_name: str) -> list[dict[str, Any]]:
+    if not isinstance(document, dict):
+        raise orders.SyncError(
+            f"HubSpot returned an invalid {property_name} property definition"
+        )
+    options = document.get("options")
+    if not isinstance(options, list):
+        raise orders.SyncError(
+            f"HubSpot property {property_name} returned no enumeration options"
+        )
+    return [
+        option
+        for option in options
+        if isinstance(option, dict) and not bool(option.get("hidden"))
+    ]
+
+
+def _option_id_by_label(
+    options: list[dict[str, Any]],
+    label: str,
+    property_name: str,
+) -> str:
+    matches = [
+        nonempty(option.get("value"))
+        for option in options
+        if _status_key(option.get("label")) == _status_key(label)
+    ]
+    matches = [value for value in matches if value is not None]
+    if len(matches) != 1:
+        raise orders.SyncError(
+            f"HubSpot {property_name} must expose exactly one visible {label!r} "
+            f"option; found {len(matches)}."
+        )
+    return matches[0]
+
+
+def configure_production_order_pipeline(access_token: str) -> None:
+    """Resolve the portal's Order pipeline/stage IDs from HubSpot's live schema."""
+
+    global _PIPELINE_ID, _STAGE_IDS
+
+    headers = {"Authorization": f"Bearer {access_token}"}
+    pipeline_property = orders._http_json(
+        f"{orders.HUBSPOT_BASE}/crm/v3/properties/order/{HUBSPOT_ORDER_PIPELINE}",
+        headers=headers,
+    )
+    pipeline_options = _visible_options(pipeline_property, HUBSPOT_ORDER_PIPELINE)
+    if len(pipeline_options) != 1:
+        raise orders.SyncError(
+            "Production requires exactly one visible HubSpot Order pipeline so "
+            "EasyStore states cannot be routed ambiguously; found "
+            f"{len(pipeline_options)}."
+        )
+    pipeline_id = nonempty(pipeline_options[0].get("value"))
+    if pipeline_id is None:
+        raise orders.SyncError("HubSpot Order pipeline option has no value")
+
+    stage_property = orders._http_json(
+        f"{orders.HUBSPOT_BASE}/crm/v3/properties/order/{HUBSPOT_ORDER_PIPELINE_STAGE}",
+        headers=headers,
+    )
+    stage_options = _visible_options(stage_property, HUBSPOT_ORDER_PIPELINE_STAGE)
+    stage_ids = {
+        key: _option_id_by_label(
+            stage_options,
+            label,
+            HUBSPOT_ORDER_PIPELINE_STAGE,
+        )
+        for key, label in ORDER_STAGE_LABELS.items()
+    }
+
+    _PIPELINE_ID = pipeline_id
+    _STAGE_IDS = stage_ids
+    _VALIDATED_STAGE_IDS.clear()
+
+
+def order_properties_with_pipeline(
+    order: dict[str, Any],
+    *,
+    external_id: str,
+    store_domain: str,
+    field_properties: dict[str, str] | None = None,
+    fallback_dial_code: str = "65",
+) -> dict[str, str]:
+    """Add HubSpot's native Order pipeline/stage to the normal Order projection."""
+
+    if _PIPELINE_ID is None or not _STAGE_IDS:
+        raise orders.SyncError("HubSpot Order pipeline was not configured before mapping")
+
+    properties = _BASE_ORDER_PROPERTIES(
+        order,
+        external_id=external_id,
+        store_domain=store_domain,
+        field_properties=field_properties,
+        fallback_dial_code=fallback_dial_code,
+    )
+    stage_key = easystore_order_pipeline_stage(order)
+    properties[HUBSPOT_ORDER_PIPELINE] = _PIPELINE_ID
+    properties[HUBSPOT_ORDER_PIPELINE_STAGE] = _STAGE_IDS[stage_key]
+    return properties
+
+
+def _closed_value(value: Any) -> bool | None:
+    if value is True or value == 1:
+        return True
+    if value is False or value == 0:
+        return False
+    key = _status_key(value)
+    if key == "true":
+        return True
+    if key == "false":
+        return False
+    return None
+
+
+def _validate_order_stage_state(
+    access_token: str,
+    hubspot_order_id: str,
+    stage_id: str,
+) -> None:
+    """Verify once per stage that HubSpot agrees with our OPEN/CLOSED semantics."""
+
+    if stage_id in _VALIDATED_STAGE_IDS:
+        return
+
+    stage_key = next(
+        (key for key, value in _STAGE_IDS.items() if value == stage_id),
+        None,
+    )
+    if stage_key is None:
+        raise orders.SyncError(f"Unknown HubSpot Order stage ID {stage_id!r}")
+
+    document = orders._http_json(
+        (
+            f"{orders.HUBSPOT_ORDERS_URL}/{hubspot_order_id}"
+            f"?properties={HUBSPOT_ORDER_PIPELINE_STAGE},{HUBSPOT_ORDER_IS_CLOSED}"
+        ),
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    properties = document.get("properties") if isinstance(document, dict) else None
+    if not isinstance(properties, dict):
+        raise orders.SyncError(
+            f"HubSpot Order {hubspot_order_id} returned no properties after stage write"
+        )
+
+    actual_stage = nonempty(properties.get(HUBSPOT_ORDER_PIPELINE_STAGE))
+    if actual_stage != stage_id:
+        raise orders.SyncError(
+            f"HubSpot Order {hubspot_order_id} did not retain pipeline stage "
+            f"{ORDER_STAGE_LABELS[stage_key]!r}."
+        )
+
+    actual_closed = _closed_value(properties.get(HUBSPOT_ORDER_IS_CLOSED))
+    expected_closed = stage_key in EXPECTED_CLOSED_STAGE_KEYS
+    if actual_closed is None or actual_closed != expected_closed:
+        expected_text = "CLOSED" if expected_closed else "OPEN"
+        raise orders.SyncError(
+            f"HubSpot stage {ORDER_STAGE_LABELS[stage_key]!r} must be configured "
+            f"as {expected_text} for EasyStore Order lifecycle rollups; HubSpot "
+            f"reported hs_is_closed={properties.get(HUBSPOT_ORDER_IS_CLOSED)!r}."
+        )
+
+    _VALIDATED_STAGE_IDS.add(stage_id)
+
+
+def _upsert_hubspot_order_with_stage_validation(
+    access_token: str,
+    existing_id: str | None,
+    properties: dict[str, str],
+) -> tuple[str, bool]:
+    hubspot_order_id, created = _BASE_UPSERT_HUBSPOT_ORDER(
+        access_token,
+        existing_id,
+        properties,
+    )
+    stage_id = nonempty(properties.get(HUBSPOT_ORDER_PIPELINE_STAGE))
+    if stage_id is None:
+        raise orders.SyncError("Production Order write omitted hs_pipeline_stage")
+    _validate_order_stage_state(access_token, hubspot_order_id, stage_id)
+    return hubspot_order_id, created
 
 
 def complete_order_with_modified_date(
@@ -243,12 +495,25 @@ def configure_production_order_mapping() -> None:
     }
 
 
+def sync_with_production_pipeline(**kwargs: Any) -> dict[str, Any]:
+    """Resolve the live Order pipeline before the generic production sync runs."""
+
+    hubspot_access_token = nonempty(kwargs.get("hubspot_access_token"))
+    if hubspot_access_token is None:
+        raise orders.SyncError("HubSpot access token is required for Order pipeline mapping")
+    configure_production_order_pipeline(hubspot_access_token)
+    return _BASE_SYNC(**kwargs)
+
+
 def main(argv: list[str] | None = None) -> int:
     # Keep the generic mapping implementation in easystore_hubspot_orders, but
     # inject the same authoritative Contact identity used by preflight/customer
-    # sync plus the portal's actual native Order fields.
+    # sync plus the portal's actual native Order fields and pipeline lifecycle.
     orders.hubspot_contact_index = hubspot_contact_index
     orders.complete_order = complete_order_with_modified_date
+    orders.order_properties = order_properties_with_pipeline
+    orders._upsert_hubspot_order = _upsert_hubspot_order_with_stage_validation
+    orders.sync = sync_with_production_pipeline
     configure_production_order_mapping()
     return orders.main(argv)
 
