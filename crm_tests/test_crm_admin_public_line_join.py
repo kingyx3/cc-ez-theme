@@ -117,7 +117,7 @@ class AdminPublicLineJoinTests(unittest.TestCase):
         self.assertTrue(checkout[commerce.LINE_ITEMS_UNAVAILABLE_KEY])
         self.assertTrue(any("missing=1" in attempt for attempt in read.attempts))
 
-    def test_admin_created_at_maps_to_easystore_cart_started(self) -> None:
+    def test_admin_created_at_keeps_native_first_cart_mapping(self) -> None:
         def serve(url, *, headers, **_kwargs):
             if url.startswith(admin.ADMIN_CHECKOUTS_URL):
                 return _admin_body([_record()])
@@ -133,7 +133,7 @@ class AdminPublicLineJoinTests(unittest.TestCase):
             read = admin.read_admin_checkouts("public-token", "admin-token")
 
         created = next(field for field in carts.CART_FIELDS if field.key == "created_at")
-        self.assertEqual(created.native, ())
+        self.assertEqual(created.native, ("hs_external_created_date",))
         self.assertEqual(created.fallback, "easystore_cart_created_at")
         self.assertEqual(created.label, "EasyStore Cart Started")
 
