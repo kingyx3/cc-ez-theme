@@ -25,8 +25,12 @@ def pipeline_document(
     *,
     pipeline_id: str = "pipeline-live",
     pipeline_label: str = "Order Pipeline",
+    processed_state: str | None = "OPEN",
     shipped_state: str = "CLOSED",
 ) -> dict:
+    processed_metadata = (
+        {"state": processed_state} if processed_state is not None else {}
+    )
     return {
         "results": [
             {
@@ -44,7 +48,7 @@ def pipeline_document(
                         "id": "processed-live",
                         "label": "Processed",
                         "archived": False,
-                        "metadata": {"state": "OPEN"},
+                        "metadata": processed_metadata,
                     },
                     {
                         "id": "shipped-live",
@@ -160,6 +164,39 @@ class HubSpotOrderPipelineStageTests(unittest.TestCase):
             },
         )
 
+    def test_closed_processed_stage_routes_payment_only_orders_to_open(self) -> None:
+        """Regression for prod run 32860581453: Processed is CLOSED in this portal."""
+
+        with patch.object(
+            orders,
+            "_http_json",
+            return_value=pipeline_document(processed_state="CLOSED"),
+        ):
+            production_orders.configure_production_order_pipeline("token")
+
+        self.assertEqual(production_orders._STAGE_IDS["open"], "open-live")
+        self.assertEqual(production_orders._STAGE_IDS["processed"], "open-live")
+
+        mapped = production_orders.order_properties_with_pipeline(
+            {
+                "financial_status": "paid",
+                "fulfillment_status": "unfulfilled",
+            },
+            external_id="1001",
+            store_domain="cardboardcollective.easy.co",
+        )
+        self.assertEqual(mapped["hs_pipeline_stage"], "open-live")
+
+    def test_unclassified_processed_stage_also_falls_back_to_open(self) -> None:
+        with patch.object(
+            orders,
+            "_http_json",
+            return_value=pipeline_document(processed_state=None),
+        ):
+            production_orders.configure_production_order_pipeline("token")
+
+        self.assertEqual(production_orders._STAGE_IDS["processed"], "open-live")
+
     def test_property_option_visibility_is_not_used_for_pipeline_discovery(self) -> None:
         """Regression for prod run 32854309344: hs_pipeline showed 0 visible options."""
 
@@ -261,7 +298,7 @@ class HubSpotOrderPipelineStageTests(unittest.TestCase):
                     "stage-shipped",
                 )
 
-    def test_processed_stage_must_remain_open_in_hubspot(self) -> None:
+    def test_processed_stage_must_remain_open_if_written_directly(self) -> None:
         response = {
             "properties": {
                 "hs_pipeline_stage": "stage-processed",
