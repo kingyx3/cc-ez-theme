@@ -227,30 +227,72 @@ Native-only Cart fields that do not get custom duplicates include
 `hs_external_token`, `hs_discount_codes`, `hs_landing_site`, `hs_referring_site`,
 `hs_total_weight`, and the native shipping/billing address fields.
 
-## Cloudflare source-attribution Contact fields
+## Cloudflare source attribution
 
-These are intentionally custom rather than mapped into HubSpot's own analytics
-properties. HubSpot owns and enumerates its analytics-source fields; writing the
-Cloudflare attribution vocabulary into those fields would change semantics or
-reject values.
+Attribution properties are intentionally custom rather than mapped into HubSpot's
+own analytics-source properties. HubSpot owns its Original/Latest Traffic Source
+fields and their channel vocabulary; those remain HubSpot's view of tracked web
+sessions. The `cc_*` properties below are immutable attribution snapshots derived
+from Cloudflare D1 touch history and EasyStore timestamps.
 
-All live in the `cloudflare_attribution` property group:
+Click UUIDs are internal Cloudflare join keys only. Production does not provision,
+read, or write a Click-ID attribution property on Contacts or Orders.
+
+### Contact acquisition
+
+All Contact acquisition fields live in the `cloudflare_attribution` property
+group:
 
 | Custom Contact property | Meaning |
 | --- | --- |
-| `cc_acquisition_click_id` | immutable acquisition click ID |
-| `cc_acquisition_source` | acquisition source |
-| `cc_acquisition_medium` | acquisition medium |
-| `cc_acquisition_campaign` | campaign |
-| `cc_acquisition_entry_path` | tracked `/go/*` entry path |
-| `cc_acquisition_country` | Cloudflare country |
-| `cc_acquisition_at` | click timestamp |
-| `cc_acquisition_automated` | link-preview/prefetch automation reason |
+| `cc_acquisition_source` | selected source (`facebook`, `whatsapp`, etc.) |
+| `cc_acquisition_medium` | selected medium |
+| `cc_acquisition_campaign` | campaign label |
+| `cc_acquisition_content` | exact post/ad/message label |
+| `cc_acquisition_entry_path` | tracked entry path |
+| `cc_acquisition_country` | country reported by Cloudflare |
+| `cc_acquisition_at` | selected touch timestamp |
+| `cc_acquisition_attribution_model` | `last_tracked_touch_before_signup` |
+| `cc_acquisition_attribution_window_days` | lookback window (`30` by default) |
+| `cc_acquisition_status` | `attributed` or `no_recent_tracked_touch` |
 
-The old machine-only EasyStore Click ID customer attribute is retired and is not
-provisioned or written to HubSpot. Cloudflare attribution now joins D1
-`customer_touches` to the existing `easystore_customer_id` and EasyStore source
-creation timestamp instead.
+The acquisition job joins D1 `customer_touches` to HubSpot
+`easystore_customer_id` and `easystore_customer_created_at`, then selects the
+latest human tracked touch before account creation within the configured window.
+An attributed snapshot is immutable. `no_recent_tracked_touch` remains retryable
+because a pre-signup browser touch may be bound to the customer shortly after
+registration.
+
+### Order attribution
+
+Orders use a separate snapshot so repeat purchases can have different marketing
+sources without changing the Contact's original acquisition:
+
+| Custom Order property | Meaning |
+| --- | --- |
+| `cc_order_source` | selected source |
+| `cc_order_medium` | selected medium |
+| `cc_order_campaign` | campaign label |
+| `cc_order_content` | exact post/ad/message label |
+| `cc_order_touch_at` | selected touch timestamp |
+| `cc_order_attribution_model` | `last_tracked_touch` |
+| `cc_order_attribution_window_days` | lookback window (`30` by default) |
+| `cc_order_attribution_status` | `attributed`, `no_recent_tracked_touch`, or a missing-source-data reason |
+
+Order attribution requires both the click and its customer binding to exist by the
+Order creation timestamp; a touch learned after purchase cannot retroactively
+claim revenue. There is no fallback from an unattributed Order to Contact
+acquisition.
+
+`hs_source_store` remains the commerce storefront and is never repurposed as a
+marketing source. HubSpot does not expose a native per-Order source/campaign/
+content property family with the same semantics, so the `cc_order_*` fields remain
+custom.
+
+Historical properties such as `easystore_attr_click_id`,
+`cc_acquisition_click_id`, `cc_order_click_id`, and the old
+`cc_acquisition_automated` field may remain in HubSpot, but current production
+attribution ignores and never writes them.
 
 ## What can be relied on in HubSpot automation/reporting
 
