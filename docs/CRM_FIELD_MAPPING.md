@@ -21,8 +21,8 @@ schema before a write.
    dropping information, the custom fallback is kept.
 5. Existing legacy `easystore_*` properties are not automatically archived or
    deleted when a native property becomes usable. They may contain historical
-   data. New sync runs simply stop writing the fallback when the native property
-   wins.
+   data. Retired fields are removed from the production field table before schema
+   resolution, so new runs neither provision nor write them.
 
 The one exception is identity data that has no HubSpot-native external ID for the
 object. Those properties are intentionally custom because removing them would
@@ -91,11 +91,12 @@ when the live portal has no writable lossless native property.
 | Custom property | EasyStore fact | Why custom can be necessary |
 | --- | --- | --- |
 | `easystore_customer_id` | EasyStore customer ID | external store identity; no equivalent native Contact identity |
-| `easystore_customer_since` | account creation timestamp | fallback when no writable native equivalent exists |
+| `easystore_customer_created_at` | customer creation timestamp | explicit EasyStore source date; HubSpot `createdate` is CRM metadata |
+| `easystore_customer_modified_at` | customer modification timestamp | explicit EasyStore source date; HubSpot `lastmodifieddate` is CRM metadata |
 | `easystore_orders_count` | EasyStore order count | HubSpot's nearest aggregate fields are calculated from HubSpot records |
 | `easystore_total_spent` | EasyStore lifetime spend | HubSpot revenue aggregates are calculated/read-only and are not the same source fact |
 | `easystore_last_order_at` | latest EasyStore order timestamp | fallback when no writable native equivalent exists |
-| `easystore_customer_birthday` | real date of birth | fallback only when native `date_of_birth` is unavailable/incompatible |
+| `easystore_customer_birthday` | real date of birth | fallback only when native `date_of_birth` is unavailable/incompatible; not provisioned when native `date_of_birth` is the portal's writable string field |
 | `easystore_birthday_day` | trusted birthday `MM-DD` | no equivalent native field with the same meaning |
 | `easystore_next_birthday` | next birthday occurrence | different semantic from date of birth |
 | `easystore_customer_gender` | EasyStore gender | fallback only when native `gender` is unavailable/incompatible |
@@ -103,8 +104,13 @@ when the live portal has no writable lossless native property.
 | `easystore_customer_note` | EasyStore staff/customer note | fallback when no unambiguous writable native equivalent exists |
 | `easystore_attr_<slug>` | merchant-defined EasyStore customer attribute | merchant-defined source field; no generic HubSpot native equivalent |
 
+`easystore_customer_since` is retired. Production removes that field before
+schema resolution and uses the explicit source-created/source-modified properties
+above instead. Existing historical values in HubSpot are left untouched.
+
 Merchant-defined attributes are capped by the sync and use one property per
-attribute label so answers are not merged into an unrelated CRM field.
+attribute label so answers are not merged into an unrelated CRM field. Machine-only
+Click ID attribute labels are explicitly excluded from this dynamic mapping.
 
 ## Orders
 
@@ -141,7 +147,7 @@ that would discard the time of day.
 | refund amount | unique semantic native if one exists | `easystore_refund_amount` |
 | discount codes | unique semantic native if one exists | `easystore_discount_codes` |
 | payment method | `hs_payment_method` / unique semantic native | `easystore_payment_method` |
-| overall order status | `hs_order_status` / unique semantic native | `easystore_order_status` |
+| overall order status | `hs_external_order_status` | `easystore_order_status` only in the generic mapper; production uses the native field |
 | paid timestamp | unique semantic native if one exists | `easystore_order_paid_at` |
 | fulfilled timestamp | unique semantic native if one exists | `easystore_order_fulfilled_at` |
 | cancelled timestamp | unique semantic native if one exists | `easystore_order_cancelled_at` |
@@ -152,7 +158,7 @@ that would discard the time of day.
 | buyer email | unique semantic native if one exists | `easystore_order_email` |
 | buyer name | unique semantic native if one exists | `easystore_order_customer_name` |
 | buyer phone | unique semantic native if one exists | `easystore_order_phone` |
-| shipping recipient | unique semantic native if one exists | `easystore_shipping_recipient` |
+| shipping recipient | `hs_shipping_address_name` | none in production |
 | shipping phone | unique semantic native if one exists | `easystore_shipping_phone` |
 | order note | unique semantic native if one exists | `easystore_order_note` |
 
@@ -186,34 +192,38 @@ authoritative for these fields.
 
 ## Carts / abandoned checkouts
 
-`hs_external_cart_id` is the native Cart external identity. Native Cart fields are
-preferred first for status, totals, dates, recovery URL, token, discount codes,
-landing/referring site, total weight and shipping/billing address fields.
+`hs_external_cart_id` is the native Cart external identity. Production also uses
+native `hs_external_status`, `hs_external_created_date` and
+`hs_external_modified_date` directly. Those three fields are native-only in the
+production entrypoint: it does not provision custom Cart status, abandoned flags,
+abandoned timestamps, or duplicate source-date properties.
 
-The following custom fields are fallbacks or EasyStore-specific facts. As with
+The remaining custom fields are fallbacks or EasyStore-specific facts. As with
 Orders, a fallback is created only if the live portal has no unambiguous writable
 native equivalent of the same type.
 
 | Custom property | Cart fact |
 | --- | --- |
-| `easystore_cart_status` | EasyStore checkout status |
 | `easystore_cart_total_amount` | total |
 | `easystore_cart_subtotal_amount` | subtotal |
 | `easystore_cart_discount_amount` | discount amount |
 | `easystore_cart_tax_amount` | tax |
 | `easystore_cart_shipping_amount` | shipping |
 | `easystore_cart_tags` | tags |
-| `easystore_cart_created_at` | checkout creation time |
-| `easystore_cart_abandoned_at` | last activity/abandonment time |
 | `easystore_cart_recovery_url` | recovery/resume URL |
 | `easystore_cart_item_count` | item/unit count |
 | `easystore_cart_items` | human-readable cart contents |
 | `easystore_cart_email` | buyer email |
 | `easystore_cart_customer_name` | buyer name |
 | `easystore_cart_phone` | buyer mobile |
-| `easystore_cart_is_abandoned` | integration's normalized abandoned flag |
+
+Retired Cart properties such as `easystore_cart_status`,
+`easystore_cart_created_at`, `easystore_cart_abandoned_at`, and
+`easystore_cart_is_abandoned` may still hold historical data in HubSpot, but the
+production sync no longer resolves, provisions, or writes them.
 
 Native-only Cart fields that do not get custom duplicates include
+`hs_external_status`, `hs_external_created_date`, `hs_external_modified_date`,
 `hs_external_token`, `hs_discount_codes`, `hs_landing_site`, `hs_referring_site`,
 `hs_total_weight`, and the native shipping/billing address fields.
 
@@ -237,9 +247,10 @@ All live in the `cloudflare_attribution` property group:
 | `cc_acquisition_at` | click timestamp |
 | `cc_acquisition_automated` | link-preview/prefetch automation reason |
 
-The click ID that connects EasyStore to this stage normally arrives through a
-merchant-defined Contact attribute such as `easystore_attr_click_id`, covered by
-the dynamic Contact attribute rule above.
+The old machine-only EasyStore Click ID customer attribute is retired and is not
+provisioned or written to HubSpot. Cloudflare attribution now joins D1
+`customer_touches` to the existing `easystore_customer_id` and EasyStore source
+creation timestamp instead.
 
 ## What can be relied on in HubSpot automation/reporting
 
