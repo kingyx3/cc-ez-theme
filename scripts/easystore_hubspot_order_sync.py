@@ -176,8 +176,6 @@ def easystore_order_pipeline_stage(order: dict[str, Any]) -> str:
     payment_key = _status_key(payment_state)
     if "refund" in payment_key:
         return "refunded"
-    if payment_key in {"paid", "authorized", "partially_paid", "partial_paid"}:
-        return "processed"
 
     order_key = _status_key(order_state)
     if order_key == "delivered":
@@ -186,6 +184,9 @@ def easystore_order_pipeline_stage(order: dict[str, Any]) -> str:
         return "shipped"
     if "refund" in order_key:
         return "refunded"
+
+    if payment_key in {"paid", "authorized", "partially_paid", "partial_paid"}:
+        return "processed"
     if order_key in {"processed", "processing", "paid"}:
         return "processed"
     return "open"
