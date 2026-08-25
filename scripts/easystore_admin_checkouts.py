@@ -47,7 +47,6 @@ from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlencode
 
-import easystore_hubspot_carts as cart_mapping
 from easystore_hubspot_orders import SyncError, _http_json, _shop_domain
 from easystore_hubspot_schema import nonempty
 
@@ -271,32 +270,6 @@ def _join_public_line_items(
     return joined
 
 
-def _prefer_easystore_cart_started_property() -> None:
-    """Map checkout created_at to the custom EasyStore Cart Started property.
-
-    The default Cart mapping prefers HubSpot's native ``hs_external_created_date``.
-    For the authoritative admin checkout source, the store wants ``created_at``
-    written to the existing custom ``easystore_cart_created_at`` property whose
-    label is "EasyStore Cart Started". The mapping is changed only after the
-    admin source has authenticated successfully, so public-fallback runs keep
-    their existing native mapping.
-    """
-
-    updated = []
-    for spec in cart_mapping.CART_FIELDS:
-        if spec.key == "created_at":
-            updated.append(
-                spec._replace(
-                    native=(),
-                    fallback="easystore_cart_created_at",
-                    label="EasyStore Cart Started",
-                )
-            )
-        else:
-            updated.append(spec)
-    cart_mapping.CART_FIELDS = tuple(updated)
-
-
 def _params(document: Any) -> dict[str, Any]:
     if isinstance(document, dict) and isinstance(document.get("params"), dict):
         return document["params"]
@@ -337,7 +310,6 @@ def read_admin_checkouts(
             attempts.append(f"{label}: refused the credential")
             continue
 
-        _prefer_easystore_cart_started_property()
         records = _checkouts(first)
         params = _params(first)
         total_count = _positive_int(params.get("total_count"))
