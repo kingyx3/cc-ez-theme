@@ -162,7 +162,8 @@ These are therefore provisioned in the `easystore_sync` group:
 | EasyStore | HubSpot Contact |
 | --- | --- |
 | `id` / `customer_id` | `easystore_customer_id` |
-| `created_at` / `created_on` / `registered_at` | `easystore_customer_since` |
+| `created_at` / `created_on` / `registered_at` | `easystore_customer_created_at` |
+| `updated_at` / `modified_at` / `updated_on` / `modified_on` | `easystore_customer_modified_at` |
 | `orders_count` / `order_count` / `total_orders` | `easystore_orders_count` |
 | `total_spent` / `total_spend` / `lifetime_spend` | `easystore_total_spent` |
 | `last_order_at` / `last_order_date` / `latest_order_at` | `easystore_last_order_at` |
@@ -170,6 +171,10 @@ These are therefore provisioned in the `easystore_sync` group:
 | `gender` / `sex` | `gender` or `easystore_customer_gender` |
 | `tags` | `easystore_customer_tags` |
 | `note` / `notes` / `remark` / `remarks` / `internal_note` / `admin_note` / `staff_note` / `comment` / `comments` / `memo` / `description` | `easystore_customer_note` |
+
+`easystore_customer_since` is retired. Production removes it before HubSpot schema
+resolution, so it is neither provisioned nor written by new runs; historical
+values may remain in the portal.
 
 Tags are normalized from a list, a comma separated string, or a list of objects
 into one comma separated value. `easystore_customer_field_coverage` in the run
@@ -214,12 +219,13 @@ A date within the last twelve months cannot be a date of birth — nobody with a
 storefront account was born this week — so it is read as an occurrence. No birth
 year is ever invented from one.
 
-Because this sync provisions `easystore_customer_birthday`, it also owns it: when
-no date of birth is reported, the property is cleared, which repairs the contacts
-an earlier run filled with a next-occurrence date. `birthday_property_cleared`
-reports how many were cleared. A portal whose **native** `date_of_birth` was
-resolved instead is never cleared, because that property belongs to the portal
-and a person may maintain it by hand.
+When the portal cannot accept the native `date_of_birth` losslessly, the sync may
+resolve the custom `easystore_customer_birthday` fallback and owns that fallback:
+when no date of birth is reported, the fallback can be cleared to repair stale
+values. When the portal exposes writable native `date_of_birth` in the compatible
+production shape, the custom fallback is removed before schema resolution and is
+not provisioned. Native `date_of_birth` is never cleared merely because EasyStore
+did not report a value, because that property may also be maintained in HubSpot.
 
 Getting from a storefront's value to a HubSpot date had three further traps, all
 of which produced wrong dates in production:
@@ -282,6 +288,11 @@ property name keep the first. Anything left out is named in the step log rather
 than dropped silently, and `easystore_customer_attributes_found` reports how many
 distinct labels the run saw.
 
+Machine-only attribution labels (`Click ID`, `ClickID`, `cb_click_id`,
+`Source click ID`, `Attribution click ID`) are explicitly excluded from dynamic
+attribute provisioning. Click UUIDs are transport/join keys inside Cloudflare D1,
+not Contact properties.
+
 Birthday, gender and free-form attribute answers are personal data the store
 already holds. They are copied as EasyStore recorded them, without inference: the
 sync never derives a birthday from an order date or a gender from a name.
@@ -309,46 +320,73 @@ HubSpot email uniqueness is respected without turning email into identity. If an
 
 ## Cloudflare source attribution
 
-`scripts/cloudflare_hubspot_attribution.py` runs after the Contact stage and
-answers the one question the storefront's own data cannot: **which channel
-produced this customer.**
+Contact acquisition and Order conversion are separate attribution snapshots built
+from the same append-only Cloudflare D1 touch history:
 
-It is the only stage that reads a system other than EasyStore and HubSpot, and the
-only one whose credentials are optional. Given no `CLOUDFLARE_ACCOUNT_ID` and
-`CLOUDFLARE_API_TOKEN`, the workflow logs a notice and skips it; nothing else in
-the run depends on it.
+- **Contact acquisition** asks which tracked human touch most recently preceded
+  EasyStore account creation.
+- **Order attribution** asks which tracked human touch most recently preceded that
+  specific purchase.
 
-The chain it completes is documented in full in
-[docs/SOURCE_ATTRIBUTION.md](SOURCE_ATTRIBUTION.md), including the one manual
-EasyStore setup step and the limits of the claim. In brief: the `cc-attribution`
-Cloudflare Worker mints an opaque `click_id` per tracked `/go/*` entry and records
-the channel in D1; the storefront carries that id into an EasyStore customer
-attribute at sign-up; the Contact stage above already copies customer attributes
-to HubSpot, so the id arrives as `easystore_attr_click_id`; this stage resolves it
-against D1 and writes the channel onto the contact.
+The full model is documented in [docs/SOURCE_ATTRIBUTION.md](SOURCE_ATTRIBUTION.md)
+and the per-Order operating guide is
+[docs/ORDER_SOURCE_ATTRIBUTION.md](ORDER_SOURCE_ATTRIBUTION.md).
 
-Values land in a **Cloudflare Attribution** property group, deliberately separate
-from `easystore_sync` so a CRM user can tell which system reported a fact:
-`cc_acquisition_click_id`, `_source`, `_medium`, `_campaign`, `_entry_path`,
-`_country`, `_at` and `_automated`. HubSpot's own `hs_analytics_source` family is
-never written: those belong to HubSpot's tracking code and are enumerated against
-HubSpot's channel list.
+The storefront never copies a click UUID into an EasyStore customer attribute or
+HubSpot property. A tracked URL creates a `source_clicks` row in D1; once the
+shopper is authenticated, the storefront binds the Worker-minted click UUID to
+EasyStore `customer.id` in append-only `customer_touches`. The UUID remains an
+internal D1 join key.
 
-Four refusals define the stage:
+### Contact acquisition
 
-- **An acquisition is written once.** A contact already carrying a different
-  click id is reported as `contacts_with_conflicting_click_id` and left alone.
-- **A click id with no D1 row writes nothing** (`click_ids_not_found_in_d1`).
-- **A value that is not a Worker-minted UUID never reaches a query.** The
-  attribute is filled by a script in a browser, so it is untrusted input and is
-  counted as `contacts_with_unusable_click_id`.
-- **Nothing to join provisions nothing.** With no click ids in the portal the
-  stage creates no HubSpot properties and makes no Cloudflare call, which is the
-  expected state until the EasyStore attribute exists.
+`scripts/cloudflare_hubspot_attribution.py` runs after the Customer stage. The
+Customer sync supplies two ordinary EasyStore facts on the HubSpot Contact:
 
-`attributed_by_source` and `attributed_by_campaign` in the run summary are the
-reporting output; `contacts_already_attributed` is the normal headline number of a
-healthy scheduled run.
+- `easystore_customer_id`
+- `easystore_customer_created_at`
+
+For each Contact without an existing acquisition snapshot, attribution selects the
+latest human touch whose `clicked_at` is before account creation and inside the
+configured 30-day window. The binding itself may happen shortly after signup,
+because the pre-signup click timestamp proves when the marketing touch occurred.
+
+Values live in the **Cloudflare Attribution** property group:
+
+| HubSpot Contact property | Meaning |
+| --- | --- |
+| `cc_acquisition_source` | selected source (`facebook`, `whatsapp`, etc.) |
+| `cc_acquisition_medium` | selected medium |
+| `cc_acquisition_campaign` | campaign label |
+| `cc_acquisition_content` | exact post/ad/message label |
+| `cc_acquisition_entry_path` | tracking path used |
+| `cc_acquisition_country` | country Cloudflare reported |
+| `cc_acquisition_at` | selected touch timestamp |
+| `cc_acquisition_attribution_model` | `last_tracked_touch_before_signup` |
+| `cc_acquisition_attribution_window_days` | `30` by default |
+| `cc_acquisition_status` | `attributed` or `no_recent_tracked_touch` |
+
+An attributed acquisition snapshot is immutable. `no_recent_tracked_touch` is
+retryable so a pre-signup touch that binds on a later authenticated page can still
+upgrade the Contact. HubSpot's own Original/Latest Traffic Source properties are
+left untouched; they remain HubSpot's analytics view rather than this deterministic
+EasyStore/Cloudflare snapshot.
+
+### Order attribution
+
+`scripts/cloudflare_hubspot_order_attribution.py` runs from the separate
+`sync-order-source-attribution.yml` workflow after Orders exist in HubSpot. It
+requires both `clicked_at <= order.created_at` and `bound_at <= order.created_at`,
+so a touch learned after the purchase cannot retroactively claim revenue.
+
+Each Order receives its own `cc_order_*` snapshot: source, medium, campaign,
+content, touch timestamp, attribution model/window and status. There is no fallback
+to Contact acquisition, and `hs_source_store` remains the commerce storefront —
+it is never repurposed as a marketing source.
+
+Historical properties such as `easystore_attr_click_id`,
+`cc_acquisition_click_id`, or `cc_order_click_id` may still exist in HubSpot, but
+current production attribution does not read or write them.
 
 ## Orders and product-backed line items
 
@@ -390,7 +428,7 @@ Order fields currently mapped include:
 | discount codes | `easystore_discount_codes` |
 | refunded amount | `easystore_refund_amount` |
 | payment method | `hs_payment_method` or `easystore_payment_method` |
-| order status | `hs_order_status` or `easystore_order_status` |
+| order status | `hs_external_order_status` in production |
 | paid / fulfilled / cancelled timestamps | `easystore_order_paid_at`, `easystore_order_fulfilled_at`, `easystore_order_cancelled_at` |
 | cancellation reason | `easystore_order_cancel_reason` |
 | sales channel | `easystore_order_channel` |
@@ -398,7 +436,8 @@ Order fields currently mapped include:
 | order tags | `easystore_order_tags` |
 | buyer email / name / mobile | `easystore_order_email`, `easystore_order_customer_name`, `easystore_order_phone` |
 | order note | `easystore_order_note` |
-| shipping recipient / phone | `easystore_shipping_recipient`, `easystore_shipping_phone` |
+| shipping recipient | `hs_shipping_address_name` in production |
+| shipping phone | native semantic match or `easystore_shipping_phone` |
 | shipping method | `hs_shipping_method` |
 | shipping address street/city/state/postal code/country | `hs_shipping_address_street` / `_city` / `_state` / `_postal_code` / `_country` |
 | billing address street/city/state/postal code/country | `hs_billing_address_street` / `_city` / `_state` / `_postal_code` / `_country` |
@@ -507,6 +546,13 @@ reads `GET /crm/v3/properties/<object>` and resolves each declared field:
 4. an existing `easystore_*` property of a conflicting type stops the stage
    instead of producing a rejected write.
 
+Production entrypoints can narrow the shared generic mapping further when the
+portal has an authoritative native field. Current examples are Order Status
+(`hs_external_order_status`), shipping recipient (`hs_shipping_address_name`) and
+Cart lifecycle/source dates (`hs_external_status`, `hs_external_created_date`,
+`hs_external_modified_date`); their retired custom fallbacks are removed before
+schema resolution.
+
 Each stage prints its resolved mapping to the step log and reports it in the run
 summary (`hubspot_order_field_properties`, `hubspot_contact_field_properties`,
 `hubspot_catalogue_field_properties`), together with
@@ -566,6 +612,12 @@ references an order, carries a `completed_at`, or reports a status of completed,
 complete, paid, converted or order; the run reports
 `checkouts_skipped_as_completed`.
 
+Production uses HubSpot's native Cart lifecycle and source-date fields directly.
+`hs_external_status` is normalized to `Abandoned` or `Recovered`;
+`hs_external_created_date` stores the EasyStore creation time; and
+`hs_external_modified_date` stores the latest EasyStore update time. Retired
+custom status/abandonment/date properties are not resolved or provisioned.
+
 Fields synchronized are:
 
 | EasyStore | HubSpot Cart |
@@ -574,15 +626,15 @@ Fields synchronized are:
 | `name` / `checkout_number` / `token` | `hs_cart_name` |
 | store domain | `hs_source_store` |
 | `currency` / `currency_code` | `hs_currency_code` |
-| `status` / `state` / `checkout_status` | `hs_external_status` or `easystore_cart_status` |
+| checkout lifecycle | `hs_external_status` (`Abandoned` / `Recovered`) |
 | `total_price` / `total_amount` / `grand_total` / `total` | `hs_total_price` or `easystore_cart_total_amount` |
 | `subtotal_price` / `subtotal` / `sub_total` / `total_line_items_price` | `hs_subtotal_price` or `easystore_cart_subtotal_amount` |
 | `total_discount` / `total_discounts` / `discount_amount` | `hs_cart_discount` or `easystore_cart_discount_amount` |
 | `total_tax` / `total_taxes` / `tax_total` / `tax` | `hs_tax` or `easystore_cart_tax_amount` |
 | `total_shipping` / `shipping_price` / `shipping_total` / `shipping_fee` | `hs_shipping_cost` or `easystore_cart_shipping_amount` |
 | `tags` | `hs_tags` or `easystore_cart_tags` |
-| `created_at` / `created_on` / `started_at` | `hs_external_created_date` or `easystore_cart_created_at` |
-| `abandoned_at` / `updated_at` / `last_activity_at` | `hs_external_modified_date` or `easystore_cart_abandoned_at` |
+| `created_at` / `created_on` / `started_at` | `hs_external_created_date` |
+| `updated_at` / `modified_at` / `last_modified_at` / `last_activity_at` | `hs_external_modified_date` |
 | `abandoned_checkout_url` / `recovery_url` / `checkout_url` | `hs_cart_url` or `easystore_cart_recovery_url` |
 | `token` / `cart_token` / `checkout_token` | `hs_external_token` |
 | `discount_codes` (or `discount_code` / `coupon_code` / `voucher_code`) | `hs_discount_codes` |
@@ -594,6 +646,11 @@ Fields synchronized are:
 | line item quantities | `easystore_cart_item_count` |
 | line item titles and quantities | `easystore_cart_items` |
 | shopper email / name / mobile | `easystore_cart_email`, `easystore_cart_customer_name`, `easystore_cart_phone` |
+
+Retired `easystore_cart_status`, `easystore_cart_created_at`,
+`easystore_cart_abandoned_at` and `easystore_cart_is_abandoned` properties may
+still contain historical data in HubSpot, but current production does not read,
+resolve, provision or write them.
 
 Everything from `token` down is **native-only**: HubSpot defines those on every
 Cart object, so a portal that somehow lacks one gains nothing from a duplicate
@@ -643,7 +700,7 @@ at all.
 
 **EasyStore's paging cannot be trusted, so nothing depends on it terminating.** `checkouts.json` demonstrably ignores `page`: page 2 comes back identical to page 1, and on other attempts it hangs until it times out. Every `page` + `limit` read in this integration therefore shares `iter_easystore_pages`, which stops with an error naming the endpoint if a page repeats records already served. See `docs/EASYSTORE_CHECKOUT_CART_SYNC.md` for how the Cart stage proves a complete snapshot with `limit` instead.
 
-**HubSpot search filters are checked against the portal's schema first.** Filtering on a property the portal has never defined fails the whole search with an HTTP 400 that reads like an outage. The attribution stage reads the contact property schema and keeps only the click-id properties that actually exist; a portal defining none of them reports that and finishes cleanly, because a store that never captured click ids has nothing to attribute.
+**Contact attribution depends on explicit EasyStore identity/source-date properties, not Click-ID properties.** The attribution stage reads the Contact schema first and skips cleanly if `easystore_customer_id` or `easystore_customer_created_at` has not been provisioned by the Customer sync. It then resolves the `cc_acquisition_*` snapshot fields and joins candidate Contacts to D1 `customer_touches`; HubSpot is never searched by a click UUID.
 
 EasyStore orders are paged from `/api/3.0/orders.json`. That list record is thinner than the single-order record: it was already missing `line_items` for some orders, and it also omits addresses and totals. The order stage therefore fetches `/api/3.0/orders/<order_id>.json` whenever a listed order is missing line items, an address, or an order total, and reports how often it had to (`orders_fetched_in_detail`). The reconciliation stage only reads line items, so it opts out of that check and its request count is unchanged.
 
@@ -662,5 +719,6 @@ Before merging/enabling the scheduled sync:
 5. Spot-check several HubSpot Contacts, Products, Orders, and associated Line Items against EasyStore, including a multi-variant product and an order with more than one line.
 6. Read the three coverage blocks in the run summary (`easystore_order_field_coverage`, `easystore_customer_field_coverage`, `easystore_catalogue_field_coverage`). Any field sitting at zero is one EasyStore does not report under the names the sync knows; add the real name to that field's `sources` and the value starts landing on the next run.
 7. For a full sandbox rehearsal before production, EasyStore supports development stores populated with Products, Variants, Customers, and Orders.
+8. Run the separate Order source-attribution smoke test in `docs/ORDER_SOURCE_ATTRIBUTION.md` before relying on `cc_order_*` revenue reporting.
 
 A green pull-request validation proves the deterministic mapping and fail-closed logic without credentials. A real API smoke test is still required to validate the specific EasyStore/HubSpot account configuration, scopes, existing CRM schema, and live data shape.
