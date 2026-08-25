@@ -63,9 +63,6 @@ ORDER_STAGE_LABELS = {
     "delivered": "Delivered",
     "cancelled": "Cancelled",
 }
-EXPECTED_OPEN_STAGE_KEYS = {"open", "processed"}
-EXPECTED_CLOSED_STAGE_KEYS = {"shipped", "delivered", "cancelled"}
-
 _BASE_COMPLETE_ORDER = orders.complete_order
 _BASE_ORDER_PROPERTIES = orders.order_properties
 _BASE_UPSERT_HUBSPOT_ORDER = orders._upsert_hubspot_order
@@ -73,6 +70,8 @@ _BASE_SYNC = orders.sync
 
 _PIPELINE_ID: str | None = None
 _STAGE_IDS: dict[str, str] = {}
+_STAGE_EXPECTED_CLOSED: dict[str, bool | None] = {}
+_STAGE_LABELS_BY_ID: dict[str, str] = {}
 _VALIDATED_STAGE_IDS: set[str] = set()
 
 
@@ -171,8 +170,8 @@ def easystore_order_pipeline_stage(order: dict[str, Any]) -> str:
     distinguishes OPEN from CLOSED stages. Payment-only orders must remain open;
     the configured pipeline resolver may therefore route this semantic
     ``processed`` state to HubSpot's Open stage when the portal configures its
-    Processed stage as CLOSED. Only shipment/delivery or explicit cancellation
-    closes an EasyStore order for these rollups.
+    Processed stage as CLOSED. Shipment/delivery must resolve to a CLOSED stage;
+    cancellation follows the portal's own Cancelled-stage semantics.
 
     A standalone refund has no lossless target in the current portal because it
     has no Refunded stage. Refusing that case is safer than calling a refund a
@@ -254,39 +253,90 @@ def _pipeline_stage_state(stage: dict[str, Any]) -> str:
     return _status_key(metadata.get("state")) if isinstance(metadata, dict) else ""
 
 
-def _validate_pipeline_stage_metadata(
+def _pipeline_stage_closed(stage: dict[str, Any]) -> bool | None:
+    state = _pipeline_stage_state(stage)
+    if state == "closed":
+        return True
+    if state == "open":
+        return False
+    return None
+
+
+def _require_pipeline_stage_state(
     stage_key: str,
     stage: dict[str, Any],
+    *,
+    closed: bool,
 ) -> None:
-    """Check HubSpot's documented Order stage state when the API returns it."""
+    """Require a state only where EasyStore's business semantics demand one."""
 
-    state = _pipeline_stage_state(stage)
-    if not state:
-        # The post-write hs_is_closed check below remains authoritative if an API
-        # response omits metadata for a stage.
-        return
-
-    expected_state = (
-        "closed" if stage_key in EXPECTED_CLOSED_STAGE_KEYS else "open"
-    )
-    if state != expected_state:
+    actual_closed = _pipeline_stage_closed(stage)
+    expected_text = "CLOSED" if closed else "OPEN"
+    if actual_closed is None:
         raise orders.SyncError(
-            f"HubSpot stage {ORDER_STAGE_LABELS[stage_key]!r} must be configured "
-            f"as {expected_state.upper()} for EasyStore Order lifecycle rollups; "
-            f"the Pipelines API reported metadata.state={state.upper()!r}."
+            f"HubSpot stage {ORDER_STAGE_LABELS[stage_key]!r} must report "
+            f"metadata.state={expected_text!r} for EasyStore Order lifecycle "
+            "routing, but the Pipelines API did not classify it as OPEN or CLOSED."
+        )
+    if actual_closed != closed:
+        actual_text = "CLOSED" if actual_closed else "OPEN"
+        raise orders.SyncError(
+            f"HubSpot stage {ORDER_STAGE_LABELS[stage_key]!r} cannot satisfy "
+            f"EasyStore's required {expected_text} lifecycle state; the Pipelines "
+            f"API reported metadata.state={actual_text!r}."
         )
 
 
-def configure_production_order_pipeline(access_token: str) -> None:
-    """Resolve safe Order stage IDs from HubSpot's live Pipelines API.
+def _resolved_fulfillment_stage(
+    stages: dict[str, dict[str, Any]],
+    *,
+    preferred_key: str,
+) -> str:
+    """Return a CLOSED fulfillment stage, preferring the matching HubSpot label."""
 
-    ``processed`` is a semantic EasyStore state, not a promise to use the HubSpot
-    stage with that label. Some portals configure Processed as CLOSED. In that
-    case paid/unfulfilled orders are routed to the verified Open stage so the sync
-    cannot manufacture a close date before fulfilment.
+    alternate_key = "delivered" if preferred_key == "shipped" else "shipped"
+    for stage_key in (preferred_key, alternate_key):
+        if _pipeline_stage_closed(stages[stage_key]) is True:
+            if stage_key != preferred_key:
+                print(
+                    f"WARNING: HubSpot Order stage "
+                    f"{ORDER_STAGE_LABELS[preferred_key]!r} is not CLOSED; "
+                    f"EasyStore {preferred_key} orders will use HubSpot stage "
+                    f"{ORDER_STAGE_LABELS[stage_key]!r} instead.",
+                    file=sys.stderr,
+                )
+            return stage_key
+
+    states = ", ".join(
+        f"{ORDER_STAGE_LABELS[key]}={_pipeline_stage_state(stages[key]).upper() or 'UNKNOWN'}"
+        for key in ("shipped", "delivered")
+    )
+    raise orders.SyncError(
+        "HubSpot Order pipeline has no CLOSED fulfillment-complete stage. "
+        f"Observed {states}. Configure either Shipped or Delivered as CLOSED "
+        "before syncing fulfilled EasyStore orders."
+    )
+
+
+def configure_production_order_pipeline(access_token: str) -> None:
+    """Resolve semantic EasyStore states onto the portal's live Order pipeline.
+
+    HubSpot stage labels do not determine OPEN/CLOSED behavior. The Pipelines API
+    metadata is authoritative, so routing adapts to portal configuration:
+
+    * unpaid/open orders always use an actually OPEN stage;
+    * paid but not fully fulfilled orders use Processed only when it is OPEN,
+      otherwise they remain on Open;
+    * shipped/delivered orders use an actually CLOSED fulfillment stage, with the
+      sibling fulfillment stage as a safe fallback;
+    * cancelled orders keep the portal's Cancelled stage exactly as configured,
+      whether HubSpot classifies it OPEN or CLOSED.
+
+    The resolved stage's live state is cached by stage ID and verified after the
+    first write, so aliases cannot be misclassified by semantic label.
     """
 
-    global _PIPELINE_ID, _STAGE_IDS
+    global _PIPELINE_ID, _STAGE_IDS, _STAGE_EXPECTED_CLOSED, _STAGE_LABELS_BY_ID
 
     headers = {"Authorization": f"Bearer {access_token}"}
     document = orders._http_json(
@@ -310,27 +360,23 @@ def configure_production_order_pipeline(access_token: str) -> None:
         stage_key: _active_stage_by_label(pipeline.get("stages"), label)
         for stage_key, label in ORDER_STAGE_LABELS.items()
     }
-
-    # These stages have non-negotiable semantics for the integration.
-    for stage_key in ("open", "shipped", "delivered", "cancelled"):
-        _validate_pipeline_stage_metadata(stage_key, stages[stage_key])
-
-    stage_ids = {
+    raw_stage_ids = {
         stage_key: nonempty(stage.get("id"))
         for stage_key, stage in stages.items()
     }
-    if any(stage_id is None for stage_id in stage_ids.values()):
+    if any(stage_id is None for stage_id in raw_stage_ids.values()):
         raise orders.SyncError("HubSpot Order pipeline returned a stage without an ID")
 
-    processed_state = _pipeline_stage_state(stages["processed"])
-    if processed_state == "open":
-        _validate_pipeline_stage_metadata("processed", stages["processed"])
-    else:
-        # A CLOSED or unclassified Processed stage is unsafe for payment-only
-        # orders. Alias the semantic state to the known Open stage instead of
-        # weakening the OPEN/CLOSED guard or writing a premature closure.
-        stage_ids["processed"] = stage_ids["open"]
-        reported_state = processed_state.upper() if processed_state else "UNKNOWN"
+    # "Open" is the safe holding state for unpaid and payment-only orders.
+    _require_pipeline_stage_state("open", stages["open"], closed=False)
+
+    processed_key = (
+        "processed"
+        if _pipeline_stage_closed(stages["processed"]) is False
+        else "open"
+    )
+    if processed_key == "open":
+        reported_state = _pipeline_stage_state(stages["processed"]).upper() or "UNKNOWN"
         print(
             "WARNING: HubSpot Order stage 'Processed' is not safely OPEN "
             f"(metadata.state={reported_state!r}); paid/unfulfilled EasyStore "
@@ -338,8 +384,37 @@ def configure_production_order_pipeline(access_token: str) -> None:
             file=sys.stderr,
         )
 
+    shipped_key = _resolved_fulfillment_stage(stages, preferred_key="shipped")
+    delivered_key = _resolved_fulfillment_stage(stages, preferred_key="delivered")
+
+    resolved_stage_keys = {
+        "open": "open",
+        "processed": processed_key,
+        "shipped": shipped_key,
+        "delivered": delivered_key,
+        "cancelled": "cancelled",
+    }
+    stage_ids = {
+        semantic_key: raw_stage_ids[stage_key]
+        for semantic_key, stage_key in resolved_stage_keys.items()
+    }
+
+    # All IDs were checked above; narrow the type once for the runtime maps.
+    resolved_ids = {
+        key: value for key, value in stage_ids.items() if value is not None
+    }
+    expected_closed: dict[str, bool | None] = {}
+    labels_by_id: dict[str, str] = {}
+    for semantic_key, resolved_stage_key in resolved_stage_keys.items():
+        stage_id = resolved_ids[semantic_key]
+        stage = stages[resolved_stage_key]
+        expected_closed[stage_id] = _pipeline_stage_closed(stage)
+        labels_by_id[stage_id] = ORDER_STAGE_LABELS[resolved_stage_key]
+
     _PIPELINE_ID = pipeline_id
-    _STAGE_IDS = {key: value for key, value in stage_ids.items() if value is not None}
+    _STAGE_IDS = resolved_ids
+    _STAGE_EXPECTED_CLOSED = expected_closed
+    _STAGE_LABELS_BY_ID = labels_by_id
     _VALIDATED_STAGE_IDS.clear()
 
 
@@ -387,16 +462,11 @@ def _validate_order_stage_state(
     hubspot_order_id: str,
     stage_id: str,
 ) -> None:
-    """Verify once per stage that HubSpot agrees with our OPEN/CLOSED semantics."""
+    """Verify the persisted stage against the live state resolved by stage ID."""
 
     if stage_id in _VALIDATED_STAGE_IDS:
         return
-
-    stage_key = next(
-        (key for key, value in _STAGE_IDS.items() if value == stage_id),
-        None,
-    )
-    if stage_key is None:
+    if stage_id not in _STAGE_IDS.values():
         raise orders.SyncError(f"Unknown HubSpot Order stage ID {stage_id!r}")
 
     document = orders._http_json(
@@ -413,21 +483,34 @@ def _validate_order_stage_state(
         )
 
     actual_stage = nonempty(properties.get(HUBSPOT_ORDER_PIPELINE_STAGE))
+    stage_label = _STAGE_LABELS_BY_ID.get(stage_id, stage_id)
     if actual_stage != stage_id:
         raise orders.SyncError(
             f"HubSpot Order {hubspot_order_id} did not retain pipeline stage "
-            f"{ORDER_STAGE_LABELS[stage_key]!r}."
+            f"{stage_label!r}."
         )
 
     actual_closed = _closed_value(properties.get(HUBSPOT_ORDER_IS_CLOSED))
-    expected_closed = stage_key in EXPECTED_CLOSED_STAGE_KEYS
-    if actual_closed is None or actual_closed != expected_closed:
+    if actual_closed is None:
+        raise orders.SyncError(
+            f"HubSpot Order {hubspot_order_id} returned an unreadable "
+            f"hs_is_closed={properties.get(HUBSPOT_ORDER_IS_CLOSED)!r} after "
+            f"writing stage {stage_label!r}."
+        )
+
+    expected_closed = _STAGE_EXPECTED_CLOSED.get(stage_id)
+    if expected_closed is not None and actual_closed != expected_closed:
         expected_text = "CLOSED" if expected_closed else "OPEN"
         raise orders.SyncError(
-            f"HubSpot stage {ORDER_STAGE_LABELS[stage_key]!r} must be configured "
-            f"as {expected_text} for EasyStore Order lifecycle rollups; HubSpot "
-            f"reported hs_is_closed={properties.get(HUBSPOT_ORDER_IS_CLOSED)!r}."
+            f"HubSpot stage {stage_label!r} changed lifecycle semantics after "
+            f"pipeline discovery: expected {expected_text}, but HubSpot reported "
+            f"hs_is_closed={properties.get(HUBSPOT_ORDER_IS_CLOSED)!r}."
         )
+
+    # If the Pipelines API omitted metadata.state, learn it safely from HubSpot's
+    # calculated flag after the first persisted write and use it for this run.
+    if expected_closed is None:
+        _STAGE_EXPECTED_CLOSED[stage_id] = actual_closed
 
     _VALIDATED_STAGE_IDS.add(stage_id)
 
