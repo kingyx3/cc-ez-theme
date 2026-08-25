@@ -101,6 +101,7 @@ _BASE_ITER_HUBSPOT_CONTACTS = base.iter_hubspot_contacts
 _BASE_RESOLVE_CONTACT_FIELDS = base.resolve_contact_fields
 _BASE_CUSTOMER_PROPERTIES = base.customer_properties
 _BASE_CUSTOMER_ATTRIBUTES = base.customer_attributes
+_BASE_CONTACT_FIELDS = base.CONTACT_FIELDS
 _FALLBACK_CUSTOMER_IDS_USED: set[str] = set()
 _NATIVE_DOB_STRING = False
 
@@ -295,7 +296,7 @@ def _install_contact_source_date_fields(native_dob_type: str | None = None) -> N
         retired.add("birthday")
 
     production_fields = tuple(
-        field for field in base.CONTACT_FIELDS if field.key not in retired
+        field for field in _BASE_CONTACT_FIELDS if field.key not in retired
     )
     existing = {field.key for field in production_fields}
     additions = tuple(
