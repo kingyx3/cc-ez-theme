@@ -25,12 +25,15 @@ def pipeline_document(
     *,
     pipeline_id: str = "pipeline-live",
     pipeline_label: str = "Order Pipeline",
+    open_state: str | None = "OPEN",
     processed_state: str | None = "OPEN",
-    shipped_state: str = "CLOSED",
+    shipped_state: str | None = "CLOSED",
+    delivered_state: str | None = "CLOSED",
+    cancelled_state: str | None = "CLOSED",
 ) -> dict:
-    processed_metadata = (
-        {"state": processed_state} if processed_state is not None else {}
-    )
+    def metadata(state: str | None) -> dict:
+        return {"state": state} if state is not None else {}
+
     return {
         "results": [
             {
@@ -42,31 +45,31 @@ def pipeline_document(
                         "id": "open-live",
                         "label": "Open",
                         "archived": False,
-                        "metadata": {"state": "OPEN"},
+                        "metadata": metadata(open_state),
                     },
                     {
                         "id": "processed-live",
                         "label": "Processed",
                         "archived": False,
-                        "metadata": processed_metadata,
+                        "metadata": metadata(processed_state),
                     },
                     {
                         "id": "shipped-live",
                         "label": "Shipped",
                         "archived": False,
-                        "metadata": {"state": shipped_state},
+                        "metadata": metadata(shipped_state),
                     },
                     {
                         "id": "delivered-live",
                         "label": "Delivered",
                         "archived": False,
-                        "metadata": {"state": "CLOSED"},
+                        "metadata": metadata(delivered_state),
                     },
                     {
                         "id": "cancelled-live",
                         "label": "Cancelled",
                         "archived": False,
-                        "metadata": {"state": "CLOSED"},
+                        "metadata": metadata(cancelled_state),
                     },
                 ],
             }
@@ -78,14 +81,29 @@ class HubSpotOrderPipelineStageTests(unittest.TestCase):
     def setUp(self) -> None:
         self.original_pipeline_id = production_orders._PIPELINE_ID
         self.original_stage_ids = dict(production_orders._STAGE_IDS)
+        self.original_expected_closed = dict(production_orders._STAGE_EXPECTED_CLOSED)
+        self.original_labels_by_id = dict(production_orders._STAGE_LABELS_BY_ID)
         self.original_validated = set(production_orders._VALIDATED_STAGE_IDS)
         production_orders._PIPELINE_ID = "pipeline-1"
         production_orders._STAGE_IDS = dict(TEST_STAGE_IDS)
+        production_orders._STAGE_EXPECTED_CLOSED = {
+            "stage-open": False,
+            "stage-processed": False,
+            "stage-shipped": True,
+            "stage-delivered": True,
+            "stage-cancelled": True,
+        }
+        production_orders._STAGE_LABELS_BY_ID = {
+            stage_id: production_orders.ORDER_STAGE_LABELS[key]
+            for key, stage_id in TEST_STAGE_IDS.items()
+        }
         production_orders._VALIDATED_STAGE_IDS.clear()
 
     def tearDown(self) -> None:
         production_orders._PIPELINE_ID = self.original_pipeline_id
         production_orders._STAGE_IDS = self.original_stage_ids
+        production_orders._STAGE_EXPECTED_CLOSED = self.original_expected_closed
+        production_orders._STAGE_LABELS_BY_ID = self.original_labels_by_id
         production_orders._VALIDATED_STAGE_IDS.clear()
         production_orders._VALIDATED_STAGE_IDS.update(self.original_validated)
 
@@ -240,13 +258,58 @@ class HubSpotOrderPipelineStageTests(unittest.TestCase):
 
         self.assertEqual(production_orders._PIPELINE_ID, "pipeline-live")
 
-    def test_pipeline_metadata_must_match_expected_closed_state(self) -> None:
+    def test_open_shipped_stage_falls_back_to_closed_delivered_stage(self) -> None:
         with patch.object(
             orders,
             "_http_json",
             return_value=pipeline_document(shipped_state="OPEN"),
         ):
-            with self.assertRaisesRegex(orders.SyncError, "must be configured as CLOSED"):
+            production_orders.configure_production_order_pipeline("token")
+
+        self.assertEqual(production_orders._STAGE_IDS["shipped"], "delivered-live")
+        self.assertEqual(production_orders._STAGE_IDS["delivered"], "delivered-live")
+
+    def test_no_closed_fulfillment_stage_fails_before_writing_orders(self) -> None:
+        with patch.object(
+            orders,
+            "_http_json",
+            return_value=pipeline_document(
+                shipped_state="OPEN",
+                delivered_state="OPEN",
+            ),
+        ):
+            with self.assertRaisesRegex(
+                orders.SyncError,
+                "no CLOSED fulfillment-complete stage",
+            ):
+                production_orders.configure_production_order_pipeline("token")
+
+    def test_cancelled_stage_follows_live_portal_state(self) -> None:
+        """Regression: this portal currently reports Cancelled as OPEN."""
+
+        with patch.object(
+            orders,
+            "_http_json",
+            return_value=pipeline_document(
+                processed_state="CLOSED",
+                cancelled_state="OPEN",
+            ),
+        ):
+            production_orders.configure_production_order_pipeline("token")
+
+        self.assertEqual(production_orders._STAGE_IDS["processed"], "open-live")
+        self.assertEqual(production_orders._STAGE_IDS["cancelled"], "cancelled-live")
+        self.assertFalse(
+            production_orders._STAGE_EXPECTED_CLOSED["cancelled-live"]
+        )
+
+    def test_open_stage_must_really_be_open(self) -> None:
+        with patch.object(
+            orders,
+            "_http_json",
+            return_value=pipeline_document(open_state="CLOSED"),
+        ):
+            with self.assertRaisesRegex(orders.SyncError, "required OPEN"):
                 production_orders.configure_production_order_pipeline("token")
 
     def test_order_projection_writes_native_pipeline_and_stage(self) -> None:
@@ -291,7 +354,7 @@ class HubSpotOrderPipelineStageTests(unittest.TestCase):
             }
         }
         with patch.object(orders, "_http_json", return_value=response):
-            with self.assertRaisesRegex(orders.SyncError, "must be configured as CLOSED"):
+            with self.assertRaisesRegex(orders.SyncError, "changed lifecycle semantics"):
                 production_orders._validate_order_stage_state(
                     "token",
                     "order-1",
@@ -306,12 +369,48 @@ class HubSpotOrderPipelineStageTests(unittest.TestCase):
             }
         }
         with patch.object(orders, "_http_json", return_value=response):
-            with self.assertRaisesRegex(orders.SyncError, "must be configured as OPEN"):
+            with self.assertRaisesRegex(orders.SyncError, "changed lifecycle semantics"):
                 production_orders._validate_order_stage_state(
                     "token",
                     "order-1",
                     "stage-processed",
                 )
+
+    def test_cancelled_open_state_is_verified_without_forcing_closed(self) -> None:
+        production_orders._STAGE_EXPECTED_CLOSED["stage-cancelled"] = False
+        response = {
+            "properties": {
+                "hs_pipeline_stage": "stage-cancelled",
+                "hs_is_closed": "false",
+            }
+        }
+        with patch.object(orders, "_http_json", return_value=response):
+            production_orders._validate_order_stage_state(
+                "token",
+                "order-1",
+                "stage-cancelled",
+            )
+
+        self.assertIn("stage-cancelled", production_orders._VALIDATED_STAGE_IDS)
+
+    def test_unknown_pipeline_state_is_learned_from_first_persisted_write(self) -> None:
+        production_orders._STAGE_EXPECTED_CLOSED["stage-cancelled"] = None
+        response = {
+            "properties": {
+                "hs_pipeline_stage": "stage-cancelled",
+                "hs_is_closed": "false",
+            }
+        }
+        with patch.object(orders, "_http_json", return_value=response):
+            production_orders._validate_order_stage_state(
+                "token",
+                "order-1",
+                "stage-cancelled",
+            )
+
+        self.assertFalse(
+            production_orders._STAGE_EXPECTED_CLOSED["stage-cancelled"]
+        )
 
 
 if __name__ == "__main__":
