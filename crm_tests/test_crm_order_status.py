@@ -16,7 +16,7 @@ class HubSpotOrderStatusTests(unittest.TestCase):
         self.original_fields = orders.ORDER_FIELDS
         self.original_derivations = dict(orders.ORDER_FIELD_DERIVATIONS)
         self.original_defaults = dict(orders.DEFAULT_ORDER_FIELD_PROPERTIES)
-        production_orders.configure_order_status_mapping()
+        production_orders.configure_production_order_mapping()
 
     def tearDown(self) -> None:
         orders.ORDER_FIELDS = self.original_fields
@@ -174,11 +174,14 @@ class HubSpotOrderStatusTests(unittest.TestCase):
 class HubSpotShippingRecipientTests(unittest.TestCase):
     def setUp(self) -> None:
         self.original_fields = orders.ORDER_FIELDS
+        self.original_derivations = dict(orders.ORDER_FIELD_DERIVATIONS)
         self.original_defaults = dict(orders.DEFAULT_ORDER_FIELD_PROPERTIES)
-        production_orders.configure_shipping_recipient_mapping()
+        production_orders.configure_production_order_mapping()
 
     def tearDown(self) -> None:
         orders.ORDER_FIELDS = self.original_fields
+        orders.ORDER_FIELD_DERIVATIONS.clear()
+        orders.ORDER_FIELD_DERIVATIONS.update(self.original_derivations)
         orders.DEFAULT_ORDER_FIELD_PROPERTIES = self.original_defaults
 
     def test_shipping_recipient_uses_native_shipping_address_customer_name(self) -> None:

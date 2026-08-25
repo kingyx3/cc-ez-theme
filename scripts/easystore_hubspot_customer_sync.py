@@ -24,16 +24,18 @@ they describe when the HubSpot record was created or changed, not when the
 EasyStore customer was created or changed. Contacts do not expose writable native
 external-created/external-modified properties, so production writes the EasyStore
 source timestamps to explicit ``easystore_customer_created_at`` and
-``easystore_customer_modified_at`` properties instead. The legacy
-``easystore_customer_since`` destination is no longer written.
+``easystore_customer_modified_at`` properties instead. The retired
+``easystore_customer_since`` field is removed from the production field table
+before schema resolution, so the sync neither provisions nor writes it.
 
 HubSpot portals do not expose ``date_of_birth`` consistently: some type it as a
 CRM date while this portal exposes the native property as a writable string. The
 shared schema resolver deliberately requires exact storage types, so this
 entrypoint adapts only that known native property. A real EasyStore birth date is
 serialized as ``YYYY-MM-DD`` into native ``date_of_birth`` when HubSpot exposes it
-as a string, and the legacy ``easystore_customer_birthday`` fallback is not
-written on those runs. The shared resolver stays strict for every other field.
+as a string. In that case the custom ``easystore_customer_birthday`` fallback is
+removed before schema resolution as well, avoiding a property that production
+will never write. The shared resolver stays strict for every other field.
 
 The old machine-only EasyStore ``Click ID`` customer attribute is retired. It is
 filtered out of merchant-defined attributes here so it is neither provisioned nor
@@ -66,7 +68,7 @@ NATIVE_DATE_OF_BIRTH_PROPERTY = "date_of_birth"
 NATIVE_DATE_OF_BIRTH_SCHEMA_URL = (
     "https://api.hubapi.com/crm/v3/properties/contacts/date_of_birth"
 )
-LEGACY_CUSTOMER_SINCE_KEY = "customer_since"
+RETIRED_CONTACT_FIELD_KEYS = frozenset({"customer_since"})
 RETIRED_CLICK_ID_ATTRIBUTE_TITLES = frozenset(
     {
         "click id",
@@ -99,6 +101,7 @@ _BASE_ITER_HUBSPOT_CONTACTS = base.iter_hubspot_contacts
 _BASE_RESOLVE_CONTACT_FIELDS = base.resolve_contact_fields
 _BASE_CUSTOMER_PROPERTIES = base.customer_properties
 _BASE_CUSTOMER_ATTRIBUTES = base.customer_attributes
+_BASE_CONTACT_FIELDS = base.CONTACT_FIELDS
 _FALLBACK_CUSTOMER_IDS_USED: set[str] = set()
 _NATIVE_DOB_STRING = False
 
@@ -284,13 +287,22 @@ def native_date_of_birth_storage_type(access_token: str) -> str | None:
     return storage_type if storage_type in {"date", "string"} else None
 
 
-def _install_contact_source_date_fields() -> None:
-    existing = {field.key for field in base.CONTACT_FIELDS}
+def _install_contact_source_date_fields(native_dob_type: str | None = None) -> None:
+    retired = set(RETIRED_CONTACT_FIELD_KEYS)
+    if native_dob_type == "string":
+        # The base field requires a CRM-date destination and would otherwise
+        # provision easystore_customer_birthday before this entrypoint writes
+        # the same value to native date_of_birth as YYYY-MM-DD text.
+        retired.add("birthday")
+
+    production_fields = tuple(
+        field for field in _BASE_CONTACT_FIELDS if field.key not in retired
+    )
+    existing = {field.key for field in production_fields}
     additions = tuple(
         field for field in CONTACT_SOURCE_DATE_FIELDS if field.key not in existing
     )
-    if additions:
-        base.CONTACT_FIELDS = base.CONTACT_FIELDS + additions
+    base.CONTACT_FIELDS = production_fields + additions
 
 
 def resolve_contact_fields(
@@ -298,7 +310,7 @@ def resolve_contact_fields(
     attribute_labels: Iterable[str] = (),
     report: dict[str, Any] | None = None,
 ) -> dict[str, str]:
-    """Prefer explicit EasyStore source timestamps and ordinary merchant fields."""
+    """Resolve only fields that the production Customer sync can actually write."""
 
     adapted = dict(
         _BASE_RESOLVE_CONTACT_FIELDS(
@@ -307,10 +319,10 @@ def resolve_contact_fields(
             report,
         )
     )
-    adapted.pop(LEGACY_CUSTOMER_SINCE_KEY, None)
+    retired = set(RETIRED_CONTACT_FIELD_KEYS)
     if _NATIVE_DOB_STRING:
-        adapted.pop("birthday", None)
-    return adapted
+        retired.add("birthday")
+    return {key: value for key, value in adapted.items() if key not in retired}
 
 
 def customer_properties(
@@ -335,7 +347,7 @@ def customer_properties(
 def _install_refinements(native_dob_type: str | None = None) -> None:
     global _NATIVE_DOB_STRING
     _NATIVE_DOB_STRING = native_dob_type == "string"
-    _install_contact_source_date_fields()
+    _install_contact_source_date_fields(native_dob_type)
     base.NOTE_SOURCES = CUSTOMER_NOTE_SOURCES
     base.customer_note = customer_note
     base.customer_needs_detail = customer_needs_detail

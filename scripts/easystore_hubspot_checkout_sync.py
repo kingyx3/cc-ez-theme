@@ -5,13 +5,15 @@ HubSpot exposes one native Cart lifecycle field in this portal:
 ``hs_external_status`` (label: Status). It is the authoritative abandonment /
 recovery marker for the shopping session, so production writes only the
 normalized CRM states ``Abandoned`` and ``Recovered`` there. No EasyStore custom
-abandoned boolean or abandoned timestamp is provisioned or written.
+status, abandoned boolean or abandoned timestamp is provisioned or written.
 
 HubSpot also exposes native external source timestamps for Carts:
 ``hs_external_created_date`` (Created Date) and ``hs_external_modified_date``
 (Modified Date). Those properties carry EasyStore's own ``created_at`` and latest
 update timestamp. HubSpot's system ``hs_createdate`` / ``hs_lastmodifieddate``
-remain CRM metadata and are never treated as EasyStore source dates.
+remain CRM metadata and are never treated as EasyStore source dates. Production
+uses these native source-date fields directly instead of provisioning duplicate
+``easystore_cart_*`` date properties.
 
 Cart records remain associated to their Contact for history. When the checkout
 has become an EasyStore Order, the existing Cart→Order linker is also the point
@@ -50,20 +52,31 @@ def semantic_cart_status(checkout: dict[str, Any]) -> str:
 
 
 def _install_native_cart_source_date_fields() -> None:
-    """Use native HubSpot Cart status and external source timestamps only."""
+    """Keep production Cart lifecycle and source dates native-only."""
 
     updated: list[FieldSpec] = []
     found_modified = False
     for spec in commerce.cart_mapping.CART_FIELDS:
-        # HubSpot has no native Cart abandoned boolean or abandoned-at timestamp.
-        # Native hs_external_status is the sole abandonment/recovery marker.
         if spec.key in {"abandoned_at", "is_abandoned"}:
+            continue
+        if spec.key == "status":
+            updated.append(
+                spec._replace(
+                    native=(NATIVE_CART_STATUS_PROPERTY,),
+                    fallback=None,
+                    label="EasyStore Cart Status",
+                    description=(
+                        "Normalized checkout lifecycle state written to HubSpot's "
+                        "native external Cart status."
+                    ),
+                )
+            )
             continue
         if spec.key == "created_at":
             updated.append(
                 spec._replace(
                     native=(NATIVE_CART_CREATED_PROPERTY,),
-                    fallback="easystore_cart_created_at",
+                    fallback=None,
                     label="EasyStore Cart Started",
                 )
             )
@@ -79,7 +92,7 @@ def _install_native_cart_source_date_fields() -> None:
                         "last_activity_at",
                     ),
                     native=(NATIVE_CART_MODIFIED_PROPERTY,),
-                    fallback="easystore_cart_modified_at",
+                    fallback=None,
                     label="EasyStore Cart Modified",
                 )
             )
@@ -97,7 +110,6 @@ def _install_native_cart_source_date_fields() -> None:
                     "last_activity_at",
                 ),
                 native=(NATIVE_CART_MODIFIED_PROPERTY,),
-                fallback="easystore_cart_modified_at",
                 label="EasyStore Cart Modified",
                 description="Date and time the cart was last modified in EasyStore.",
                 kind="datetime",
@@ -138,10 +150,6 @@ def cart_properties_with_native_status(
         field_properties=field_properties,
         fallback_dial_code=fallback_dial_code,
     )
-    # Defensive cleanup for records mapped by older field tables: production no
-    # longer writes either EasyStore custom abandonment property.
-    properties.pop("easystore_cart_is_abandoned", None)
-    properties.pop("easystore_cart_abandoned_at", None)
     if field_properties.get("status") == NATIVE_CART_STATUS_PROPERTY:
         properties[NATIVE_CART_STATUS_PROPERTY] = semantic_cart_status(checkout)
     return properties
@@ -200,9 +208,6 @@ def main(argv: list[str] | None = None) -> int:
     # commerce imported these helpers by name, so patch its module globals before
     # the checkout entrypoint starts mapping Carts or resolving associations.
     _install_native_cart_source_date_fields()
-    # The admin reader previously forced EasyStore created_at into a custom
-    # property. Production now keeps native hs_external_created_date authoritative.
-    checkouts.admin_source._prefer_easystore_cart_started_property = lambda: None
     checkouts.admin_source.as_checkout = admin_checkout_with_source_dates
     orders.hubspot_contact_index = hubspot_contact_index
     commerce.hubspot_contact_index = hubspot_contact_index
