@@ -16,6 +16,9 @@ HUBSPOT_SHIPPING_ADDRESS_NAME = "hs_shipping_address_name"
 HUBSPOT_ORDER_PIPELINE = "hs_pipeline"
 HUBSPOT_ORDER_PIPELINE_STAGE = "hs_pipeline_stage"
 HUBSPOT_ORDER_IS_CLOSED = "hs_is_closed"
+HUBSPOT_ORDER_PIPELINES_URL = (
+    f"{orders.HUBSPOT_BASE}/crm/pipelines/2026-03/order"
+)
 
 ORDER_MODIFIED_SOURCES = (
     "updated_at",
@@ -48,8 +51,10 @@ FULFILLMENT_STATUS_SOURCES = (
 CANCELLED_STATUS_KEYS = {"cancelled", "canceled", "deleted"}
 FALSEY_CANCELLATION_KEYS = {"", "0", "false", "nil", "null", "none"}
 
-# The production portal has one HubSpot Order pipeline. Resolve the IDs from the
-# live property option set rather than hard-coding portal-generated UUIDs.
+# The production portal has one HubSpot Order pipeline. Resolve its IDs from the
+# Pipelines API rather than the hs_pipeline property definition: HubSpot treats
+# pipelines/stages as first-class CRM resources and property option visibility is
+# not an authoritative pipeline inventory.
 ORDER_STAGE_LABELS = {
     "open": "Open",
     "processed": "Processed",
@@ -205,76 +210,97 @@ def easystore_order_pipeline_stage(order: dict[str, Any]) -> str:
     return "open"
 
 
-def _visible_options(document: Any, property_name: str) -> list[dict[str, Any]]:
+def _active_pipeline_records(document: Any) -> list[dict[str, Any]]:
     if not isinstance(document, dict):
-        raise orders.SyncError(
-            f"HubSpot returned an invalid {property_name} property definition"
-        )
-    options = document.get("options")
-    if not isinstance(options, list):
-        raise orders.SyncError(
-            f"HubSpot property {property_name} returned no enumeration options"
-        )
+        raise orders.SyncError("HubSpot returned an invalid Order pipeline response")
+    results = document.get("results")
+    if not isinstance(results, list):
+        raise orders.SyncError("HubSpot Order Pipelines API returned no results list")
     return [
-        option
-        for option in options
-        if isinstance(option, dict) and not bool(option.get("hidden"))
+        pipeline
+        for pipeline in results
+        if isinstance(pipeline, dict) and not bool(pipeline.get("archived"))
     ]
 
 
-def _option_id_by_label(
-    options: list[dict[str, Any]],
+def _active_stage_by_label(
+    stages: Any,
     label: str,
-    property_name: str,
-) -> str:
+) -> dict[str, Any]:
+    if not isinstance(stages, list):
+        raise orders.SyncError("HubSpot Order pipeline returned no stages list")
     matches = [
-        nonempty(option.get("value"))
-        for option in options
-        if _status_key(option.get("label")) == _status_key(label)
+        stage
+        for stage in stages
+        if isinstance(stage, dict)
+        and not bool(stage.get("archived"))
+        and _status_key(stage.get("label")) == _status_key(label)
     ]
-    matches = [value for value in matches if value is not None]
     if len(matches) != 1:
         raise orders.SyncError(
-            f"HubSpot {property_name} must expose exactly one visible {label!r} "
-            f"option; found {len(matches)}."
+            f"HubSpot Order pipeline must expose exactly one active {label!r} "
+            f"stage; found {len(matches)}."
         )
+    if nonempty(matches[0].get("id")) is None:
+        raise orders.SyncError(f"HubSpot Order stage {label!r} has no ID")
     return matches[0]
 
 
+def _validate_pipeline_stage_metadata(
+    stage_key: str,
+    stage: dict[str, Any],
+) -> None:
+    """Check HubSpot's documented Order stage state when the API returns it."""
+
+    metadata = stage.get("metadata")
+    state = _status_key(metadata.get("state")) if isinstance(metadata, dict) else ""
+    if not state:
+        # The post-write hs_is_closed check below remains authoritative if an API
+        # response omits metadata for a stage.
+        return
+
+    expected_state = (
+        "closed" if stage_key in EXPECTED_CLOSED_STAGE_KEYS else "open"
+    )
+    if state != expected_state:
+        raise orders.SyncError(
+            f"HubSpot stage {ORDER_STAGE_LABELS[stage_key]!r} must be configured "
+            f"as {expected_state.upper()} for EasyStore Order lifecycle rollups; "
+            f"the Pipelines API reported metadata.state={state.upper()!r}."
+        )
+
+
 def configure_production_order_pipeline(access_token: str) -> None:
-    """Resolve the portal's Order pipeline/stage IDs from HubSpot's live schema."""
+    """Resolve the portal's Order pipeline/stage IDs from HubSpot's Pipelines API."""
 
     global _PIPELINE_ID, _STAGE_IDS
 
     headers = {"Authorization": f"Bearer {access_token}"}
-    pipeline_property = orders._http_json(
-        f"{orders.HUBSPOT_BASE}/crm/v3/properties/order/{HUBSPOT_ORDER_PIPELINE}",
+    document = orders._http_json(
+        HUBSPOT_ORDER_PIPELINES_URL,
         headers=headers,
     )
-    pipeline_options = _visible_options(pipeline_property, HUBSPOT_ORDER_PIPELINE)
-    if len(pipeline_options) != 1:
+    pipelines = _active_pipeline_records(document)
+    if len(pipelines) != 1:
         raise orders.SyncError(
-            "Production requires exactly one visible HubSpot Order pipeline so "
+            "Production requires exactly one active HubSpot Order pipeline so "
             "EasyStore states cannot be routed ambiguously; found "
-            f"{len(pipeline_options)}."
+            f"{len(pipelines)}."
         )
-    pipeline_id = nonempty(pipeline_options[0].get("value"))
-    if pipeline_id is None:
-        raise orders.SyncError("HubSpot Order pipeline option has no value")
 
-    stage_property = orders._http_json(
-        f"{orders.HUBSPOT_BASE}/crm/v3/properties/order/{HUBSPOT_ORDER_PIPELINE_STAGE}",
-        headers=headers,
-    )
-    stage_options = _visible_options(stage_property, HUBSPOT_ORDER_PIPELINE_STAGE)
-    stage_ids = {
-        key: _option_id_by_label(
-            stage_options,
-            label,
-            HUBSPOT_ORDER_PIPELINE_STAGE,
-        )
-        for key, label in ORDER_STAGE_LABELS.items()
-    }
+    pipeline = pipelines[0]
+    pipeline_id = nonempty(pipeline.get("id"))
+    if pipeline_id is None:
+        raise orders.SyncError("HubSpot Order pipeline has no ID")
+
+    stage_ids: dict[str, str] = {}
+    for stage_key, label in ORDER_STAGE_LABELS.items():
+        stage = _active_stage_by_label(pipeline.get("stages"), label)
+        _validate_pipeline_stage_metadata(stage_key, stage)
+        stage_id = nonempty(stage.get("id"))
+        if stage_id is None:
+            raise orders.SyncError(f"HubSpot Order stage {label!r} has no ID")
+        stage_ids[stage_key] = stage_id
 
     _PIPELINE_ID = pipeline_id
     _STAGE_IDS = stage_ids

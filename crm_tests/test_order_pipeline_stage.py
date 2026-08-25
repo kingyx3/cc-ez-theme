@@ -21,6 +21,55 @@ TEST_STAGE_IDS = {
 }
 
 
+def pipeline_document(
+    *,
+    pipeline_id: str = "pipeline-live",
+    pipeline_label: str = "Order Pipeline",
+    shipped_state: str = "CLOSED",
+) -> dict:
+    return {
+        "results": [
+            {
+                "id": pipeline_id,
+                "label": pipeline_label,
+                "archived": False,
+                "stages": [
+                    {
+                        "id": "open-live",
+                        "label": "Open",
+                        "archived": False,
+                        "metadata": {"state": "OPEN"},
+                    },
+                    {
+                        "id": "processed-live",
+                        "label": "Processed",
+                        "archived": False,
+                        "metadata": {"state": "OPEN"},
+                    },
+                    {
+                        "id": "shipped-live",
+                        "label": "Shipped",
+                        "archived": False,
+                        "metadata": {"state": shipped_state},
+                    },
+                    {
+                        "id": "delivered-live",
+                        "label": "Delivered",
+                        "archived": False,
+                        "metadata": {"state": "CLOSED"},
+                    },
+                    {
+                        "id": "cancelled-live",
+                        "label": "Cancelled",
+                        "archived": False,
+                        "metadata": {"state": "CLOSED"},
+                    },
+                ],
+            }
+        ]
+    }
+
+
 class HubSpotOrderPipelineStageTests(unittest.TestCase):
     def setUp(self) -> None:
         self.original_pipeline_id = production_orders._PIPELINE_ID
@@ -87,49 +136,18 @@ class HubSpotOrderPipelineStageTests(unittest.TestCase):
                 }
             )
 
-    def test_live_schema_resolves_pipeline_and_stage_ids_by_label(self) -> None:
-        pipeline_property = {
-            "options": [
-                {
-                    "label": "Order Pipeline",
-                    "value": "pipeline-live",
-                    "hidden": False,
-                }
-            ]
-        }
-        stage_property = {
-            "options": [
-                {"label": "Open", "value": "open-live", "hidden": False},
-                {
-                    "label": "Processed",
-                    "value": "processed-live",
-                    "hidden": False,
-                },
-                {
-                    "label": "Shipped",
-                    "value": "shipped-live",
-                    "hidden": False,
-                },
-                {
-                    "label": "Delivered",
-                    "value": "delivered-live",
-                    "hidden": False,
-                },
-                {
-                    "label": "Cancelled",
-                    "value": "cancelled-live",
-                    "hidden": False,
-                },
-            ]
-        }
-
+    def test_pipeline_api_resolves_pipeline_and_stage_ids_by_label(self) -> None:
         with patch.object(
             orders,
             "_http_json",
-            side_effect=[pipeline_property, stage_property],
-        ):
+            return_value=pipeline_document(),
+        ) as request:
             production_orders.configure_production_order_pipeline("token")
 
+        request.assert_called_once_with(
+            production_orders.HUBSPOT_ORDER_PIPELINES_URL,
+            headers={"Authorization": "Bearer token"},
+        )
         self.assertEqual(production_orders._PIPELINE_ID, "pipeline-live")
         self.assertEqual(
             production_orders._STAGE_IDS,
@@ -142,18 +160,56 @@ class HubSpotOrderPipelineStageTests(unittest.TestCase):
             },
         )
 
-    def test_multiple_visible_order_pipelines_are_rejected(self) -> None:
+    def test_property_option_visibility_is_not_used_for_pipeline_discovery(self) -> None:
+        """Regression for prod run 32854309344: hs_pipeline showed 0 visible options."""
+
         with patch.object(
             orders,
             "_http_json",
-            return_value={
-                "options": [
-                    {"label": "Order Pipeline", "value": "one"},
-                    {"label": "Other Pipeline", "value": "two"},
-                ]
-            },
+            return_value=pipeline_document(),
+        ) as request:
+            production_orders.configure_production_order_pipeline("token")
+
+        requested_url = request.call_args.args[0]
+        self.assertIn("/crm/pipelines/2026-03/order", requested_url)
+        self.assertNotIn("/properties/order/", requested_url)
+
+    def test_multiple_active_order_pipelines_are_rejected(self) -> None:
+        response = pipeline_document()
+        response["results"].append(
+            {
+                "id": "pipeline-two",
+                "label": "Other Pipeline",
+                "archived": False,
+                "stages": [],
+            }
+        )
+        with patch.object(orders, "_http_json", return_value=response):
+            with self.assertRaisesRegex(orders.SyncError, "exactly one active"):
+                production_orders.configure_production_order_pipeline("token")
+
+    def test_archived_pipeline_is_ignored(self) -> None:
+        response = pipeline_document()
+        response["results"].append(
+            {
+                "id": "pipeline-old",
+                "label": "Old Pipeline",
+                "archived": True,
+                "stages": [],
+            }
+        )
+        with patch.object(orders, "_http_json", return_value=response):
+            production_orders.configure_production_order_pipeline("token")
+
+        self.assertEqual(production_orders._PIPELINE_ID, "pipeline-live")
+
+    def test_pipeline_metadata_must_match_expected_closed_state(self) -> None:
+        with patch.object(
+            orders,
+            "_http_json",
+            return_value=pipeline_document(shipped_state="OPEN"),
         ):
-            with self.assertRaisesRegex(orders.SyncError, "exactly one visible"):
+            with self.assertRaisesRegex(orders.SyncError, "must be configured as CLOSED"):
                 production_orders.configure_production_order_pipeline("token")
 
     def test_order_projection_writes_native_pipeline_and_stage(self) -> None:
