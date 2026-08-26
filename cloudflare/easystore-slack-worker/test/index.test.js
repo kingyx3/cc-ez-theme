@@ -10,13 +10,13 @@ import {
   deliverToSlack,
   getSlackMinimumIntervalMs,
   isTopicAllowed,
-  makeQueueSafeEvent,
   normalizeEvent,
   renderOrderUrl,
   retryDelaySeconds,
   validateSlackWebhookUrl,
   verifyEasyStoreSignature,
 } from "../src/index.js";
+import { makeQueueSafeMessage } from "../src/production.js";
 
 const representativePayloads = {
   app: { app: { id: 7, name: "Cardboard Connector" } },
@@ -177,17 +177,17 @@ test("bounds normalized queue messages well below Cloudflare's 128 KB limit", ()
       line_items: items,
     },
   }, { topic: "order/create", shopDomain: huge, eventId: "f".repeat(64) });
-  const queued = makeQueueSafeEvent(event);
-  const bytes = new TextEncoder().encode(JSON.stringify({
+  const queued = makeQueueSafeMessage({
     schemaVersion: 1,
-    eventId: queued.eventId,
+    eventId: event.eventId,
     enqueuedAt: new Date().toISOString(),
-    topic: queued.topic,
-    shopDomain: queued.shopDomain,
-    event: queued,
-  })).byteLength;
+    topic: event.topic,
+    shopDomain: event.shopDomain,
+    event,
+  });
+  const bytes = new TextEncoder().encode(JSON.stringify(queued)).byteLength;
 
-  assert.equal(queued.order.items.length, 25);
+  assert.equal(queued.event.order.items.length, 25);
   assert.ok(bytes < 64 * 1024, `queue payload was ${bytes} bytes`);
 });
 
