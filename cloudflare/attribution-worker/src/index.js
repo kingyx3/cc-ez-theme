@@ -1,18 +1,31 @@
 const CHANNELS = Object.freeze({
   ca: Object.freeze({ source: "carousell", medium: "marketplace" }),
   fb: Object.freeze({ source: "facebook", medium: "social" }),
+  gg: Object.freeze({ source: "google", medium: "cpc" }),
   ig: Object.freeze({ source: "instagram", medium: "social" }),
+  li: Object.freeze({ source: "linkedin", medium: "social" }),
   tt: Object.freeze({ source: "tiktok", medium: "social" }),
   wa: Object.freeze({ source: "whatsapp", medium: "messaging" }),
   em: Object.freeze({ source: "email", medium: "email" }),
   qr: Object.freeze({ source: "qr", medium: "offline" }),
 });
 
+const AD_CLICK_PARAMETERS = Object.freeze({
+  gclid: "google",
+  gbraid: "google",
+  wbraid: "google",
+  fbclid: "facebook",
+  ttclid: "tiktok",
+  li_fat_id: "linkedin",
+});
+
 const MAX_LABEL_LENGTH = 100;
+const MAX_AD_CLICK_ID_LENGTH = 1024;
 const CLICK_COOKIE = "cb_click_id";
 const CLICK_COOKIE_MAX_AGE = 60 * 60 * 24 * 90;
 const CLICK_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CUSTOMER_ID = /^\d{1,32}$/;
+const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/;
 
 const AUTOMATED_USER_AGENT =
   /bot\b|crawler|crawling|spider|slurp|fetcher|preview|facebookexternalhit|whatsapp|telegram|slackbot|twitterbot|discordbot|embedly|pinterest|linkedinbot|skypeuripreview|applebot|bingpreview|curl\/|wget\/|python-requests|go-http-client|okhttp|java\/|libwww-perl|headlesschrome|phantomjs|lighthouse|pingdom|uptimerobot|monitoring/i;
@@ -56,6 +69,7 @@ export default {
     const clickedAt = Date.now();
     const country = String(request.cf?.country || "");
     const botReason = automatedReason(request);
+    const adClickIds = captureAdClickIdentifiers(url);
 
     if (request.method === "GET") {
       if (env.ANALYTICS) {
@@ -85,6 +99,7 @@ export default {
             country,
             clickedAt,
             botReason,
+            adClickIds,
           }).catch((error) => {
             console.error(
               JSON.stringify({
@@ -104,6 +119,9 @@ export default {
     destination.searchParams.set("utm_campaign", campaign);
     destination.searchParams.set("utm_content", content);
     destination.searchParams.set("cb_click_id", clickId);
+    for (const { parameter, identifier } of adClickIds) {
+      destination.searchParams.set(parameter, identifier);
+    }
 
     return new Response(null, {
       status: 302,
@@ -134,6 +152,26 @@ function trackingRoute(url, env) {
     content: sanitizeContent(url.searchParams.get("content"), code),
     to: safeDestinationPath(url.searchParams.get("to")),
   };
+}
+
+export function captureAdClickIdentifiers(url) {
+  const captured = [];
+  for (const [parameter, network] of Object.entries(AD_CLICK_PARAMETERS)) {
+    const identifier = url.searchParams.get(parameter);
+    if (!validAdClickIdentifier(identifier)) continue;
+    captured.push({ network, parameter, identifier });
+  }
+  return captured;
+}
+
+function validAdClickIdentifier(value) {
+  if (value === null || value === undefined) return false;
+  const text = String(value);
+  return (
+    text.length > 0 &&
+    text.length <= MAX_AD_CLICK_ID_LENGTH &&
+    !CONTROL_CHARACTERS.test(text)
+  );
 }
 
 export function sanitizeCampaign(value) {
@@ -327,4 +365,19 @@ async function recordClick(db, click) {
       click.content,
     )
     .run();
+
+  for (const { network, parameter, identifier } of click.adClickIds || []) {
+    await db
+      .prepare(
+        `INSERT INTO source_click_identifiers (
+          click_id,
+          network,
+          parameter,
+          identifier
+        ) VALUES (?, ?, ?, ?)
+        ON CONFLICT(click_id, parameter) DO NOTHING`,
+      )
+      .bind(click.clickId, network, parameter, identifier)
+      .run();
+  }
 }
