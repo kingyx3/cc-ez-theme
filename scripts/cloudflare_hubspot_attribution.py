@@ -1,18 +1,24 @@
 #!/usr/bin/env python3
-"""Attribute HubSpot Contacts from Cloudflare customer touch history.
+"""Sync Cloudflare attribution and native ad click identifiers to HubSpot Contacts.
 
-Click UUIDs are transport keys inside Cloudflare only. They are not copied through
-an EasyStore customer attribute and are not stored on HubSpot Contacts.
+The Worker UUID remains an internal transport key inside Cloudflare. It is never
+copied through EasyStore and is never stored on a HubSpot Contact.
 
-The storefront binds each tracked click to the logged-in EasyStore ``customer.id``
-in append-only D1 ``customer_touches`` history. The Customer sync separately writes
-the immutable EasyStore customer ID and source creation timestamp to HubSpot. This
-stage joins those two trusted facts and chooses the latest human tracked click that
-happened before account creation and inside the configured attribution window.
+The storefront binds each tracked Worker click to the logged-in EasyStore
+``customer.id`` in append-only D1 ``customer_touches`` history. This stage uses
+that history for two independent jobs:
 
-A Contact acquisition is immutable once a real acquisition snapshot exists. A
-Contact with no eligible touch may carry ``no_recent_tracked_touch`` and can be
-upgraded on a later run if the browser binds the pre-signup touch after registration.
+* Contact acquisition: choose the latest human tracked touch before account
+  creation inside the configured attribution window. Once attributed, this
+  marketing snapshot is immutable.
+* Advertising identity: choose the latest bound vendor click identifier for each
+  supported ad network and copy it into HubSpot's native conversion-compatible
+  Contact property when that property is writable. These values are rolling and
+  are not locked by the Contact acquisition snapshot.
+
+Google ``gbraid`` and ``wbraid`` are preserved in D1 and forwarded to the
+storefront but are not written into ``hs_google_click_id`` because that native
+property represents GCLID specifically.
 
 Only Python's standard library is used so the scheduled workflow has no runtime
 package dependency.
@@ -120,6 +126,77 @@ FIELDS: tuple[FieldSpec, ...] = (
     ),
 )
 
+# The click-ID destinations intentionally have no custom fallback: a custom
+# property cannot substitute for HubSpot's native conversion matching fields.
+AD_CLICK_FIELDS: tuple[FieldSpec, ...] = (
+    FieldSpec(
+        key="google_click_id",
+        native=("hs_google_click_id",),
+        label="Google Click ID",
+        description="Latest bound Google Ads GCLID.",
+    ),
+    FieldSpec(
+        key="facebook_click_id",
+        native=("hs_facebook_click_id",),
+        label="Facebook Click ID",
+        description="Latest bound Meta/Facebook FBCLID.",
+    ),
+    FieldSpec(
+        key="tiktok_click_id",
+        native=("hs_tiktok_click_id",),
+        label="TikTok click id",
+        description="Latest bound TikTok TTCLID.",
+    ),
+    FieldSpec(
+        key="linkedin_click_id",
+        native=("hs_linkedin_click_id",),
+        label="LinkedIn click id",
+        description="Latest bound LinkedIn li_fat_id.",
+    ),
+)
+
+# Companion timestamps make our API writes monotonic and stop an older D1 touch
+# from overwriting a newer value on a retry. They also let us preserve a native
+# HubSpot value whose origin/timestamp is unknown instead of guessing.
+AD_CLICK_TIMESTAMP_FIELDS: tuple[FieldSpec, ...] = (
+    FieldSpec(
+        key="google_click_at",
+        fallback="cc_google_click_at",
+        label="Google click time",
+        description="Cloudflare click time for the GCLID last written by this integration.",
+        kind="datetime",
+    ),
+    FieldSpec(
+        key="facebook_click_at",
+        fallback="cc_facebook_click_at",
+        label="Facebook click time",
+        description="Cloudflare click time for the FBCLID last written by this integration.",
+        kind="datetime",
+    ),
+    FieldSpec(
+        key="tiktok_click_at",
+        fallback="cc_tiktok_click_at",
+        label="TikTok click time",
+        description="Cloudflare click time for the TTCLID last written by this integration.",
+        kind="datetime",
+    ),
+    FieldSpec(
+        key="linkedin_click_at",
+        fallback="cc_linkedin_click_at",
+        label="LinkedIn click time",
+        description="Cloudflare click time for the li_fat_id last written by this integration.",
+        kind="datetime",
+    ),
+)
+
+AD_CLICK_SYNC_FIELDS = AD_CLICK_FIELDS + AD_CLICK_TIMESTAMP_FIELDS
+AD_CLICK_PARAMETER_FIELDS: dict[str, tuple[str, str]] = {
+    "gclid": ("google_click_id", "google_click_at"),
+    "fbclid": ("facebook_click_id", "facebook_click_at"),
+    "ttclid": ("tiktok_click_id", "tiktok_click_at"),
+    "li_fat_id": ("linkedin_click_id", "linkedin_click_at"),
+}
+
 LOCK_KEYS = ("source", "medium", "campaign", "content", "path", "country", "clicked_at")
 
 
@@ -189,7 +266,7 @@ def fetch_customer_touches(
     latest_signup_at: int,
     window_days: int,
 ) -> tuple[dict[str, list[dict[str, Any]]], int]:
-    """Fetch human click history for candidate customers in bounded D1 batches.
+    """Fetch human click history for acquisition candidates in bounded batches.
 
     ``bound_at`` is deliberately not required to precede account creation. A new
     account may bind its already-existing browser touch on the first authenticated
@@ -236,6 +313,59 @@ def fetch_customer_touches(
     return dict(by_customer), queries
 
 
+def fetch_customer_ad_clicks(
+    *,
+    account_id: str,
+    api_token: str,
+    database_id: str,
+    customer_ids: list[str],
+) -> tuple[dict[str, list[dict[str, Any]]], int]:
+    """Fetch only the newest supported vendor click ID per customer/parameter."""
+
+    by_customer: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    queries = 0
+
+    for batch in chunked(sorted(set(customer_ids)), D1_BATCH_SIZE):
+        placeholders = ", ".join("?" for _ in batch)
+        rows = d1_query(
+            account_id=account_id,
+            api_token=api_token,
+            database_id=database_id,
+            sql=f"""
+              WITH ranked AS (
+                SELECT
+                  ct.customer_id,
+                  ct.bound_at,
+                  sci.parameter,
+                  sci.identifier,
+                  sc.clicked_at,
+                  ROW_NUMBER() OVER (
+                    PARTITION BY ct.customer_id, sci.parameter
+                    ORDER BY sc.clicked_at DESC, ct.bound_at DESC
+                  ) AS row_number
+                FROM customer_touches AS ct
+                JOIN source_clicks AS sc ON sc.click_id = ct.click_id
+                JOIN source_click_identifiers AS sci ON sci.click_id = sc.click_id
+                WHERE ct.customer_id IN ({placeholders})
+                  AND sci.parameter IN ('gclid', 'fbclid', 'ttclid', 'li_fat_id')
+                  AND COALESCE(sc.bot, 0) = 0
+              )
+              SELECT customer_id, bound_at, parameter, identifier, clicked_at
+              FROM ranked
+              WHERE row_number = 1
+              ORDER BY customer_id, parameter
+            """,
+            params=[*batch],
+        )
+        queries += 1
+        for row in rows:
+            customer_id = nonempty(row.get("customer_id"))
+            if customer_id is not None:
+                by_customer[customer_id].append(row)
+
+    return dict(by_customer), queries
+
+
 def latest_touch_before_signup(
     touches: list[dict[str, Any]],
     *,
@@ -258,6 +388,88 @@ def latest_touch_before_signup(
         eligible,
         key=lambda touch: (int(touch["clicked_at"]), int(touch.get("bound_at") or 0)),
     )
+
+
+def latest_ad_clicks(
+    rows: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """Return the newest D1 row for every HubSpot-supported vendor parameter."""
+
+    latest: dict[str, tuple[tuple[int, int], dict[str, Any]]] = {}
+    for row in rows:
+        parameter = str(row.get("parameter") or "")
+        if parameter not in AD_CLICK_PARAMETER_FIELDS:
+            continue
+        identifier = row.get("identifier")
+        if identifier is None or str(identifier) == "":
+            continue
+        try:
+            clicked_at = int(row.get("clicked_at"))
+            bound_at = int(row.get("bound_at"))
+        except (TypeError, ValueError):
+            continue
+        rank = (clicked_at, bound_at)
+        current = latest.get(parameter)
+        if current is None or rank > current[0]:
+            latest[parameter] = (rank, row)
+    return {parameter: value[1] for parameter, value in latest.items()}
+
+
+def ad_click_property_changes(
+    rows: list[dict[str, Any]],
+    *,
+    existing: dict[str, Any],
+    field_properties: dict[str, str],
+) -> tuple[dict[str, str], list[str], list[str]]:
+    """Build monotonic native click-ID updates.
+
+    If HubSpot already carries a different native click ID and this integration
+    has no companion timestamp for it, preserve the native value rather than
+    guessing that the D1 value is newer.
+    """
+
+    changes: dict[str, str] = {}
+    updated_parameters: list[str] = []
+    preserved_parameters: list[str] = []
+
+    for parameter, row in latest_ad_clicks(rows).items():
+        id_key, at_key = AD_CLICK_PARAMETER_FIELDS[parameter]
+        id_property = field_properties.get(id_key)
+        at_property = field_properties.get(at_key)
+        if id_property is None or at_property is None:
+            continue
+
+        identifier = str(row["identifier"])
+        try:
+            clicked_at = int(row["clicked_at"])
+        except (TypeError, ValueError):
+            continue
+
+        current_raw = existing.get(id_property)
+        current_id = None if current_raw is None or str(current_raw) == "" else str(current_raw)
+        current_at = epoch_millis(existing.get(at_property))
+
+        if current_at is None:
+            if current_id is None:
+                changes[id_property] = identifier
+                changes[at_property] = str(clicked_at)
+                updated_parameters.append(parameter)
+            elif current_id == identifier:
+                changes[at_property] = str(clicked_at)
+                updated_parameters.append(parameter)
+            else:
+                preserved_parameters.append(parameter)
+            continue
+
+        if clicked_at > current_at:
+            changes[id_property] = identifier
+            changes[at_property] = str(clicked_at)
+            updated_parameters.append(parameter)
+        elif clicked_at == current_at and current_id is None:
+            changes[id_property] = identifier
+            updated_parameters.append(parameter)
+
+    return changes, updated_parameters, preserved_parameters
 
 
 def iter_hubspot_contacts(
@@ -364,6 +576,9 @@ def sync(
         "contacts_already_attributed": 0,
         "contacts_with_eligible_touch": 0,
         "contacts_without_recent_tracked_touch": 0,
+        "contacts_with_native_ad_click_updates": 0,
+        "native_ad_click_ids_updated_by_parameter": {},
+        "native_ad_click_ids_preserved_without_timestamp": {},
     }
 
     schema = property_schema(
@@ -373,21 +588,26 @@ def sync(
         error=SyncError,
         optional=True,
     )
-    if schema is not None:
-        missing = [
-            name
-            for name in (CUSTOMER_ID_PROPERTY, CUSTOMER_CREATED_AT_PROPERTY)
-            if name not in schema
-        ]
-        if missing:
-            summary["attribution_status"] = "missing_customer_source_properties"
-            summary["missing_hubspot_contact_properties"] = missing
-            print(
-                "WARNING: Contact acquisition skipped because the Customer sync has "
-                "not provisioned: " + ", ".join(missing),
-                file=sys.stderr,
-            )
-            return summary
+    if schema is not None and CUSTOMER_ID_PROPERTY not in schema:
+        summary["attribution_status"] = "missing_customer_source_properties"
+        summary["missing_hubspot_contact_properties"] = [CUSTOMER_ID_PROPERTY]
+        print(
+            "WARNING: Cloudflare Contact sync skipped because the Customer sync has "
+            f"not provisioned: {CUSTOMER_ID_PROPERTY}",
+            file=sys.stderr,
+        )
+        return summary
+
+    acquisition_enabled = schema is None or CUSTOMER_CREATED_AT_PROPERTY in schema
+    if not acquisition_enabled:
+        summary["acquisition_status"] = "missing_customer_created_at_property"
+        summary["missing_hubspot_contact_properties"] = [CUSTOMER_CREATED_AT_PROPERTY]
+        print(
+            "WARNING: Contact acquisition skipped because the Customer sync has "
+            f"not provisioned: {CUSTOMER_CREATED_AT_PROPERTY}. Native ad click ID "
+            "sync will still run.",
+            file=sys.stderr,
+        )
 
     schema_report: dict[str, Any] = {}
     field_properties = resolve_fields(
@@ -411,12 +631,47 @@ def sync(
         file=sys.stderr,
     )
 
+    ad_schema_report: dict[str, Any] = {}
+    ad_field_properties = resolve_fields(
+        http_json=_http_json,
+        access_token=hubspot_access_token,
+        object_type=CONTACT_OBJECT_TYPE,
+        fields=AD_CLICK_SYNC_FIELDS,
+        error=SyncError,
+        report=ad_schema_report,
+        group=PROPERTY_GROUP,
+        group_label=PROPERTY_GROUP_LABEL,
+    )
+    summary["hubspot_ad_click_field_properties"] = {
+        field.key: ad_field_properties[field.key]
+        for field in AD_CLICK_SYNC_FIELDS
+        if field.key in ad_field_properties
+    }
+    missing_native = [
+        field.native[0]
+        for field in AD_CLICK_FIELDS
+        if field.key not in ad_field_properties and field.native
+    ]
+    if missing_native:
+        summary["unwritable_or_missing_native_ad_click_properties"] = missing_native
+        print(
+            "WARNING: HubSpot did not expose writable native ad click properties: "
+            + ", ".join(missing_native),
+            file=sys.stderr,
+        )
+    print(
+        "Native ad click fields mapped to HubSpot properties: "
+        + describe_mapping(summary["hubspot_ad_click_field_properties"]),
+        file=sys.stderr,
+    )
+
     requested = (
         CUSTOMER_ID_PROPERTY,
         CUSTOMER_CREATED_AT_PROPERTY,
         *tuple(field_properties.values()),
+        *tuple(ad_field_properties.values()),
     )
-    candidates: list[dict[str, Any]] = []
+    contacts: list[dict[str, Any]] = []
     owners: dict[str, list[str]] = defaultdict(list)
 
     for contact in iter_hubspot_contacts(hubspot_access_token, requested):
@@ -432,14 +687,15 @@ def sync(
             continue
         owners[customer_id].append(contact_id)
 
-        signup_at = epoch_millis(properties.get(CUSTOMER_CREATED_AT_PROPERTY))
-        if signup_at is None:
+        signup_at = (
+            epoch_millis(properties.get(CUSTOMER_CREATED_AT_PROPERTY))
+            if acquisition_enabled
+            else None
+        )
+        if acquisition_enabled and signup_at is None:
             summary["contacts_missing_customer_created_at"] += 1
-            continue
-        if acquisition_locked(properties, field_properties):
-            summary["contacts_already_attributed"] += 1
-            continue
-        candidates.append(
+
+        contacts.append(
             {
                 "contact_id": contact_id,
                 "customer_id": customer_id,
@@ -455,21 +711,31 @@ def sync(
         summary["contacts_with_duplicate_easystore_customer_id"] = sum(
             len(set(owners[customer_id])) for customer_id in duplicate_customer_ids
         )
-        candidates = [
-            candidate
-            for candidate in candidates
-            if candidate["customer_id"] not in duplicate_customer_ids
-        ]
+    unique_contacts = [
+        contact
+        for contact in contacts
+        if contact["customer_id"] not in duplicate_customer_ids
+    ]
+
+    acquisition_candidates: list[dict[str, Any]] = []
+    if acquisition_enabled:
+        for contact in unique_contacts:
+            if contact["signup_at"] is None:
+                continue
+            if acquisition_locked(contact["properties"], field_properties):
+                summary["contacts_already_attributed"] += 1
+                continue
+            acquisition_candidates.append(contact)
 
     touches_by_customer: dict[str, list[dict[str, Any]]] = {}
     d1_queries = 0
-    if candidates:
-        signup_times = [int(candidate["signup_at"]) for candidate in candidates]
+    if acquisition_candidates:
+        signup_times = [int(candidate["signup_at"]) for candidate in acquisition_candidates]
         touches_by_customer, d1_queries = fetch_customer_touches(
             account_id=account_id,
             api_token=api_token,
             database_id=database_id,
-            customer_ids=[str(candidate["customer_id"]) for candidate in candidates],
+            customer_ids=[str(candidate["customer_id"]) for candidate in acquisition_candidates],
             earliest_signup_at=min(signup_times),
             latest_signup_at=max(signup_times),
             window_days=window_days,
@@ -477,11 +743,25 @@ def sync(
     summary["d1_queries"] = d1_queries
     summary["customers_with_touch_history"] = len(touches_by_customer)
 
-    updates: list[dict[str, Any]] = []
+    ad_clicks_by_customer: dict[str, list[dict[str, Any]]] = {}
+    ad_d1_queries = 0
+    if unique_contacts and any(
+        field.key in ad_field_properties for field in AD_CLICK_FIELDS
+    ):
+        ad_clicks_by_customer, ad_d1_queries = fetch_customer_ad_clicks(
+            account_id=account_id,
+            api_token=api_token,
+            database_id=database_id,
+            customer_ids=[str(contact["customer_id"]) for contact in unique_contacts],
+        )
+    summary["d1_ad_click_queries"] = ad_d1_queries
+    summary["customers_with_ad_click_history"] = len(ad_clicks_by_customer)
+
+    updates_by_contact: dict[str, dict[str, str]] = defaultdict(dict)
     by_source: Counter[str] = Counter()
     by_campaign: Counter[str] = Counter()
 
-    for candidate in candidates:
+    for candidate in acquisition_candidates:
         touch = latest_touch_before_signup(
             touches_by_customer.get(str(candidate["customer_id"]), []),
             signup_at=int(candidate["signup_at"]),
@@ -504,16 +784,44 @@ def sync(
             for key, value in desired.items()
             if str(existing.get(key) or "") != str(value)
         }
-        if changed:
-            updates.append({"id": candidate["contact_id"], "properties": changed})
+        updates_by_contact[candidate["contact_id"]].update(changed)
 
+    updated_parameters: Counter[str] = Counter()
+    preserved_parameters: Counter[str] = Counter()
+    for contact in unique_contacts:
+        changes, updated, preserved = ad_click_property_changes(
+            ad_clicks_by_customer.get(str(contact["customer_id"]), []),
+            existing=contact["properties"],
+            field_properties=ad_field_properties,
+        )
+        if changes:
+            summary["contacts_with_native_ad_click_updates"] += 1
+            updates_by_contact[contact["contact_id"]].update(changes)
+        updated_parameters.update(updated)
+        preserved_parameters.update(preserved)
+
+    updates = [
+        {"id": contact_id, "properties": properties}
+        for contact_id, properties in updates_by_contact.items()
+        if properties
+    ]
     _batch_write(hubspot_access_token, "update", updates)
     summary["contacts_updated"] = len(updates)
+    summary["native_ad_click_ids_updated_by_parameter"] = dict(
+        updated_parameters.most_common()
+    )
+    summary["native_ad_click_ids_preserved_without_timestamp"] = dict(
+        preserved_parameters.most_common()
+    )
     summary["attributed_by_source"] = dict(by_source.most_common())
     summary["attributed_by_campaign"] = dict(by_campaign.most_common())
-    summary["attribution_status"] = "complete"
-    if schema_report.get("hints"):
-        summary["hubspot_contact_property_hints"] = schema_report["hints"]
+    summary["attribution_status"] = (
+        "complete" if acquisition_enabled else "native_ad_click_sync_complete"
+    )
+    hints = dict(schema_report.get("hints") or {})
+    hints.update(ad_schema_report.get("hints") or {})
+    if hints:
+        summary["hubspot_contact_property_hints"] = hints
     return summary
 
 
