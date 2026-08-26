@@ -1,4 +1,4 @@
-name: Deploy Cloudflare EasyStore Slack Worker
+name: EasyStore Slack Worker CI & Deploy
 
 on:
   pull_request:
@@ -6,13 +6,13 @@ on:
       - main
     paths:
       - "cloudflare/easystore-slack-worker/**"
-      - ".github/workflows/deploy-cloudflare-easystore-slack-worker.yml"
+      - ".github/workflows/easystore-slack-worker-ci-deploy.yml"
   push:
     branches:
       - main
     paths:
       - "cloudflare/easystore-slack-worker/**"
-      - ".github/workflows/deploy-cloudflare-easystore-slack-worker.yml"
+      - ".github/workflows/easystore-slack-worker-ci-deploy.yml"
   workflow_dispatch:
 
 permissions:
@@ -60,7 +60,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     concurrency:
-      group: cloudflare-easystore-slack-production
+      group: cloudflare-easystore-slack-production-v2
       cancel-in-progress: false
 
     defaults:
