@@ -13,6 +13,7 @@ import test from "node:test";
 
 import worker, {
   automatedReason,
+  captureAdClickIdentifiers,
   clickCookie,
   cookieDomain,
   sanitizeCampaign,
@@ -60,7 +61,7 @@ function fakeAnalytics() {
 function makeRequest(path, { method = "GET", headers = {}, cf = {} } = {}) {
   return {
     method,
-    url: new URL(path, "https://cardboard.sg").toString(),
+    url: new URL(path, "https://go.cardboard.sg").toString(),
     headers: new Headers({ "user-agent": BROWSER_USER_AGENT, ...headers }),
     cf: { country: "SG", ...cf },
   };
@@ -112,6 +113,16 @@ function d1Row(write) {
   };
 }
 
+function sourceWrite(db) {
+  return db.writes.find((write) => write.sql.includes("INSERT INTO source_clicks"));
+}
+
+function identifierWrites(db) {
+  return db.writes.filter((write) =>
+    write.sql.includes("INSERT INTO source_click_identifiers"),
+  );
+}
+
 test("a tracked click redirects to the store with UTMs and the click id", async () => {
   const response = await invoke(makeRequest("/go/fb"));
 
@@ -154,6 +165,10 @@ test("each channel code maps to its own source and medium", async () => {
   const expected = {
     ca: ["carousell", "marketplace"],
     fb: ["facebook", "social"],
+    gg: ["google", "cpc"],
+    ig: ["instagram", "social"],
+    li: ["linkedin", "social"],
+    tt: ["tiktok", "social"],
     wa: ["whatsapp", "messaging"],
     qr: ["qr", "offline"],
   };
@@ -161,7 +176,7 @@ test("each channel code maps to its own source and medium", async () => {
   for (const [code, [source, medium]] of Object.entries(expected)) {
     const db = fakeDatabase();
     await invoke(makeRequest(`/go/${code}`), { db });
-    const row = d1Row(db.writes[0]);
+    const row = d1Row(sourceWrite(db));
     assert.equal(row.source, source);
     assert.equal(row.medium, medium);
     assert.equal(row.path, `/go/${code}`);
@@ -178,12 +193,74 @@ test("an uppercase channel code and a trailing slash still resolve", async () =>
   );
 });
 
+test("native ad click ids are preserved, forwarded, and stored separately", async () => {
+  const db = fakeDatabase();
+  const response = await invoke(
+    makeRequest(
+      "/gg?campaign=search&content=brand&to=/collections/test" +
+        "&gclid=Google-AbC_123&gbraid=GBRAID-CaSe&wbraid=WBRAID-CaSe",
+    ),
+    { db },
+  );
+
+  const location = new URL(response.headers.get("location"));
+  assert.equal(location.pathname, "/collections/test");
+  assert.equal(location.searchParams.get("gclid"), "Google-AbC_123");
+  assert.equal(location.searchParams.get("gbraid"), "GBRAID-CaSe");
+  assert.equal(location.searchParams.get("wbraid"), "WBRAID-CaSe");
+
+  const writes = identifierWrites(db);
+  assert.equal(writes.length, 3);
+  const byParameter = Object.fromEntries(
+    writes.map((write) => [write.values[2], write.values]),
+  );
+  assert.equal(byParameter.gclid[1], "google");
+  assert.equal(byParameter.gclid[3], "Google-AbC_123");
+  assert.equal(byParameter.gbraid[3], "GBRAID-CaSe");
+  assert.equal(byParameter.wbraid[3], "WBRAID-CaSe");
+  assert.equal(byParameter.gclid[0], d1Row(sourceWrite(db)).clickId);
+});
+
+test("facebook tiktok and linkedin click ids pass through unchanged", async () => {
+  const db = fakeDatabase();
+  const response = await invoke(
+    makeRequest(
+      "/fb?fbclid=FB.Case&ttclid=TT.Case&li_fat_id=LI.Case&campaign=mixed",
+    ),
+    { db },
+  );
+  const location = new URL(response.headers.get("location"));
+  assert.equal(location.searchParams.get("fbclid"), "FB.Case");
+  assert.equal(location.searchParams.get("ttclid"), "TT.Case");
+  assert.equal(location.searchParams.get("li_fat_id"), "LI.Case");
+
+  const networkByParameter = Object.fromEntries(
+    identifierWrites(db).map((write) => [write.values[2], write.values[1]]),
+  );
+  assert.deepEqual(networkByParameter, {
+    fbclid: "facebook",
+    ttclid: "tiktok",
+    li_fat_id: "linkedin",
+  });
+});
+
+test("invalid ad click identifiers are ignored rather than truncated", () => {
+  const url = new URL("https://go.cardboard.sg/gg");
+  url.searchParams.set("gclid", "x".repeat(1025));
+  url.searchParams.set("fbclid", "bad\u0001value");
+  url.searchParams.set("ttclid", "TikTok-OK");
+
+  assert.deepEqual(captureAdClickIdentifiers(url), [
+    { network: "tiktok", parameter: "ttclid", identifier: "TikTok-OK" },
+  ]);
+});
+
 test("a real click is written to D1 as human traffic", async () => {
   const db = fakeDatabase();
   await invoke(makeRequest("/go/fb?campaign=Ju1y%20Sale!"), { db });
 
   assert.equal(db.writes.length, 1);
-  const row = d1Row(db.writes[0]);
+  const row = d1Row(sourceWrite(db));
   assert.equal(row.campaign, "ju1y-sale");
   assert.equal(row.country, "SG");
   assert.equal(row.bot, 0);
@@ -201,7 +278,7 @@ test("a WhatsApp link preview is recorded, flagged, and still redirected", async
   // The crawler needs the destination to draw its card, so it is not refused.
   assert.equal(response.status, 302);
   // And the row survives, so the raw count stays complete and auditable.
-  const row = d1Row(db.writes[0]);
+  const row = d1Row(sourceWrite(db));
   assert.equal(row.bot, 1);
   assert.equal(row.botReason, "user-agent");
 });
@@ -213,7 +290,7 @@ test("a browser prefetch is flagged by its own announcement", async () => {
     { db },
   );
 
-  assert.equal(d1Row(db.writes[0]).botReason, "prefetch");
+  assert.equal(d1Row(sourceWrite(db)).botReason, "prefetch");
 });
 
 test("a Cloudflare verified bot is flagged even with a browser user agent", async () => {
@@ -223,7 +300,7 @@ test("a Cloudflare verified bot is flagged even with a browser user agent", asyn
     { db },
   );
 
-  assert.equal(d1Row(db.writes[0]).botReason, "verified-bot");
+  assert.equal(d1Row(sourceWrite(db)).botReason, "verified-bot");
 });
 
 test("analytics engine gets the same facts including the bot dimension", async () => {
@@ -319,14 +396,14 @@ test("campaign sanitisation keeps a usable label and never an empty one", () => 
 test("a blank campaign parameter falls back to the configured default", async () => {
   const db = fakeDatabase();
   await invoke(makeRequest("/go/fb?campaign="), { db });
-  assert.equal(d1Row(db.writes[0]).campaign, "always-on");
+  assert.equal(d1Row(sourceWrite(db)).campaign, "always-on");
 
   const configured = fakeDatabase();
   await invoke(makeRequest("/go/fb"), {
     db: configured,
     env: { STORE_URL: "https://cardboard.sg/", DEFAULT_CAMPAIGN: "spring" },
   });
-  assert.equal(d1Row(configured.writes[0]).campaign, "spring");
+  assert.equal(d1Row(sourceWrite(configured)).campaign, "spring");
 });
 
 test("a missing STORE_URL and DEFAULT_CAMPAIGN fall back to production values", async () => {
