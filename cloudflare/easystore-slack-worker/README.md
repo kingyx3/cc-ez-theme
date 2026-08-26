@@ -61,6 +61,8 @@ npm run check
 npx wrangler deploy
 ```
 
+The repository also includes `.github/workflows/deploy-cloudflare-easystore-slack-worker.yml`. Pull requests validate the Worker and run a Wrangler dry-run; pushes to `main` deploy using the repository's `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets. Worker secrets (`SLACK_WEBHOOK_URL` and `EASYSTORE_APP_SECRET`) still need to be set once on the deployed Worker.
+
 Wrangler will print the deployed `workers.dev` hostname. Configure EasyStore to POST to:
 
 ```text
