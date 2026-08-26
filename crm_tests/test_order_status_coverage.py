@@ -14,13 +14,14 @@ import easystore_hubspot_orders as orders
 
 
 class EasyStoreOrderStatusCoverageTests(unittest.TestCase):
-    def test_iterator_reads_open_cancelled_and_archived_and_deduplicates(self) -> None:
+    def test_iterator_reads_all_statuses_and_deduplicates(self) -> None:
         by_status = {
             "open": [{"id": 1, "status": "open"}, {"id": 2, "status": "open"}],
             "cancelled": [{"id": 3, "status": "cancelled"}],
             # Deliberately overlap id=2 to prove a transient API overlap cannot
             # cause the same HubSpot Order to be processed twice.
             "archived": [{"id": 2, "status": "archived"}, {"id": 4, "status": "archived"}],
+            "deleted": [{"id": 5, "status": "deleted"}],
         }
         requested_statuses: list[str] = []
 
@@ -49,10 +50,11 @@ class EasyStoreOrderStatusCoverageTests(unittest.TestCase):
             requested_statuses,
             list(production_orders.EASYSTORE_SYNC_ORDER_STATUSES),
         )
-        self.assertEqual([str(order["id"]) for order in found], ["1", "2", "3", "4"])
-
-    def test_deleted_orders_are_not_recreated(self) -> None:
-        self.assertNotIn("deleted", production_orders.EASYSTORE_SYNC_ORDER_STATUSES)
+        self.assertEqual(
+            production_orders.EASYSTORE_SYNC_ORDER_STATUSES,
+            ("open", "cancelled", "archived", "deleted"),
+        )
+        self.assertEqual([str(order["id"]) for order in found], ["1", "2", "3", "4", "5"])
 
     def test_main_installs_complete_iterator_only_for_the_run(self) -> None:
         original_iterator = orders.iter_easystore_orders
