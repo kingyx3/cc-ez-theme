@@ -1,7 +1,7 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "cc-easystore-slack",
-  "main": "src/index.js",
+  "main": "src/production.js",
   "compatibility_date": "2026-08-26",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
@@ -11,7 +11,28 @@
   },
   "vars": {
     "STORE_LABEL": "Cardboard",
-    "MAX_BODY_BYTES": "262144",
-    "SLACK_TIMEOUT_MS": "7000"
+    "MAX_BODY_BYTES": "1048576",
+    "SLACK_TIMEOUT_MS": "5000",
+    "SLACK_MODE": "incoming_webhook",
+    "ALLOWED_TOPICS": "app/uninstall,store/update,product/create,product/update,product/delete,customer/create,customer/delete,order/create,order/update,order/paid,order/cancel,order/partially_paid,fulfillment/create,fulfillment/update,fulfillment/cancel,refund/create,channel/inventory_update"
+  },
+  "queues": {
+    "producers": [
+      {
+        "binding": "OUTBOUND_QUEUE",
+        "queue": "cc-easystore-slack-events"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "cc-easystore-slack-events",
+        "max_batch_size": 1,
+        "max_batch_timeout": 1,
+        "max_retries": 8,
+        "dead_letter_queue": "cc-easystore-slack-dlq",
+        "max_concurrency": 1,
+        "retry_delay": 30
+      }
+    ]
   }
 }
