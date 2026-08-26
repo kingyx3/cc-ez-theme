@@ -1,5 +1,6 @@
 name: EasyStore Slack Worker CI & Deploy
 
+# Fresh workflow identity/concurrency key intentionally avoids the retired legacy workflow's stale queued runs.
 on:
   pull_request:
     branches:
