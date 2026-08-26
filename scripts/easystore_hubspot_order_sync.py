@@ -2,8 +2,8 @@
 """Production Order sync entrypoint with complete EasyStore status coverage.
 
 EasyStore's Orders API exposes terminal orders through status-specific collections.
-Production queries the non-deleted collections explicitly so cancelled and archived
-orders cannot disappear from later HubSpot lifecycle runs.
+Production queries every documented lifecycle collection explicitly so cancelled,
+archived, and deleted orders cannot disappear from later HubSpot lifecycle runs.
 
 The portal-specific HubSpot mapping stays in ``easystore_hubspot_order_sync_impl``.
 This stable entrypoint installs the complete source iterator only while ``main``
@@ -19,21 +19,20 @@ from urllib.parse import urlencode
 import easystore_hubspot_orders as orders
 
 
-# ``deleted`` is intentionally excluded. A source-deleted order should not be
-# silently recreated as a live CRM commerce record. Cancelled orders remain
-# auditable and archived orders remain part of purchase history, so both must be
-# included alongside the default/open collection.
-EASYSTORE_SYNC_ORDER_STATUSES = ("open", "cancelled", "archived")
+# EasyStore documents four Order-list lifecycle buckets. Query all of them so
+# production reconciliation has complete source visibility, including records
+# that EasyStore marks deleted.
+EASYSTORE_SYNC_ORDER_STATUSES = ("open", "cancelled", "archived", "deleted")
 
 
 def iter_easystore_orders_all_statuses(
     store_domain: str,
     access_token: str,
 ) -> Iterator[dict[str, Any]]:
-    """Yield every non-deleted EasyStore Order exactly once.
+    """Yield every EasyStore Order across all documented status buckets exactly once.
 
     EasyStore documents ``status`` as an Orders-list filter. Production data has
-    shown that relying on the unfiltered collection can omit cancelled orders, so
+    shown that relying on the unfiltered collection can omit terminal orders, so
     each lifecycle bucket is paginated explicitly. De-duplication by immutable
     EasyStore order ID protects the sync if the API ever overlaps buckets while an
     order is transitioning between states.
@@ -87,7 +86,7 @@ _impl.iter_easystore_orders_all_statuses = iter_easystore_orders_all_statuses
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run the existing production sync against all non-deleted Order buckets."""
+    """Run the existing production sync against every EasyStore Order bucket."""
 
     previous_iterator = orders.iter_easystore_orders
     orders.iter_easystore_orders = iter_easystore_orders_all_statuses
