@@ -24,6 +24,10 @@ concurrency:
     github.event.pull_request.number || 'production' }}
   cancel-in-progress: false
 
+env:
+  PRIMARY_QUEUE: cc-easystore-slack-events
+  DEAD_LETTER_QUEUE: cc-easystore-slack-dlq
+
 jobs:
   validate:
     name: Validate Worker
@@ -56,10 +60,11 @@ jobs:
         run: npx wrangler deploy --dry-run
 
   deploy:
-    name: Deploy Worker
+    name: Provision queues and deploy Worker
     if: github.event_name != 'pull_request'
     needs: validate
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     defaults:
       run:
@@ -94,13 +99,31 @@ jobs:
       - name: Install Worker dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Validate Worker JavaScript
-        run: npm run check
+      - name: Re-run validation before production deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run check
+          npm test
+          npx wrangler deploy --dry-run
 
-      - name: Run Worker behaviour tests
-        run: npm test
+      - name: Ensure production queues exist
+        shell: bash
+        run: |
+          set -euo pipefail
+          ensure_queue() {
+            local queue_name="$1"
+            if npx wrangler queues info "${queue_name}" >/dev/null 2>&1; then
+              echo "Queue ${queue_name} already exists."
+            else
+              echo "Creating queue ${queue_name}..."
+              npx wrangler queues create "${queue_name}"
+            fi
+          }
+          ensure_queue "${PRIMARY_QUEUE}"
+          ensure_queue "${DEAD_LETTER_QUEUE}"
 
-      - name: Deploy Worker
+      - name: Deploy Worker with queue bindings
         run: npm run deploy
 
       - name: Write deployment summary
@@ -113,6 +136,12 @@ jobs:
             echo "- Worker: \`cc-easystore-slack\`"
             echo "- Source commit: \`${GITHUB_SHA}\`"
             echo "- Worker deployment: successful"
-            echo "- Webhook path: \`/webhooks/easystore\`"
+            echo "- EasyStore endpoint: \`/webhooks/easystore\`"
+            echo "- Liveness: \`/health\`"
+            echo "- Readiness: \`/ready\`"
+            echo "- Queue: \`${PRIMARY_QUEUE}\`"
+            echo "- Dead-letter queue: \`${DEAD_LETTER_QUEUE}\`"
             echo "- Required Worker secrets: \`SLACK_WEBHOOK_URL\`, \`EASYSTORE_APP_SECRET\`"
+            echo
+            echo "> The Cloudflare API token must include Workers Scripts edit and Queues edit permissions."
           } >> "${GITHUB_STEP_SUMMARY}"
