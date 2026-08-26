@@ -1,0 +1,118 @@
+name: Deploy Cloudflare EasyStore Slack Worker
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "cloudflare/easystore-slack-worker/**"
+      - ".github/workflows/deploy-cloudflare-easystore-slack-worker.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "cloudflare/easystore-slack-worker/**"
+      - ".github/workflows/deploy-cloudflare-easystore-slack-worker.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: >-
+    cloudflare-easystore-slack-${{ github.event_name == 'pull_request' &&
+    github.event.pull_request.number || 'production' }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate Worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        working-directory: cloudflare/easystore-slack-worker
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - name: Install Worker dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Validate Worker JavaScript
+        run: npm run check
+
+      - name: Run Worker behaviour tests
+        run: npm test
+
+      - name: Validate Wrangler deployment bundle
+        run: npx wrangler deploy --dry-run
+
+  deploy:
+    name: Deploy Worker
+    if: github.event_name != 'pull_request'
+    needs: validate
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: cloudflare/easystore-slack-worker
+
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - name: Check Cloudflare credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${CLOUDFLARE_API_TOKEN}" ]]; then
+            echo "::error::Repository secret CLOUDFLARE_API_TOKEN is not configured."
+            exit 1
+          fi
+          if [[ -z "${CLOUDFLARE_ACCOUNT_ID}" ]]; then
+            echo "::error::Repository secret CLOUDFLARE_ACCOUNT_ID is not configured."
+            exit 1
+          fi
+
+      - name: Install Worker dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Validate Worker JavaScript
+        run: npm run check
+
+      - name: Run Worker behaviour tests
+        run: npm test
+
+      - name: Deploy Worker
+        run: npm run deploy
+
+      - name: Write deployment summary
+        if: success()
+        shell: bash
+        run: |
+          {
+            echo "### Cloudflare EasyStore → Slack Worker"
+            echo
+            echo "- Worker: \`cc-easystore-slack\`"
+            echo "- Source commit: \`${GITHUB_SHA}\`"
+            echo "- Worker deployment: successful"
+            echo "- Webhook path: \`/webhooks/easystore\`"
+            echo "- Required Worker secrets: \`SLACK_WEBHOOK_URL\`, \`EASYSTORE_APP_SECRET\`"
+          } >> "${GITHUB_STEP_SUMMARY}"

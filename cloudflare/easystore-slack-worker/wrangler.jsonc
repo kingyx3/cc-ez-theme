@@ -1,0 +1,17 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "cc-easystore-slack",
+  "main": "src/index.js",
+  "compatibility_date": "2026-08-26",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "vars": {
+    "STORE_LABEL": "Cardboard",
+    "MAX_BODY_BYTES": "262144",
+    "SLACK_TIMEOUT_MS": "7000"
+  }
+}
