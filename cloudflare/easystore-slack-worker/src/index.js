@@ -1,9 +1,13 @@
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-const DEFAULT_MAX_BODY_BYTES = 256 * 1024;
-const DEFAULT_SLACK_TIMEOUT_MS = 7000;
+const DEFAULT_MAX_BODY_BYTES = 1024 * 1024;
+const DEFAULT_SLACK_TIMEOUT_MS = 5000;
 const DEFAULT_SLACK_MODE = "incoming_webhook";
+const MAX_RETRY_DELAY_SECONDS = 3600;
+const INCOMING_WEBHOOK_INTERVAL_MS = 1100;
+// Slack's developer rate-limit table currently lists webhook workflow triggers at 10/minute.
+const WORKFLOW_WEBHOOK_INTERVAL_MS = 6500;
 
 export const SUPPORTED_TOPICS = Object.freeze([
   "app/uninstall",
@@ -51,27 +55,36 @@ export default {
     const requestId = crypto.randomUUID();
 
     if (request.method === "GET" && url.pathname === "/health") {
+      return jsonResponse({ ok: true, service: "cc-easystore-slack", version: 2 }, 200, requestId);
+    }
+
+    if (request.method === "GET" && url.pathname === "/ready") {
+      const problems = readinessProblems(env);
       return jsonResponse({
-        ok: true,
+        ok: problems.length === 0,
         service: "cc-easystore-slack",
         supportedTopics: SUPPORTED_TOPICS.length,
-        slackMode: normalizeSlackMode(env.SLACK_MODE),
-      }, 200, requestId);
+        slackMode: safeSlackMode(env.SLACK_MODE),
+        problems,
+      }, problems.length === 0 ? 200 : 503, requestId);
     }
 
     if (request.method !== "POST" || url.pathname !== "/webhooks/easystore") {
       return jsonResponse({ ok: false, error: "not_found" }, 404, requestId);
     }
 
+    if (!isJsonContentType(request.headers.get("content-type"))) {
+      return jsonResponse({ ok: false, error: "unsupported_media_type" }, 415, requestId);
+    }
+
     try {
-      requireConfig(env);
+      requireWebhookConfig(env);
       const maxBodyBytes = parsePositiveInteger(env.MAX_BODY_BYTES, DEFAULT_MAX_BODY_BYTES);
       const rawBody = await readBodyWithLimit(request, maxBodyBytes);
       const signature = request.headers.get("EasyStore-Hmac-SHA256") ?? request.headers.get("Easystore-Hmac-Sha256");
-      const verified = await verifyEasyStoreSignature(rawBody, signature ?? "", env.EASYSTORE_APP_SECRET);
 
-      if (!verified) {
-        console.warn(JSON.stringify({ event: "easystore_webhook_rejected", requestId, reason: "invalid_hmac" }));
+      if (!await verifyEasyStoreSignature(rawBody, signature ?? "", env.EASYSTORE_APP_SECRET)) {
+        log("warn", "easystore_webhook_rejected", { requestId, reason: "invalid_hmac" });
         return jsonResponse({ ok: false, error: "invalid_hmac" }, 401, requestId);
       }
 
@@ -87,69 +100,169 @@ export default {
         request.headers.get("EasyStore-Topic") ??
         firstString(payload?.topic, payload?.event, payload?.type),
       );
-      const shopDomain =
-        request.headers.get("Easystore-Shop-Domain") ??
-        request.headers.get("EasyStore-Shop-Domain") ??
-        firstString(payload?.shop_domain, payload?.shop?.domain, payload?.store?.domain);
+      const shopDomain = firstString(
+        request.headers.get("Easystore-Shop-Domain"),
+        request.headers.get("EasyStore-Shop-Domain"),
+        payload?.shop_domain,
+        payload?.shop?.domain,
+        payload?.store?.domain,
+      );
 
       if (!isTopicAllowed(topic, env.ALLOWED_TOPICS)) {
-        console.log(JSON.stringify({ event: "easystore_webhook_ignored", requestId, topic: topic || null, shopDomain: shopDomain || null }));
+        log("info", "easystore_webhook_ignored", { requestId, topic: topic || null, shopDomain: shopDomain || null });
         return jsonResponse({ ok: true, ignored: true }, 200, requestId);
       }
 
+      const eventId = await computeEventId(rawBody, topic, shopDomain);
       const normalized = normalizeEvent(payload, {
         topic,
         shopDomain,
         storeLabel: env.STORE_LABEL,
         orderUrlTemplate: env.ORDER_URL_TEMPLATE,
         productUrlTemplate: env.PRODUCT_URL_TEMPLATE,
+        eventId,
       });
-      const slackMode = normalizeSlackMode(env.SLACK_MODE);
-      const slackPayload = slackMode === "workflow" ? buildSlackWorkflowPayload(normalized) : buildSlackPayload(normalized);
-      const timeoutMs = parsePositiveInteger(env.SLACK_TIMEOUT_MS, DEFAULT_SLACK_TIMEOUT_MS);
-      const slackResponse = await postToSlack(env.SLACK_WEBHOOK_URL, slackPayload, timeoutMs);
+      await env.OUTBOUND_QUEUE.send({
+        schemaVersion: 1,
+        eventId,
+        enqueuedAt: new Date().toISOString(),
+        topic,
+        shopDomain,
+        event: normalized,
+      });
 
-      if (!slackResponse.ok) {
-        console.error(JSON.stringify({
-          event: "slack_delivery_failed",
-          requestId,
-          status: slackResponse.status,
-          topic: normalized.topic || null,
-          resourceType: normalized.resource.type || null,
-          resourceId: normalized.resource.id || null,
-        }));
-        return jsonResponse({ ok: false, error: "slack_delivery_failed" }, 502, requestId);
-      }
-
-      console.log(JSON.stringify({
-        event: "easystore_webhook_delivered",
+      log("info", "easystore_webhook_queued", {
         requestId,
-        topic: normalized.topic || null,
-        shopDomain: normalized.shopDomain || null,
+        eventId,
+        topic,
+        shopDomain: shopDomain || null,
         resourceType: normalized.resource.type || null,
         resourceId: normalized.resource.id || null,
-        slackMode,
-      }));
-      return jsonResponse({ ok: true }, 200, requestId);
+      });
+      return jsonResponse({ ok: true, queued: true, eventId }, 200, requestId);
     } catch (error) {
-      if (error instanceof BodyTooLargeError) return jsonResponse({ ok: false, error: "payload_too_large" }, 413, requestId);
+      if (error instanceof BodyTooLargeError) {
+        return jsonResponse({ ok: false, error: "payload_too_large" }, 413, requestId);
+      }
       const message = error instanceof Error ? error.message : String(error);
-      console.error(JSON.stringify({ event: "easystore_webhook_error", requestId, message }));
+      log("error", "easystore_webhook_error", { requestId, message });
       return jsonResponse({ ok: false, error: "internal_error" }, 500, requestId);
+    }
+  },
+
+  async queue(batch, env) {
+    for (const message of batch.messages) {
+      const slackMode = normalizeSlackMode(env.SLACK_MODE);
+      const intervalMs = getSlackMinimumIntervalMs(slackMode);
+      try {
+        requireDeliveryConfig(env, slackMode);
+        const body = validateQueueMessage(message.body);
+        const slackPayload = slackMode === "workflow"
+          ? buildSlackWorkflowPayload(body.event)
+          : buildSlackPayload(body.event);
+        const delivery = await deliverToSlack(
+          env.SLACK_WEBHOOK_URL,
+          slackPayload,
+          slackMode,
+          parsePositiveInteger(env.SLACK_TIMEOUT_MS, DEFAULT_SLACK_TIMEOUT_MS),
+        );
+
+        if (delivery.ok) {
+          message.ack();
+          log("info", "slack_delivery_succeeded", {
+            queueMessageId: message.id,
+            eventId: body.eventId,
+            topic: body.topic,
+            resourceType: body.event.resource.type || null,
+            resourceId: body.event.resource.id || null,
+            slackMode,
+            status: delivery.status,
+            attempt: message.attempts,
+          });
+        } else {
+          const delaySeconds = delivery.retryAfterSeconds || retryDelaySeconds(message.attempts, delivery.status);
+          message.retry({ delaySeconds });
+          log("warn", "slack_delivery_retry", {
+            queueMessageId: message.id,
+            eventId: body.eventId,
+            topic: body.topic,
+            slackMode,
+            status: delivery.status,
+            attempt: message.attempts,
+            delaySeconds,
+          });
+        }
+      } catch (error) {
+        const delaySeconds = retryDelaySeconds(message.attempts, 0);
+        message.retry({ delaySeconds });
+        log("error", "slack_delivery_error", {
+          queueMessageId: message.id,
+          attempt: message.attempts,
+          delaySeconds,
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+
+      // max_concurrency=1 plus one-message batches and this pacing keeps Slack calls serialized.
+      await sleep(intervalMs);
     }
   },
 };
 
-function requireConfig(env) {
-  if (!env.SLACK_WEBHOOK_URL) throw new Error("Missing SLACK_WEBHOOK_URL secret");
-  if (!env.EASYSTORE_APP_SECRET) throw new Error("Missing EASYSTORE_APP_SECRET secret");
+function readinessProblems(env) {
+  const problems = [];
+  if (!env?.EASYSTORE_APP_SECRET) problems.push("missing_easystore_app_secret");
+  if (!env?.SLACK_WEBHOOK_URL) problems.push("missing_slack_webhook_url");
+  if (!env?.OUTBOUND_QUEUE?.send) problems.push("missing_outbound_queue_binding");
+  try {
+    const mode = normalizeSlackMode(env?.SLACK_MODE);
+    if (env?.SLACK_WEBHOOK_URL) validateSlackWebhookUrl(env.SLACK_WEBHOOK_URL, mode);
+  } catch {
+    problems.push("invalid_slack_configuration");
+  }
+  return problems;
+}
+
+function requireWebhookConfig(env) {
+  if (!env?.EASYSTORE_APP_SECRET) throw new Error("Missing EASYSTORE_APP_SECRET secret");
+  if (!env?.OUTBOUND_QUEUE?.send) throw new Error("Missing OUTBOUND_QUEUE binding");
   normalizeSlackMode(env.SLACK_MODE);
 }
 
-function normalizeSlackMode(value) {
+function requireDeliveryConfig(env, mode) {
+  if (!env?.SLACK_WEBHOOK_URL) throw new Error("Missing SLACK_WEBHOOK_URL secret");
+  validateSlackWebhookUrl(env.SLACK_WEBHOOK_URL, mode);
+}
+
+function safeSlackMode(value) {
+  try { return normalizeSlackMode(value); } catch { return "invalid"; }
+}
+
+export function normalizeSlackMode(value) {
   const mode = firstString(value, DEFAULT_SLACK_MODE).toLowerCase();
   if (!["incoming_webhook", "workflow"].includes(mode)) throw new Error(`Unsupported SLACK_MODE: ${mode}`);
   return mode;
+}
+
+export function getSlackMinimumIntervalMs(mode) {
+  return normalizeSlackMode(mode) === "workflow" ? WORKFLOW_WEBHOOK_INTERVAL_MS : INCOMING_WEBHOOK_INTERVAL_MS;
+}
+
+export function validateSlackWebhookUrl(value, mode) {
+  let url;
+  try { url = new URL(value); } catch { throw new Error("SLACK_WEBHOOK_URL is not a valid URL"); }
+  if (url.protocol !== "https:" || url.hostname !== "hooks.slack.com") {
+    throw new Error("SLACK_WEBHOOK_URL must use https://hooks.slack.com");
+  }
+  const expectedPrefix = normalizeSlackMode(mode) === "workflow" ? "/triggers/" : "/services/";
+  if (!url.pathname.startsWith(expectedPrefix)) {
+    throw new Error(`SLACK_WEBHOOK_URL path must start with ${expectedPrefix} for ${normalizeSlackMode(mode)} mode`);
+  }
+  return url.toString();
+}
+
+function isJsonContentType(value) {
+  return firstString(value).toLowerCase().split(";", 1)[0].trim() === "application/json";
 }
 
 async function readBodyWithLimit(request, maxBytes) {
@@ -184,18 +297,35 @@ async function readBodyWithLimit(request, maxBytes) {
 
 export async function verifyEasyStoreSignature(rawBody, providedSignature, secret) {
   if (!providedSignature || !secret) return false;
+  const normalizedSignature = providedSignature.trim();
   const key = await crypto.subtle.importKey("raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  const signature = await crypto.subtle.sign("HMAC", key, rawBody);
-  const expectedHex = bytesToHex(new Uint8Array(signature));
+  const signature = new Uint8Array(await crypto.subtle.sign("HMAC", key, rawBody));
+  const isHex = /^[a-fA-F0-9]{64}$/.test(normalizedSignature);
+  const provided = isHex ? normalizedSignature.toLowerCase() : normalizedSignature;
+  const expected = isHex ? bytesToHex(signature) : bytesToBase64(signature);
   const [providedHash, expectedHash] = await Promise.all([
-    crypto.subtle.digest("SHA-256", encoder.encode(providedSignature.trim().toLowerCase())),
-    crypto.subtle.digest("SHA-256", encoder.encode(expectedHex)),
+    crypto.subtle.digest("SHA-256", encoder.encode(provided)),
+    crypto.subtle.digest("SHA-256", encoder.encode(expected)),
   ]);
   return crypto.subtle.timingSafeEqual(providedHash, expectedHash);
 }
 
+export async function computeEventId(rawBody, topic, shopDomain) {
+  const prefix = encoder.encode(`${normalizeTopic(topic)}\n${firstString(shopDomain).toLowerCase()}\n`);
+  const input = new Uint8Array(prefix.length + rawBody.length);
+  input.set(prefix, 0);
+  input.set(rawBody, prefix.length);
+  return bytesToHex(new Uint8Array(await crypto.subtle.digest("SHA-256", input)));
+}
+
 function bytesToHex(bytes) {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function bytesToBase64(bytes) {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
 }
 
 function parsePositiveInteger(value, fallback) {
@@ -224,7 +354,7 @@ export function normalizeEvent(payload, options = {}) {
   const resource = normalizeResource(profile.kind, payload, order, { shopDomain, productUrlTemplate: options.productUrlTemplate });
   const fields = buildEventFields(profile.kind, payload, order, resource, { shopDomain, storeLabel });
   const heading = buildHeading(profile, order, resource);
-  return { topic, kind: profile.kind, heading, shopDomain, storeLabel, resource, order, fields };
+  return { topic, kind: profile.kind, heading, shopDomain, storeLabel, resource, order, fields, eventId: firstString(options.eventId) };
 }
 
 function normalizeOrder(payload, options = {}) {
@@ -245,28 +375,15 @@ function normalizeOrder(payload, options = {}) {
     joinName(order?.shipping_address?.first_name, order?.shipping_address?.last_name),
   );
   const shippingMethod = firstString(
-    order?.shipping_method?.title,
-    order?.shipping_method?.name,
-    order?.shipping_line?.title,
-    order?.shipping_line?.name,
-    order?.shipping_lines?.[0]?.title,
-    order?.shipping_lines?.[0]?.name,
-    order?.delivery_method,
-    order?.delivery_name,
+    order?.shipping_method?.title, order?.shipping_method?.name,
+    order?.shipping_line?.title, order?.shipping_line?.name,
+    order?.shipping_lines?.[0]?.title, order?.shipping_lines?.[0]?.name,
+    order?.delivery_method, order?.delivery_name,
   );
-  const items = findLineItems(order, payload).map(normalizeLineItem).filter((item) => item.name);
+  const rawItems = findLineItems(order, payload);
+  const items = rawItems.slice(0, 25).map(normalizeLineItem).filter((item) => item.name);
   return {
-    id,
-    number,
-    currency,
-    total,
-    paid,
-    due,
-    paymentStatus,
-    fulfillmentStatus,
-    customer,
-    shippingMethod,
-    items,
+    id, number, currency, total, paid, due, paymentStatus, fulfillmentStatus, customer, shippingMethod, items, itemCount: rawItems.length,
     url: renderUrlTemplate(options.orderUrlTemplate, { id, order_number: number, shop: options.shopDomain }),
   };
 }
@@ -279,8 +396,7 @@ function normalizeResource(kind, payload, order, options = {}) {
     const product = findResource(payload, "product");
     const id = firstString(product?.id, product?.product_id, payload?.product_id);
     return {
-      type: "product",
-      id,
+      type: "product", id,
       name: firstString(product?.title, product?.name, product?.product_title, product?.handle, id),
       sku: firstString(product?.sku, product?.variants?.[0]?.sku),
       inventory: firstString(product?.inventory_quantity, product?.quantity, product?.variants?.[0]?.inventory_quantity),
@@ -300,10 +416,7 @@ function normalizeResource(kind, payload, order, options = {}) {
       type: "fulfillment",
       id: firstString(fulfillment?.id, fulfillment?.fulfillment_id, payload?.fulfillment_id),
       name: firstString(fulfillment?.name, fulfillment?.tracking_number, order.number ? `Order #${order.number}` : ""),
-      url: order.url,
-      sku: "",
-      inventory: "",
-      status: firstString(fulfillment?.status, fulfillment?.fulfillment_status),
+      url: order.url, sku: "", inventory: "", status: firstString(fulfillment?.status, fulfillment?.fulfillment_status),
       trackingCompany: firstString(fulfillment?.tracking_company, fulfillment?.carrier, fulfillment?.shipping_company),
       trackingNumber: firstString(fulfillment?.tracking_number, fulfillment?.tracking_no, fulfillment?.tracking_code),
     };
@@ -311,14 +424,9 @@ function normalizeResource(kind, payload, order, options = {}) {
   if (kind === "refund") {
     const refund = findResource(payload, "refund");
     return {
-      type: "refund",
-      id: firstString(refund?.id, refund?.refund_id, payload?.refund_id),
-      name: order.number ? `Order #${order.number}` : firstString(refund?.name),
-      url: order.url,
-      sku: "",
-      inventory: "",
-      status: firstString(refund?.status),
-      amount: firstValue(refund?.amount, refund?.refund_amount, refund?.total, payload?.amount),
+      type: "refund", id: firstString(refund?.id, refund?.refund_id, payload?.refund_id),
+      name: order.number ? `Order #${order.number}` : firstString(refund?.name), url: order.url, sku: "", inventory: "",
+      status: firstString(refund?.status), amount: firstValue(refund?.amount, refund?.refund_amount, refund?.total, payload?.amount),
       currency: firstString(refund?.currency, refund?.currency_code, order.currency, payload?.currency),
       reason: firstString(refund?.reason, refund?.note, refund?.message),
     };
@@ -326,14 +434,11 @@ function normalizeResource(kind, payload, order, options = {}) {
   if (kind === "inventory") {
     const inventory = findInventory(payload);
     return {
-      type: "inventory",
-      id: firstString(inventory?.variant_id, inventory?.product_id, inventory?.id),
-      name: firstString(inventory?.product_title, inventory?.title, inventory?.product?.title, inventory?.name),
-      url: "",
+      type: "inventory", id: firstString(inventory?.variant_id, inventory?.product_id, inventory?.id),
+      name: firstString(inventory?.product_title, inventory?.title, inventory?.product?.title, inventory?.name), url: "",
       sku: firstString(inventory?.sku, inventory?.variant?.sku),
       inventory: firstString(inventory?.inventory_quantity, inventory?.quantity, inventory?.available, inventory?.available_quantity, inventory?.stock),
-      status: "",
-      location: firstString(inventory?.location_name, inventory?.location?.name, inventory?.channel_name, inventory?.channel?.name),
+      status: "", location: firstString(inventory?.location_name, inventory?.location?.name, inventory?.channel_name, inventory?.channel?.name),
     };
   }
   if (kind === "store") {
@@ -350,14 +455,9 @@ function normalizeResource(kind, payload, order, options = {}) {
 function buildEventFields(kind, payload, order, resource, context) {
   const store = firstString(context.shopDomain, context.storeLabel);
   if (kind === "order") return compactFields([
-    ["Total", formatMoney(order.total, order.currency)],
-    ["Paid", formatMoney(order.paid, order.currency)],
-    ["Amount due", formatMoney(order.due, order.currency)],
-    ["Payment", humanize(order.paymentStatus)],
-    ["Fulfilment", humanize(order.fulfillmentStatus)],
-    ["Customer", order.customer],
-    ["Delivery", order.shippingMethod],
-    ["Store", store],
+    ["Total", formatMoney(order.total, order.currency)], ["Paid", formatMoney(order.paid, order.currency)],
+    ["Amount due", formatMoney(order.due, order.currency)], ["Payment", humanize(order.paymentStatus)],
+    ["Fulfilment", humanize(order.fulfillmentStatus)], ["Customer", order.customer], ["Delivery", order.shippingMethod], ["Store", store],
   ]);
   if (kind === "product") return compactFields([
     ["Product", resource.name], ["Product ID", resource.id], ["SKU", resource.sku], ["Price", formatMoney(resource.price, resource.currency)], ["Inventory", resource.inventory], ["Status", humanize(resource.status)], ["Store", store],
@@ -426,7 +526,7 @@ export function buildSlackPayload(event) {
       const variant = item.variant ? ` — ${escapeMrkdwn(item.variant)}` : "";
       return `• ${escapeMrkdwn(item.name)}${variant} × ${escapeMrkdwn(item.quantity || "1")}`;
     });
-    if (event.order.items.length > 12) itemLines.push(`• …and ${event.order.items.length - 12} more`);
+    if (event.order.itemCount > 12) itemLines.push(`• …and ${event.order.itemCount - 12} more`);
     blocks.push({ type: "section", text: { type: "mrkdwn", text: `*Items*\n${itemLines.join("\n")}`.slice(0, 3000) } });
   }
   if (event.resource.url) {
@@ -437,8 +537,10 @@ export function buildSlackPayload(event) {
       action_id: `view_easystore_${event.resource.type}`.slice(0, 255),
     }] });
   }
-  blocks.push({ type: "context", elements: [{ type: "mrkdwn", text: `EasyStore topic: \`${escapeMrkdwn(event.topic)}\`` }] });
-  return { text: event.heading, blocks };
+  const contextParts = [`EasyStore topic: \`${escapeMrkdwn(event.topic)}\``];
+  if (event.eventId) contextParts.push(`Event: \`${event.eventId.slice(0, 12)}\``);
+  blocks.push({ type: "context", elements: [{ type: "mrkdwn", text: contextParts.join("  •  ") }] });
+  return { text: truncatePlainText(event.heading, 3000), blocks };
 }
 
 export function buildSlackWorkflowPayload(event) {
@@ -446,15 +548,16 @@ export function buildSlackWorkflowPayload(event) {
   const itemSummary = event.order.items.length > 0
     ? `\nItems:\n${event.order.items.slice(0, 8).map((item) => `• ${item.name}${item.variant ? ` — ${item.variant}` : ""} × ${item.quantity || "1"}`).join("\n")}`
     : "";
+  const eventSummary = event.eventId ? `\nEvent ID: ${event.eventId.slice(0, 12)}` : "";
   return {
-    topic: event.topic || "",
-    title: event.heading || "EasyStore event",
-    store: firstString(event.shopDomain, event.storeLabel),
-    resource: firstString(event.resource.name, event.resource.id, event.resource.type),
-    details: `${fieldSummary}${itemSummary}`.trim(),
-    order_number: event.order.number || "",
-    amount: firstString(formatMoney(event.resource.amount, event.resource.currency), formatMoney(event.order.total, event.order.currency)),
-    url: event.resource.url || "",
+    topic: truncatePlainText(event.topic || "", 100),
+    title: truncatePlainText(event.heading || "EasyStore event", 150),
+    store: truncatePlainText(firstString(event.shopDomain, event.storeLabel), 255),
+    resource: truncatePlainText(firstString(event.resource.name, event.resource.id, event.resource.type), 500),
+    details: `${fieldSummary}${itemSummary}${eventSummary}`.trim().slice(0, 6000),
+    order_number: truncatePlainText(event.order.number || "", 100),
+    amount: truncatePlainText(firstString(formatMoney(event.resource.amount, event.resource.currency), formatMoney(event.order.total, event.order.currency)), 100),
+    url: truncatePlainText(event.resource.url || "", 2000),
   };
 }
 
@@ -503,18 +606,71 @@ export function renderUrlTemplate(template, values) {
   }
 }
 
-async function postToSlack(webhookUrl, payload, timeoutMs) {
+function validateQueueMessage(body) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) throw new Error("Invalid queue message body");
+  if (body.schemaVersion !== 1) throw new Error("Unsupported queue message schema");
+  if (!firstString(body.eventId) || !firstString(body.topic)) throw new Error("Queue message missing event metadata");
+  if (!body.event || typeof body.event !== "object" || Array.isArray(body.event)) throw new Error("Queue message missing normalized event");
+  if (!SUPPORTED_TOPICS.includes(normalizeTopic(body.event.topic))) throw new Error("Queue message has unsupported topic");
+  return body;
+}
+
+export async function deliverToSlack(webhookUrl, payload, mode, timeoutMs, fetchImpl = fetch) {
+  const url = validateSlackWebhookUrl(webhookUrl, mode);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort("Slack webhook timeout"), timeoutMs);
   try {
-    return await fetch(webhookUrl, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload), signal: controller.signal });
+    const response = await fetchImpl(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    return {
+      ok: response.ok,
+      status: response.status,
+      retryAfterSeconds: response.status === 429 ? parseRetryAfterSeconds(response.headers.get("retry-after")) : 0,
+    };
   } finally {
     clearTimeout(timeout);
   }
 }
 
+function parseRetryAfterSeconds(value) {
+  const parsed = Number.parseInt(value ?? "", 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 0;
+  return Math.min(parsed, 24 * 60 * 60);
+}
+
+export function retryDelaySeconds(attempts, status) {
+  if (status >= 400 && status < 500 && ![408, 425, 429].includes(status)) {
+    return Math.min(300 * Math.max(1, attempts), MAX_RETRY_DELAY_SECONDS);
+  }
+  const exponent = Math.max(0, Math.min(6, Number(attempts || 1) - 1));
+  return Math.min(30 * (2 ** exponent), MAX_RETRY_DELAY_SECONDS);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function jsonResponse(body, status, requestId) {
-  return Response.json(body, { status, headers: { "cache-control": "no-store", "x-request-id": requestId } });
+  return Response.json(body, {
+    status,
+    headers: {
+      "cache-control": "no-store",
+      "content-security-policy": "default-src 'none'",
+      "x-content-type-options": "nosniff",
+      "x-request-id": requestId,
+    },
+  });
+}
+
+function log(level, event, fields) {
+  const entry = JSON.stringify({ event, ...fields });
+  if (level === "error") console.error(entry);
+  else if (level === "warn") console.warn(entry);
+  else console.log(entry);
 }
 
 function firstString(...values) {
