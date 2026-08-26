@@ -12,6 +12,8 @@
   "vars": {
     "STORE_LABEL": "Cardboard",
     "MAX_BODY_BYTES": "262144",
-    "SLACK_TIMEOUT_MS": "7000"
+    "SLACK_TIMEOUT_MS": "7000",
+    "SLACK_MODE": "incoming_webhook",
+    "ALLOWED_TOPICS": "app/uninstall,store/update,product/create,product/update,product/delete,customer/create,customer/delete,order/create,order/update,order/paid,order/cancel,order/partially_paid,fulfillment/create,fulfillment/update,fulfillment/cancel,refund/create,channel/inventory_update"
   }
 }
