@@ -10,6 +10,7 @@ import {
   deliverToSlack,
   getSlackMinimumIntervalMs,
   isTopicAllowed,
+  makeQueueSafeEvent,
   normalizeEvent,
   renderOrderUrl,
   retryDelaySeconds,
@@ -158,6 +159,36 @@ test("event IDs are deterministic and change with topic or body", async () => {
   assert.equal(first, second);
   assert.equal(first.length, 64);
   assert.notEqual(first, changed);
+});
+
+test("bounds normalized queue messages well below Cloudflare's 128 KB limit", () => {
+  const huge = "x".repeat(200_000);
+  const items = Array.from({ length: 80 }, (_, index) => ({
+    title: `${index}-${huge}`,
+    variant_title: huge,
+    quantity: 1,
+  }));
+  const event = normalizeEvent({
+    order: {
+      id: huge,
+      order_number: huge,
+      customer_name: huge,
+      delivery_method: huge,
+      line_items: items,
+    },
+  }, { topic: "order/create", shopDomain: huge, eventId: "f".repeat(64) });
+  const queued = makeQueueSafeEvent(event);
+  const bytes = new TextEncoder().encode(JSON.stringify({
+    schemaVersion: 1,
+    eventId: queued.eventId,
+    enqueuedAt: new Date().toISOString(),
+    topic: queued.topic,
+    shopDomain: queued.shopDomain,
+    event: queued,
+  })).byteLength;
+
+  assert.equal(queued.order.items.length, 25);
+  assert.ok(bytes < 64 * 1024, `queue payload was ${bytes} bytes`);
 });
 
 test("renders only HTTPS order URL templates", () => {
