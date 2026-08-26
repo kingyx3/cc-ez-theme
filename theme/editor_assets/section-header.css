@@ -52,3 +52,34 @@ summary.list-menu__item {
 summary.menu-drawer__menu-item > a.list-menu__item {
   padding: 0;
 }
+
+/*
+ * Header chrome that carries no merchant setting.
+ *
+ * These sat in `sections/header.liquid`'s inline <style>, which put them in the
+ * HTML of every page. The section keeps only the declarations its colour and
+ * logo settings feed; everything static is here, where it is cached once.
+ */
+.header__logo_secondary {
+  display: none;
+}
+
+.header-wrapper .search-modal .field__input {
+  background-color: rgb(var(--color-background));
+}
+
+.search-modal__form {
+  position: relative;
+}
+
+.search-input-focus .easystore-section-header-hidden {
+  transform: none;
+}
+
+.header__submenu--account {
+  margin-left: -60px;
+}
+
+.header__account-entry {
+  position: relative;
+}

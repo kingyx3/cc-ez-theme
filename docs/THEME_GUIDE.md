@@ -124,7 +124,10 @@ Snippets are shared partials. Examples:
 - `price.liquid` renders sale and regular prices.
 - `search-modal.liquid` renders header search.
 - `filters.liquid` and `collection-sorting.liquid` support collection browsing.
-- `svg-definitions.liquid` centralizes interface icons.
+- `svg-definitions.liquid` centralizes interface icons. It is a single `case`
+  over the whole icon set, so a template that draws one icon many times should
+  `{% capture %}` it once and reuse the string rather than including the snippet
+  per item - `navigation-browse.liquid` shows the pattern.
 - `translation-fallback.liquid` prints a platform translation, or a literal
   fallback when the store has none.
 - `low-inventory-notice.liquid` prints the remaining stock when only a few units
@@ -155,9 +158,42 @@ cmp -s \
 ```
 
 The validator rejects missing counterparts because a storefront/editor mismatch
-can make preview behavior differ from the published theme.
+can make preview behavior differ from the published theme. The validator only
+compares file *names*; `tests/test_theme_asset_delivery.py` compares the bytes,
+which is the drift that actually matters - a merchant styling a page in the
+editor that the shopper never sees.
 
-## 5. Homepage merchandising
+## 5. What the storefront sends on every page
+
+A section's HTML is re-sent with every page view and cached by nothing, so code
+that belongs to the theme rather than to a merchant setting belongs in
+`assets/`, where the browser caches it once. Section-level `<style>` and
+`<script>` blocks are for values Liquid has to render - a colour setting, a
+translated string, a customer's own data - and nothing else.
+
+`tests/test_theme_asset_delivery.py` pins the rules that keep this cheap:
+
+- `sections/header.liquid` renders on every page. Its behaviour lives in
+  `assets/header.js` (sticky bar, disclosure menus) and
+  `assets/referral-notification.js`, which reads the three Liquid values it
+  needs from a `window.referralNotificationConfig` object. Its static styling
+  lives in `assets/section-header.css` and
+  `assets/component-referral-notification.css`.
+- Scripts load with `defer`. A blocking `<script src>` anywhere in the document
+  stops the parser; nothing this theme ships needs to run during parse except
+  `snippets/login-redirect-boot.liquid`, which is inline and documents why.
+- `layout/theme.liquid` preconnects to `code.jquery.com` before requesting from
+  it, and preloads the two stylesheets that have to stay linked at the end of
+  the body (`compact-spacing.css` and `card-navigation-polish.css`) so the
+  cascade keeps its order without the page reflowing after it paints.
+- A product grid marks its first row `card_image_eager` so the largest
+  contentful paint is not a lazily loaded image. `product-card.liquid` lowers
+  the flag again on the way out, because `include` shares one scope.
+- No stylesheet is sent twice. Before adding rules to a page-specific
+  stylesheet, check whether `base.css` or the template's other stylesheets
+  already carry them.
+
+## 6. Homepage merchandising
 
 Homepage order is controlled by `content_for_index` in:
 
@@ -227,7 +263,7 @@ Use the theme customizer to:
 The section chooses which collection to render. Product membership and product
 ordering remain collection responsibilities in EasyStore.
 
-## 6. Product cards
+## 7. Product cards
 
 `snippets/product-card.liquid` is the shared product-card renderer. It supports:
 
@@ -265,7 +301,7 @@ decision is documented. Trading-card product names commonly contain set,
 language, configuration, and edition information that customers need before
 opening the product.
 
-## 7. Header and announcement
+## 8. Header and announcement
 
 The header settings include:
 
@@ -308,7 +344,7 @@ The theme controls:
 - the Browse dropdown backed by EasyStore navigation records;
 - the fixed collection shortcut destinations.
 
-## 8. Product taxonomy
+## 9. Product taxonomy
 
 Recommended classification for sealed MTG products:
 
@@ -330,7 +366,7 @@ Keep product-type collections for the few categories customers actively browse,
 such as Collector Booster Boxes, Play Booster Boxes, Bundles, and Booster
 Packs. Use tags for narrower operational detail.
 
-## 9. Remaining stock and out-of-stock interest
+## 10. Remaining stock and out-of-stock interest
 
 `snippets/low-inventory-notice.liquid` prints "Only N left" once a product is
 down to five or fewer units. Cards report the total across the variants a
@@ -463,7 +499,7 @@ product URL. Automatic restock detection, subscriber storage, consent
 management, and outbound notification require a backend or dedicated app and
 should not be implemented as unsecured client-side theme code.
 
-## 10. Theme settings
+## 11. Theme settings
 
 Settings have two mirrored representations:
 
@@ -481,7 +517,7 @@ When changing defaults:
 
 Prefer safe Liquid fallbacks and CSS custom-property fallbacks for new settings.
 
-## 11. EasyStore content and app hooks
+## 12. EasyStore content and app hooks
 
 Calls such as `{% app_snippet 'collection/product_top' %}` are integration
 points. They allow installed EasyStore apps to inject storefront behavior.
@@ -489,7 +525,7 @@ points. They allow installed EasyStore apps to inject storefront behavior.
 Do not remove app hooks merely because they render nothing in a local source
 review. Installed apps own any storefront UI they inject through these hooks.
 
-## 12. Accessibility requirements
+## 13. Accessibility requirements
 
 When modifying the theme:
 
@@ -505,7 +541,7 @@ When modifying the theme:
 Hover behavior must have a corresponding keyboard-focus treatment when it
 communicates interaction.
 
-## 13. Safe change recipes
+## 14. Safe change recipes
 
 ### Add a new stylesheet
 
@@ -541,11 +577,13 @@ Update the section's `collection__id` in both settings-data files, or use the
 EasyStore theme customizer after upload. The handle must match an existing
 EasyStore collection.
 
-## 14. Maintenance checklist
+## 15. Maintenance checklist
 
 Before opening a pull request:
 
-- [ ] Storefront and editor assets remain mirrored.
+- [ ] Storefront and editor assets remain mirrored, byte for byte.
+- [ ] New behaviour or styling went into `assets/`, not into a section's inline
+      `<script>`/`<style>`, and any new `<script src>` carries `defer`.
 - [ ] JSON parses successfully.
 - [ ] Liquid references point to existing local files.
 - [ ] Section schema blocks are valid.
@@ -556,7 +594,7 @@ Before opening a pull request:
 - [ ] The generated ZIP validates.
 - [ ] Documentation and repository tooling are absent from the ZIP.
 
-## 15. Known platform boundaries
+## 16. Known platform boundaries
 
 - Navigation records, collections, products, inventory, and customer data are
   EasyStore data, not theme source.

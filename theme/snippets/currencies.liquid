@@ -12,7 +12,13 @@
       + {{ item.quantity | default: 0 }};
   {% endfor %}
 </script>
-<script src="{{ 'purchase-limit-feedback.js' | asset_url }}"></script>
+{% comment %}
+  Deferred: it ran as a blocking request at the end of every page, holding up the
+  end of parsing for 20KB that nothing on screen waits for. It patches
+  `EasyStore.Action.addToCart` on a retry loop and enhances `product-form` through
+  `customElements.whenDefined`, so neither hook depends on running during parse.
+{% endcomment %}
+<script src="{{ 'purchase-limit-feedback.js' | asset_url }}" defer="defer"></script>
 
 <script>
   EasyStore.Currencies.init({{ shop.enabled_currencies |json }}, {{ settings.is_server_side_currency_conversion }})
