@@ -73,7 +73,10 @@ export async function correlateWorkflowOrder(message, env) {
     const humanNumber = normalizeOrderNumber(order.number, orderId);
     let snapshot = null;
 
-    if (!humanNumber) snapshot = await readSnapshot(stub);
+    // EasyStore lifecycle events may keep the customer-facing order number while
+    // omitting fields selected earlier at checkout, especially shipping method.
+    // Hydrate whenever a notification-critical order field is missing.
+    if (needsSnapshotHydration(order, humanNumber)) snapshot = await readSnapshot(stub);
 
     const hydratedOrder = {
       ...order,
@@ -184,6 +187,14 @@ function normalizeOrderNumber(number, orderId) {
   const normalizedId = firstString(orderId).replace(/^#+\s*/, "").trim();
   if (normalizedId && plain === normalizedId) return "";
   return `#${plain}`;
+}
+
+function needsSnapshotHydration(order, humanNumber) {
+  return !humanNumber
+    || !firstString(order.customer)
+    || !firstString(order.currency)
+    || firstPresent(order.total) === ""
+    || !firstString(order.shippingMethod);
 }
 
 function normalizeHttpsUrl(value) {
