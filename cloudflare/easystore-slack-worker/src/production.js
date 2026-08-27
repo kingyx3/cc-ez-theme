@@ -169,6 +169,7 @@ function buildWorkflowFields(topic, event) {
       return compactFields([
         ["Customer", order.customer],
         ["Paid", formatMoney(order.paid, order.currency)],
+        ["Delivery", order.shippingMethod],
       ]);
     case "order/cancel":
       return compactFields([
