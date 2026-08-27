@@ -24,7 +24,7 @@ Repeated failures → cc-easystore-slack-dlq
 
 The HTTP webhook path does **not** wait for Slack. It returns `200 OK` only after Cloudflare confirms the normalized event has been written to the queue. This keeps the EasyStore acknowledgement path short while making Slack delivery retryable.
 
-Cloudflare Queues provide at-least-once delivery. A rare duplicate Slack notification is therefore still possible if Slack accepts a message but the queue acknowledgement is interrupted. Each event has a deterministic Event ID included in logs and Slack context/details to make duplicates diagnosable.
+Cloudflare Queues provide at-least-once delivery. A rare duplicate Slack notification is therefore still possible if Slack accepts a message but the queue acknowledgement is interrupted. Each event has a deterministic Event ID included in logs to make duplicates diagnosable.
 
 ## Supported EasyStore topics
 
@@ -106,25 +106,19 @@ The repository's `CLOUDFLARE_API_TOKEN` must therefore have permissions sufficie
 
 ### Recommended for higher volume: Incoming Webhook
 
-`wrangler.jsonc` defaults to:
-
-```jsonc
-"SLACK_MODE": "incoming_webhook"
-```
-
 Create a Slack app with Incoming Webhooks enabled, choose the destination channel when installing/adding the webhook, and save its `/services/...` URL as `SLACK_WEBHOOK_URL`.
 
-Incoming Webhooks are conservatively paced slightly above one second per delivery. This is the preferred mode if `channel/inventory_update` can be noisy because Slack supports a higher sustained posting rate than webhook-triggered workflows.
+Incoming Webhooks are conservatively paced slightly above one second per delivery. This is the preferred mode if you intentionally want high-volume product/inventory notifications.
 
 ### Slack Workflow Builder / Automations
 
-To control message/channel routing in Slack, change:
+With:
 
 ```jsonc
 "SLACK_MODE": "workflow"
 ```
 
-Create a Slack Workflow that starts **From a webhook** and define these eight Text variables exactly:
+create a Slack Workflow that starts **From a webhook** and define these eight Text variables exactly:
 
 ```text
 topic
@@ -137,20 +131,35 @@ amount
 url
 ```
 
-Add a **Send a message to a channel** step and insert the variables you want. A sensible message is:
+Keep all eight trigger variables for compatibility and future routing, but the human-facing message should use only `title` and `details`.
+
+Set the **Send a message to a channel** step to exactly:
 
 ```text
 {title}
 
 {details}
-
-Event: {topic}
-Store: {store}
 ```
 
-Use Slack's variable picker rather than typing braces literally.
+Use Slack's variable picker rather than typing braces literally. Do **not** append static `Topic`, `Store`, `Resource`, `Order`, or `Amount` lines; the Worker already folds the useful operational context into `title` and `details`.
 
-The Worker uses conservative 6.5-second pacing in Workflow mode because Slack's current developer rate-limit table lists webhook workflow triggers at 10 per minute. This protects the workflow from bursts, but means a large inventory-event backlog can take time to drain. Prefer Incoming Webhook mode for high-volume notifications.
+The canonical Slack-side template and example outputs are documented in [`SLACK_WORKFLOW_TEMPLATE.md`](./SLACK_WORKFLOW_TEMPLATE.md).
+
+In Workflow mode, the production consumer intentionally triggers Slack only for meaningful order lifecycle events:
+
+```text
+order/create
+order/paid
+order/partially_paid
+order/cancel
+fulfillment/create
+fulfillment/cancel
+refund/create
+```
+
+Other supported EasyStore events are still accepted and queued, but are acknowledged and logged without triggering the Slack Workflow. This suppresses side-effect noise such as product stock changes and generic order/restock updates.
+
+The Worker uses conservative 6.5-second pacing in Workflow mode because Slack webhook workflow triggers have lower throughput than Incoming Webhooks.
 
 After publishing the Slack workflow, save its `https://hooks.slack.com/triggers/...` URL as `SLACK_WEBHOOK_URL`.
 
@@ -252,8 +261,9 @@ Before enabling all 17 EasyStore webhooks:
 2. Confirm `cc-easystore-slack-events` and `cc-easystore-slack-dlq` exist in Cloudflare.
 3. Set `EASYSTORE_APP_SECRET` and `SLACK_WEBHOOK_URL` as Worker secrets.
 4. Confirm `/ready` returns `200`.
-5. Choose `incoming_webhook` or `workflow` deliberately; use Incoming Webhook for higher event volume.
-6. Register all 17 EasyStore topics against `/webhooks/easystore`.
-7. Trigger at least one real order and one non-order event and verify Slack formatting.
-8. Review Cloudflare Worker logs and Queue/DLQ metrics after launch.
-9. Capture redacted real payload fixtures and tighten field mappings if EasyStore's actual payload differs from the tolerant mappings in `normalizeEvent()`.
+5. Choose `incoming_webhook` or `workflow` deliberately.
+6. For Workflow mode, set the Slack message step to `{title}` + `{details}` only.
+7. Register all 17 EasyStore topics against `/webhooks/easystore`.
+8. Trigger at least one real order create/cancel lifecycle and verify Slack formatting.
+9. Review Cloudflare Worker logs and Queue/DLQ metrics after launch.
+10. Capture redacted real payload fixtures and tighten field mappings if EasyStore's actual payload differs from the tolerant mappings in `normalizeEvent()`.
