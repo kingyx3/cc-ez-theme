@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
-    "check": "node --check src/index.js && node --check src/production.js",
+    "check": "node --check src/index.js && node --check src/production.js && node --check src/order-correlation.js && node --check src/correlated-production.js",
     "test": "node --test \"test/**/*.test.js\"",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
