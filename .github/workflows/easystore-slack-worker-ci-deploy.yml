@@ -1,0 +1,145 @@
+name: EasyStore Slack Worker CI & Deploy
+
+# Fresh workflow identity/concurrency key intentionally avoids the retired legacy workflow's stale queued runs.
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "cloudflare/easystore-slack-worker/**"
+      - ".github/workflows/easystore-slack-worker-ci-deploy.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "cloudflare/easystore-slack-worker/**"
+      - ".github/workflows/easystore-slack-worker-ci-deploy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PRIMARY_QUEUE: cc-easystore-slack-events
+  DEAD_LETTER_QUEUE: cc-easystore-slack-dlq
+
+jobs:
+  validate:
+    name: Validate Worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        working-directory: cloudflare/easystore-slack-worker
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - name: Install Worker dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Validate Worker JavaScript
+        run: npm run check
+
+      - name: Run Worker behaviour tests
+        run: npm test
+
+      - name: Validate Wrangler deployment bundle
+        run: npx wrangler deploy --dry-run
+
+  deploy:
+    name: Provision queues and deploy Worker
+    if: github.event_name != 'pull_request'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: cloudflare-easystore-slack-production-v2
+      cancel-in-progress: false
+
+    defaults:
+      run:
+        working-directory: cloudflare/easystore-slack-worker
+
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - name: Check Cloudflare credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${CLOUDFLARE_API_TOKEN}" ]]; then
+            echo "::error::Repository secret CLOUDFLARE_API_TOKEN is not configured."
+            exit 1
+          fi
+          if [[ -z "${CLOUDFLARE_ACCOUNT_ID}" ]]; then
+            echo "::error::Repository secret CLOUDFLARE_ACCOUNT_ID is not configured."
+            exit 1
+          fi
+
+      - name: Install Worker dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Re-run validation before production deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run check
+          npm test
+          npx wrangler deploy --dry-run
+
+      - name: Ensure production queues exist
+        shell: bash
+        run: |
+          set -euo pipefail
+          ensure_queue() {
+            local queue_name="$1"
+            if npx wrangler queues info "${queue_name}" >/dev/null 2>&1; then
+              echo "Queue ${queue_name} already exists."
+            else
+              echo "Creating queue ${queue_name}..."
+              npx wrangler queues create "${queue_name}"
+            fi
+          }
+          ensure_queue "${PRIMARY_QUEUE}"
+          ensure_queue "${DEAD_LETTER_QUEUE}"
+
+      - name: Deploy Worker with queue bindings
+        run: npm run deploy
+
+      - name: Write deployment summary
+        if: success()
+        shell: bash
+        run: |
+          {
+            echo "### Cloudflare EasyStore → Slack Worker"
+            echo
+            echo "- Worker: \`cc-easystore-slack\`"
+            echo "- Source commit: \`${GITHUB_SHA}\`"
+            echo "- Worker deployment: successful"
+            echo "- EasyStore endpoint: \`/webhooks/easystore\`"
+            echo "- Liveness: \`/health\`"
+            echo "- Readiness: \`/ready\`"
+            echo "- Queue: \`${PRIMARY_QUEUE}\`"
+            echo "- Dead-letter queue: \`${DEAD_LETTER_QUEUE}\`"
+            echo "- Required Worker secrets: \`SLACK_WEBHOOK_URL\`, \`EASYSTORE_APP_SECRET\`"
+            echo
+            echo "> The Cloudflare API token must include Workers Scripts edit and Queues edit permissions."
+          } >> "${GITHUB_STEP_SUMMARY}"
