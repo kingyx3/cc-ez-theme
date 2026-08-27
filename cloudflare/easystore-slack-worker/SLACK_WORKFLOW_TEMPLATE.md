@@ -49,26 +49,32 @@ Those fields remain in the webhook payload for compatibility and future routing,
 An order creation should read like:
 
 ```text
-🛍️ New order #1113 · SGD 208.00 · Unpaid
+🛍️ New order #1114 · SGD 168.00 · Unpaid
 
-Customer: J T
+Customer: Bry Test 2
 Items:
-• MTG-HOB-PBB-EN × 1
+• MTG-FRA-SLB-EN × 1
 ```
 
-A cancellation with a human order number should read like:
+EasyStore cancellation payloads can contain only the internal order ID. The Worker keeps a 30-day Durable Object correlation snapshot from richer order lifecycle events so a subsequent sparse cancellation can still read like:
 
 ```text
-❌ Order #1113 cancelled · SGD 208.00
+❌ Order #1114 cancelled · SGD 168.00
+
+Customer: Bry Test 2
 ```
 
-If EasyStore sends only its internal ID on the cancellation webhook, the Worker will instead make that explicit:
+The internal EasyStore ID remains available in Worker/queue metadata but is not repeated in the human-facing message when correlation succeeds.
+
+If the snapshot is missing, expired, or temporarily unavailable, notification delivery still proceeds with the explicit fallback instead of failing the EasyStore webhook:
 
 ```text
-❌ Order cancelled · EasyStore ID 114408393
+❌ Order cancelled · EasyStore ID 114410861
 
-EasyStore order ID: 114408393
+EasyStore order ID: 114410861
 ```
+
+Correlation snapshots are keyed by store + EasyStore order ID and retain only the fields needed for lifecycle notifications: customer-facing order number, customer name, amount/currency, delivery method, and an HTTPS order URL when configured. They expire after 30 days.
 
 ## Workflow-mode notification policy
 

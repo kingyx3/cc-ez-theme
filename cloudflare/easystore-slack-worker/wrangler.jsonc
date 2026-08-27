@@ -1,7 +1,7 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "cc-easystore-slack",
-  "main": "src/production.js",
+  "main": "src/correlated-production.js",
   "compatibility_date": "2026-08-26",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
@@ -16,6 +16,20 @@
     "SLACK_MODE": "workflow",
     "ALLOWED_TOPICS": "app/uninstall,store/update,product/create,product/update,product/delete,customer/create,customer/delete,order/create,order/update,order/paid,order/cancel,order/partially_paid,fulfillment/create,fulfillment/update,fulfillment/cancel,refund/create,channel/inventory_update"
   },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "ORDER_CORRELATION",
+        "class_name": "OrderCorrelation"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "order-correlation-v1",
+      "new_sqlite_classes": ["OrderCorrelation"]
+    }
+  ],
   "queues": {
     "producers": [
       {
