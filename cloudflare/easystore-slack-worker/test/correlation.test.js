@@ -80,7 +80,7 @@ function richOrderCreate() {
         paymentStatus: "unpaid",
         fulfillmentStatus: "unfulfilled",
         customer: "Bry Test 2",
-        shippingMethod: "",
+        shippingMethod: "Ninja Van Standard",
         items: [{ name: "MTG-FRA-SLB-EN", variant: "", quantity: "1" }],
         itemCount: 1,
         url: "",
@@ -91,7 +91,49 @@ function richOrderCreate() {
         name: "Order #1114",
         url: "",
       },
-      fields: [{ label: "Customer", value: "Bry Test 2" }],
+      fields: [
+        { label: "Customer", value: "Bry Test 2" },
+        { label: "Delivery", value: "Ninja Van Standard" },
+      ],
+    },
+  };
+}
+
+function sparseOrderPaid(topic = "order/paid") {
+  return {
+    schemaVersion: 1,
+    eventId: `${topic}-1114`.padEnd(64, "0"),
+    topic,
+    shopDomain: "cardboardcollective.easy.co",
+    event: {
+      topic,
+      kind: "order",
+      shopDomain: "cardboardcollective.easy.co",
+      storeLabel: "Cardboard",
+      heading: "EasyStore payment event",
+      eventId: "",
+      order: {
+        id: "114410861",
+        number: "#1114",
+        currency: "SGD",
+        total: "168.00",
+        paid: topic === "order/paid" ? "168.00" : "80.00",
+        due: topic === "order/paid" ? "0.00" : "88.00",
+        paymentStatus: topic === "order/paid" ? "paid" : "partially_paid",
+        fulfillmentStatus: "unfulfilled",
+        customer: "Bry Test 2",
+        shippingMethod: "",
+        items: [],
+        itemCount: 0,
+        url: "",
+      },
+      resource: {
+        type: "order",
+        id: "114410861",
+        name: "Order #1114",
+        url: "",
+      },
+      fields: [],
     },
   };
 }
@@ -157,6 +199,44 @@ test("sparse cancellation is hydrated from the earlier human order snapshot", as
   assert.equal(slack.amount, "SGD 168.00");
   assert.equal(slack.details, "Customer: Bry Test 2");
   assert.doesNotMatch(slack.details, /114410861/);
+});
+
+test("paid event inherits checkout shipping method even when order number is present", async () => {
+  const namespace = new MemoryCorrelationNamespace();
+  const env = { ORDER_CORRELATION: namespace };
+
+  await correlateWorkflowOrder(richOrderCreate(), env);
+  const correlated = await correlateWorkflowOrder(sparseOrderPaid(), env);
+  const prepared = prepareWorkflowQueueMessage(correlated);
+  const slack = buildSlackWorkflowPayload(prepared.event);
+
+  assert.equal(prepared.event.order.number, "#1114");
+  assert.equal(prepared.event.order.shippingMethod, "Ninja Van Standard");
+  assert.equal(prepared.event.heading, "💰 Order #1114 paid · SGD 168.00");
+  assert.deepEqual(prepared.event.fields, [
+    { label: "Customer", value: "Bry Test 2" },
+    { label: "Delivery", value: "Ninja Van Standard" },
+  ]);
+  assert.match(slack.details, /Customer: Bry Test 2/);
+  assert.match(slack.details, /Delivery: Ninja Van Standard/);
+});
+
+test("partially paid event also includes the selected shipping method", async () => {
+  const namespace = new MemoryCorrelationNamespace();
+  const env = { ORDER_CORRELATION: namespace };
+
+  await correlateWorkflowOrder(richOrderCreate(), env);
+  const correlated = await correlateWorkflowOrder(sparseOrderPaid("order/partially_paid"), env);
+  const prepared = prepareWorkflowQueueMessage(correlated);
+  const slack = buildSlackWorkflowPayload(prepared.event);
+
+  assert.equal(prepared.event.order.shippingMethod, "Ninja Van Standard");
+  assert.deepEqual(prepared.event.fields, [
+    { label: "Customer", value: "Bry Test 2" },
+    { label: "Paid", value: "SGD 80.00" },
+    { label: "Delivery", value: "Ninja Van Standard" },
+  ]);
+  assert.match(slack.details, /Delivery: Ninja Van Standard/);
 });
 
 test("order correlation snapshots expire after roughly 30 days", async () => {
