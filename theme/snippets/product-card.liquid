@@ -22,6 +22,24 @@
 {% endif %}
 {% assign product_card_alt = product.featured_image.alt | _default: product.title %}
 
+{% comment %}
+  card_image_eager
+    optional. When a caller sets it, this card's main image is fetched eagerly
+    and at high priority instead of lazily. Every image in a product grid was
+    lazy, including the one that is almost always the page's largest contentful
+    paint, so the browser deliberately waited before starting the request the
+    shopper is waiting on. Callers raise it for the first row only.
+
+    `include` shares one scope in EasyStore Liquid, so it is lowered again at
+    the end of this snippet: without that, the first eager card on a page would
+    make every later card on it eager too - including the cards of sections that
+    never asked.
+{% endcomment %}
+{% assign product_card_image_eager = false %}
+{% if card_image_eager %}
+  {% assign product_card_image_eager = true %}
+{% endif %}
+
 {% assign show_listing_add_to_cart = true %}
 {% if settings.show_add_to_cart_button == false or settings.show_add_to_cart_button == 0 or settings.show_add_to_cart_button == '0' %}
   {% assign show_listing_add_to_cart = false %}
@@ -49,7 +67,7 @@
     <div class="card card--product grid-link__image--product" tabindex="-1">
       <div class="card__inner">
         <div class="media media--transparent media--{{product_image_ratio}} media--hover-effect">
-          <img src="{{ product.featured_image.src | img_url: settings.product_img_res }}" alt="{{ product_card_alt | escape }}" width="800" height="800" loading="lazy">
+          <img src="{{ product.featured_image.src | img_url: settings.product_img_res }}" alt="{{ product_card_alt | escape }}" width="800" height="800" {% if product_card_image_eager %}loading="eager" fetchpriority="high"{% else %}loading="lazy"{% endif %}>
           {% if show_secondary_image and product.secondary_image.src != "" and product.secondary_image.src != null %}
             <img src="{{ product.secondary_image.src | img_url: settings.product_img_res }}" alt="{{ product.secondary_image.alt | _default: product.title | escape }}" width="800" height="800" loading="lazy">
           {% endif %}
@@ -116,3 +134,5 @@
     {% endif %}
   </a>
 </div>
+
+{% assign card_image_eager = false %}

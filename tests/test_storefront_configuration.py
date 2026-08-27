@@ -244,26 +244,39 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertNotIn('id="input-discount_code"', main_cart)
         self.assertIn('id="input-discount_code"', cart_template)
 
-        header = (THEME_ROOT / "sections" / "header.liquid").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("function updateReferralData(data)", header)
-        self.assertIn("function removeReferralData()", header)
+        # The referral invitation moved out of the header's inline <script> and
+        # into a cacheable asset. The regressions it carries are pinned to the
+        # code, so they follow it there.
+        referral = (
+            THEME_ROOT / "assets" / "referral-notification.js"
+        ).read_text(encoding="utf-8")
         self.assertEqual(
-            header.count("localStorage.setItem('referral_notification_data'"),
+            referral,
+            (THEME_ROOT / "editor_assets" / "referral-notification.js").read_text(
+                encoding="utf-8"
+            ),
+        )
+        self.assertIn("function updateReferralData(data)", referral)
+        self.assertIn("function removeReferralData()", referral)
+        self.assertEqual(
+            referral.count("localStorage.setItem(STORAGE_KEY"),
             1,
         )
         self.assertEqual(
-            header.count("localStorage.removeItem('referral_notification_data'"),
+            referral.count("localStorage.removeItem(STORAGE_KEY"),
+            1,
+        )
+        self.assertEqual(
+            referral.count("const STORAGE_KEY = 'referral_notification_data';"),
             1,
         )
 
-        self.assertIn("encodeURIComponent(referralCode)", header)
+        self.assertIn("encodeURIComponent(referralCode)", referral)
         self.assertIn(
             "const campaign = data && data.data && data.data.campaign;",
-            header,
+            referral,
         )
-        self.assertIn("Array.isArray(campaign.referral_rules)", header)
+        self.assertIn("Array.isArray(campaign.referral_rules)", referral)
 
         quickview = (
             THEME_ROOT / "assets" / "product-quickview.js"

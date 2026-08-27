@@ -40,7 +40,17 @@
   <link rel="canonical" href="{{ canonical_url }}">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="{{ settings.colors_accent_1 }}">
-  
+
+  {% comment %}
+    The two scripts below are the first blocking requests on every page, and
+    they are the only ones that leave EasyStore's own hosts. Opening the
+    connection to code.jquery.com alongside this document takes the DNS
+    lookup, TCP handshake and TLS negotiation out of the critical path; on a
+    cold mobile connection that is most of the wait before either arrives.
+  {% endcomment %}
+  <link rel="preconnect" href="https://code.jquery.com" crossorigin>
+  <link rel="dns-prefetch" href="https://code.jquery.com">
+
   <script
     src="https://code.jquery.com/jquery-3.7.1.min.js"
     integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo="
@@ -175,6 +185,17 @@
   
   {{ 'base.css' | asset_url | stylesheet_tag }}
   {{ 'conversion-theme.css' | asset_url | stylesheet_tag }}
+
+  {% comment %}
+    These two are the storefront's last word on spacing and card polish, so
+    they have to load after every section stylesheet and are linked at the end
+    of the body with the rest of `currencies`. Discovered there, they arrived
+    after the page had already painted and it visibly reflowed. Preloading them
+    here starts the download with the head's own stylesheets and leaves the
+    cascade exactly as it was.
+  {% endcomment %}
+  <link rel="preload" href="{{ 'compact-spacing.css' | asset_url }}" as="style">
+  <link rel="preload" href="{{ 'card-navigation-polish.css' | asset_url }}" as="style">
 
   
   {% app_snippet 'global/head' %}

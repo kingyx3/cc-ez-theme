@@ -45,7 +45,18 @@
       grid grid--2-col product-grid
       {% if section.settings.products_per_row < 3 %}grid--2-col-tablet{% else %}grid--3-col-tablet{% endif %} grid--one-third-max grid--{{section.settings.products_per_row}}-col-desktop grid--quarter-max">
       {% if collection.products.size > 0 %}
+        {% comment %}
+          The first row is what a shopper waits for, so its images are fetched
+          eagerly and the rest stay lazy. `card_image_eager` is set on every
+          iteration, not only the first: `include` shares one scope, so leaving
+          it raised would make the whole grid eager.
+        {% endcomment %}
+        {% assign eager_card_count = section.settings.products_per_row | default: 4 %}
         {% for product in collection.products %}
+          {% assign card_image_eager = false %}
+          {% if forloop.index <= eager_card_count %}
+            {% assign card_image_eager = true %}
+          {% endif %}
           <li class="grid__item">
             {% include 'product-card', show_secondary_image: section.settings.show_secondary_image, show_add_to_cart_button: section.settings.show_add_to_cart_button, image_ratio: section.settings.image_ratio, show_product_info: section.settings.show_product_info %}
           </li>
