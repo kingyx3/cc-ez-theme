@@ -378,6 +378,8 @@ function normalizeOrder(payload, options = {}) {
     order?.shipping_method?.title, order?.shipping_method?.name,
     order?.shipping_line?.title, order?.shipping_line?.name,
     order?.shipping_lines?.[0]?.title, order?.shipping_lines?.[0]?.name,
+    order?.shipping_methods?.[0]?.title, order?.shipping_methods?.[0]?.name, order?.shipping_methods?.[0]?.courier_name,
+    typeof order?.shipping_methods?.[0] === "string" ? order.shipping_methods[0] : "",
     order?.delivery_method, order?.delivery_name,
   );
   const rawItems = findLineItems(order, payload);
