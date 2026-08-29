@@ -1,0 +1,40 @@
+{% assign organization_logo = settings.logo_img | default: settings.meta_img %}
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "OnlineStore",
+  "@id": "https://cardboard.sg/#organization",
+  "name": "Cardboard Collective",
+  "legalName": "Cardboard Collective Pte. Ltd.",
+  "url": "https://cardboard.sg/",
+  "logo": {{ organization_logo | json }},
+  "email": "contact@cardboard.sg",
+  "identifier": {
+    "@type": "PropertyValue",
+    "propertyID": "Singapore UEN",
+    "value": "202635416D"
+  },
+  "address": {
+    "@type": "PostalAddress",
+    "streetAddress": "160 Robinson Road, #14-04",
+    "addressLocality": "Singapore",
+    "postalCode": "068914",
+    "addressCountry": "SG"
+  },
+  "contactPoint": {
+    "@type": "ContactPoint",
+    "contactType": "customer service",
+    "email": "contact@cardboard.sg",
+    "availableLanguage": ["English"]
+  },
+  "sameAs": [
+    "https://www.facebook.com/cardboardsg",
+    "https://www.carousell.sg/u/cardboard_collective/"
+  ],
+  "hasMerchantReturnPolicy": {
+    "@type": "MerchantReturnPolicy",
+    "merchantReturnLink": "https://cardboard.sg/legal/refund-policy"
+  }
+}
+</script>
