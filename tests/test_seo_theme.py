@@ -9,20 +9,16 @@ THEME_ROOT = REPOSITORY_ROOT / "theme"
 
 
 class SeoThemeTests(unittest.TestCase):
-    def test_homepage_uses_visible_seo_intro_and_organization_schema(self) -> None:
+    def test_homepage_keeps_ui_neutral_and_renders_organization_schema(self) -> None:
         home = (THEME_ROOT / "templates" / "home.liquid").read_text(encoding="utf-8")
-        intro = (THEME_ROOT / "sections" / "seo-intro.liquid").read_text(
-            encoding="utf-8"
-        )
         organization = (
             THEME_ROOT / "snippets" / "organization-schema.liquid"
         ).read_text(encoding="utf-8")
 
-        self.assertIn("{% section 'seo-intro' %}", home)
         self.assertIn("{% include 'organization-schema' %}", home)
-        self.assertNotIn('<h1 class="visually-hidden">', home)
-        self.assertIn('<h1 id="SeoIntroHeading-', intro)
-        self.assertIn("Magic: The Gathering Sealed Products in Singapore", intro)
+        self.assertIn('<h1 class="visually-hidden">{{ shop.name | escape }}</h1>', home)
+        self.assertNotIn("{% section 'seo-intro' %}", home)
+        self.assertFalse((THEME_ROOT / "sections" / "seo-intro.liquid").exists())
         self.assertIn('"@type": "OnlineStore"', organization)
         self.assertIn('"hasMerchantReturnPolicy"', organization)
         self.assertIn(
