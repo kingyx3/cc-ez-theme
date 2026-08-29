@@ -1,0 +1,63 @@
+<style>
+  .breadcrumbs {
+    padding-top: clamp(1rem, 2vw, 1.6rem);
+  }
+
+  .breadcrumbs__list {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 1.3rem;
+    line-height: 1.5;
+  }
+
+  .breadcrumbs__item {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+  }
+
+  .breadcrumbs__item + .breadcrumbs__item::before {
+    content: '/';
+    margin-right: 0.6rem;
+    opacity: 0.45;
+  }
+
+  .breadcrumbs__link {
+    color: inherit;
+    text-decoration-thickness: 0.1rem;
+    text-underline-offset: 0.2rem;
+  }
+
+  .breadcrumbs__current {
+    opacity: 0.72;
+    overflow-wrap: anywhere;
+  }
+</style>
+
+<nav class="breadcrumbs page-width" aria-label="Breadcrumb">
+  <ol class="breadcrumbs__list">
+    <li class="breadcrumbs__item">
+      <a class="breadcrumbs__link" href="/">Home</a>
+    </li>
+
+    {% if collection and template contains 'collection' %}
+      <li class="breadcrumbs__item breadcrumbs__current" aria-current="page">
+        {{ collection.title | escape }}
+      </li>
+    {% elsif product and template contains 'product' %}
+      {% if collection and collection.title != blank %}
+        <li class="breadcrumbs__item">
+          <a class="breadcrumbs__link" href="{{ collection.url }}">{{ collection.title | escape }}</a>
+        </li>
+      {% endif %}
+      <li class="breadcrumbs__item breadcrumbs__current" aria-current="page">
+        {{ product.title | escape }}
+      </li>
+    {% endif %}
+  </ol>
+</nav>
