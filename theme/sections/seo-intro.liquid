@@ -1,0 +1,100 @@
+<style>
+  #SeoIntro-{{ section.__key }} {
+    padding: clamp(2.4rem, 4vw, 4.8rem) 0 clamp(1.2rem, 2vw, 2.4rem);
+  }
+
+  #SeoIntro-{{ section.__key }} .seo-intro__inner {
+    max-width: 88rem;
+    margin: 0 auto;
+    text-align: center;
+  }
+
+  #SeoIntro-{{ section.__key }} .seo-intro__title {
+    margin: 0;
+    font-size: clamp(2.8rem, 5vw, 4.8rem);
+    line-height: 1.15;
+  }
+
+  #SeoIntro-{{ section.__key }} .seo-intro__copy {
+    max-width: 78rem;
+    margin: 1.6rem auto 0;
+    color: rgba(var(--color-base-text), 0.78);
+  }
+
+  #SeoIntro-{{ section.__key }} .seo-intro__copy p {
+    margin: 0.8rem 0 0;
+  }
+</style>
+
+<section id="SeoIntro-{{ section.__key }}" class="seo-intro page-width" aria-labelledby="SeoIntroHeading-{{ section.__key }}">
+  <div class="seo-intro__inner">
+    <h1 id="SeoIntroHeading-{{ section.__key }}" class="seo-intro__title">
+      {{ section.settings.heading | escape }}
+    </h1>
+
+    <div class="seo-intro__copy">
+      {% if section.settings.body != blank %}
+        <p>{{ section.settings.body | escape }}</p>
+      {% endif %}
+      {% if section.settings.body_secondary != blank %}
+        <p>{{ section.settings.body_secondary | escape }}</p>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": {
+    "en_US": "SEO introduction",
+    "zh_TW": "SEO 介紹",
+    "zh_CN": "SEO 介绍",
+    "ms_MY": "Pengenalan SEO"
+  },
+  "settings": [
+    {
+      "type": "text",
+      "id": "heading",
+      "default": "Magic: The Gathering Sealed Products in Singapore",
+      "label": {
+        "en_US": "Heading",
+        "zh_TW": "標題",
+        "zh_CN": "标题",
+        "ms_MY": "Tajuk"
+      }
+    },
+    {
+      "type": "text",
+      "id": "body",
+      "default": "Shop authentic sealed Magic: The Gathering products in Singapore, including Collector Boosters, Play Boosters, Bundles, Commander decks, pre-orders and limited releases.",
+      "label": {
+        "en_US": "Introduction",
+        "zh_TW": "介紹",
+        "zh_CN": "介绍",
+        "ms_MY": "Pengenalan"
+      }
+    },
+    {
+      "type": "text",
+      "id": "body_secondary",
+      "default": "Cardboard Collective carries English and Japanese MTG products with local Singapore delivery and meetup options.",
+      "label": {
+        "en_US": "Supporting text",
+        "zh_TW": "補充文字",
+        "zh_CN": "补充文字",
+        "ms_MY": "Teks sokongan"
+      }
+    }
+  ],
+  "presets": [
+    {
+      "name": {
+        "en_US": "SEO introduction",
+        "zh_TW": "SEO 介紹",
+        "zh_CN": "SEO 介绍",
+        "ms_MY": "Pengenalan SEO"
+      }
+    }
+  ]
+}
+{% endschema %}
