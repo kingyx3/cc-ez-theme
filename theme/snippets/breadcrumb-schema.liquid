@@ -1,0 +1,56 @@
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {% if collection and template contains 'collection' %}
+      {
+        "@type": "ListItem",
+        "position": 1,
+        "name": "Home",
+        "item": "https://cardboard.sg/"
+      },
+      {
+        "@type": "ListItem",
+        "position": 2,
+        "name": {{ collection.title | json }},
+        "item": {{ canonical_url | json }}
+      }
+    {% elsif product and template contains 'product' %}
+      {% if collection and collection.title != blank %}
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "Home",
+          "item": "https://cardboard.sg/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": {{ collection.title | json }},
+          "item": {{ 'https://cardboard.sg' | append: collection.url | json }}
+        },
+        {
+          "@type": "ListItem",
+          "position": 3,
+          "name": {{ product.title | json }},
+          "item": {{ canonical_url | json }}
+        }
+      {% else %}
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "Home",
+          "item": "https://cardboard.sg/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": {{ product.title | json }},
+          "item": {{ canonical_url | json }}
+        }
+      {% endif %}
+    {% endif %}
+  ]
+}
+</script>
