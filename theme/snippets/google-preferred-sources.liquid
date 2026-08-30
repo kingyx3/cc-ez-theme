@@ -1,0 +1,19 @@
+<div id="google-preferred-source-slot" style="margin-top: 1.5rem;" hidden>
+  <div google-add-preferred-source-btn></div>
+</div>
+
+<script>
+  (function () {
+    var slot = document.getElementById('google-preferred-source-slot');
+    var socialLinks = document.querySelector('.footer__list-social');
+
+    if (!slot || !socialLinks) {
+      if (slot) slot.remove();
+      return;
+    }
+
+    socialLinks.insertAdjacentElement('afterend', slot);
+    slot.hidden = false;
+  })();
+</script>
+<script async src="https://news.google.com/swg/js/v1/publisher.js"></script>
