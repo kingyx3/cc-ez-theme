@@ -1,19 +1,62 @@
 <div id="google-preferred-source-slot" style="margin-top: 1.5rem;" hidden>
-  <div google-add-preferred-source-btn></div>
+  <button
+    id="google-preferred-source-button"
+    type="button"
+    class="button button--secondary"
+  >
+    Add to Preferred Sources
+  </button>
 </div>
 
 <script>
   (function () {
     var slot = document.getElementById('google-preferred-source-slot');
+    var button = document.getElementById('google-preferred-source-button');
     var socialLinks = document.querySelector('.footer__list-social');
 
-    if (!slot || !socialLinks) {
+    if (!slot || !button || !socialLinks) {
       if (slot) slot.remove();
       return;
     }
 
     socialLinks.insertAdjacentElement('afterend', slot);
-    slot.hidden = false;
+
+    function trackPreferredSourceStart() {
+      var eventParameters = {
+        source: 'footer',
+        domain: 'cardboard.sg'
+      };
+
+      if (typeof window.gtag === 'function') {
+        window.gtag('event', 'preferred_source_start', eventParameters);
+        return;
+      }
+
+      if (Array.isArray(window.dataLayer)) {
+        window.dataLayer.push({
+          event: 'preferred_source_start',
+          source: eventParameters.source,
+          domain: eventParameters.domain
+        });
+      }
+    }
+
+    (self.PREFERRED_SOURCE = self.PREFERRED_SOURCE || []).push(function (preferredSource) {
+      preferredSource.init({
+        theme: 'light'
+      });
+
+      button.addEventListener('click', function () {
+        trackPreferredSourceStart();
+        preferredSource.addPreferredSource();
+      });
+
+      slot.hidden = false;
+    });
   })();
 </script>
-<script async src="https://news.google.com/swg/js/v1/publisher.js"></script>
+<script
+  async
+  preferred-sources-control="manual"
+  src="https://news.google.com/swg/js/v1/publisher.js"
+></script>
