@@ -1,0 +1,181 @@
+/* Collection landing-page hierarchy.
+   Keep SEO copy and breadcrumbs visible without letting them overpower the product grid. */
+
+.template-collection .spaced-section.spaced-section--full-width {
+  margin-top: 0.8rem;
+}
+
+.template-collection .collection-hero__inner {
+  margin-bottom: 0;
+  padding-bottom: clamp(1.2rem, 2vw, 1.8rem);
+  border-bottom: 0.1rem solid rgba(var(--color-base-text), 0.08);
+}
+
+.template-collection .collection-hero__text-wrapper {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "title sort"
+    "description description"
+    "center center";
+  align-items: start;
+  column-gap: 2rem;
+  row-gap: 0.8rem;
+}
+
+/* Flatten the legacy wrapper so the title, app content and sorting control can
+   participate in one intentional layout with the description. */
+.template-collection .collection-hero__text-wrapper > div:first-child {
+  display: contents;
+}
+
+.template-collection .collection-hero__title {
+  grid-area: title;
+  max-width: 24ch;
+  margin: 0;
+  font-family: var(--font-heading-family);
+  font-size: clamp(2.4rem, 4.2vw, 3.4rem);
+  font-style: var(--font-heading-style);
+  font-weight: var(--font-heading-weight);
+  line-height: 1.12;
+  letter-spacing: -0.025em;
+  text-align: left;
+  text-wrap: balance;
+}
+
+.template-collection .top-wrapper-section {
+  grid-area: center;
+  min-width: 0;
+}
+
+.template-collection .top-wrapper-section:empty,
+.template-collection .collection-filters:empty {
+  display: none;
+}
+
+.template-collection .collection-hero__text-wrapper > .rte {
+  grid-area: description;
+  max-width: 88rem;
+  margin: 0;
+  color: rgba(var(--color-base-text), 0.72);
+  font-family: var(--font-body-family);
+  font-size: 1.35rem;
+  font-style: var(--font-body-style);
+  font-weight: 400;
+  line-height: 1.55;
+  letter-spacing: 0.01em;
+}
+
+.template-collection .collection-hero__text-wrapper > .rte p,
+.template-collection .collection-hero__text-wrapper > .rte ul,
+.template-collection .collection-hero__text-wrapper > .rte ol {
+  margin-top: 0.35rem;
+  margin-bottom: 0.35rem;
+}
+
+.template-collection .collection-hero__text-wrapper > .rte strong,
+.template-collection .collection-hero__text-wrapper > .rte b {
+  color: rgba(var(--color-base-text), 0.9);
+  font-weight: 600;
+}
+
+.template-collection .collection-hero__text-wrapper > .rte a {
+  color: inherit;
+  text-decoration-thickness: 0.1rem;
+  text-underline-offset: 0.2rem;
+}
+
+.template-collection .collection-filters {
+  grid-area: sort;
+  align-self: center;
+  min-width: max-content;
+  margin: 0 !important;
+}
+
+.template-collection .collection-filters__item {
+  padding-left: 0;
+}
+
+.template-collection .collection-filters__label,
+.template-collection .collection-filters__sort {
+  font-family: var(--font-body-family);
+  font-size: 1.25rem;
+  font-style: var(--font-body-style);
+  font-weight: 400;
+  line-height: 1.4;
+  letter-spacing: 0.01em;
+}
+
+.template-collection .collection-filters__label {
+  margin-right: 0.7rem;
+  color: rgba(var(--color-base-text), 0.58);
+}
+
+.template-collection .collection-filters__sort {
+  min-height: 3.6rem;
+  padding-top: 0.4rem;
+  padding-bottom: 0.4rem;
+}
+
+.template-collection #CollectionProductGrid {
+  margin-top: clamp(1rem, 1.8vw, 1.6rem);
+}
+
+@media screen and (min-width: 750px) {
+  .template-collection .collection-hero__text-wrapper > .rte {
+    font-size: 1.4rem;
+  }
+}
+
+@media screen and (max-width: 749px) {
+  .template-collection .spaced-section.spaced-section--full-width {
+    margin-top: 0.5rem;
+  }
+
+  .template-collection .collection-hero__inner {
+    padding-bottom: 1.2rem;
+  }
+
+  .template-collection .collection-hero__text-wrapper {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "title"
+      "description"
+      "center"
+      "sort";
+    row-gap: 0.65rem;
+  }
+
+  .template-collection .collection-hero__title {
+    max-width: none;
+    font-size: clamp(2.3rem, 7vw, 2.8rem);
+    line-height: 1.14;
+    text-align: left !important;
+  }
+
+  .template-collection .collection-hero__text-wrapper > .rte {
+    max-width: none;
+    font-size: 1.28rem;
+    line-height: 1.5;
+  }
+
+  .template-collection .collection-filters:not(:empty) {
+    width: 100%;
+    min-width: 0;
+    padding-top: 0.65rem;
+    border-top: 0.1rem solid rgba(var(--color-base-text), 0.07);
+  }
+
+  .template-collection .collection-filters__item,
+  .template-collection .collection-filters__field {
+    width: 100%;
+  }
+
+  .template-collection .collection-filters__field {
+    justify-content: flex-end;
+  }
+
+  .template-collection #CollectionProductGrid {
+    margin-top: 1rem;
+  }
+}
