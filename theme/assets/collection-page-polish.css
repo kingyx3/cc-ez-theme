@@ -48,6 +48,11 @@
   min-width: 0;
 }
 
+.template-collection .top-wrapper-section:empty,
+.template-collection .collection-filters:empty {
+  display: none;
+}
+
 .template-collection .collection-hero__text-wrapper > .rte {
   grid-area: description;
   max-width: 88rem;
@@ -154,7 +159,7 @@
     line-height: 1.5;
   }
 
-  .template-collection .collection-filters {
+  .template-collection .collection-filters:not(:empty) {
     width: 100%;
     min-width: 0;
     padding-top: 0.65rem;
