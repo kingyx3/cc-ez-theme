@@ -1,5 +1,5 @@
 /* Collection landing-page hierarchy.
-   Keep SEO copy and breadcrumbs visible without letting them overpower the product grid. */
+   Keep SEO copy visible and useful without letting it overpower the products. */
 
 .template-collection .spaced-section.spaced-section--full-width {
   margin-top: 0.8rem;
@@ -23,8 +23,8 @@
   row-gap: 0.8rem;
 }
 
-/* Flatten the legacy wrapper so the title, app content and sorting control can
-   participate in one intentional layout with the description. */
+/* Flatten the legacy wrapper so title, app content, and sorting participate in
+   one deliberate layout without changing the Liquid/SEO structure. */
 .template-collection .collection-hero__text-wrapper > div:first-child {
   display: contents;
 }
@@ -48,14 +48,17 @@
   min-width: 0;
 }
 
-.template-collection .top-wrapper-section:empty,
-.template-collection .collection-filters:empty {
+/* Liquid indentation leaves whitespace text nodes, so :empty alone is not
+   enough to collapse these optional rows. Modern storefront browsers support
+   :has(), which lets us key off the actual rendered controls/content. */
+.template-collection .top-wrapper-section:not(:has(*)),
+.template-collection .collection-filters:not(:has(.collection-filters__item)) {
   display: none;
 }
 
 .template-collection .collection-hero__text-wrapper > .rte {
   grid-area: description;
-  max-width: 88rem;
+  max-width: 72ch;
   margin: 0;
   color: rgba(var(--color-base-text), 0.72);
   font-family: var(--font-body-family);
@@ -159,7 +162,7 @@
     line-height: 1.5;
   }
 
-  .template-collection .collection-filters:not(:empty) {
+  .template-collection .collection-filters:has(.collection-filters__item) {
     width: 100%;
     min-width: 0;
     padding-top: 0.65rem;
