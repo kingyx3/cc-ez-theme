@@ -23,3 +23,12 @@ def test_preferred_sources_reuses_existing_analytics_only() -> None:
     assert "Array.isArray(window.dataLayer)" in content
     assert "googletagmanager.com/gtag/js" not in content
     assert "google-add-preferred-source-btn" not in content
+
+
+def test_preferred_sources_cta_is_recognizably_google_branded() -> None:
+    content = SNIPPET.read_text(encoding="utf-8")
+
+    assert "https://www.gstatic.com/images/branding/product/2x/googleg_48dp.png" in content
+    assert "Add us as a Preferred Source on Google" in content
+    assert 'aria-label="Add Cardboard Collective as a preferred source on Google"' in content
+    assert 'class="google-preferred-source__icon"' in content
