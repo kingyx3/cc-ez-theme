@@ -425,7 +425,14 @@ def resolve_fields(
 
     for field in fields:
         native = select_native(field, schema)
-        if native is None and field.fallback is not None:
+        # cc_* properties are integration-owned attribution snapshots. They must
+        # not be silently redirected into a semantically similar HubSpot-native
+        # property such as hs_source_store, whose commerce meaning is different.
+        if (
+            native is None
+            and field.fallback is not None
+            and not field.fallback.startswith("cc_")
+        ):
             native = select_semantic_native(field, schema)
             if native is not None and report is not None:
                 report["semantic_native"][field.key] = native
