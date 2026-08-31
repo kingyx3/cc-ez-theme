@@ -7,7 +7,7 @@
 
 .template-collection .collection-hero__inner {
   margin-bottom: 0;
-  padding-bottom: clamp(1.2rem, 2vw, 1.8rem);
+  padding-bottom: clamp(1.2rem, 2vw, 1.7rem);
   border-bottom: 0.1rem solid rgba(var(--color-base-text), 0.08);
 }
 
@@ -20,7 +20,7 @@
     "center center";
   align-items: start;
   column-gap: 2rem;
-  row-gap: 0.8rem;
+  row-gap: 0.7rem;
 }
 
 /* Flatten the legacy wrapper so title, app content, and sorting participate in
@@ -34,7 +34,7 @@
   max-width: 24ch;
   margin: 0;
   font-family: var(--font-heading-family);
-  font-size: clamp(2.4rem, 4.2vw, 3.4rem);
+  font-size: clamp(2.35rem, 3.8vw, 3.2rem);
   font-style: var(--font-heading-style);
   font-weight: var(--font-heading-weight);
   line-height: 1.12;
@@ -58,22 +58,22 @@
 
 .template-collection .collection-hero__text-wrapper > .rte {
   grid-area: description;
-  max-width: 72ch;
+  max-width: 70ch;
   margin: 0;
   color: rgba(var(--color-base-text), 0.72);
   font-family: var(--font-body-family);
-  font-size: 1.35rem;
+  font-size: 1.3rem;
   font-style: var(--font-body-style);
   font-weight: 400;
-  line-height: 1.55;
-  letter-spacing: 0.01em;
+  line-height: 1.5;
+  letter-spacing: 0.008em;
 }
 
 .template-collection .collection-hero__text-wrapper > .rte p,
 .template-collection .collection-hero__text-wrapper > .rte ul,
 .template-collection .collection-hero__text-wrapper > .rte ol {
-  margin-top: 0.35rem;
-  margin-bottom: 0.35rem;
+  margin-top: 0.3rem;
+  margin-bottom: 0.3rem;
 }
 
 .template-collection .collection-hero__text-wrapper > .rte strong,
@@ -96,7 +96,22 @@
 }
 
 .template-collection .collection-filters__item {
+  align-items: center;
   padding-left: 0;
+}
+
+/* compact-spacing.css gives every .select a bottom margin. That is useful in
+   forms, but here it made the dropdown sit visibly higher than "Sort by". */
+.template-collection .collection-filters__field {
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.template-collection .collection-filters__field .select {
+  display: flex;
+  align-items: center;
+  width: auto;
+  margin: 0;
 }
 
 .template-collection .collection-filters__label,
@@ -105,19 +120,27 @@
   font-size: 1.25rem;
   font-style: var(--font-body-style);
   font-weight: 400;
-  line-height: 1.4;
   letter-spacing: 0.01em;
 }
 
 .template-collection .collection-filters__label {
-  margin-right: 0.7rem;
+  display: inline-flex;
+  align-items: center;
+  min-height: 3.4rem;
+  margin: 0;
   color: rgba(var(--color-base-text), 0.58);
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 .template-collection .collection-filters__sort {
-  min-height: 3.6rem;
-  padding-top: 0.4rem;
-  padding-bottom: 0.4rem;
+  height: 3.4rem;
+  min-height: 3.4rem;
+  margin: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  line-height: 1.2;
+  vertical-align: middle;
 }
 
 .template-collection #CollectionProductGrid {
@@ -126,17 +149,17 @@
 
 @media screen and (min-width: 750px) {
   .template-collection .collection-hero__text-wrapper > .rte {
-    font-size: 1.4rem;
+    font-size: 1.34rem;
   }
 }
 
 @media screen and (max-width: 749px) {
   .template-collection .spaced-section.spaced-section--full-width {
-    margin-top: 0.5rem;
+    margin-top: 0.45rem;
   }
 
   .template-collection .collection-hero__inner {
-    padding-bottom: 1.2rem;
+    padding-bottom: 1.15rem;
   }
 
   .template-collection .collection-hero__text-wrapper {
@@ -146,26 +169,34 @@
       "description"
       "center"
       "sort";
-    row-gap: 0.65rem;
+    row-gap: 0.55rem;
   }
 
   .template-collection .collection-hero__title {
-    max-width: none;
-    font-size: clamp(2.3rem, 7vw, 2.8rem);
-    line-height: 1.14;
+    max-width: 18ch;
+    font-size: clamp(2.1rem, 6.2vw, 2.5rem);
+    line-height: 1.12;
     text-align: left !important;
   }
 
   .template-collection .collection-hero__text-wrapper > .rte {
     max-width: none;
-    font-size: 1.28rem;
-    line-height: 1.5;
+    font-size: 1.18rem;
+    line-height: 1.48;
+    letter-spacing: 0.006em;
+  }
+
+  .template-collection .collection-hero__text-wrapper > .rte p,
+  .template-collection .collection-hero__text-wrapper > .rte ul,
+  .template-collection .collection-hero__text-wrapper > .rte ol {
+    margin-top: 0.25rem;
+    margin-bottom: 0.25rem;
   }
 
   .template-collection .collection-filters:has(.collection-filters__item) {
     width: 100%;
     min-width: 0;
-    padding-top: 0.65rem;
+    padding-top: 0.6rem;
     border-top: 0.1rem solid rgba(var(--color-base-text), 0.07);
   }
 
@@ -179,6 +210,6 @@
   }
 
   .template-collection #CollectionProductGrid {
-    margin-top: 1rem;
+    margin-top: 0.9rem;
   }
 }
