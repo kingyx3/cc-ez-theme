@@ -9,8 +9,14 @@
   history in the background, caches it for the session, and holds purchase
   attempts until that history is known. Opt into that path here so navigation is
   not blocked by one full order-history pass per configured limit.
+
+  Keep the original include shape because other purchase helpers use its position
+  as a delivery invariant. `include` shares this scope on EasyStore, so the flag
+  is set immediately before it and cleared immediately afterwards.
 {% endcomment %}
-{% include 'customer-order-limits', defer_history: true %}
+{% assign defer_history = true %}
+{% include 'customer-order-limits' %}
+{% assign defer_history = false %}
 
 <script>
   window.purchaseCartQuantities = {};
