@@ -45,44 +45,47 @@
     nothing without needing a sentinel value.
 
     Storefront delivery can disable this inline pass. In that mode the existing
-    client history loader performs one authoritative history read for every rule
-    instead of Liquid re-walking the same orders once per configured product.
+    client history loader performs one authoritative history read and applies it
+    to every rule instead of Liquid re-walking the same orders once per configured
+    product.
   {% endcomment %}
   {% assign customer_order_limit_row_purchased = 0 %}
-  {% if customer_order_limit_customer_authenticated and customer_order_limit_inline_history_enabled %}
-    {% assign customer_order_limit_row_orders = customer.orders | default: customer.recent_orders %}
-    {% for order in customer_order_limit_row_orders %}
-      {% comment %}
-        Cancelled orders never count. Which field carries the cancellation
-        depends on the order shape EasyStore hands this page, so the decision
-        lives in one snippet rather than being spelled out again here.
-      {% endcomment %}
-      {% include 'customer-order-limit-cancelled', cancelled_order: order %}
-      {% unless customer_order_limit_cancelled %}
+  {% if customer_order_limit_customer_authenticated %}
+    {% if customer_order_limit_inline_history_enabled %}
+      {% assign customer_order_limit_row_orders = customer.orders | default: customer.recent_orders %}
+      {% for order in customer_order_limit_row_orders %}
         {% comment %}
-          An order with no readable date counts as current, so an unexpected date
-          format keeps the limit enforced instead of silently clearing it.
+          Cancelled orders never count. Which field carries the cancellation
+          depends on the order shape EasyStore hands this page, so the decision
+          lives in one snippet rather than being spelled out again here.
         {% endcomment %}
-        {% assign customer_order_limit_row_order_epoch = order.created_at | date: '%s' | plus: 0 %}
-        {% if customer_order_limit_row_order_epoch == 0 %}
-          {% assign customer_order_limit_row_order_epoch = order.processed_at | date: '%s' | plus: 0 %}
-        {% endif %}
-        {% if customer_order_limit_row_order_epoch == 0 %}
-          {% assign customer_order_limit_row_order_epoch = customer_order_limit_now_epoch %}
-        {% endif %}
-        {% if customer_order_limit_row_order_epoch >= customer_order_limit_row_window %}
-          {% assign customer_order_limit_row_lines = order.line_items | default: order.items %}
-          {% for line_item in customer_order_limit_row_lines %}
-            {% assign customer_order_limit_row_line_handle = line_item.product.handle | default: line_item.handle | default: '' | append: '' | strip | downcase %}
-            {% assign customer_order_limit_row_line_sku = line_item.sku | default: line_item.variant.sku | default: line_item.product.sku | default: '' | append: '' | strip | downcase %}
-            {% if customer_order_limit_row_line_handle == customer_order_limit_row_handle or customer_order_limit_row_line_sku == customer_order_limit_row_handle %}
-              {% assign customer_order_limit_row_line_quantity = line_item.quantity | default: line_item.qty | default: 0 | plus: 0 %}
-              {% assign customer_order_limit_row_purchased = customer_order_limit_row_purchased | plus: customer_order_limit_row_line_quantity %}
-            {% endif %}
-          {% endfor %}
-        {% endif %}
-      {% endunless %}
-    {% endfor %}
+        {% include 'customer-order-limit-cancelled', cancelled_order: order %}
+        {% unless customer_order_limit_cancelled %}
+          {% comment %}
+            An order with no readable date counts as current, so an unexpected date
+            format keeps the limit enforced instead of silently clearing it.
+          {% endcomment %}
+          {% assign customer_order_limit_row_order_epoch = order.created_at | date: '%s' | plus: 0 %}
+          {% if customer_order_limit_row_order_epoch == 0 %}
+            {% assign customer_order_limit_row_order_epoch = order.processed_at | date: '%s' | plus: 0 %}
+          {% endif %}
+          {% if customer_order_limit_row_order_epoch == 0 %}
+            {% assign customer_order_limit_row_order_epoch = customer_order_limit_now_epoch %}
+          {% endif %}
+          {% if customer_order_limit_row_order_epoch >= customer_order_limit_row_window %}
+            {% assign customer_order_limit_row_lines = order.line_items | default: order.items %}
+            {% for line_item in customer_order_limit_row_lines %}
+              {% assign customer_order_limit_row_line_handle = line_item.product.handle | default: line_item.handle | default: '' | append: '' | strip | downcase %}
+              {% assign customer_order_limit_row_line_sku = line_item.sku | default: line_item.variant.sku | default: line_item.product.sku | default: '' | append: '' | strip | downcase %}
+              {% if customer_order_limit_row_line_handle == customer_order_limit_row_handle or customer_order_limit_row_line_sku == customer_order_limit_row_handle %}
+                {% assign customer_order_limit_row_line_quantity = line_item.quantity | default: line_item.qty | default: 0 | plus: 0 %}
+                {% assign customer_order_limit_row_purchased = customer_order_limit_row_purchased | plus: customer_order_limit_row_line_quantity %}
+              {% endif %}
+            {% endfor %}
+          {% endif %}
+        {% endunless %}
+      {% endfor %}
+    {% endif %}
   {% endif %}
 
   {% assign customer_order_limit_row_cart = 0 %}
