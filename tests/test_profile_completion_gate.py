@@ -190,8 +190,9 @@ class ProfileCompletionGateTests(unittest.TestCase):
     def test_deferred_login_redirect_cannot_bypass_the_profile_gate(self) -> None:
         asset = read(ASSET)
 
-        marker = "if (window.ccProfileCompletionRequired) return;"
+        marker = "if (window.ccProfileCompletionRequired) {"
         self.assertIn(marker, asset)
+        self.assertIn("requireProfileCompletionPassword();", asset)
         self.assertLess(asset.index("if (stillAuthenticating())"), asset.index(marker))
         self.assertLess(asset.index(marker), asset.index("if (!signedIn()) return;"))
 
