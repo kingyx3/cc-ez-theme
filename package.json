@@ -4,7 +4,8 @@
   "scripts": {
     "test:e2e": "playwright test",
     "test:e2e:smoke": "playwright test e2e/storefront.spec.js",
-    "test:e2e:a11y": "playwright test e2e/accessibility.spec.js"
+    "test:e2e:a11y": "playwright test e2e/accessibility.spec.js",
+    "test:e2e:performance": "playwright test e2e/performance.spec.js --project=chromium-desktop --workers=1 --retries=0"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.10.2",
