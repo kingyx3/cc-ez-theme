@@ -40,6 +40,14 @@
  * still asking for a step is therefore never a page to leave, whatever the
  * markers say, and that is decided from the markup as well as the path: the OTP
  * step renders no form of its own, and its URL is the platform's to change.
+ *
+ * Mandatory profile completion is also the reliable first-account checkpoint.
+ * EasyStore can skip or rewrite registration/auth routes, so a browser marker
+ * is not sufficient proof that the shopper is still in signup. When the head
+ * gate says required profile details are missing, this module promotes the
+ * theme-owned `details[password2]` control into that same form and requires it.
+ * Once those details are complete the gate disappears and normal account visits
+ * leave EasyStore's Change password controls hidden in their usual panel.
  */
 (() => {
   'use strict';
@@ -181,6 +189,25 @@
     return target === here() ? '' : target;
   };
 
+  const requireProfileCompletionPassword = () => {
+    const form = document.getElementById('details_form');
+    if (!form) return;
+
+    const password = form.querySelector('[name="details[password2]"]');
+    const saveRow = form.querySelector('p.text-right');
+    const saveArea = saveRow && saveRow.parentNode;
+    if (!password || !saveRow || !saveArea) return;
+
+    password.setAttribute('required', 'required');
+    password.setAttribute('autocomplete', 'new-password');
+    password.setAttribute('placeholder', 'Set password');
+
+    const passwordWrapper = password.closest('.field');
+    const passwordLabel = passwordWrapper && passwordWrapper.querySelector('label');
+    if (passwordLabel) passwordLabel.textContent = 'Set password';
+    if (passwordWrapper) saveArea.insertBefore(passwordWrapper, saveRow);
+  };
+
   const start = () => {
     const requested = requestedTarget();
 
@@ -205,8 +232,14 @@
     }
 
     // The head gate owns this customer until the required profile details have
-    // been accepted. In particular, do not consume the saved Buy Now target.
-    if (window.ccProfileCompletionRequired) return;
+    // been accepted. This is also the first-account checkpoint: surface and
+    // require EasyStore's existing new-password control on the same form. No
+    // signup route/session marker is needed, so platform auth URL changes cannot
+    // silently remove the password requirement.
+    if (window.ccProfileCompletionRequired) {
+      requireProfileCompletionPassword();
+      return;
+    }
 
     if (!signedIn()) return;
 
