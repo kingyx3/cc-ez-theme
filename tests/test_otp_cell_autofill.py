@@ -38,16 +38,10 @@ class OtpFieldsAreLeftAloneTests(unittest.TestCase):
     The widget also submits over fetch rather than a native form submit, so a
     submit-event guard cannot deduplicate it from the theme side.
 
-    The widget has since been read rather than guessed at, with
-    scripts/otp-widget-capture.console.js and scripts/otp-handler-probe.console.js,
-    and `submitOTP()` turns out to have exactly one trigger - an input event on
-    the last of the six cells. account-otp-autofill.js spreads an autofilled code
-    on that evidence and emits that one event, so these assertions no longer ban
-    every write. What they still ban is the reverted design: the old module and
-    its loader, the WebOTP path that had a second script writing into the same
-    cells, and the per-cell event storm. The count that actually matters - one
-    submit, never two - is asserted behaviourally in e2e/otp-autofill.spec.js
-    against a replica of the real widget.
+    The widget can change independently of this theme. Even a synthetic-event
+    design that submitted once against a captured replica can submit twice
+    against later platform behavior. The theme therefore stays out of the
+    platform OTP cells entirely.
     """
 
     @classmethod
@@ -61,20 +55,19 @@ class OtpFieldsAreLeftAloneTests(unittest.TestCase):
             THEME_ROOT / "snippets" / "currencies.liquid"
         ).read_text(encoding="utf-8")
 
-    def test_the_otp_module_is_not_shipped(self) -> None:
+    def test_no_otp_mutation_module_is_shipped(self) -> None:
         for directory in ASSET_DIRECTORIES:
-            with self.subTest(directory=directory):
-                self.assertFalse(
-                    (THEME_ROOT / directory / "otp-cell-autofill.js").exists()
-                )
+            for name in ("otp-cell-autofill.js", "account-otp-autofill.js"):
+                with self.subTest(directory=directory, module=name):
+                    self.assertFalse((THEME_ROOT / directory / name).exists())
 
-    def test_no_layout_or_snippet_loads_an_otp_script(self) -> None:
-        self.assertNotIn("otp-cell-autofill", self.currencies)
+    def test_no_layout_or_snippet_loads_an_otp_mutation_script(self) -> None:
+        banned = ("otp-cell-autofill", "account-otp-autofill")
         for liquid in THEME_ROOT.rglob("*.liquid"):
+            source = liquid.read_text(encoding="utf-8")
             with self.subTest(template=liquid.name):
-                self.assertNotIn(
-                    "otp-cell-autofill", liquid.read_text(encoding="utf-8")
-                )
+                for name in banned:
+                    self.assertNotIn(name, source)
 
     def test_no_theme_script_claims_one_time_code_fields(self) -> None:
         for path, source in self.scripts.items():
@@ -82,84 +75,11 @@ class OtpFieldsAreLeftAloneTests(unittest.TestCase):
                 self.assertNotIn("one-time-code", source)
                 self.assertNotIn("OTPCredential", source)
 
-    def test_no_theme_script_restores_the_reverted_modules_internals(self) -> None:
-        # The double submit came from dispatching input *and* change on every
-        # cell. Its helpers stay banned by name so the design cannot come back
-        # by copy-paste.
+    def test_no_theme_script_touches_platform_otp_cells(self) -> None:
         for path, source in self.scripts.items():
             with self.subTest(script=path.name):
-                self.assertNotIn("distributeOtpCode", source)
-                self.assertNotIn("otpCell", source)
-
-
-class OtpAutofillModuleTests(unittest.TestCase):
-    """account-otp-autofill.js spreads an autofilled code across the six cells.
-
-    The widget's own handler submits from exactly one place - an input event on
-    the last cell - so the module's safety reduces to which events it emits.
-    e2e/otp-autofill.spec.js proves the resulting count against a replica; these
-    assertions keep the source honest about how it gets there.
-    """
-
-    MODULE = "account-otp-autofill.js"
-
-    @classmethod
-    def setUpClass(cls) -> None:
-        cls.sources = {
-            directory: code_only(
-                (THEME_ROOT / directory / cls.MODULE).read_text(encoding="utf-8")
-            )
-            for directory in ASSET_DIRECTORIES
-        }
-
-    def test_the_module_ships_to_both_asset_mirrors_identically(self) -> None:
-        bodies = {
-            directory: (THEME_ROOT / directory / self.MODULE).read_text(encoding="utf-8")
-            for directory in ASSET_DIRECTORIES
-        }
-        for directory in ASSET_DIRECTORIES:
-            with self.subTest(directory=directory):
-                self.assertTrue((THEME_ROOT / directory / self.MODULE).exists())
-        self.assertEqual(bodies["assets"], bodies["editor_assets"])
-
-    def test_the_layout_loads_it(self) -> None:
-        layout = (THEME_ROOT / "layout" / "theme.liquid").read_text(encoding="utf-8")
-        self.assertIn(self.MODULE, layout)
-
-    def test_it_dispatches_input_and_never_change(self) -> None:
-        # A change event is what the reverted module added on top of input, and
-        # widgets that submit on change are why that doubled the POST.
-        for directory, source in self.sources.items():
-            with self.subTest(directory=directory):
-                self.assertIn("new Event('input'", source)
-                self.assertNotIn("'change'", source)
-                self.assertNotIn('"change"', source)
-
-    def test_it_only_ever_dispatches_on_the_last_cell(self) -> None:
-        # One dispatch site, and it is the cell the widget submits from.
-        for directory, source in self.sources.items():
-            with self.subTest(directory=directory):
-                self.assertEqual(source.count("dispatchEvent"), 1)
-                self.assertIn("cells[cells.length - 1]", source)
-
-    def test_it_latches_so_one_code_is_handed_over_once(self) -> None:
-        # Autofill can fire input more than once for a single suggestion.
-        for directory, source in self.sources.items():
-            with self.subTest(directory=directory):
-                self.assertIn("handedOver", source)
-
-    def test_it_only_completes_when_every_cell_is_filled(self) -> None:
-        # Otherwise a short autofill would post an incomplete verification.
-        for directory, source in self.sources.items():
-            with self.subTest(directory=directory):
-                self.assertIn("complete", source)
-                self.assertIn("every", source)
-
-    def test_it_is_scoped_to_the_platform_widget(self) -> None:
-        # The captured markup: six .otp-input cells inside #otp-form.
-        for directory, source in self.sources.items():
-            with self.subTest(directory=directory):
-                self.assertIn("#otp-form .otp-input", source)
+                self.assertNotIn("#otp-form", source)
+                self.assertNotIn("otp-input", source)
 
 
 class ActivateAccountButtonTests(unittest.TestCase):
