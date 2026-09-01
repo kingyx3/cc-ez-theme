@@ -109,7 +109,7 @@ class ProfileCompletionGateTests(unittest.TestCase):
         self.assertIn("form.reportValidity", boot)
 
     def test_profile_gate_never_reuses_change_password_fields_for_signup(self) -> None:
-        boot = read(BOOT)
+        boot = liquid_code(read(BOOT))
         details = read(DETAILS)
         register = read(REGISTER)
 
