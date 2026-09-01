@@ -35,10 +35,15 @@ def read(relative: str) -> str:
 class StorefrontDeliveryShapeTests(unittest.TestCase):
     def test_currencies_opts_storefront_into_deferred_history(self) -> None:
         currencies = read("snippets/currencies.liquid")
-        self.assertIn(
-            "{% include 'customer-order-limits', defer_history: true %}",
-            currencies,
-        )
+        enable = "{% assign defer_history = true %}"
+        include = "{% include 'customer-order-limits' %}"
+        disable = "{% assign defer_history = false %}"
+
+        self.assertIn(enable, currencies)
+        self.assertIn(include, currencies)
+        self.assertIn(disable, currencies)
+        self.assertLess(currencies.index(enable), currencies.index(include))
+        self.assertLess(currencies.index(include), currencies.index(disable))
 
     def test_both_server_history_passes_obey_the_inline_history_switch(self) -> None:
         limits = read("snippets/customer-order-limits.liquid")
@@ -50,11 +55,11 @@ class StorefrontDeliveryShapeTests(unittest.TestCase):
             "customer_order_limit_inline_history_enabled %}",
             limits,
         )
-        self.assertIn(
-            "{% if customer_order_limit_customer_authenticated and "
-            "customer_order_limit_inline_history_enabled %}",
-            row,
-        )
+        auth = "{% if customer_order_limit_customer_authenticated %}"
+        inline = "{% if customer_order_limit_inline_history_enabled %}"
+        self.assertIn(auth, row)
+        self.assertIn(inline, row)
+        self.assertLess(row.index(auth), row.index(inline))
 
 
 @unittest.skipIf(
