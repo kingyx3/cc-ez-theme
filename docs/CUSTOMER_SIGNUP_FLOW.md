@@ -10,7 +10,7 @@ When an unauthenticated shopper starts from a product or another storefront page
 
 1. The theme remembers the product or prior storefront page in `sessionStorage`.
 2. Visiting `/account/register` starts a tab-scoped signup marker for the password step.
-3. The customer enters their mobile number and completes EasyStore OTP verification. The signup marker survives those platform-owned OTP pages.
+3. The customer enters their mobile number and completes EasyStore OTP verification. The signup marker survives those platform-owned OTP pages, including an `/account/login` URL if EasyStore uses it as an intermediate authentication step.
 4. If any required human profile field is still blank, the theme routes the authenticated customer to `/account/details` before the originally requested storefront page can paint.
 5. The completion form always requires first name, last name, gender and date of birth. **Set password is shown and required only when the customer arrived through the active signup trip.**
 6. The Click ID attribution field remains hidden and automatic; it never replaces or satisfies a human profile field.
@@ -41,11 +41,19 @@ The account-details template contains EasyStore's normal password-change control
 
 For a new mobile/OTP signup there is no old password to enter. While the tab is in the signup trip, mandatory completion surfaces only `details[password2]`, labels it **Set password**, and marks it required. There is **no current-password field** in the signup completion UI.
 
-The signup trip is identified with `cc:signup-password-setup` in `sessionStorage`. The marker is set on `/account/register`, kept through OTP, and cleared when EasyStore confirms the account-details save with `update_success`. Visiting the normal `/account/login` route clears an abandoned signup marker so an existing customer does not inherit the signup prompt.
+The signup trip is identified with `cc:signup-password-setup` in `sessionStorage`. The marker is set on `/account/register`, kept through OTP and any platform-owned authentication route, and cleared when EasyStore confirms the account-details save with `update_success`.
+
+An `/account/login` URL by itself does **not** clear the marker because EasyStore can use that route while a registration is still in progress. The marker is cleared early only when the shopper explicitly follows the registration page's sign-in link or submits the existing-customer password form. That prevents a real returning customer from inheriting a stale signup prompt without dropping the password requirement from a new signup.
 
 Outside an active signup trip, `/account/details` does **not** move, relabel, or require `details[password2]`. Normal account-details visits keep both password controls in EasyStore's hidden **Change password** panel. Customers who deliberately want to change a password later use that normal account feature.
 
 This means the theme does not guess whether a customer "has a password" from profile completeness or keep a long-lived browser-side password-state marker. The only browser state is the short-lived, tab-scoped fact that the shopper is currently finishing signup.
+
+## Returning customer login
+
+The theme-rendered `/account/login` form is **password-first**: it asks for the customer's email/mobile identity and `customer[password]`, then renders EasyStore's optional `login/button` methods below the normal password submit. OTP remains appropriate for registration verification and password recovery; the theme does not auto-select OTP as the returning-customer login method.
+
+EasyStore can also render parts of the account flow itself. Theme code must not write values into, dispatch events into, or auto-click controls in those platform-owned verification widgets. If a live EasyStore-owned login screen chooses OTP despite the password-first theme template, that authentication-mode choice must be corrected in EasyStore's customer/login settings or platform behavior rather than by scripting the OTP widget from the theme.
 
 ## Return to the page before signup
 
@@ -65,7 +73,9 @@ The signup/profile gate must preserve these behaviors:
 - a machine-only Click ID cannot make a human profile complete;
 - **Set password appears only during signup** and stays hidden for later mandatory-profile or normal account-details visits;
 - signup never asks for a current password;
-- leaving signup for normal login clears the signup-only password marker;
+- platform auth route changes do not erase the signup-only password marker;
+- deliberately switching from registration to password sign-in clears the signup-only password marker;
+- the theme-rendered returning-customer login keeps password as its primary form;
 - once EasyStore accepts the completed required profile, the customer returns to the product or prior storefront page they were trying to continue from.
 
 The implementation lives in `theme/snippets/login-redirect-boot.liquid`, with regression coverage in `tests/test_profile_completion_gate.py` and the login-redirect browser suite.
