@@ -624,55 +624,18 @@ Before opening a pull request:
   platform's verification cells are what broke signup with "Customer already
   exists (phone)". Setting the matching store translations makes each override a
   no-op, and it can be deleted at that point.
-- Autofill on that one-time-code step used to drop the whole code into a single
-  cell instead of spreading it across the six. `account-otp-autofill.js` fixes
-  it, and the history is worth knowing before touching it, because the same
-  symptom was attempted twice before and broke signup both times. PR #65 and
-  PR #66 wrote the digits into the cells and dispatched `input` and `change` on
-  each one; two scripts ended up writing into the same fields, the widget's own
-  submit ran more than once, the second POST returned "Customer already exists
-  (phone)", and every new customer was blocked until `b228492` reverted it. A
-  submit lock does not help — the widget posts over `fetch`, so there is no
-  submit event to intercept.
-- What made a safe fix possible was reading the widget instead of guessing.
-  Captured at `/account/auth/send`: six `type="number"` cells, `maxlength="1"`,
-  `pattern="[0-9]"`, class `otp-input`, no `name` and no `id`, inside
-  `div#otp-form > div.d-flex`, with **no `form` element** — which is why the
-  reverted module never even ran here, as it gated on a form action matching a
-  verification keyword. `maxlength` is inert on a number input, so all six digits
-  fit in one cell; no cell sets `autocomplete`, so Android has no
-  `one-time-code` target and fills whichever cell has focus. The cells carry no
-  framework state, so the widget reads `value` directly. Its own handler is:
 
-  ```js
-  if (input.value.length >= 1) {
-    if (index < otp_inputs.length - 1) otp_inputs[index + 1].focus();
-    if (index === 5) submitOTP();
-  }
-  ```
-
-  `submitOTP()` therefore has exactly one trigger: an `input` event on the last
-  cell. The module fills the cells by assignment — no events, because the widget
-  reads `value` — and emits that single `input` on the last cell only, which is
-  the same one event a customer's sixth keystroke produces. It emits nothing when
-  the code is short, so a partial verification cannot post, and it latches so a
-  suggestion that fires `input` twice still hands the code over once. The
-  widget's own paste path already spreads a code correctly and sets values
-  without dispatching, so the module never sees it and stays out of the way.
-- Re-derive all of that with `scripts/otp-widget-capture.console.js` (markup and
-  whether the cells carry framework state) and `scripts/otp-handler-probe.console.js`
-  (the handlers as source, out of jQuery's registry and `getEventListeners`).
-  Both only read — no value set, no event dispatched, no listener added, no node
-  removed, and no digits printed — so they are safe to run during a real signup.
-  Neither is packaged.
-- The invariant that matters here is a count, not a shape: the widget must be
-  asked to submit exactly once. `e2e/otp-autofill.spec.js` asserts it by running
-  the real module against a replica built from the captured markup and handlers,
-  counting `submitOTP()` calls across autofill, short codes, repeat autofill,
-  typing, paste, and correction. It needs no storefront, so its CI job depends on
-  `validate` rather than `preflight` and keeps running when the live store is
-  unreachable. `tests/test_otp_cell_autofill.py` still bans the reverted design
-  by name.
+- EasyStore owns the one-time-code cells and the verification request. Theme
+  code must not write values into those cells or dispatch events into them.
+  This is intentionally absolute: the widget submits over `fetch`, its handlers
+  can change without a theme deploy, and a theme-side submit lock or synthetic
+  event count cannot guarantee a single request. The first request can create
+  the customer and a second then returns "Customer already exists (phone)".
+  Native typing, paste, and browser autofill are left untouched; Android's
+  split-autofill limitation remains a platform issue. The read-only
+  `scripts/otp-widget-capture.console.js` and
+  `scripts/otp-handler-probe.console.js` probes may inspect the widget, but
+  neither is packaged and neither mutates it.
 - A store translation can come back empty. A field whose placeholder and
   floating label both read one key then renders with no visible title at all,
   which is how the email field on `/account/details` shipped untitled while

@@ -2,8 +2,8 @@
 
 A Buy Now login carries the product/prior-page target in sessionStorage. The
 customer may be authenticated before EasyStore considers their profile complete,
-so the target must stay pending until the required human profile fields are
-accepted. Set password is surfaced only during the mobile/OTP signup trip.
+so the target must stay pending until EasyStore's native first-password step and
+the required human profile fields are accepted.
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 THEME = ROOT / "theme"
 BOOT = THEME / "snippets" / "login-redirect-boot.liquid"
 DETAILS = THEME / "templates" / "customers" / "details.liquid"
+REGISTER = THEME / "templates" / "customers" / "register.liquid"
 SIGNUP_DOC = ROOT / "docs" / "CUSTOMER_SIGNUP_FLOW.md"
 ASSET = THEME / "assets" / "account-login-redirect.js"
 EDITOR_ASSET = THEME / "editor_assets" / "account-login-redirect.js"
@@ -84,7 +85,7 @@ class ProfileCompletionGateTests(unittest.TestCase):
         # Once none of the four required human fields are blank, the gate is not
         # rendered. The account landing path then consumes the target that was
         # deliberately preserved during signup/profile completion and replaces
-        # /account/details with the original storefront page.
+        # the account landing page with the original storefront page.
         self.assertIn("window.sessionStorage.removeItem('cc:pending-login-redirect');", landing)
         self.assertIn("window.location.replace(target);", landing)
         self.assertLess(
@@ -107,60 +108,35 @@ class ProfileCompletionGateTests(unittest.TestCase):
         self.assertIn("form.checkValidity", boot)
         self.assertIn("form.reportValidity", boot)
 
-    def test_signup_surfaces_only_the_new_password_field(self) -> None:
-        boot = read(BOOT)
+    def test_profile_gate_never_reuses_change_password_fields_for_signup(self) -> None:
+        boot = liquid_code(read(BOOT))
         details = read(DETAILS)
+        register = read(REGISTER)
 
-        # Keep EasyStore's normal account password-change pair intact.
+        # EasyStore keeps a distinct contract for first password creation and
+        # later password changes. Do not silently turn the latter into the former.
+        self.assertIn('name="customer[password]"', register)
         self.assertIn('name="details[password1]"', details)
         self.assertIn('name="details[password2]"', details)
+        self.assertNotIn('details[password1]', boot)
+        self.assertNotIn('details[password2]', boot)
+        self.assertNotIn("cc:signup-password-setup", boot)
+        self.assertNotIn("signupPasswordPending", boot)
 
-        # Signup must never surface or query the current-password control.
-        self.assertNotIn("form.querySelector('[name=\"details[password1]\"]')", boot)
-        self.assertIn("form.querySelector('[name=\"details[password2]\"]')", boot)
-        self.assertNotIn("currentPassword", boot)
-        self.assertNotIn("currentWrapper", boot)
-
-        self.assertIn("password.setAttribute('required', 'required');", boot)
-        self.assertIn("password.setAttribute('autocomplete', 'new-password');", boot)
-        self.assertIn("password.setAttribute('placeholder', 'Set password');", boot)
-        self.assertIn("passwordLabel.textContent = 'Set password';", boot)
-        self.assertIn("saveArea.insertBefore(passwordWrapper, saveRow);", boot)
-
-    def test_set_password_is_visible_only_during_signup(self) -> None:
+    def test_native_first_password_step_precedes_details_redirect(self) -> None:
         boot = read(BOOT)
 
-        # Visiting the real registration route starts a tab-scoped signup trip.
-        self.assertIn("SIGNUP_PASSWORD_KEY = 'cc:signup-password-setup'", boot)
-        self.assertIn("var REGISTER_PATH = /^\\/account\\/register(?:\\/|$)/i;", boot)
-        self.assertIn("if (REGISTER_PATH.test(path)) {", boot)
-        self.assertIn("setSignupPasswordPending();", boot)
+        self.assertIn("function nativeFirstPasswordStep()", boot)
+        self.assertIn('input[name="customer[password]"]', boot)
+        self.assertIn("function routeAfterNativeAccountSetup()", boot)
+        self.assertIn("if (nativeFirstPasswordStep()) return;", boot)
+        self.assertIn("document.addEventListener('DOMContentLoaded', routeAfterNativeAccountSetup);", boot)
 
-        # EasyStore can move an in-progress signup through /account/login, so the
-        # route itself must not erase the first-password requirement. Clear it
-        # only when the shopper deliberately switches to password sign-in or
-        # actually submits the existing-customer password form.
-        self.assertIn("var LOGIN_PATH = /^\\/account\\/login(?:\\/|$)/i;", boot)
-        self.assertNotIn("if (LOGIN_PATH.test(path))", boot)
-        self.assertIn("target.closest('a[href]')", boot)
-        self.assertIn("LOGIN_PATH.test(destination.pathname)", boot)
-        self.assertIn("form.matches('form[action=\"/account/login\"]')", boot)
-        self.assertIn("form.querySelector('input[name=\"customer[password]\"]')", boot)
-        self.assertIn("clearSignupPasswordPending();", boot)
-
-        # The mandatory details gate promotes the new-password field only while
-        # that signup marker is present. Normal profile completion leaves it hidden.
-        self.assertIn("var signupPasswordSetup = signupPasswordPending();", boot)
-        self.assertIn("if (signupPasswordSetup && password) {", boot)
-        self.assertNotIn("PASSWORD_SET_PREFIX", boot)
-        self.assertNotIn("cc-profile-customer-id", boot)
-        self.assertNotIn("localStorage", boot)
-
-        # EasyStore's server acknowledgement ends the signup-only password step.
-        self.assertIn("{% if update_success %}", boot)
-        self.assertIn('<meta name="cc-profile-update-success" content="true">', boot)
-        self.assertIn("if (profileUpdateSucceeded && signupPasswordPending()) {", boot)
-        self.assertIn("clearSignupPasswordPending();", boot)
+        route = boot[boot.index("function routeAfterNativeAccountSetup()") :]
+        self.assertLess(
+            route.index("if (nativeFirstPasswordStep()) return;"),
+            route.index("window.location.replace(PROFILE_PATH);"),
+        )
 
     def test_signup_policy_is_documented(self) -> None:
         documentation = read(SIGNUP_DOC).lower()
@@ -168,12 +144,12 @@ class ProfileCompletionGateTests(unittest.TestCase):
         self.assertIn("mobile number", documentation)
         self.assertIn("otp", documentation)
         self.assertIn("guest checkout is disabled", documentation)
-        self.assertIn("set password", documentation)
-        self.assertIn("no current-password field", documentation)
-        self.assertIn("signup-only", documentation)
-        self.assertIn("/account/register", documentation)
-        self.assertIn("normal account-details", documentation)
-        self.assertIn("update_success", documentation)
+        self.assertIn("customer[password]", documentation)
+        self.assertIn("details[password1]", documentation)
+        self.assertIn("details[password2]", documentation)
+        self.assertIn("change password", documentation)
+        self.assertIn("native", documentation)
+        self.assertIn("password-first", documentation)
         self.assertIn("is_optional_fields_filled", documentation)
         self.assertIn("does not keep the gate locked", documentation)
         self.assertIn("product or prior storefront page", documentation)
@@ -194,6 +170,7 @@ class ProfileCompletionGateTests(unittest.TestCase):
         self.assertIn(marker, asset)
         self.assertLess(asset.index("if (stillAuthenticating())"), asset.index(marker))
         self.assertLess(asset.index(marker), asset.index("if (!signedIn()) return;"))
+        self.assertNotIn("details[password2]", asset)
 
     def test_editor_asset_stays_identical(self) -> None:
         self.assertEqual(read(ASSET), read(EDITOR_ASSET))
