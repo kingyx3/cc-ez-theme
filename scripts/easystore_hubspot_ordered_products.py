@@ -5,6 +5,12 @@ HubSpot Product records are variant-level in this integration. Before delegating
 to the existing product sync, this entrypoint scans the same complete EasyStore
 Order lifecycle buckets used by production and keeps only variants whose SKU is
 referenced by at least one Order line.
+
+HubSpot's Product ``createdate`` and ``hs_lastmodifieddate`` are CRM system
+metadata, not source-system timestamps. Production therefore adds dedicated
+``easystore_product_created_at`` and ``easystore_product_modified_at`` datetime
+properties and writes the EasyStore parent Product's own creation/update times to
+them for every synchronized variant.
 """
 
 from __future__ import annotations
@@ -18,6 +24,26 @@ from typing import Any
 import easystore_hubspot_order_sync as order_sync
 import easystore_hubspot_orders as orders
 import easystore_hubspot_products as products
+
+
+PRODUCT_SOURCE_DATE_FIELDS: tuple[products.FieldSpec, ...] = (
+    products.FieldSpec(
+        key="source_created_at",
+        sources=("created_at", "created_on"),
+        fallback="easystore_product_created_at",
+        label="EasyStore Created Date",
+        description="Date and time the product record was created in EasyStore.",
+        kind="datetime",
+    ),
+    products.FieldSpec(
+        key="source_modified_at",
+        sources=("updated_at", "modified_at", "updated_on", "modified_on"),
+        fallback="easystore_product_modified_at",
+        label="EasyStore Modified Date",
+        description="Date and time the product record was last modified in EasyStore.",
+        kind="datetime",
+    ),
+)
 
 
 def ordered_variant_skus(
@@ -73,6 +99,7 @@ def sync(
     )
 
     base_product_variants = products.product_variants
+    base_product_fields = products.PRODUCT_FIELDS
     skipped_without_orders = 0
 
     def ordered_product_variants(
@@ -102,6 +129,7 @@ def sync(
         return selected
 
     products.product_variants = ordered_product_variants
+    products.PRODUCT_FIELDS = (*base_product_fields, *PRODUCT_SOURCE_DATE_FIELDS)
     try:
         summary = products.sync(
             store_domain=store_domain,
@@ -110,6 +138,7 @@ def sync(
         )
     finally:
         products.product_variants = base_product_variants
+        products.PRODUCT_FIELDS = base_product_fields
 
     result = dict(summary)
     result.update(
