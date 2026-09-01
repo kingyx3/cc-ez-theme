@@ -132,13 +132,21 @@ class ProfileCompletionGateTests(unittest.TestCase):
 
         # Visiting the real registration route starts a tab-scoped signup trip.
         self.assertIn("SIGNUP_PASSWORD_KEY = 'cc:signup-password-setup'", boot)
-        self.assertIn("if (/^\\/account\\/register(?:\\/|$)/i.test(path)) {", boot)
-        self.assertIn("window.sessionStorage.setItem(SIGNUP_PASSWORD_KEY, '1');", boot)
+        self.assertIn("var REGISTER_PATH = /^\\/account\\/register(?:\\/|$)/i;", boot)
+        self.assertIn("if (REGISTER_PATH.test(path)) {", boot)
+        self.assertIn("setSignupPasswordPending();", boot)
 
-        # Returning to ordinary login means signup was abandoned, so an existing
-        # customer cannot inherit the signup-only password prompt.
-        self.assertIn("if (/^\\/account\\/login(?:\\/|$)/i.test(path)) {", boot)
-        self.assertIn("window.sessionStorage.removeItem(SIGNUP_PASSWORD_KEY);", boot)
+        # EasyStore can move an in-progress signup through /account/login, so the
+        # route itself must not erase the first-password requirement. Clear it
+        # only when the shopper deliberately switches to password sign-in or
+        # actually submits the existing-customer password form.
+        self.assertIn("var LOGIN_PATH = /^\\/account\\/login(?:\\/|$)/i;", boot)
+        self.assertNotIn("if (LOGIN_PATH.test(path))", boot)
+        self.assertIn("target.closest('a[href]')", boot)
+        self.assertIn("LOGIN_PATH.test(destination.pathname)", boot)
+        self.assertIn("form.matches('form[action=\"/account/login\"]')", boot)
+        self.assertIn("form.querySelector('input[name=\"customer[password]\"]')", boot)
+        self.assertIn("clearSignupPasswordPending();", boot)
 
         # The mandatory details gate promotes the new-password field only while
         # that signup marker is present. Normal profile completion leaves it hidden.
