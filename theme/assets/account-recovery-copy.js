@@ -50,11 +50,17 @@
     || EMAIL_PROMISE.test(document.body ? document.body.textContent || '' : '');
 
   const start = () => {
+    // The marker/text probe is much cheaper than materialising every candidate
+    // element on a normal storefront page. Run it first so non-account pages do
+    // no broad DOM scan at all. Keep the second probe after the rewrite because
+    // that was the original rule for whether a dynamically-rendered step needs
+    // an observer once the matching sentence has been replaced.
+    if (!hasRecoveryStep()) return;
     rewriteWithin(document.body);
-    // The platform flow can render its recovery step after a click, so the page
-    // is watched - but only on a page that has such a step at all.
     if (!hasRecoveryStep()) return;
 
+    // The platform flow can render its recovery step after a click, so the page
+    // is watched - but only on a page that has such a step at all.
     // One rescan per frame at most, and a timer where frames are unavailable.
     const soon = typeof window.requestAnimationFrame === 'function'
       ? (callback) => window.requestAnimationFrame(callback)

@@ -6,7 +6,19 @@
   This snippet only prepares what every row needs — sign-in state, the current
   time, the page's product identifiers, and the diagnostics that report what the
   order pass could actually read — and then renders the configuration.
+
+  `defer_history: true` deliberately skips the expensive inline customer-order
+  scan. The client validator already treats zero inline line items as unknown,
+  loads the authoritative account-order payload, caches it in sessionStorage,
+  and holds purchase attempts until the history is known. Keeping inline history
+  as the default preserves direct snippet rendering and diagnostic tooling while
+  storefront delivery can opt into the cheaper path.
 {% endcomment %}
+
+{% assign customer_order_limit_inline_history_enabled = true %}
+{% if defer_history %}
+  {% assign customer_order_limit_inline_history_enabled = false %}
+{% endif %}
 
 {% comment %}
   A truthy customer object is the sign-in check the rest of the theme uses for
@@ -37,6 +49,10 @@
   against a configured limit happens per row. Without this, "the limit is not
   enforcing" cannot be told apart from "the storefront cannot see order history"
   without another release.
+
+  When history delivery is deferred, leaving these counters at zero is
+  intentional: zero line items is the client validator's existing signal that
+  history is unknown and must be loaded before a purchase can be measured.
 {% endcomment %}
 {% assign customer_order_limit_orders_seen = 0 %}
 {% assign customer_order_limit_cancelled_seen = 0 %}
@@ -45,7 +61,7 @@
 {% assign customer_order_limit_sample_count = 0 %}
 {% assign customer_order_limit_status_sample = '' %}
 {% assign customer_order_limit_status_count = 0 %}
-{% if customer_order_limit_customer_authenticated %}
+{% if customer_order_limit_customer_authenticated and customer_order_limit_inline_history_enabled %}
   {% assign customer_order_limit_orders = customer.orders | default: customer.recent_orders %}
   {% for order in customer_order_limit_orders %}
     {% comment %}
