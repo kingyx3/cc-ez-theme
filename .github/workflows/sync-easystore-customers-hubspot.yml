@@ -53,6 +53,7 @@ jobs:
         run: |
           python -m py_compile scripts/easystore_hubspot_schema.py
           python -m py_compile scripts/easystore_hubspot_products.py
+          python -m py_compile scripts/easystore_hubspot_ordered_products.py
           python -m py_compile scripts/easystore_hubspot_sync.py
           python -m py_compile scripts/easystore_hubspot_customer_sync.py
           python -m py_compile scripts/easystore_hubspot_contact_identity.py
@@ -152,7 +153,7 @@ jobs:
           set -euo pipefail
           python scripts/easystore_hubspot_preflight.py | tee preflight-summary.json
 
-      - name: Pull EasyStore products and upsert HubSpot products
+      - name: Pull ordered EasyStore products and upsert HubSpot products
         id: products
         continue-on-error: true
         env:
@@ -161,7 +162,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python scripts/easystore_hubspot_products.py | tee product-sync-summary.json
+          python scripts/easystore_hubspot_ordered_products.py | tee product-sync-summary.json
 
       - name: Pull EasyStore customers and upsert HubSpot contacts
         id: customers
@@ -258,7 +259,7 @@ jobs:
             echo
             echo "- GitHub environment: \`${DEPLOYMENT_ENV}\`"
             echo "- Schedule: 00:00, 06:00, 12:00, 18:00 Asia/Singapore (both dev and prod)"
-            echo "- Products: one HubSpot Product per EasyStore variant, keyed by SKU"
+            echo "- Products: one HubSpot Product per EasyStore variant, keyed by SKU; only variants referenced by at least one EasyStore Order are synced"
             echo "- Customers: keyed by normalized HubSpot phone; mobilephone is mirror-only; ambiguous primary-phone ownership fails before writes"
             echo "- Source attribution: Cloudflare click ids on contacts resolved against D1; an acquisition is written once and never overwritten"
             echo "- Customer notes: Customer.note + Customer.note2 only; Order notes remain separate"
