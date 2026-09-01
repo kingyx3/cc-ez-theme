@@ -40,8 +40,10 @@
   keeps that session marker through EasyStore's OTP pages. The mandatory details
   form surfaces password2 only while that signup marker exists. EasyStore's
   server-rendered `update_success` acknowledgement clears it after the successful
-  details save. Visiting the normal login page clears an abandoned signup marker.
-  Normal account-details visits never surface Set password.
+  details save. The marker is also cleared when the shopper explicitly abandons
+  registration for the password sign-in form, but not merely because EasyStore
+  routes an in-progress signup through `/account/login`. Normal account-details
+  visits never surface Set password.
 
   The Liquid decision is rendered as meta markers rather than interpolated into
   JavaScript. `e2e/login-redirect.spec.js` executes this first script directly as
@@ -301,20 +303,62 @@
 
     var path = String(window.location.pathname || '');
     var SIGNUP_PASSWORD_KEY = 'cc:signup-password-setup';
+    var REGISTER_PATH = /^\/account\/register(?:\/|$)/i;
+    var LOGIN_PATH = /^\/account\/login(?:\/|$)/i;
 
-    try {
-      if (/^\/account\/register(?:\/|$)/i.test(path)) {
+    function setSignupPasswordPending() {
+      try {
         window.sessionStorage.setItem(SIGNUP_PASSWORD_KEY, '1');
+      } catch (error) {
+        /* signup can continue; only the details-page promotion is unavailable */
+      }
+    }
+
+    function clearSignupPasswordPending() {
+      try {
+        window.sessionStorage.removeItem(SIGNUP_PASSWORD_KEY);
+      } catch (error) {
+        /* signup marker disappears with the tab when storage is unavailable */
+      }
+    }
+
+    if (REGISTER_PATH.test(path)) {
+      setSignupPasswordPending();
+    }
+
+    // EasyStore may carry a registration through an /account/login URL while it
+    // still owns the OTP/authentication step. Route alone is therefore not proof
+    // that signup was abandoned. Clear only when the shopper explicitly takes
+    // the registration page's sign-in escape hatch.
+    document.addEventListener('click', function (event) {
+      if (!REGISTER_PATH.test(path)) return;
+
+      var target = event.target;
+      if (!target || !target.closest) return;
+      var link = target.closest('a[href]');
+      if (!link) return;
+
+      var destination = null;
+      try {
+        destination = new URL(link.getAttribute('href'), window.location.href);
+      } catch (error) {
         return;
       }
+      if (destination.origin !== window.location.origin) return;
+      if (!LOGIN_PATH.test(destination.pathname)) return;
 
-      // Following the register page's "Sign in" escape hatch means signup was
-      // abandoned. Do not let that stale marker affect an existing account.
-      if (/^\/account\/login(?:\/|$)/i.test(path)) {
-        window.sessionStorage.removeItem(SIGNUP_PASSWORD_KEY);
-      }
-    } catch (error) {
-      /* signup still works; only the optional details-page promotion is lost */
-    }
+      clearSignupPasswordPending();
+    }, true);
+
+    // A real password-form POST is also unambiguous: this is an existing
+    // customer signing in, not the platform moving a new signup between pages.
+    document.addEventListener('submit', function (event) {
+      var form = event.target;
+      if (!form || !form.matches) return;
+      if (!form.matches('form[action="/account/login"]')) return;
+      if (!form.querySelector('input[name="customer[password]"]')) return;
+
+      clearSignupPasswordPending();
+    }, true);
   })();
 </script>
