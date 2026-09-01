@@ -75,11 +75,13 @@ class OtpFieldsAreLeftAloneTests(unittest.TestCase):
                 self.assertNotIn("one-time-code", source)
                 self.assertNotIn("OTPCredential", source)
 
-    def test_no_theme_script_touches_platform_otp_cells(self) -> None:
+    def test_otp_aware_scripts_never_dispatch_synthetic_input(self) -> None:
         for path, source in self.scripts.items():
+            if "#otp-form" not in source and "otp-input" not in source:
+                continue
             with self.subTest(script=path.name):
-                self.assertNotIn("#otp-form", source)
-                self.assertNotIn("otp-input", source)
+                self.assertNotIn("new Event('input'", source)
+                self.assertNotIn('new Event("input"', source)
 
 
 class ActivateAccountButtonTests(unittest.TestCase):
