@@ -43,11 +43,16 @@
     || EMAIL_SIGNUP.test(pageText());
 
   const start = () => {
+    // Detect the account step before walking every link/button. Ordinary
+    // storefront pages only pay for the existing marker/text probe and skip the
+    // broad control scan completely. Repeat the original guard after hiding so
+    // observation behavior stays tied to the same post-rewrite page state.
+    if (!hasAccountStep()) return;
     hideEmailSignup();
-    // The platform renders its next step after a submit, so the page is watched
-    // - but only on a page that has an account step at all.
     if (!hasAccountStep()) return;
 
+    // The platform renders its next step after a submit, so the page is watched
+    // - but only on a page that has an account step at all.
     let queued = false;
     new MutationObserver(() => {
       if (queued) return;
