@@ -1,6 +1,6 @@
 # EasyStore browser E2E tests
 
-These Playwright tests exercise a deployed EasyStore storefront rather than rendering Liquid locally. Every pull request runs the complete browser/device and Axe matrix. By default PRs target `https://cardboard.sg`; set the repository Actions variable `E2E_PR_BASE_URL` when a deployed preview storefront is available so the same suite validates that preview instead.
+These Playwright tests exercise a deployed EasyStore storefront rather than rendering Liquid locally. Every pull request runs the complete browser/device and Axe matrix. By default PRs target the EasyStore dev storefront at `https://cardboardcollective.easy.co`; set the repository Actions variable `E2E_PR_BASE_URL` when a different deployed preview storefront is available so the same suite validates that preview instead.
 
 ## Run locally
 
@@ -22,12 +22,22 @@ npm run test:e2e
 
 `E2E_LIMITED_PRODUCT_PATH` is optional. Left unset, the suite reads the handles configured in `theme/snippets/customer-order-limit-config.liquid` and opens the first one the storefront publishes a purchase-limit rule for, falling back to the collections that carry limited products if a handle does not resolve as a bare `/products/<handle>` URL. So a product whose SKU changes — or a limit that moves to a different product — needs no change here. Set the variable only to pin one specific product.
 
+## Authenticated login smoke
+
+GitHub Actions also verifies that the configured returning-customer test account can sign in with a password on the target storefront. Configure these repository Actions values:
+
+- variable `EASYSTORE_TEST_USER`
+- secret `EASYSTORE_TEST_USER_PW`
+
+The authenticated spec disables Playwright trace, screenshot, and video retention so failure artifacts cannot capture the password or authenticated account state. It only signs in and verifies that EasyStore lands on an account route; it does not place an order.
+
 ## GitHub Actions
 
 Every pull request runs all of the following:
 
 - Playwright suite/configuration validation
 - storefront reachability preflight
+- authenticated password login smoke on Chromium desktop
 - Chromium desktop
 - Firefox desktop
 - WebKit desktop
@@ -36,9 +46,9 @@ Every pull request runs all of the following:
 - Axe serious/critical accessibility checks
 - OTP autofill, login redirect, and purchase-limit-after-login regression suites, which serve their own pages and so run even when the storefront is unreachable
 
-The PR target resolves in this order: `E2E_PR_BASE_URL`, `E2E_BASE_URL`, then `https://cardboard.sg`. The workflow can also be run manually with an explicit `base_url`.
+The PR target resolves in this order: `E2E_PR_BASE_URL`, `E2E_BASE_URL`, then `https://cardboardcollective.easy.co`. The workflow can also be run manually with an explicit `base_url`.
 
-The suite covers storefront shell/navigation, responsive menus, collections, positive and empty search, unknown-route/404 behavior, PDP controls and image modal, guest purchase-limit login redirect, cart add/update/remove state, checkout handoff, login UI, uncaught same-origin JavaScript errors, broken same-origin resources, horizontal overflow, cross-browser/device projects, and automated Axe checks.
+The suite covers storefront shell/navigation, responsive menus, collections, positive and empty search, unknown-route/404 behavior, PDP controls and image modal, guest purchase-limit login redirect, cart add/update/remove state, checkout handoff, login UI, authenticated password login, uncaught same-origin JavaScript errors, broken same-origin resources, horizontal overflow, cross-browser/device projects, and automated Axe checks.
 
 Known EasyStore/platform behavior is narrowly baselined instead of disabling checks wholesale: third-party script exceptions are ignored, the injected cart-view `getCart` null error is recorded as a known platform error, and existing accessibility findings are allowlisted by exact Axe rule and DOM target. Any new same-origin error, broken resource, or serious/critical accessibility target still fails CI.
 

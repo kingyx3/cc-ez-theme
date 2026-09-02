@@ -151,8 +151,8 @@ test.describe('customer entry points', () => {
       return;
     }
 
-    const phoneInput = page.getByRole('textbox', { name: /mobile number/i });
-    await expect(phoneInput).toBeVisible();
+    const identityInput = page.getByRole('textbox', { name: /phone or email|mobile number/i });
+    await expect(identityInput).toBeVisible();
     await expect(page.getByRole('button', { name: /continue/i })).toBeVisible();
   });
 });

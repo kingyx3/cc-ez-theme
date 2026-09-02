@@ -47,11 +47,36 @@ async function expectBasicPageHealth(page) {
   expect(overflow, 'page should not horizontally overflow the viewport').toBeLessThanOrEqual(2);
 }
 
+// Chromium can reach DOMContentLoaded before the deferred product runtime has
+// upgraded <product-form>. Clicking at that moment exercises the browser's
+// native form path instead of the EasyStore Ajax cart path and makes cart.json
+// appear unchanged. Wait for the exact runtime the shopper uses before
+// classifying a product or clicking Add to Cart.
+async function waitForProductRuntime(page) {
+  await page.waitForFunction(() => {
+    const form = document.querySelector('product-form form[action="/cart/add"]');
+    const host = form && form.closest('product-form');
+    const productFormReady = Boolean(form && host && host.form === form);
+    const cartRuntimeReady = typeof window.EasyStore?.Action?.addToCart === 'function';
+
+    // customer-order-limits.js intentionally does not create an API on pages
+    // with no configured rules. If rules are present, however, wait until its
+    // API exists so a fast browser cannot misclassify a limited product as an
+    // unlimited one merely because the deferred script has not executed yet.
+    const source = window.customerOrderLimitsV2;
+    const hasRules = Boolean(source?.rules && Object.keys(source.rules).length);
+    const limitsReady = !hasRules || typeof window.CustomerOrderLimits?.ruleFor === 'function';
+
+    return productFormReady && cartRuntimeReady && limitsReady;
+  }, null, { timeout: 15_000 });
+}
+
 async function readCart(page) {
   return page.evaluate(async () => {
     const response = await fetch('/cart.json', {
       method: 'GET',
       credentials: 'same-origin',
+      cache: 'no-store',
       headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
     });
     if (!response.ok) throw new Error(`cart.json returned ${response.status}`);
@@ -76,6 +101,19 @@ async function productLinksFromCollection(page, collectionPath) {
   return hrefs.slice(0, 10);
 }
 
+async function productHasActiveLimit(page, handle) {
+  await waitForProductRuntime(page);
+  return page.evaluate(productHandle => {
+    const source = window.customerOrderLimitsV2;
+    const hasRules = Boolean(source?.rules && Object.keys(source.rules).length);
+    if (!hasRules) return false;
+    if (typeof window.CustomerOrderLimits?.ruleFor !== 'function') {
+      throw new Error('CustomerOrderLimits API did not initialize for a product that publishes limit rules.');
+    }
+    return Boolean(window.CustomerOrderLimits.ruleFor(productHandle));
+  }, handle);
+}
+
 async function openUnlimitedPurchasableProduct(page) {
   const collections = [
     '/collections/marvel-super-heroes',
@@ -91,9 +129,11 @@ async function openUnlimitedPurchasableProduct(page) {
       const add = page.locator('#AddToCart').first();
       if (!(await form.count()) || !(await add.count())) continue;
       if (await add.isDisabled()) continue;
+
+      await waitForProductRuntime(page);
       const handle = new URL(page.url()).pathname.match(/\/products\/([^/?#]+)/)?.[1] || '';
-      const limited = await page.evaluate(productHandle => Boolean(window.CustomerOrderLimits?.ruleFor?.(productHandle)), handle);
-      if (!limited) return href;
+      if (!handle) continue;
+      if (!(await productHasActiveLimit(page, handle))) return href;
     }
   }
 
@@ -104,7 +144,7 @@ async function isLimitedProductPage(page) {
   if (!(await page.locator('form[action="/cart/add"]').first().count())) return false;
   const handle = new URL(page.url()).pathname.match(/\/products\/([^/?#]+)/)?.[1] || '';
   if (!handle) return false;
-  return page.evaluate(productHandle => Boolean(window.CustomerOrderLimits?.ruleFor?.(productHandle)), handle);
+  return productHasActiveLimit(page, handle);
 }
 
 // Opens a product the storefront actually publishes a limit rule for, and
@@ -130,12 +170,19 @@ async function openLimitedProduct(page) {
 async function openConfiguredUnlimitedProduct(page) {
   if (process.env.E2E_UNLIMITED_PRODUCT_PATH) {
     await gotoStorefront(page, process.env.E2E_UNLIMITED_PRODUCT_PATH);
+    await waitForProductRuntime(page);
+
+    const handle = new URL(page.url()).pathname.match(/\/products\/([^/?#]+)/)?.[1] || '';
+    expect(handle, 'configured unlimited product should resolve to a product route').not.toBe('');
+    expect(await productHasActiveLimit(page, handle), 'E2E_UNLIMITED_PRODUCT_PATH must not carry an active customer limit').toBe(false);
+    await expect(page.locator('#AddToCart').first()).toBeEnabled();
     return process.env.E2E_UNLIMITED_PRODUCT_PATH;
   }
   return openUnlimitedPurchasableProduct(page);
 }
 
 async function addCurrentProductToCart(page) {
+  await waitForProductRuntime(page);
   const before = await readCart(page);
   const beforeCount = Number(before?.item_count || 0);
   const add = page.locator('#AddToCart').first();
@@ -143,9 +190,18 @@ async function addCurrentProductToCart(page) {
   await expect(add).toBeEnabled();
   await add.click();
 
-  await expect.poll(async () => Number((await readCart(page))?.item_count || 0), {
-    message: 'cart.json should reflect the added product',
-  }).toBeGreaterThan(beforeCount);
+  try {
+    await expect.poll(async () => Number((await readCart(page))?.item_count || 0), {
+      message: 'cart.json should reflect the added product',
+      timeout: 15_000,
+    }).toBeGreaterThan(beforeCount);
+  } catch (error) {
+    const form = page.locator('form[action="/cart/add"]').first();
+    const visibleError = form.locator('.form__message:not(.hidden), [role="alert"]:visible').first();
+    const message = (await visibleError.textContent().catch(() => ''))?.replace(/\s+/g, ' ').trim();
+    const suffix = message ? ` Storefront error: ${message}` : '';
+    throw new Error(`Add to Cart did not mutate cart.json within 15 seconds.${suffix}`, { cause: error });
+  }
 
   return readCart(page);
 }
@@ -182,4 +238,5 @@ module.exports = {
   readCart,
   removeFirstCartItem,
   searchTerm,
+  waitForProductRuntime,
 };
