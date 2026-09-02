@@ -7,6 +7,14 @@ const {
   requireTestCredentials,
 } = require('./auth-helpers');
 
+// This suite creates a real authenticated customer session. Metrics are the
+// artifact; screenshots, traces, and video must never capture protected pages.
+test.use({
+  trace: 'off',
+  screenshot: 'off',
+  video: 'off',
+});
+
 const OUTPUT_DIR = process.env.AUTH_PERF_RESULTS_DIR
   ? path.resolve(process.env.AUTH_PERF_RESULTS_DIR)
   : path.join(process.cwd(), 'authenticated-performance-results');
