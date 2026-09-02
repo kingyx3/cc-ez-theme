@@ -105,39 +105,50 @@ async function signInThroughClassicForm(page) {
   await submit.click();
 }
 
-async function waitForChallenge(page) {
-  await expect.poll(async () => {
-    if (await hasVisiblePassword(page)) return 'password';
-    if (await hasVisibleOtp(page)) return 'otp';
-
-    if (/^\/account\/challenge(?:\/|$)/i.test(pathOf(page))) {
-      // Do not treat the URL alone as a rendered challenge. Chromium can expose
-      // the new location before EasyStore has replaced the previous document,
-      // which was the original race in this test.
-      const interactive = page.locator('input:visible, button:visible, a:visible, [role="button"]:visible');
-      if (await interactive.count()) return 'challenge-ui';
-    }
-    return 'pending';
-  }, {
-    message: 'EasyStore should advance from identity entry to a rendered authentication challenge',
-    timeout: 20_000,
-  }).not.toBe('pending');
-
-  await page.waitForLoadState('domcontentloaded').catch(() => {});
-  // Give client-rendered challenge controls one animation frame plus a small
-  // debounce after the document swap. This is not a correctness wait; the
-  // locators below still assert the actual control contract.
-  await page.waitForTimeout(250);
+function redactDiagnosticText(value) {
+  return String(value || '')
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[email]')
+    .replace(/\+?\d[\d\s().-]{5,}\d/g, '[number]')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
-function sanitizedChallengeContract(page) {
+async function renderedChallengeSurface(page) {
+  if (await hasVisiblePassword(page)) return 'password';
+  if (await hasVisibleOtp(page)) return 'otp';
+  if (!/^\/account\/challenge(?:\/|$)/i.test(pathOf(page))) return 'pending';
+
+  // Header/navigation links are always present on this theme, so they cannot
+  // prove that the platform challenge has rendered. Require interaction or
+  // challenge-specific copy inside the content/dialog surface instead.
+  const scopedInteractive = page.locator([
+    'main input:visible',
+    'main button:visible',
+    'main [role="button"]:visible',
+    'main iframe:visible',
+    '[role="dialog"] input:visible',
+    '[role="dialog"] button:visible',
+    '[role="dialog"] [role="button"]:visible',
+    '[role="dialog"] iframe:visible',
+  ].join(', '));
+  if (await scopedInteractive.count()) return 'challenge-ui';
+
+  const mainText = redactDiagnosticText(await page.locator('main').first().innerText().catch(() => ''));
+  if (/(password|verification|verify|security code|one[- ]time|otp|challenge|sign in|log in)/i.test(mainText)) {
+    return 'challenge-copy';
+  }
+
+  return 'pending';
+}
+
+async function sanitizedChallengeContract(page) {
   return page.evaluate(() => {
     const clean = value => String(value || '')
       .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[email]')
       .replace(/\+?\d[\d\s().-]{5,}\d/g, '[number]')
       .replace(/\s+/g, ' ')
       .trim()
-      .slice(0, 120);
+      .slice(0, 240);
 
     const visible = element => {
       const style = getComputedStyle(element);
@@ -145,8 +156,22 @@ function sanitizedChallengeContract(page) {
       return style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0;
     };
 
+    const controlDetails = control => ({
+      tag: control.tagName.toLowerCase(),
+      type: clean(control.getAttribute('type')),
+      name: clean(control.getAttribute('name')),
+      ariaLabel: clean(control.getAttribute('aria-label')),
+      title: clean(control.getAttribute('title')),
+      text: clean(control.textContent),
+      hrefPath: control.tagName === 'A' && control.getAttribute('href')
+        ? (() => { try { return new URL(control.href).pathname; } catch (_) { return ''; } })()
+        : '',
+    });
+
+    const main = document.querySelector('main');
     return {
       path: location.pathname,
+      mainText: clean(main ? main.textContent : ''),
       inputs: [...document.querySelectorAll('input')].filter(visible).slice(0, 12).map(input => ({
         type: input.type || null,
         name: clean(input.name),
@@ -156,19 +181,37 @@ function sanitizedChallengeContract(page) {
         ariaLabel: clean(input.getAttribute('aria-label')),
         placeholder: clean(input.getAttribute('placeholder')),
       })),
-      controls: [...document.querySelectorAll('button, a, [role="button"]')].filter(visible).slice(0, 20).map(control => ({
-        tag: control.tagName.toLowerCase(),
-        type: clean(control.getAttribute('type')),
-        name: clean(control.getAttribute('name')),
-        ariaLabel: clean(control.getAttribute('aria-label')),
-        title: clean(control.getAttribute('title')),
-        text: clean(control.textContent),
-        hrefPath: control.tagName === 'A' && control.getAttribute('href')
-          ? (() => { try { return new URL(control.href).pathname; } catch (_) { return ''; } })()
-          : '',
+      mainControls: main
+        ? [...main.querySelectorAll('button, a, [role="button"]')].filter(visible).slice(0, 20).map(controlDetails)
+        : [],
+      dialogs: [...document.querySelectorAll('[role="dialog"]')].filter(visible).slice(0, 4).map(dialog => ({
+        text: clean(dialog.textContent),
+        controls: [...dialog.querySelectorAll('button, a, [role="button"]')].filter(visible).slice(0, 12).map(controlDetails),
+      })),
+      frames: [...document.querySelectorAll('iframe')].filter(visible).slice(0, 6).map(frame => ({
+        title: clean(frame.getAttribute('title')),
+        name: clean(frame.getAttribute('name')),
+        srcPath: (() => { try { return frame.src ? new URL(frame.src).pathname : ''; } catch (_) { return ''; } })(),
+        srcOrigin: (() => { try { return frame.src ? new URL(frame.src).origin : ''; } catch (_) { return ''; } })(),
       })),
     };
   });
+}
+
+async function waitForChallenge(page) {
+  try {
+    await expect.poll(() => renderedChallengeSurface(page), {
+      message: 'EasyStore should advance from identity entry to a rendered authentication challenge',
+      timeout: 20_000,
+      intervals: [100, 200, 500, 1000],
+    }).not.toBe('pending');
+  } catch (error) {
+    const contract = await sanitizedChallengeContract(page).catch(() => ({ path: pathOf(page) }));
+    throw new Error(`EasyStore challenge surface did not render. Sanitized challenge contract: ${JSON.stringify(contract)}`, { cause: error });
+  }
+
+  await page.waitForLoadState('domcontentloaded').catch(() => {});
+  await page.waitForTimeout(200);
 }
 
 async function clickPasswordMethodIfPresent(page) {
