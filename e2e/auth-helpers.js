@@ -2,6 +2,7 @@ const { expect } = require('@playwright/test');
 
 const testUser = (process.env.EASYSTORE_TEST_USER || '').trim();
 const testPassword = process.env.EASYSTORE_TEST_USER_PW || '';
+const RECAPTCHA_BLOCKER_CODE = 'EASYSTORE_RECAPTCHA_REQUIRED';
 
 const AUTHENTICATING_PATH = /^\/account\/(?:login|register|recover|auth|challenge|activate|reset)(?:\/|$)/i;
 const AUTHENTICATING_MARKUP = [
@@ -68,6 +69,22 @@ async function hasVisiblePassword(page) {
   return visible(passwordInput(page));
 }
 
+async function hasVisibleRecaptcha(page) {
+  const frame = page.locator([
+    'iframe[title*="recaptcha" i]:visible',
+    'iframe[src*="/recaptcha/" i]:visible',
+    'iframe[src*="google.com/recaptcha" i]:visible',
+  ].join(', ')).first();
+  if (await visible(frame)) return true;
+
+  const mainText = await page.locator('main').first().innerText().catch(() => '');
+  return /(not a robot|recaptcha)/i.test(mainText);
+}
+
+function isRecaptchaBlockError(error) {
+  return String(error instanceof Error ? error.message : error || '').includes(RECAPTCHA_BLOCKER_CODE);
+}
+
 async function isFullyAuthenticated(page) {
   if (AUTHENTICATING_PATH.test(pathOf(page))) return false;
   if (await visible(page.locator(AUTHENTICATING_MARKUP).first())) return false;
@@ -116,6 +133,7 @@ function redactDiagnosticText(value) {
 async function renderedChallengeSurface(page) {
   if (await hasVisiblePassword(page)) return 'password';
   if (await hasVisibleOtp(page)) return 'otp';
+  if (await hasVisibleRecaptcha(page)) return 'recaptcha';
   if (!/^\/account\/challenge(?:\/|$)/i.test(pathOf(page))) return 'pending';
 
   // Header/navigation links are always present on this theme, so they cannot
@@ -260,10 +278,24 @@ async function openAlternateChallengeMethods(page) {
 
 async function choosePasswordChallenge(page) {
   if (await hasVisiblePassword(page)) return;
+
+  if (await hasVisibleRecaptcha(page)) {
+    throw new Error(
+      `${RECAPTCHA_BLOCKER_CODE}: EasyStore requires Google reCAPTCHA before the password challenge on this CI runner. ` +
+      'Authenticated tests will not automate or bypass CAPTCHA. Configure an approved dev-only CI authentication mechanism or CAPTCHA exemption, then rerun the trusted workflow.'
+    );
+  }
+
   if (await clickPasswordMethodIfPresent(page)) return;
 
   if (await openAlternateChallengeMethods(page)) {
     if (await hasVisiblePassword(page)) return;
+    if (await hasVisibleRecaptcha(page)) {
+      throw new Error(
+        `${RECAPTCHA_BLOCKER_CODE}: EasyStore requires Google reCAPTCHA before the password challenge on this CI runner. ` +
+        'Authenticated tests will not automate or bypass CAPTCHA. Configure an approved dev-only CI authentication mechanism or CAPTCHA exemption, then rerun the trusted workflow.'
+      );
+    }
     if (await clickPasswordMethodIfPresent(page)) return;
   }
 
@@ -362,10 +394,12 @@ async function openAuthenticatedPage(browser, baseURL, storageState, route) {
 
 module.exports = {
   AUTHENTICATING_MARKUP,
+  RECAPTCHA_BLOCKER_CODE,
   SIGNED_IN_MARKUP,
   createAuthenticatedStorageState,
   expectFullyAuthenticated,
   isFullyAuthenticated,
+  isRecaptchaBlockError,
   openAuthenticatedPage,
   requireTestCredentials,
   signIn,
