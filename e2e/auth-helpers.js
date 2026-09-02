@@ -7,6 +7,9 @@ const AUTHENTICATING_PATH = /^\/account\/(?:login|register|recover|auth|challeng
 const AUTHENTICATING_MARKUP = [
   '#otp-form',
   '.otp-input',
+  'input[autocomplete="one-time-code"]',
+  'input[name*="otp" i]',
+  'input[name*="code" i]',
   'input[name="customer[password]"]',
   'input[name="customer[email_or_phone]"]',
   'form[action^="/account/login"]',
@@ -35,12 +38,34 @@ async function visible(locator) {
   return locator.isVisible().catch(() => false);
 }
 
+function passwordInput(page) {
+  return page.locator([
+    'input[type="password"]:visible',
+    'input[name*="password" i]:visible',
+    'input[autocomplete="current-password"]:visible',
+    'input[autocomplete="new-password"]:visible',
+  ].join(', ')).first();
+}
+
 async function hasVisibleOtp(page) {
-  return visible(page.locator('#otp-form:visible, .otp-input:visible').first());
+  const explicit = page.locator([
+    '#otp-form:visible',
+    '.otp-input:visible',
+    'input[autocomplete="one-time-code"]:visible',
+    'input[name*="otp" i]:visible',
+    'input[name*="verification" i]:visible',
+    'input[name*="code" i]:visible',
+  ].join(', ')).first();
+  if (await visible(explicit)) return true;
+
+  // EasyStore has changed OTP markup before. Six single-character numeric/text
+  // cells are a stronger contract than any one class name and contain no data.
+  const singleCharacterInputs = page.locator('input:visible[maxlength="1"]');
+  return (await singleCharacterInputs.count()) >= 4;
 }
 
 async function hasVisiblePassword(page) {
-  return visible(page.locator('input[type="password"]:visible').first());
+  return visible(passwordInput(page));
 }
 
 async function isFullyAuthenticated(page) {
@@ -63,7 +88,7 @@ async function expectFullyAuthenticated(page, expectedPath) {
   }
 
   await expect(page.locator(SIGNED_IN_MARKUP).first()).toBeVisible();
-  await expect(page.locator('#otp-form:visible, .otp-input:visible')).toHaveCount(0);
+  await expect(page.locator('#otp-form:visible, .otp-input:visible, input[autocomplete="one-time-code"]:visible')).toHaveCount(0);
 }
 
 async function signInThroughClassicForm(page) {
@@ -84,41 +109,131 @@ async function waitForChallenge(page) {
   await expect.poll(async () => {
     if (await hasVisiblePassword(page)) return 'password';
     if (await hasVisibleOtp(page)) return 'otp';
-    if (/^\/account\/challenge(?:\/|$)/i.test(pathOf(page))) return 'challenge';
+
+    if (/^\/account\/challenge(?:\/|$)/i.test(pathOf(page))) {
+      // Do not treat the URL alone as a rendered challenge. Chromium can expose
+      // the new location before EasyStore has replaced the previous document,
+      // which was the original race in this test.
+      const interactive = page.locator('input:visible, button:visible, a:visible, [role="button"]:visible');
+      if (await interactive.count()) return 'challenge-ui';
+    }
     return 'pending';
   }, {
-    message: 'EasyStore should advance from identity entry to an authentication challenge',
+    message: 'EasyStore should advance from identity entry to a rendered authentication challenge',
     timeout: 20_000,
   }).not.toBe('pending');
 
   await page.waitForLoadState('domcontentloaded').catch(() => {});
+  // Give client-rendered challenge controls one animation frame plus a small
+  // debounce after the document swap. This is not a correctness wait; the
+  // locators below still assert the actual control contract.
+  await page.waitForTimeout(250);
+}
+
+function sanitizedChallengeContract(page) {
+  return page.evaluate(() => {
+    const clean = value => String(value || '')
+      .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[email]')
+      .replace(/\+?\d[\d\s().-]{5,}\d/g, '[number]')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 120);
+
+    const visible = element => {
+      const style = getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0;
+    };
+
+    return {
+      path: location.pathname,
+      inputs: [...document.querySelectorAll('input')].filter(visible).slice(0, 12).map(input => ({
+        type: input.type || null,
+        name: clean(input.name),
+        autocomplete: clean(input.autocomplete),
+        inputmode: clean(input.inputMode),
+        maxlength: input.maxLength,
+        ariaLabel: clean(input.getAttribute('aria-label')),
+        placeholder: clean(input.getAttribute('placeholder')),
+      })),
+      controls: [...document.querySelectorAll('button, a, [role="button"]')].filter(visible).slice(0, 20).map(control => ({
+        tag: control.tagName.toLowerCase(),
+        type: clean(control.getAttribute('type')),
+        name: clean(control.getAttribute('name')),
+        ariaLabel: clean(control.getAttribute('aria-label')),
+        title: clean(control.getAttribute('title')),
+        text: clean(control.textContent),
+        hrefPath: control.tagName === 'A' && control.getAttribute('href')
+          ? (() => { try { return new URL(control.href).pathname; } catch (_) { return ''; } })()
+          : '',
+      })),
+    };
+  });
+}
+
+async function clickPasswordMethodIfPresent(page) {
+  const accessibleCandidates = [
+    page.getByRole('button', { name: /password/i }),
+    page.getByRole('link', { name: /password/i }),
+    page.locator('[role="button"]:visible').filter({ hasText: /password/i }),
+    page.locator('[aria-label*="password" i]:visible, [title*="password" i]:visible'),
+  ];
+
+  for (const candidate of accessibleCandidates) {
+    const count = await candidate.count();
+    for (let index = 0; index < count; index += 1) {
+      const control = candidate.nth(index);
+      const text = ((await control.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
+      const label = (await control.getAttribute('aria-label').catch(() => '')) || '';
+      const title = (await control.getAttribute('title').catch(() => '')) || '';
+      const descriptor = `${text} ${label} ${title}`;
+      if (/(forgot|reset|recover)/i.test(descriptor)) continue;
+      await control.click();
+      await expect(passwordInput(page)).toBeVisible({ timeout: 15_000 });
+      return true;
+    }
+  }
+  return false;
+}
+
+async function openAlternateChallengeMethods(page) {
+  const alternates = [
+    /another (?:way|method)/i,
+    /other (?:way|method|option)/i,
+    /try another/i,
+    /more (?:options|methods)/i,
+    /choose (?:another|a different)/i,
+  ];
+
+  for (const pattern of alternates) {
+    const candidates = page.locator('button:visible, a:visible, [role="button"]:visible').filter({ hasText: pattern });
+    if (!(await candidates.count())) continue;
+    await candidates.first().click();
+    await page.waitForTimeout(200);
+    return true;
+  }
+  return false;
 }
 
 async function choosePasswordChallenge(page) {
   if (await hasVisiblePassword(page)) return;
+  if (await clickPasswordMethodIfPresent(page)) return;
 
-  const controls = page.locator('button:visible, a:visible, [role="button"]:visible');
-  const count = await controls.count();
-  for (let index = 0; index < count; index += 1) {
-    const control = controls.nth(index);
-    const text = ((await control.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
-    if (!/password/i.test(text)) continue;
-    if (/(forgot|reset|recover)/i.test(text)) continue;
-
-    await control.click();
-    await expect(page.locator('input[type="password"]:visible').first()).toBeVisible({ timeout: 15_000 });
-    return;
+  if (await openAlternateChallengeMethods(page)) {
+    if (await hasVisiblePassword(page)) return;
+    if (await clickPasswordMethodIfPresent(page)) return;
   }
 
+  const contract = await sanitizedChallengeContract(page);
   if (await hasVisibleOtp(page)) {
-    throw new Error('EasyStore presented an OTP-only challenge and no password option. The password-based dev test account cannot complete this challenge unattended.');
+    throw new Error(`EasyStore presented an OTP challenge and no password option. Sanitized challenge contract: ${JSON.stringify(contract)}`);
   }
 
-  throw new Error(`EasyStore challenge at ${pathOf(page)} exposes neither a password field nor a password challenge option.`);
+  throw new Error(`EasyStore challenge exposes neither a password field nor a password challenge option. Sanitized challenge contract: ${JSON.stringify(contract)}`);
 }
 
 async function submitPasswordChallenge(page) {
-  const password = page.locator('input[type="password"]:visible').first();
+  const password = passwordInput(page);
   await expect(password).toBeVisible({ timeout: 15_000 });
   await password.fill(testPassword);
 
@@ -139,10 +254,9 @@ async function signInThroughEasyStoreIdentityFlow(page) {
   await identity.fill(testUser);
   await expect(continueButton).toBeEnabled();
 
-  await Promise.all([
-    waitForChallenge(page),
-    continueButton.click(),
-  ]);
+  const challengeReady = waitForChallenge(page);
+  await continueButton.click();
+  await challengeReady;
 
   await choosePasswordChallenge(page);
   await submitPasswordChallenge(page);
