@@ -84,6 +84,10 @@ jobs:
           test "$status" -lt 500
 
   authenticated-login:
+    # GitHub withholds the dev test-user variable/secret from pull_request runs.
+    # Run this only for trusted branch/manual events where the dev environment
+    # can inject the real returning-customer credentials.
+    if: github.event_name != 'pull_request'
     name: Authenticated login / chromium-desktop
     needs: preflight
     runs-on: ubuntu-latest
