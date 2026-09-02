@@ -17,7 +17,7 @@ on:
       base_url:
         description: EasyStore storefront or preview URL to test
         required: false
-        default: https://cardboard.sg
+        default: https://cardboardcollective.easy.co
         type: string
 
 permissions:
@@ -28,7 +28,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  E2E_BASE_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.base_url || vars.E2E_PR_BASE_URL || vars.E2E_BASE_URL || 'https://cardboard.sg' }}
+  E2E_BASE_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.base_url || vars.E2E_PR_BASE_URL || vars.E2E_BASE_URL || 'https://cardboardcollective.easy.co' }}
   # Left empty on purpose: the suite reads the theme's configured limits and
   # opens one of those products. Set the repository variable only to pin a
   # specific product.
@@ -76,6 +76,45 @@ jobs:
           echo "Storefront HTTP status: $status"
           test "$status" -ge 200
           test "$status" -lt 500
+
+  authenticated-login:
+    name: Authenticated login / chromium-desktop
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      EASYSTORE_TEST_USER: ${{ vars.EASYSTORE_TEST_USER }}
+      EASYSTORE_TEST_USER_PW: ${{ secrets.EASYSTORE_TEST_USER_PW }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Install E2E dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Install Chromium
+        timeout-minutes: 18
+        run: |
+          set -euo pipefail
+          for attempt in 1 2; do
+            if timeout --kill-after=30s 8m \
+                npx playwright install --with-deps chromium; then
+              exit 0
+            fi
+            echo "::warning::Playwright browser install attempt ${attempt} did not finish."
+            sleep 15
+          done
+          echo "::error::Playwright browser install did not finish after two attempts."
+          exit 1
+
+      - name: Run authenticated login smoke
+        run: npx playwright test e2e/authenticated-login.spec.js --project=chromium-desktop
 
   functional:
     name: Functional / ${{ matrix.project }}
