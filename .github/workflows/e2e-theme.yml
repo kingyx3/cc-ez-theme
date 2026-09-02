@@ -12,11 +12,20 @@ on:
       - "package-lock.json"
       - "playwright.config.js"
       - ".github/workflows/e2e-theme.yml"
-  # Temporary branch-scoped trigger used to exercise dev environment credentials
-  # without the pull_request event's secret restrictions.
   push:
     branches:
+      - main
+      # Temporary canary branch while PR #223 proves the credentialed flow.
+      # Remove this branch entry after the PR is merged; main remains the
+      # permanent trusted trigger for authenticated E2E.
       - test/e2e-dev-auth
+    paths:
+      - "theme/**"
+      - "e2e/**"
+      - "package.json"
+      - "package-lock.json"
+      - "playwright.config.js"
+      - ".github/workflows/e2e-theme.yml"
   workflow_dispatch:
     inputs:
       base_url:
@@ -84,11 +93,10 @@ jobs:
           test "$status" -lt 500
 
   authenticated-login:
-    # GitHub withholds the dev test-user variable/secret from pull_request runs.
-    # Run this only for trusted branch/manual events where the dev environment
-    # can inject the real returning-customer credentials.
+    # Pull-request events do not receive the dev customer secret. Trusted main
+    # pushes and manual runs do, through the protected dev environment.
     if: github.event_name != 'pull_request'
-    name: Authenticated login / chromium-desktop
+    name: Authenticated account / chromium-desktop
     needs: preflight
     runs-on: ubuntu-latest
     environment: dev
@@ -124,8 +132,8 @@ jobs:
           echo "::error::Playwright browser install did not finish after two attempts."
           exit 1
 
-      - name: Run authenticated login smoke
-        run: npx playwright test e2e/authenticated-login.spec.js --project=chromium-desktop
+      - name: Run authenticated account suite
+        run: npx playwright test e2e/authenticated-login.spec.js --project=chromium-desktop --workers=1
 
   functional:
     name: Functional / ${{ matrix.project }}
