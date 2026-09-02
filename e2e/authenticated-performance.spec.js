@@ -4,6 +4,7 @@ const { test, expect } = require('@playwright/test');
 const {
   createAuthenticatedStorageState,
   expectFullyAuthenticated,
+  isRecaptchaBlockError,
   requireTestCredentials,
 } = require('./auth-helpers');
 
@@ -28,6 +29,16 @@ const BUDGETS = {
   clsP95: Number(process.env.AUTH_PERF_MAX_CLS_P95 || 0.35),
   longTaskP50Ms: Number(process.env.AUTH_PERF_MAX_LONG_TASK_P50_MS || 3000),
 };
+
+function gitMetadata() {
+  return {
+    sha: process.env.GITHUB_SHA || null,
+    ref: process.env.GITHUB_REF_NAME || null,
+    event: process.env.GITHUB_EVENT_NAME || null,
+    runId: process.env.GITHUB_RUN_ID || null,
+    runAttempt: process.env.GITHUB_RUN_ATTEMPT || null,
+  };
+}
 
 function quantile(values, ratio) {
   const numeric = values.filter(Number.isFinite).sort((a, b) => a - b);
@@ -253,13 +264,30 @@ function markdownSummary(report) {
     `Target: \`${report.baseURL}\`  `,
     `Recorded: ${report.recordedAt}  `,
     `Commit: \`${report.git.sha || 'local'}\`  `,
+  ];
+
+  if (report.status === 'blocked') {
+    lines.push(
+      'Status: **BLOCKED**',
+      '',
+      report.blocker === 'recaptcha'
+        ? 'EasyStore required Google reCAPTCHA before CI could establish an authenticated session. The test intentionally does not automate or bypass CAPTCHA.'
+        : 'CI could not establish the authenticated test session, so protected-page timings were not recorded.',
+      '',
+      '> This artifact records only the blocker category and run metadata. It contains no credentials, cookies, screenshots, traces, or account content.',
+      ''
+    );
+    return `${lines.join('\n')}\n`;
+  }
+
+  lines.push(
     `Samples: ${report.sampleCount} cold + ${report.sampleCount} warm per protected route`,
     '',
     '> Authentication state is held in memory only. This artifact contains route names and numeric measurements, never cookies, passwords, or account content.',
     '',
     '| Route | Cache | Result | Success | TTFB p50 | Load p50 | FCP p50 | LCP p50 | CLS p95 | Long tasks p50 | Requests p50 | Transfer p50 |',
-    '| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
-  ];
+    '| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |'
+  );
 
   for (const scenario of report.scenarios) {
     for (const cache of ['cold', 'warm']) {
@@ -288,6 +316,14 @@ function markdownSummary(report) {
   );
 
   return `${lines.join('\n')}\n`;
+}
+
+function writeReport(report) {
+  fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+  fs.writeFileSync(path.join(OUTPUT_DIR, 'metrics.json'), `${JSON.stringify(report, null, 2)}\n`, 'utf8');
+  const summary = markdownSummary(report);
+  fs.writeFileSync(path.join(OUTPUT_DIR, 'summary.md'), summary, 'utf8');
+  console.log(summary);
 }
 
 function assertSummaryWithinBudgets(route, cache, summary) {
@@ -319,7 +355,30 @@ test.describe('authenticated account performance', () => {
     requireTestCredentials();
 
     const normalizedBaseURL = new URL(baseURL || 'https://cardboard.sg').href;
-    const storageState = await createAuthenticatedStorageState(browser, normalizedBaseURL);
+    const common = {
+      schemaVersion: 1,
+      recordedAt: new Date().toISOString(),
+      baseURL: normalizedBaseURL,
+      sampleCount: SAMPLE_COUNT,
+      settleMs: SETTLE_MS,
+      budgets: BUDGETS,
+      git: gitMetadata(),
+    };
+
+    let storageState;
+    try {
+      storageState = await createAuthenticatedStorageState(browser, normalizedBaseURL);
+    } catch (error) {
+      const report = {
+        ...common,
+        status: 'blocked',
+        blocker: isRecaptchaBlockError(error) ? 'recaptcha' : 'authentication',
+        scenarios: [],
+      };
+      writeReport(report);
+      throw error;
+    }
+
     const routes = ['/account', '/account/orders', '/account/details', '/account/addresses'];
     const scenarios = [];
 
@@ -334,29 +393,15 @@ test.describe('authenticated account performance', () => {
     }
 
     const report = {
-      schemaVersion: 1,
-      recordedAt: new Date().toISOString(),
-      baseURL: normalizedBaseURL,
-      sampleCount: SAMPLE_COUNT,
-      settleMs: SETTLE_MS,
-      budgets: BUDGETS,
-      git: {
-        sha: process.env.GITHUB_SHA || null,
-        ref: process.env.GITHUB_REF_NAME || null,
-        event: process.env.GITHUB_EVENT_NAME || null,
-        runId: process.env.GITHUB_RUN_ID || null,
-        runAttempt: process.env.GITHUB_RUN_ATTEMPT || null,
-      },
+      ...common,
+      status: 'measured',
       scenarios,
     };
 
-    fs.mkdirSync(OUTPUT_DIR, { recursive: true });
-    fs.writeFileSync(path.join(OUTPUT_DIR, 'metrics.json'), `${JSON.stringify(report, null, 2)}\n`, 'utf8');
-    fs.writeFileSync(path.join(OUTPUT_DIR, 'summary.md'), markdownSummary(report), 'utf8');
-    console.log(markdownSummary(report));
-
     // Write the complete observation first so a budget failure still leaves a
     // useful artifact showing exactly which route/cache mode regressed.
+    writeReport(report);
+
     for (const scenario of scenarios) {
       assertSummaryWithinBudgets(scenario.route, 'cold', scenario.cold.summary);
       assertSummaryWithinBudgets(scenario.route, 'warm', scenario.warm.summary);
