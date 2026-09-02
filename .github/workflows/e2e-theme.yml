@@ -12,12 +12,17 @@ on:
       - "package-lock.json"
       - "playwright.config.js"
       - ".github/workflows/e2e-theme.yml"
+  # Temporary branch-scoped trigger used to exercise dev environment credentials
+  # without the pull_request event's secret restrictions.
+  push:
+    branches:
+      - test/e2e-dev-auth
   workflow_dispatch:
     inputs:
       base_url:
-        description: EasyStore storefront or preview URL to test
+        description: EasyStore storefront or preview URL to test; blank uses the selected environment variable
         required: false
-        default: https://cardboardcollective.easy.co
+        default: ''
         type: string
 
 permissions:
@@ -28,7 +33,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  E2E_BASE_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.base_url || vars.E2E_PR_BASE_URL || vars.E2E_BASE_URL || 'https://cardboardcollective.easy.co' }}
+  E2E_BASE_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.base_url || vars.E2E_PR_BASE_URL || vars.E2E_BASE_URL || 'https://cardboard.sg' }}
   # Left empty on purpose: the suite reads the theme's configured limits and
   # opens one of those products. Set the repository variable only to pin a
   # specific product.
@@ -60,6 +65,7 @@ jobs:
     name: Storefront preflight
     needs: validate
     runs-on: ubuntu-latest
+    environment: dev
     timeout-minutes: 5
     steps:
       - name: Verify storefront is reachable
@@ -121,6 +127,7 @@ jobs:
     name: Functional / ${{ matrix.project }}
     needs: preflight
     runs-on: ubuntu-latest
+    environment: dev
     # Playwright's upstream GitHub Actions example uses a 60-minute job budget.
     # Browser downloads plus Linux OS dependencies are network-bound on hosted
     # runners, so keep that headroom rather than cancelling before tests execute.
@@ -302,6 +309,7 @@ jobs:
     name: Accessibility / chromium-desktop
     needs: preflight
     runs-on: ubuntu-latest
+    environment: dev
     timeout-minutes: 60
 
     steps:
