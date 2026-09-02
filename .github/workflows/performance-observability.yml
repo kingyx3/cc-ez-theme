@@ -5,6 +5,8 @@ on:
     paths:
       - "theme/**"
       - "e2e/performance.spec.js"
+      - "e2e/authenticated-performance.spec.js"
+      - "e2e/auth-helpers.js"
       - "e2e/storefront-helpers.js"
       - "package.json"
       - "package-lock.json"
@@ -13,9 +15,14 @@ on:
   push:
     branches:
       - main
+      # Temporary canary branch for PR #223. Remove after the authenticated
+      # performance job has been proven and the PR is merged.
+      - test/e2e-dev-auth
     paths:
       - "theme/**"
       - "e2e/performance.spec.js"
+      - "e2e/authenticated-performance.spec.js"
+      - "e2e/auth-helpers.js"
       - "e2e/storefront-helpers.js"
       - "package.json"
       - "package-lock.json"
@@ -107,5 +114,71 @@ jobs:
         with:
           name: storefront-performance-${{ github.run_id }}-${{ github.run_attempt }}
           path: performance-results/
+          if-no-files-found: warn
+          retention-days: 90
+
+  authenticated-observe:
+    # Never expose the dev customer secret to pull_request events. Pushes to
+    # trusted branches, scheduled runs, and manual runs use the protected dev
+    # environment and keep the authenticated storage state in memory only.
+    if: github.event_name != 'pull_request'
+    name: Authenticated account / chromium-desktop
+    runs-on: ubuntu-latest
+    environment: dev
+    timeout-minutes: 30
+    env:
+      EASYSTORE_TEST_USER: ${{ vars.EASYSTORE_TEST_USER }}
+      EASYSTORE_TEST_USER_PW: ${{ secrets.EASYSTORE_TEST_USER_PW }}
+      AUTH_PERF_RUNS: ${{ github.event_name == 'workflow_dispatch' && inputs.samples || '3' }}
+      AUTH_PERF_RESULTS_DIR: authenticated-performance-results
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - name: Install E2E dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Install Chromium
+        timeout-minutes: 18
+        run: |
+          set -euo pipefail
+          for attempt in 1 2; do
+            if timeout --kill-after=30s 8m \
+                npx playwright install --with-deps chromium; then
+              exit 0
+            fi
+            echo "::warning::Playwright browser install attempt ${attempt} did not finish."
+            sleep 15
+          done
+          echo "::error::Playwright browser install did not finish after two attempts."
+          exit 1
+
+      - name: Record authenticated account performance
+        run: npx playwright test e2e/authenticated-performance.spec.js --project=chromium-desktop --workers=1 --retries=0
+
+      - name: Add authenticated observations to job summary
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f authenticated-performance-results/summary.md ]]; then
+            cat authenticated-performance-results/summary.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "## Authenticated account performance" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "No authenticated metrics file was produced. Check the measurement step logs." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload authenticated performance history artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: authenticated-performance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: authenticated-performance-results/
           if-no-files-found: warn
           retention-days: 90
