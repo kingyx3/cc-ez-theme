@@ -38,7 +38,7 @@ class CustomerOrderLimitTests(unittest.TestCase):
             ("CC-BDL-SPIDERVAULT-EN", 1),
             ("CC-BDL-UNEXPECTED-EN", 2),
             ("CC-BDL-MANYREALITIES-EN", 1),
-            ("CC-BDL-TWINBOX-EN", 1),
+            ("CC-BDL-TWINBOX-EN", 2),
             ("MTG-HOB-GFB-EN", 1),
             ("MTG-MSH-JBB-EN", 6),
             ("MTG-MSH-CMD-EN-CE-SET4", 1),
