@@ -1,0 +1,66 @@
+name: OTP autofill regression
+
+on:
+  pull_request:
+    paths:
+      - "theme/assets/account-otp-copy.js"
+      - "theme/editor_assets/account-otp-copy.js"
+      - "tests/test_otp_cell_autofill.py"
+      - "e2e/otp-autofill.spec.js"
+      - "package.json"
+      - "package-lock.json"
+      - "playwright.config.js"
+      - ".github/workflows/otp-autofill-regression.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: otp-autofill-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  otp-autofill:
+    name: OTP single-event regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Install E2E dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Install Chromium
+        timeout-minutes: 18
+        run: |
+          set -euo pipefail
+          for attempt in 1 2; do
+            if timeout --kill-after=30s 8m \
+                npx playwright install --with-deps chromium; then
+              exit 0
+            fi
+            echo "::warning::Playwright browser install attempt ${attempt} did not finish."
+            sleep 15
+          done
+          echo "::error::Playwright browser install did not finish after two attempts."
+          exit 1
+
+      - name: Run OTP autofill regression suite
+        run: npx playwright test e2e/otp-autofill.spec.js --project=chromium-desktop
+
+      - name: Upload OTP failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-test-results-otp-autofill
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 14
