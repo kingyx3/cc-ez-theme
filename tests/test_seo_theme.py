@@ -9,17 +9,33 @@ THEME_ROOT = REPOSITORY_ROOT / "theme"
 
 
 class SeoThemeTests(unittest.TestCase):
-    def test_homepage_keeps_ui_neutral_and_renders_organization_schema(self) -> None:
+    def test_homepage_pins_brand_identity_without_adding_visible_seo_copy(self) -> None:
         home = (THEME_ROOT / "templates" / "home.liquid").read_text(encoding="utf-8")
+        website = (THEME_ROOT / "snippets" / "website-schema.liquid").read_text(
+            encoding="utf-8"
+        )
         organization = (
             THEME_ROOT / "snippets" / "organization-schema.liquid"
         ).read_text(encoding="utf-8")
 
+        self.assertIn("{% include 'website-schema' %}", home)
         self.assertIn("{% include 'organization-schema' %}", home)
-        self.assertIn('<h1 class="visually-hidden">{{ shop.name | escape }}</h1>', home)
+        self.assertIn('<h1 class="visually-hidden">Cardboard Collective</h1>', home)
         self.assertNotIn("{% section 'seo-intro' %}", home)
         self.assertFalse((THEME_ROOT / "sections" / "seo-intro.liquid").exists())
+
+        self.assertIn('"@type": "WebSite"', website)
+        self.assertIn('"@id": "https://cardboard.sg/#website"', website)
+        self.assertIn('"name": "Cardboard Collective"', website)
+        self.assertIn('"alternateName": ["cardboard.sg"]', website)
+        self.assertIn('"@id": "https://cardboard.sg/#organization"', website)
+
         self.assertIn('"@type": "OnlineStore"', organization)
+        self.assertIn('"name": "Cardboard Collective"', organization)
+        self.assertIn('"legalName": "Cardboard Collective Pte. Ltd."', organization)
+        self.assertIn("Singapore-based online retailer", organization)
+        self.assertNotIn('"@type": "PostalAddress"', organization)
+        self.assertNotIn('"streetAddress"', organization)
         self.assertIn('"hasMerchantReturnPolicy"', organization)
         self.assertIn(
             '"merchantReturnLink": "https://cardboard.sg/legal/refund-policy"',
