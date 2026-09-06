@@ -20,18 +20,18 @@ class SeoThemeTests(unittest.TestCase):
 
         self.assertIn("{% include 'website-schema' %}", home)
         self.assertIn("{% include 'organization-schema' %}", home)
-        self.assertIn('<h1 class="visually-hidden">Cardboard Collective</h1>', home)
+        self.assertIn('<h1 class="visually-hidden">{{ shop.name | escape }}</h1>', home)
         self.assertNotIn("{% section 'seo-intro' %}", home)
         self.assertFalse((THEME_ROOT / "sections" / "seo-intro.liquid").exists())
 
         self.assertIn('"@type": "WebSite"', website)
         self.assertIn('"@id": "https://cardboard.sg/#website"', website)
-        self.assertIn('"name": "Cardboard Collective"', website)
+        self.assertIn('"name": {{ shop.name | json }}', website)
         self.assertIn('"alternateName": ["cardboard.sg"]', website)
         self.assertIn('"@id": "https://cardboard.sg/#organization"', website)
 
         self.assertIn('"@type": "OnlineStore"', organization)
-        self.assertIn('"name": "Cardboard Collective"', organization)
+        self.assertIn('"name": {{ shop.name | json }}', organization)
         self.assertIn('"legalName": "Cardboard Collective Pte. Ltd."', organization)
         self.assertIn("Singapore-based online retailer", organization)
         self.assertNotIn('"@type": "PostalAddress"', organization)
