@@ -5,22 +5,16 @@
   "@context": "https://schema.org",
   "@type": "OnlineStore",
   "@id": "https://cardboard.sg/#organization",
-  "name": "Cardboard Collective",
+  "name": {{ shop.name | json }},
   "legalName": "Cardboard Collective Pte. Ltd.",
   "url": "https://cardboard.sg/",
+  "description": "Singapore-based online retailer specialising in sealed Magic: The Gathering products and preorders.",
   "logo": {{ organization_logo | json }},
   "email": "contact@cardboard.sg",
   "identifier": {
     "@type": "PropertyValue",
     "propertyID": "Singapore UEN",
     "value": "202635416D"
-  },
-  "address": {
-    "@type": "PostalAddress",
-    "streetAddress": "160 Robinson Road, #14-04",
-    "addressLocality": "Singapore",
-    "postalCode": "068914",
-    "addressCountry": "SG"
   },
   "contactPoint": {
     "@type": "ContactPoint",

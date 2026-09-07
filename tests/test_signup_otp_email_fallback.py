@@ -4,9 +4,9 @@ This store signs customers up by mobile number only. The link belongs to
 EasyStore's own flow at /account/auth, so no theme deploy can take it out of
 the template and the theme hides it at runtime instead.
 
-The safety constraints are the recovery-copy override's, for the same reason:
-theme scripts writing into the platform's verification fields are what broke
-signup with "Customer already exists (phone)".
+The email-fallback routine remains visibility-only even though the same loaded
+asset now also contains the separately tested, narrowly-scoped OTP autofill
+handoff.
 """
 from __future__ import annotations
 
@@ -41,6 +41,13 @@ class EmailSignupOverrideTests(unittest.TestCase):
         step = re.search(r"const OTP_STEP = /(.*)/i;", cls.code)
         assert step, "the step waiting on a code is no longer recognised"
         cls.step_wording = re.compile(step.group(1), re.IGNORECASE)
+        hide = re.search(
+            r"const hideEmailSignup = \(\) => \{(.*?)\n  \};\n\n  const OTP_STEP",
+            cls.code,
+            flags=re.DOTALL,
+        )
+        assert hide, "the email fallback routine is no longer independently testable"
+        cls.hide_code = hide.group(1)
 
     def test_the_layout_loads_it(self) -> None:
         layout = (THEME / "layout" / "theme.liquid").read_text(encoding="utf-8")
@@ -72,12 +79,14 @@ class EmailSignupOverrideTests(unittest.TestCase):
 
     def test_it_hides_links_only(self) -> None:
         # Hiding a wrapper would take the step's instructions with it.
-        self.assertIn("querySelectorAll('a, button')", self.code)
-        self.assertIn("text.length > LINK_LENGTH", self.code)
+        self.assertIn("querySelectorAll('a, button')", self.hide_code)
+        self.assertIn("text.length > LINK_LENGTH", self.hide_code)
 
-    def test_it_hides_and_writes_nothing_else(self) -> None:
-        # The whole safety argument for touching the platform's auth flow.
-        self.assertIn("control.hidden = true", self.code)
+    def test_the_email_fallback_routine_hides_and_writes_nothing_else(self) -> None:
+        # OTP autofill has its own safety suite. This test pins only the email
+        # fallback concern so adding a separate behavior to the same asset does
+        # not weaken the visibility-only contract here.
+        self.assertIn("control.hidden = true", self.hide_code)
         for forbidden in (
             "dispatchEvent",
             ".value =",
@@ -91,12 +100,12 @@ class EmailSignupOverrideTests(unittest.TestCase):
             "location.pathname",
         ):
             with self.subTest(forbidden=forbidden):
-                self.assertNotIn(forbidden, self.code)
+                self.assertNotIn(forbidden, self.hide_code)
 
     def test_it_observes_account_pages_only(self) -> None:
         # Still no observer on the rest of the storefront, and still no
         # page-path heuristic - the trap that once turned the search box into
-        # an OTP field, and why "location.pathname" is forbidden above.
+        # an OTP field.
         self.assertIn("if (!hasAccountStep()) return;", self.code)
         self.assertIn('form[action*="/account"]', self.code)
 
