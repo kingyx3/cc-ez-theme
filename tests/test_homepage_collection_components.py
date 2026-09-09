@@ -46,6 +46,19 @@ class HomepageCollectionComponentTests(unittest.TestCase):
                         best_sellers["settings"][setting_name],
                     )
 
+    def test_only_the_first_homepage_collection_is_image_prioritized(self) -> None:
+        section_ids = self.homepage["content_for_index"]
+        prioritized = [
+            section_id
+            for section_id in section_ids
+            if self.sections[section_id]["settings"].get(
+                "prioritize_initial_images", False
+            )
+        ]
+
+        self.assertEqual(prioritized, [section_ids[0]])
+        self.assertEqual(self.sections[section_ids[0]]["settings"]["title"], "Best Sellers")
+
     def test_homepage_collections_keep_themed_accent_colors(self) -> None:
         expected_accents = {
             "Best Sellers": "#C44120",
@@ -88,6 +101,7 @@ class HomepageCollectionComponentTests(unittest.TestCase):
         self.assertIn("show_add_to_cart_button: false", products)
         self.assertIn("section.settings.products_per_row", products)
         self.assertIn("section.settings.swipe_on_mobile", products)
+        self.assertIn("section.settings.prioritize_initial_images", products)
 
 
 if __name__ == "__main__":
