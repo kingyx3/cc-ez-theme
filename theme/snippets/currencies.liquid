@@ -1,38 +1,54 @@
 {{ 'compact-spacing.css' | asset_url | stylesheet_tag }}
 {{ 'card-navigation-polish.css' | asset_url | stylesheet_tag }}
 
-<script src="{{ 'buy-now-limit-checkout.js' | asset_url }}" defer="defer"></script>
 {% comment %}
-  Storefront pages do not need to render a customer's full order history before
-  the document can be returned. `customer-order-limits.js` already treats a page
-  with no inline line items as "history unknown", loads the authoritative account
-  history in the background, caches it for the session, and holds purchase
-  attempts until that history is known. Opt into that path here so navigation is
-  not blocked by one full order-history pass per configured limit.
-
-  Keep the original include shape because other purchase helpers use its position
-  as a delivery invariant. `include` shares this scope on EasyStore, so the flag
-  is set immediately before it and cleared immediately afterwards.
+  Purchase-limit modules are only useful where a shopper can actually purchase.
+  Product and cart pages always need them. Listing pages need them only when the
+  global listing add-to-cart control is enabled. Keeping the condition here
+  preserves the existing purchase behavior while removing roughly 70KB of theme
+  JavaScript from read-only pages such as the default homepage, blog and account.
 {% endcomment %}
-{% assign defer_history = true %}
-{% include 'customer-order-limits' %}
-{% assign defer_history = false %}
+{% assign purchase_controls_needed = false %}
+{% if template contains 'product' or template contains 'cart' %}
+  {% assign purchase_controls_needed = true %}
+{% elsif settings.show_add_to_cart_button %}
+  {% assign purchase_controls_needed = true %}
+{% endif %}
 
-<script>
-  window.purchaseCartQuantities = {};
-  {% for item in cart.items %}
-    window.purchaseCartQuantities[String({{ item.variant_id | json }})] =
-      (window.purchaseCartQuantities[String({{ item.variant_id | json }})] || 0)
-      + {{ item.quantity | default: 0 }};
-  {% endfor %}
-</script>
-{% comment %}
-  Deferred: it ran as a blocking request at the end of every page, holding up the
-  end of parsing for 20KB that nothing on screen waits for. It patches
-  `EasyStore.Action.addToCart` on a retry loop and enhances `product-form` through
-  `customElements.whenDefined`, so neither hook depends on running during parse.
-{% endcomment %}
-<script src="{{ 'purchase-limit-feedback.js' | asset_url }}" defer="defer"></script>
+{% if purchase_controls_needed %}
+  <script src="{{ 'buy-now-limit-checkout.js' | asset_url }}" defer="defer"></script>
+  {% comment %}
+    Storefront pages do not need to render a customer's full order history before
+    the document can be returned. `customer-order-limits.js` already treats a page
+    with no inline line items as "history unknown", loads the authoritative account
+    history in the background, caches it for the session, and holds purchase
+    attempts until that history is known. Opt into that path here so navigation is
+    not blocked by one full order-history pass per configured limit.
+
+    Keep the original include shape because other purchase helpers use its position
+    as a delivery invariant. `include` shares this scope on EasyStore, so the flag
+    is set immediately before it and cleared immediately afterwards.
+  {% endcomment %}
+  {% assign defer_history = true %}
+  {% include 'customer-order-limits' %}
+  {% assign defer_history = false %}
+
+  <script>
+    window.purchaseCartQuantities = {};
+    {% for item in cart.items %}
+      window.purchaseCartQuantities[String({{ item.variant_id | json }})] =
+        (window.purchaseCartQuantities[String({{ item.variant_id | json }})] || 0)
+        + {{ item.quantity | default: 0 }};
+    {% endfor %}
+  </script>
+  {% comment %}
+    Deferred: it ran as a blocking request at the end of every page, holding up the
+    end of parsing for 20KB that nothing on screen waits for. It patches
+    `EasyStore.Action.addToCart` on a retry loop and enhances `product-form` through
+    `customElements.whenDefined`, so neither hook depends on running during parse.
+  {% endcomment %}
+  <script src="{{ 'purchase-limit-feedback.js' | asset_url }}" defer="defer"></script>
+{% endif %}
 
 <script>
   EasyStore.Currencies.init({{ shop.enabled_currencies |json }}, {{ settings.is_server_side_currency_conversion }})
