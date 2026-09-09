@@ -21,18 +21,14 @@ class CustomerOrderLimitTests(unittest.TestCase):
     def test_exact_limit_matrix_is_preserved(self) -> None:
         config = self.read("snippets/customer-order-limit-config.liquid")
         expected = (
-            ("MTG-HOB-BDL-EN", 6),
             ("MTG-HOB-CBB-EN", 1),
             ("MTG-HOB-CBB-EN-CASE6", 1),
             ("MTG-HOB-CBB-EN-PACK", 4),
             ("MTG-HOB-DNK-EN", 3),
-            ("MTG-HOB-PBB-EN", 12),
             ("MTG-HOB-PRK-EN-SET4", 3),
             ("MTG-HOB-OBP-EN", 2),
-            ("MTG-HOB-SCN-EN-SET2", 2),
             ("MTG-FRA-SLB-EN", 1),
             ("MTG-FRA-CBB-EN", 1),
-            ("CC-BDL-SCENES3-EN", 1),
             ("CC-BDL-FRIENDS3-EN-SPM", 1),
             ("CC-BDL-FRIENDS3-EN-MSH", 1),
             ("CC-BDL-SPIDERVAULT-EN", 1),
@@ -40,8 +36,6 @@ class CustomerOrderLimitTests(unittest.TestCase):
             ("CC-BDL-MANYREALITIES-EN", 1),
             ("CC-BDL-TWINBOX-EN", 2),
             ("MTG-HOB-GFB-EN", 1),
-            ("MTG-MSH-JBB-EN", 6),
-            ("MTG-MSH-CMD-EN-CE-SET4", 1),
             ("late-night-crackers-ep3", 2),
             ("late-night-crackers-ep4-1", 4),
             ("late-night-crackers-ep4-2", 1),
@@ -50,6 +44,12 @@ class CustomerOrderLimitTests(unittest.TestCase):
         self.assertEqual([(handle, maximum) for handle, maximum, _ in rows], list(expected))
 
         unlimited = (
+            "MTG-HOB-BDL-EN",
+            "MTG-HOB-PBB-EN",
+            "MTG-HOB-SCN-EN-SET2",
+            "CC-BDL-SCENES3-EN",
+            "MTG-MSH-JBB-EN",
+            "MTG-MSH-CMD-EN-CE-SET4",
             "MTG-MSH-BGB-EN",
             "MTG-MSH-CBB-EN",
             "MTG-MSH-DNK-EN",
@@ -74,7 +74,7 @@ class CustomerOrderLimitTests(unittest.TestCase):
         for handle in unlimited:
             self.assertNotIn(handle, config)
 
-        self.assertEqual(len(rows), 24)
+        self.assertEqual(len(rows), 18)
         self.assertIn("normalized to lowercase", config)
         self.assertIn("Delete the row to leave a product", config)
         self.assertNotIn("split:", config)
