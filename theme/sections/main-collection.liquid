@@ -46,16 +46,20 @@
       {% if section.settings.products_per_row < 3 %}grid--2-col-tablet{% else %}grid--3-col-tablet{% endif %} grid--one-third-max grid--{{section.settings.products_per_row}}-col-desktop grid--quarter-max">
       {% if collection.products.size > 0 %}
         {% comment %}
-          The first row is what a shopper waits for, so its images are fetched
-          eagerly and the rest stay lazy. `card_image_eager` is set on every
-          iteration, not only the first: `include` shares one scope, so leaving
-          it raised would make the whole grid eager.
+          The first row is visible immediately, so keep it eager. Only the first
+          card is allowed to claim high network priority; giving the entire row
+          fetchpriority="high" makes those images compete with the actual LCP.
+          Both flags are set on every iteration because `include` shares scope.
         {% endcomment %}
         {% assign eager_card_count = section.settings.products_per_row | default: 4 %}
         {% for product in collection.products %}
           {% assign card_image_eager = false %}
+          {% assign card_image_high_priority = false %}
           {% if forloop.index <= eager_card_count %}
             {% assign card_image_eager = true %}
+          {% endif %}
+          {% if forloop.first %}
+            {% assign card_image_high_priority = true %}
           {% endif %}
           <li class="grid__item">
             {% include 'product-card', show_secondary_image: section.settings.show_secondary_image, show_add_to_cart_button: section.settings.show_add_to_cart_button, image_ratio: section.settings.image_ratio, show_product_info: section.settings.show_product_info %}
