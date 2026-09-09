@@ -4,14 +4,18 @@
 {% comment %}
   Purchase-limit modules are only useful where a shopper can actually purchase.
   Product and cart pages always need them. Listing pages need them only when the
-  global listing add-to-cart control is enabled. Keeping the condition here
-  preserves the existing purchase behavior while removing roughly 70KB of theme
-  JavaScript from read-only pages such as the default homepage, blog and account.
+  global listing add-to-cart control is enabled. EasyStore may expose an unchecked
+  setting as false, 0, or "0", and Liquid treats 0 as truthy, so normalize it the
+  same way product-card.liquid does before deciding to ship purchase JavaScript.
 {% endcomment %}
+{% assign listing_purchase_controls_enabled = true %}
+{% if settings.show_add_to_cart_button == false or settings.show_add_to_cart_button == 0 or settings.show_add_to_cart_button == '0' %}
+  {% assign listing_purchase_controls_enabled = false %}
+{% endif %}
 {% assign purchase_controls_needed = false %}
 {% if template contains 'product' or template contains 'cart' %}
   {% assign purchase_controls_needed = true %}
-{% elsif settings.show_add_to_cart_button %}
+{% elsif listing_purchase_controls_enabled %}
   {% assign purchase_controls_needed = true %}
 {% endif %}
 
