@@ -167,6 +167,7 @@
             "image_ratio": "square",
             "show_secondary_image": true,
             "swipe_on_mobile": true,
+            "prioritize_initial_images": true,
             "center_title": true,
             "show_product_info": true,
             "product_bg_color": "rgba(246, 246, 246, 1)"
@@ -186,6 +187,7 @@
             "image_ratio": "square",
             "show_secondary_image": true,
             "swipe_on_mobile": true,
+            "prioritize_initial_images": false,
             "center_title": true,
             "show_product_info": true,
             "product_bg_color": "rgba(245, 245, 245, 1)"
@@ -205,6 +207,7 @@
             "image_ratio": "square",
             "show_secondary_image": true,
             "swipe_on_mobile": true,
+            "prioritize_initial_images": false,
             "center_title": true,
             "show_product_info": true,
             "product_bg_color": "rgba(245, 245, 245, 1)"
@@ -224,6 +227,7 @@
             "image_ratio": "square",
             "show_secondary_image": true,
             "swipe_on_mobile": true,
+            "prioritize_initial_images": false,
             "center_title": true,
             "show_product_info": true,
             "product_bg_color": "rgba(245, 245, 245, 1)"
@@ -243,6 +247,7 @@
             "image_ratio": "square",
             "show_secondary_image": true,
             "swipe_on_mobile": true,
+            "prioritize_initial_images": false,
             "center_title": true,
             "show_product_info": true,
             "product_bg_color": "rgba(245, 245, 245, 1)"

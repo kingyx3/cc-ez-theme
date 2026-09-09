@@ -226,53 +226,71 @@ class TheHeadOpensItsConnectionsEarlyTests(unittest.TestCase):
             with self.subTest(tag=tag):
                 self.assertIn('defer="defer"', tag)
 
+    def test_purchase_modules_are_guarded_on_read_only_pages(self) -> None:
+        currencies = read("snippets/currencies.liquid")
 
-class ProductGridsFetchTheirFirstRowEagerlyTests(unittest.TestCase):
-    """A lazy image cannot be the largest contentful paint without a delay.
+        guard = "{% if purchase_controls_needed %}"
+        self.assertIn("{% assign purchase_controls_needed = false %}", currencies)
+        self.assertIn("template contains 'product'", currencies)
+        self.assertIn("template contains 'cart'", currencies)
+        self.assertIn("settings.show_add_to_cart_button", currencies)
+        self.assertIn(guard, currencies)
+        self.assertLess(currencies.index(guard), currencies.index("buy-now-limit-checkout.js"))
+        self.assertLess(currencies.index(guard), currencies.index("customer-order-limits"))
+        self.assertLess(currencies.index(guard), currencies.index("purchase-limit-feedback.js"))
+        # Currency conversion remains outside the purchase-only guard.
+        self.assertLess(currencies.index("{% endif %}", currencies.index(guard)), currencies.index("EasyStore.Currencies.init"))
 
-    Every card in every grid was `loading="lazy"`, including the one at the top
-    of a collection page, so the browser deliberately waited before starting the
-    request the shopper is waiting on.
-    """
 
-    CALLERS = (
-        "sections/main-collection.liquid",
-        "snippets/featured-collection-products.liquid",
-    )
+class ProductGridImageDeliveryTests(unittest.TestCase):
+    """Product grids should discover the LCP image without flooding the network."""
 
-    def test_the_card_offers_an_eager_image_and_lowers_the_flag_again(self) -> None:
+    def test_product_cards_offer_responsive_sources(self) -> None:
         card = read("snippets/product-card.liquid")
 
+        for width in ("240x", "360x", "550x", "750x"):
+            with self.subTest(width=width):
+                self.assertIn(f"img_url: '{width}'", card)
         self.assertIn(
-            '{% if product_card_image_eager %}loading="eager" '
-            'fetchpriority="high"{% else %}loading="lazy"{% endif %}',
+            'sizes="(max-width: 749px) 50vw, (max-width: 989px) 33vw, 25vw"',
             card,
         )
-        # `include` shares one scope, so an unreset flag would make every later
-        # card on the page eager - including cards of sections that never asked.
-        self.assertTrue(
-            card.rstrip().endswith("{% assign card_image_eager = false %}")
+        self.assertGreaterEqual(card.count("srcset="), 2)
+
+    def test_eager_loading_and_high_priority_are_independent(self) -> None:
+        card = read("snippets/product-card.liquid")
+
+        self.assertIn("{% if product_card_image_eager %}loading=\"eager\"", card)
+        self.assertIn(
+            "{% if product_card_image_high_priority %} fetchpriority=\"high\"{% endif %}",
+            card,
         )
-        # The hover image is never the largest contentful paint.
+        self.assertIn("{% assign card_image_eager = false %}", card)
+        self.assertIn("{% assign card_image_high_priority = false %}", card)
+        # The hover image is never an LCP candidate and remains lazy.
         self.assertIn("product.secondary_image.src", card)
         secondary = card.split("product.secondary_image.src", maxsplit=1)[1]
-        self.assertIn('loading="lazy"', secondary.split(">", maxsplit=1)[0])
+        self.assertIn('loading="lazy"', secondary.split("{% endif %}", maxsplit=1)[0])
 
-    def test_each_grid_sets_the_flag_on_every_iteration(self) -> None:
-        for caller in self.CALLERS:
-            with self.subTest(caller=caller):
-                source = read(caller)
-                self.assertIn("{% assign card_image_eager = false %}", source)
-                self.assertIn("{% assign card_image_eager = true %}", source)
-                self.assertIn(
-                    "{% if forloop.index <= eager_card_count %}", source
-                )
-                # Lowered before the branch that raises it, so the reset runs on
-                # every pass rather than only on the first row.
-                self.assertLess(
-                    source.index("{% assign card_image_eager = false %}"),
-                    source.index("{% assign card_image_eager = true %}"),
-                )
+    def test_collection_grid_only_prioritizes_its_first_card(self) -> None:
+        collection = read("sections/main-collection.liquid")
+
+        self.assertIn("{% if forloop.index <= eager_card_count %}", collection)
+        self.assertIn("{% if forloop.first %}", collection)
+        self.assertIn("{% assign card_image_high_priority = true %}", collection)
+        self.assertLess(
+            collection.index("{% assign card_image_eager = true %}"),
+            collection.index("{% assign card_image_high_priority = true %}"),
+        )
+
+    def test_featured_collections_require_an_explicit_priority_opt_in(self) -> None:
+        featured = read("snippets/featured-collection-products.liquid")
+        section = read("sections/featured-collection.liquid")
+
+        self.assertIn("section.settings.prioritize_initial_images", featured)
+        self.assertIn('"id": "prioritize_initial_images"', section)
+        self.assertIn('"default": false', section)
+        self.assertIn("{% if section.settings.prioritize_initial_images and forloop.first %}", featured)
 
 
 class NoStylesheetIsSentTwiceTests(unittest.TestCase):
