@@ -606,9 +606,9 @@ class CustomerOrderLimitRenderingTests(unittest.TestCase):
         after = datetime(2026, 8, 10, 12, tzinfo=timezone.utc)
         orders = [
             {"created_at": before, "is_cancelled": 0,
-             "line_items": [{"product": {"handle": LOWER}, "quantity": 2}]},
+             "line_items": [{"product": {"handle": "cc-bdl-unexpected-en"}, "quantity": 2}]},
             {"created_at": after, "is_cancelled": 0,
-             "line_items": [{"sku": "MTG-HOB-BDL-EN", "quantity": 1}]},
+             "line_items": [{"sku": "MTG-HOB-CBB-EN-PACK", "quantity": 1}]},
         ]
         rendered = environment.get_template("customer-order-limits").render(
             customer={"id": 42, "email": "buyer@example.com", "orders": orders},
@@ -632,11 +632,11 @@ class CustomerOrderLimitRenderingTests(unittest.TestCase):
                 # Configuration, not copy: no message names the date.
                 self.assertNotIn("Aug 09", rule["message"])
                 self.assertNotIn("since", rule["message"])
-        # Orders on either side of the date, on limits configured at 2 and 6.
-        self.assertEqual(rules[LOWER]["purchased"], 0)
-        self.assertEqual(rules[LOWER]["remaining"], 2)
-        self.assertEqual(rules["mtg-hob-bdl-en"]["purchased"], 1)
-        self.assertEqual(rules["mtg-hob-bdl-en"]["remaining"], 5)
+        # Orders on either side of the date, on limits configured at 2 and 4.
+        self.assertEqual(rules["cc-bdl-unexpected-en"]["purchased"], 0)
+        self.assertEqual(rules["cc-bdl-unexpected-en"]["remaining"], 2)
+        self.assertEqual(rules["mtg-hob-cbb-en-pack"]["purchased"], 1)
+        self.assertEqual(rules["mtg-hob-cbb-en-pack"]["remaining"], 3)
 
     # --- diagnostics --------------------------------------------------------
 
