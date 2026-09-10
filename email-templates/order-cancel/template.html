@@ -1,4 +1,4 @@
-<meta name="subject" content="Order {{ order.name }} cancelled">
+<meta name="subject" content="Your order {{ order.name }} has been cancelled">
 <meta name="template_type" content="order-cancel">
 
 <style>
@@ -9,14 +9,15 @@
 
 <!-- Main content -->
 <div style="padding: 20px;">
-  <h1 style="font-size: 27px; font-weight: 500; margin: 0 0 20px;">Order {{ order.name }} has been cancelled.</h1>
+  <h1 style="font-size: 27px; font-weight: 500; margin: 0 0 20px;">Your order {{ order.name }} has been cancelled</h1>
 
   <div style="font-size: 15px; color: #767676;">
     <p style="margin: 15px 0;">Hi {{ customer.name }},</p>
-    <p style="margin: 15px 0;">Thank you for your interest in our products. Unfortunately, your order was cancelled. For your reference, here&#39;s a summary of your order:</p>
+    <p style="margin: 15px 0;">A quick update on your order: it has been cancelled, and any reserved stock has been released.</p>
   </div>
 </div>
 
+<!-- Order details -->
 <div style="padding: 0 20px 20px;">
   <hr style="border: none; border-top: 1px solid #eee;">
   <table style="border-spacing: 0; border-collapse: collapse; margin-top: 20px; width: 100%; font-size: 15px;">
@@ -33,7 +34,7 @@
       <tr><td>{% if order.cancel_reason != blank %}</td></tr>
       <tr valign="top">
         <td style="width: 40%; padding-bottom: 10px; padding-right: 10px;">
-          <strong>Reason of cancel</strong>
+          <strong>Cancellation reason</strong>
         </td>
         <td style="width: 60%; padding-bottom: 10px; color: #666;">
           {{ order.cancel_reason }}
@@ -42,7 +43,18 @@
       <tr><td>{% endif %}</td></tr>
     </tbody>
   </table>
-  <br>
-  <a href="{{shop.visit_store}}" style="background-color: {{template_attributes.button_color}}; color: {{template_attributes.button_text_color}}; text-decoration: none; padding: 16px 25px; border: none; border-radius: 10px; font-size: 15px; font-weight: 500;">Visit our store</a>
+</div>
+
+<!-- Recovery and support -->
+<div style="padding: 0 20px 20px; font-size: 15px; color: #767676;">
+  <p style="margin: 15px 0;">If this happened because payment wasn&#39;t completed and you&#39;d still like the items, please place a fresh order and <strong>complete payment at checkout</strong>.</p>
+
+  <div style="margin: 28px 0;">
+    <a href="{{shop.visit_store}}" style="background-color: {{template_attributes.button_color}}; color: {{template_attributes.button_text_color}}; text-decoration: none; padding: 16px 25px; border: none; border-radius: 10px; font-size: 15px; font-weight: 500;">Place a new order</a>
+  </div>
+
+  <p style="margin: 15px 0;">Already reordered? You can ignore this email. If you think payment went through, or this cancellation looks unexpected, reply to this email and we&#39;ll check it for you.</p>
+
+  <p style="margin: 24px 0 0;">Warm regards,<br>The Cardboard Collective team</p>
 </div>
 <br>
