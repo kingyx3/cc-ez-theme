@@ -280,83 +280,48 @@
   (function () {
     'use strict';
 
-    var NAME_LABELS = {
+    var labels = {
       'customer[first_name]': 'first name',
       'customer[last_name]': 'last name',
       'details[first_name]': 'first name',
       'details[last_name]': 'last name'
     };
-    var NAME_SELECTOR = Object.keys(NAME_LABELS).map(function (name) {
+    var selector = Object.keys(labels).map(function (name) {
       return '[name="' + name + '"]';
     }).join(',');
-    var LETTER_PATTERN;
+    var letters;
+    try { letters = new RegExp('\\p{L}', 'gu'); }
+    catch (error) { letters = /[A-Za-z\u00C0-\u024F\u1E00-\u1EFF]/g; }
 
-    try {
-      LETTER_PATTERN = new RegExp('\\p{L}', 'gu');
-    } catch (error) {
-      // Older engines still get broad Latin-letter support rather than treating
-      // spaces or punctuation as characters that satisfy the name requirement.
-      LETTER_PATTERN = /[A-Za-z\u00C0-\u024F\u1E00-\u1EFF]/g;
-    }
-
-    function letterCount(value) {
-      var matches = String(value || '').match(LETTER_PATTERN);
-      return matches ? matches.length : 0;
-    }
-
-    function setNameConstraints(field) {
-      field.setAttribute('required', 'required');
-      field.setAttribute('minlength', '2');
-    }
-
-    function validateName(field) {
-      var label = field && NAME_LABELS[field.name];
+    function validate(field) {
+      var label = field && labels[field.name];
       if (!label) return;
-
-      setNameConstraints(field);
-      field.setCustomValidity(
-        letterCount(field.value) >= 2
-          ? ''
-          : 'Please enter at least 2 letters for your ' + label + '.'
-      );
+      var count = (String(field.value || '').match(letters) || []).length;
+      field.required = true;
+      field.minLength = 2;
+      field.setCustomValidity(count >= 2 ? '' : 'Please enter at least 2 letters for your ' + label + '.');
     }
 
-    function validateFormNames(form) {
-      if (!form || !form.querySelectorAll) return;
-      Array.prototype.forEach.call(form.querySelectorAll(NAME_SELECTOR), validateName);
+    function validateForm(form) {
+      if (!form) return;
+      Array.prototype.forEach.call(form.querySelectorAll(selector), validate);
     }
 
-    function initNameValidation() {
-      Array.prototype.forEach.call(document.querySelectorAll(NAME_SELECTOR), setNameConstraints);
-
-      // Delegated handlers cover EasyStore fields inserted after DOMContentLoaded
-      // without an observer, and re-check current values before native form
-      // validation so browser autofill cannot leave stale validity behind.
-      ['focusin', 'input', 'change', 'invalid'].forEach(function (eventName) {
-        document.addEventListener(eventName, function (event) {
-          validateName(event.target);
-        }, true);
+    function init() {
+      Array.prototype.forEach.call(document.querySelectorAll(selector), validate);
+      ['focusin', 'input', 'change', 'invalid'].forEach(function (type) {
+        document.addEventListener(type, function (event) { validate(event.target); }, true);
       });
-
       document.addEventListener('click', function (event) {
-        var submitter = event.target && event.target.closest
-          ? event.target.closest('button, input[type="submit"]')
-          : null;
-        if (!submitter || submitter.type !== 'submit' || !submitter.form) return;
-        validateFormNames(submitter.form);
+        var button = event.target && event.target.closest ? event.target.closest('button, input[type="submit"]') : null;
+        if (button && button.type === 'submit') validateForm(button.form);
       }, true);
-
       document.addEventListener('keydown', function (event) {
-        var field = event.target;
-        if (event.key !== 'Enter' || !field || !field.form) return;
-        validateFormNames(field.form);
+        if (event.key === 'Enter' && event.target && event.target.form) validateForm(event.target.form);
       }, true);
     }
 
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', initNameValidation);
-    } else {
-      initNameValidation();
-    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+    else init();
   })();
 </script>
