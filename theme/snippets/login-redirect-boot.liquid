@@ -276,4 +276,19 @@
   </script>
 {% endif %}
 
-<script src="{{ 'customer-name-validation.js' | asset_url }}" defer></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    var selector = [
+      '[name="customer[first_name]"]',
+      '[name="customer[last_name]"]',
+      '[name="details[first_name]"]',
+      '[name="details[last_name]"]'
+    ].join(',');
+
+    Array.prototype.forEach.call(document.querySelectorAll(selector), function (field) {
+      field.setAttribute('required', 'required');
+      field.setAttribute('minlength', '2');
+      if (!field.hasAttribute('pattern')) field.setAttribute('pattern', '.{2,}');
+    });
+  });
+</script>
