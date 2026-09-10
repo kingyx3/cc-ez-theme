@@ -21,12 +21,12 @@
 
   The gate deliberately uses only the human fields this store actually requires:
   first name, last name, gender, and birthdate. First and last names must each be
-  at least two non-whitespace characters. EasyStore's
-  `customer.is_optional_fields_filled` is an aggregate platform flag and may stay
-  false because of unrelated optional/custom fields even after those four fields
-  are saved. Treating it as a hard requirement can therefore trap a customer on
-  `/account/details` forever. Click ID still cannot satisfy the gate because none
-  of the four explicit checks use customer attributes.
+  at least two characters. EasyStore's `customer.is_optional_fields_filled` is an
+  aggregate platform flag and may stay false because of unrelated optional/custom
+  fields even after those four fields are saved. Treating it as a hard requirement
+  can therefore trap a customer on `/account/details` forever. Click ID still
+  cannot satisfy the gate because none of the four explicit checks use customer
+  attributes.
 
   A first account password is not a profile update. EasyStore's registration
   contract creates it as `customer[password]`; `/account/details` instead carries
@@ -56,8 +56,8 @@
 
 {% assign cc_profile_completion_required = false %}
 {% if customer %}
-  {% assign cc_first_name_length = customer.first_name | strip | size %}
-  {% assign cc_last_name_length = customer.last_name | strip | size %}
+  {% assign cc_first_name_length = customer.first_name | size %}
+  {% assign cc_last_name_length = customer.last_name | size %}
   {% if customer.first_name == blank or customer.last_name == blank or cc_first_name_length < 2 or cc_last_name_length < 2 or customer.gender == blank or customer.birthdate == blank %}
     {% assign cc_profile_completion_required = true %}
   {% endif %}
