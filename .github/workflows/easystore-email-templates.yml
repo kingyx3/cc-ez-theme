@@ -1,0 +1,191 @@
+name: EasyStore email templates
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "email-templates/**"
+      - ".github/workflows/easystore-email-templates.yml"
+  push:
+    branches: [main]
+    paths:
+      - "email-templates/**"
+  workflow_dispatch:
+    inputs:
+      template:
+        description: "Template slug to deploy, or 'all'"
+        required: true
+        default: "payment-successful"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: easystore-email-templates-production
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate templates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate source files and generated payloads
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          found=0
+          for dir in email-templates/*/; do
+            [ -d "$dir" ] || continue
+            found=1
+            slug="$(basename "$dir")"
+
+            test -s "${dir}template.json"
+            test -s "${dir}template.html"
+            test -s "${dir}plain.txt"
+
+            jq -e '
+              type == "object" and
+              (.subject | type == "string" and length > 0) and
+              (.cc_recipients | type == "string") and
+              (.is_enabled | type == "boolean") and
+              (.template_attributes | type == "object")
+            ' "${dir}template.json" >/dev/null
+
+            grep -Fq "<meta name=\"template_type\" content=\"${slug}\">" "${dir}template.html"
+
+            jq -n \
+              --slurpfile config "${dir}template.json" \
+              --rawfile html "${dir}template.html" \
+              --rawfile plain "${dir}plain.txt" \
+              '{
+                template: {
+                  subject: $config[0].subject,
+                  cc_recipients: $config[0].cc_recipients,
+                  content_html: $html,
+                  is_enabled: $config[0].is_enabled,
+                  template_attributes: $config[0].template_attributes
+                },
+                plain_template: {
+                  content: ($plain | sub("\\n$"; ""))
+                }
+              }' > "/tmp/${slug}.json"
+
+            jq -e '
+              (.template.subject | type == "string" and length > 0) and
+              (.template.content_html | type == "string" and length > 0) and
+              (.plain_template.content | type == "string" and length > 0)
+            ' "/tmp/${slug}.json" >/dev/null
+
+            echo "Validated ${slug}"
+          done
+
+          if [ "$found" -ne 1 ]; then
+            echo "No managed email templates found under email-templates/" >&2
+            exit 1
+          fi
+
+  deploy:
+    name: Deploy to EasyStore
+    needs: validate
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      EASYSTORE_ADMIN_TOKEN: ${{ secrets.EASYSTORE_ADMIN_TOKEN }}
+      EASYSTORE_DEFAULT_DOMAIN: ${{ vars.EASYSTORE_DEFAULT_DOMAIN || 'cardboardcollective.easy.co' }}
+      EASYSTORE_POD_ID: ${{ vars.EASYSTORE_POD_ID || '1007' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select templates
+        id: select
+        shell: bash
+        env:
+          REQUESTED_TEMPLATE: ${{ inputs.template || 'all' }}
+        run: |
+          set -euo pipefail
+
+          if [ "$REQUESTED_TEMPLATE" = "all" ]; then
+            templates=""
+            for dir in email-templates/*/; do
+              [ -d "$dir" ] || continue
+              templates="${templates} $(basename "$dir")"
+            done
+            templates="${templates# }"
+          else
+            if [ ! -d "email-templates/${REQUESTED_TEMPLATE}" ]; then
+              echo "Unknown template: ${REQUESTED_TEMPLATE}" >&2
+              exit 1
+            fi
+            templates="$REQUESTED_TEMPLATE"
+          fi
+
+          if [ -z "$templates" ]; then
+            echo "No templates selected" >&2
+            exit 1
+          fi
+
+          echo "templates=$templates" >> "$GITHUB_OUTPUT"
+          echo "Selected: $templates"
+
+      - name: Deploy templates
+        shell: bash
+        env:
+          TEMPLATES: ${{ steps.select.outputs.templates }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${EASYSTORE_ADMIN_TOKEN:-}" ]; then
+            echo "Missing required GitHub Actions secret EASYSTORE_ADMIN_TOKEN" >&2
+            exit 1
+          fi
+
+          for slug in $TEMPLATES; do
+            dir="email-templates/${slug}/"
+            payload="/tmp/${slug}.json"
+
+            jq -n \
+              --slurpfile config "${dir}template.json" \
+              --rawfile html "${dir}template.html" \
+              --rawfile plain "${dir}plain.txt" \
+              '{
+                template: {
+                  subject: $config[0].subject,
+                  cc_recipients: $config[0].cc_recipients,
+                  content_html: $html,
+                  is_enabled: $config[0].is_enabled,
+                  template_attributes: $config[0].template_attributes
+                },
+                plain_template: {
+                  content: ($plain | sub("\\n$"; ""))
+                }
+              }' > "$payload"
+
+            echo "Deploying ${slug}..."
+            curl \
+              --fail-with-body \
+              --silent \
+              --show-error \
+              --request PUT \
+              "https://api.easystore.co/admin/v2/store/settings/templates/${slug}" \
+              --header "Accept: application/json" \
+              --header "Authorization: Bearer ${EASYSTORE_ADMIN_TOKEN}" \
+              --header "Content-Type: application/json" \
+              --header "easystore-browser: {}" \
+              --header "easystore-pod-id: ${EASYSTORE_POD_ID}" \
+              --header "easystore-source: admin" \
+              --header "x-easystore-infra-default-domain: ${EASYSTORE_DEFAULT_DOMAIN}" \
+              --header "x-easystore-infra-pod-id: ${EASYSTORE_POD_ID}" \
+              --header "x-easystore-infra-source: admin" \
+              --header "idempotency-key: gha:${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}:${slug}" \
+              --data-binary "@${payload}"
+
+            echo
+            echo "Deployed ${slug}"
+          done
