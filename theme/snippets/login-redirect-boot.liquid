@@ -20,12 +20,13 @@
   until those fields submit successfully.
 
   The gate deliberately uses only the human fields this store actually requires:
-  first name, last name, gender, and birthdate. EasyStore's
-  `customer.is_optional_fields_filled` is an aggregate platform flag and may stay
-  false because of unrelated optional/custom fields even after those four fields
-  are saved. Treating it as a hard requirement can therefore trap a customer on
-  `/account/details` forever. Click ID still cannot satisfy the gate because none
-  of the four explicit checks use customer attributes.
+  first name, last name, gender, and birthdate. First and last names must each
+  contain at least two letters. EasyStore's `customer.is_optional_fields_filled`
+  is an aggregate platform flag and may stay false because of unrelated
+  optional/custom fields even after those four fields are saved. Treating it as a
+  hard requirement can therefore trap a customer on `/account/details` forever.
+  Click ID still cannot satisfy the gate because none of the four explicit checks
+  use customer attributes.
 
   A first account password is not a profile update. EasyStore's registration
   contract creates it as `customer[password]`; `/account/details` instead carries
@@ -55,7 +56,9 @@
 
 {% assign cc_profile_completion_required = false %}
 {% if customer %}
-  {% if customer.first_name == blank or customer.last_name == blank or customer.gender == blank or customer.birthdate == blank %}
+  {% assign cc_first_name_length = customer.first_name | strip | size %}
+  {% assign cc_last_name_length = customer.last_name | strip | size %}
+  {% if customer.first_name == blank or customer.last_name == blank or cc_first_name_length < 2 or cc_last_name_length < 2 or customer.gender == blank or customer.birthdate == blank %}
     {% assign cc_profile_completion_required = true %}
   {% endif %}
 {% endif %}
@@ -272,3 +275,53 @@
     })();
   </script>
 {% endif %}
+
+<script>
+  (function () {
+    'use strict';
+
+    var labels = {
+      'customer[first_name]': 'first name',
+      'customer[last_name]': 'last name',
+      'details[first_name]': 'first name',
+      'details[last_name]': 'last name'
+    };
+    var selector = Object.keys(labels).map(function (name) {
+      return '[name="' + name + '"]';
+    }).join(',');
+    var letters;
+    try { letters = new RegExp('\\p{L}', 'gu'); }
+    catch (error) { letters = /[A-Za-z\u00C0-\u024F\u1E00-\u1EFF]/g; }
+
+    function validate(field) {
+      var label = field && labels[field.name];
+      if (!label) return;
+      var count = (String(field.value || '').match(letters) || []).length;
+      field.required = true;
+      field.minLength = 2;
+      field.setCustomValidity(count >= 2 ? '' : 'Please enter at least 2 letters for your ' + label + '.');
+    }
+
+    function validateForm(form) {
+      if (!form) return;
+      Array.prototype.forEach.call(form.querySelectorAll(selector), validate);
+    }
+
+    function init() {
+      Array.prototype.forEach.call(document.querySelectorAll(selector), validate);
+      ['focusin', 'input', 'change', 'invalid'].forEach(function (type) {
+        document.addEventListener(type, function (event) { validate(event.target); }, true);
+      });
+      document.addEventListener('click', function (event) {
+        var button = event.target && event.target.closest ? event.target.closest('button, input[type="submit"]') : null;
+        if (button && button.type === 'submit') validateForm(button.form);
+      }, true);
+      document.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter' && event.target && event.target.form) validateForm(event.target.form);
+      }, true);
+    }
+
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+    else init();
+  })();
+</script>
