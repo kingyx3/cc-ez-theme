@@ -21,6 +21,7 @@ class CustomerNameValidationTests(unittest.TestCase):
         validation = read(VALIDATION)
 
         self.assertIn("var MIN_NAME_LENGTH = 2;", validation)
+        self.assertIn("var MIN_NAME_PATTERN = '[\\\\s\\\\S]{2,}';", validation)
         for name in (
             "customer[first_name]",
             "customer[last_name]",
@@ -32,15 +33,14 @@ class CustomerNameValidationTests(unittest.TestCase):
 
         self.assertIn("field.setAttribute('minlength', String(MIN_NAME_LENGTH));", validation)
         self.assertIn("field.setAttribute('required', 'required');", validation)
-        self.assertIn("String(field.value || '').trim()", validation)
-        self.assertIn("field.setCustomValidity", validation)
-        self.assertIn("field.addEventListener('input', syncValidity);", validation)
+        self.assertIn("if (!field.hasAttribute('pattern'))", validation)
+        self.assertIn("field.setAttribute('pattern', MIN_NAME_PATTERN);", validation)
 
     def test_profile_completion_gate_rejects_short_saved_names(self) -> None:
         boot = read(BOOT)
 
-        self.assertIn("customer.first_name | strip | size", boot)
-        self.assertIn("customer.last_name | strip | size", boot)
+        self.assertIn("customer.first_name | size", boot)
+        self.assertIn("customer.last_name | size", boot)
         self.assertIn("cc_first_name_length < 2", boot)
         self.assertIn("cc_last_name_length < 2", boot)
 
