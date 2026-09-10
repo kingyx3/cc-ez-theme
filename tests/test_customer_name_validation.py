@@ -1,4 +1,4 @@
-"""Customer first and last names must contain at least two characters."""
+"""Customer first and last names must contain at least two letters."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ def read(path: Path) -> str:
 
 
 class CustomerNameValidationTests(unittest.TestCase):
-    def test_all_customer_name_inputs_get_the_two_character_minimum(self) -> None:
+    def test_all_customer_name_inputs_require_two_actual_letters(self) -> None:
         boot = read(BOOT)
 
         for name in (
@@ -29,13 +29,28 @@ class CustomerNameValidationTests(unittest.TestCase):
 
         self.assertIn("field.setAttribute('required', 'required');", boot)
         self.assertIn("field.setAttribute('minlength', '2');", boot)
-        self.assertIn("field.setAttribute('pattern', '.{2,}');", boot)
+        self.assertIn("new RegExp('\\\\p{L}', 'gu')", boot)
+        self.assertIn("letterCount(field.value) >= 2", boot)
+        self.assertIn("field.setCustomValidity(", boot)
+        self.assertIn("Please enter at least 2 letters for your ", boot)
+        self.assertNotIn("field.setAttribute('pattern', '.{2,}');", boot)
 
-    def test_profile_completion_gate_rejects_short_saved_names(self) -> None:
+    def test_dynamic_and_autofilled_fields_are_rechecked_before_submit(self) -> None:
         boot = read(BOOT)
 
-        self.assertIn("customer.first_name | size", boot)
-        self.assertIn("customer.last_name | size", boot)
+        for event_name in ("focusin", "input", "change", "invalid"):
+            with self.subTest(event_name=event_name):
+                self.assertIn(event_name, boot)
+
+        self.assertIn("validateFormNames(submitter.form);", boot)
+        self.assertIn("event.key !== 'Enter'", boot)
+        self.assertIn("validateFormNames(field.form);", boot)
+
+    def test_profile_completion_gate_strips_outer_whitespace_from_saved_names(self) -> None:
+        boot = read(BOOT)
+
+        self.assertIn("customer.first_name | strip | size", boot)
+        self.assertIn("customer.last_name | strip | size", boot)
         self.assertIn("cc_first_name_length < 2", boot)
         self.assertIn("cc_last_name_length < 2", boot)
 
