@@ -30,34 +30,21 @@ The CI workflow performs the full payload-generation validation on pull requests
 
 ## Deployment
 
-`.github/workflows/easystore-email-templates.yml` uses two deployment targets:
+`.github/workflows/easystore-email-templates.yml` follows the same GitHub Environment convention as the existing EasyStore theme/admin deployment workflow:
 
-- **Development:** when a pull request containing email-template changes is merged into any branch other than `main`, the merged base-branch state is deployed to the dev EasyStore store.
-- **Production:** when email-template changes reach `main`, the resulting `push` deploys the `main` state to the production EasyStore store.
+- `main` deploys through the GitHub `prod` environment.
+- Any non-`main` branch deploys through the GitHub `dev` environment.
 
-An ordinary push to a non-`main` branch does not deploy. This keeps development deployment tied to completed merges rather than every feature-branch commit.
+A PR merge into a non-`main` branch therefore deploys the merged branch state to dev through the resulting branch push. A merge into `main` deploys production.
 
-The workflow can also be run manually for one template or all templates, with an explicit `dev` or `production` target.
+Manual runs use the selected workflow ref in the same way: `main` uses `prod`, while another branch uses `dev`.
 
-### Production configuration
+Both GitHub environments use the same configuration names; their values differ by environment:
 
-Required GitHub Actions secret:
+- Secret `EASYSTORE_ADMIN_TOKEN`
+- Variable `EASYSTORE_POD_ID`
+- Variable `EASYSTORE_STORE_DOMAIN`
 
-- `EASYSTORE_ADMIN_TOKEN` — production bearer token accepted by `api.easystore.co` for the EasyStore Admin API.
-
-Optional repository variables (defaults match the current Cardboard Collective production routing):
-
-- `EASYSTORE_DEFAULT_DOMAIN` — defaults to `cardboardcollective.easy.co`.
-- `EASYSTORE_POD_ID` — defaults to `1007`.
-
-### Development configuration
-
-Development deliberately has no production fallback. Configure all of the following before merging template changes into a non-`main` branch:
-
-- Secret `EASYSTORE_DEV_ADMIN_TOKEN` — bearer token for the dev EasyStore store.
-- Variable `EASYSTORE_DEV_DEFAULT_DOMAIN` — dev store EasyStore default domain.
-- Variable `EASYSTORE_DEV_POD_ID` — dev store pod ID.
-
-If any dev setting is missing, the dev deployment fails before making a PUT request rather than falling back to production routing.
+If the selected environment is missing any required value, validation still succeeds but the automatic EasyStore deployment is skipped with a warning, matching the repository's existing admin deployment behavior.
 
 The EasyStore Admin endpoint used here is not a documented public API. Treat it as an internal integration: tokens may expire and request/header requirements may change when EasyStore changes its admin application.
