@@ -2,19 +2,15 @@ name: EasyStore email templates
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
-    paths:
-      - "email-templates/**"
-      - ".github/workflows/easystore-email-templates.yml"
-  pull_request_target:
-    types: [closed]
     paths:
       - "email-templates/**"
       - ".github/workflows/easystore-email-templates.yml"
   push:
-    branches: [main]
+    branches:
+      - "**"
     paths:
       - "email-templates/**"
+      - ".github/workflows/easystore-email-templates.yml"
   workflow_dispatch:
     inputs:
       template:
@@ -22,14 +18,6 @@ on:
         required: true
         default: "payment-successful"
         type: string
-      target:
-        description: "EasyStore target"
-        required: true
-        default: "dev"
-        type: choice
-        options:
-          - dev
-          - production
 
 permissions:
   contents: read
@@ -37,20 +25,10 @@ permissions:
 jobs:
   validate:
     name: Validate templates
-    if: >-
-      github.event_name != 'pull_request_target' ||
-      (github.event.pull_request.merged == true && github.event.pull_request.base.ref != 'main')
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout merged non-main base branch
-        if: github.event_name == 'pull_request_target'
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.base.ref }}
-
-      - name: Checkout current ref
-        if: github.event_name != 'pull_request_target'
-        uses: actions/checkout@v4
+      - name: Check out repository
+        uses: actions/checkout@v7
 
       - name: Validate source files and generated payloads
         shell: bash
@@ -108,30 +86,53 @@ jobs:
             exit 1
           fi
 
-  deploy-development:
-    name: Deploy to EasyStore dev
+  deploy:
+    name: Deploy email templates to EasyStore
     needs: validate
-    if: >-
-      (github.event_name == 'pull_request_target' &&
-       github.event.pull_request.merged == true &&
-       github.event.pull_request.base.ref != 'main') ||
-      (github.event_name == 'workflow_dispatch' && inputs.target == 'dev')
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    environment: ${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }}
     concurrency:
-      group: easystore-email-templates-development
+      group: easystore-email-templates-${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }}
       cancel-in-progress: false
     env:
-      EASYSTORE_ADMIN_TOKEN: ${{ secrets.EASYSTORE_DEV_ADMIN_TOKEN }}
-      EASYSTORE_DEFAULT_DOMAIN: ${{ vars.EASYSTORE_DEV_DEFAULT_DOMAIN }}
-      EASYSTORE_POD_ID: ${{ vars.EASYSTORE_DEV_POD_ID }}
+      EASYSTORE_POD_ID: ${{ vars.EASYSTORE_POD_ID }}
+      EASYSTORE_STORE_DOMAIN: ${{ vars.EASYSTORE_STORE_DOMAIN }}
+
     steps:
-      - name: Checkout dev deployment source
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.base.ref || github.ref }}
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Check EasyStore credential and environment variables
+        id: credential
+        env:
+          EASYSTORE_ADMIN_TOKEN: ${{ secrets.EASYSTORE_ADMIN_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          configured=true
+
+          if [[ -z "${EASYSTORE_ADMIN_TOKEN}" ]]; then
+            echo "::warning::EASYSTORE_ADMIN_TOKEN is not configured in the selected GitHub environment."
+            configured=false
+          fi
+          if [[ -z "${EASYSTORE_POD_ID}" ]]; then
+            echo "::warning::EASYSTORE_POD_ID is not configured in the selected GitHub environment."
+            configured=false
+          fi
+          if [[ -z "${EASYSTORE_STORE_DOMAIN}" ]]; then
+            echo "::warning::EASYSTORE_STORE_DOMAIN is not configured in the selected GitHub environment."
+            configured=false
+          fi
+
+          echo "configured=${configured}" >> "${GITHUB_OUTPUT}"
+          if [[ "${configured}" != "true" ]]; then
+            echo "::warning::Validation succeeded but automatic EasyStore email deployment is skipped."
+          fi
 
       - name: Select templates
+        if: steps.credential.outputs.configured == 'true'
         id: select
         shell: bash
         env:
@@ -139,7 +140,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ "$REQUESTED_TEMPLATE" = "all" ]; then
+          if [[ "$REQUESTED_TEMPLATE" == "all" ]]; then
             templates=""
             for dir in email-templates/*/; do
               [ -d "$dir" ] || continue
@@ -147,40 +148,29 @@ jobs:
             done
             templates="${templates# }"
           else
-            if [ ! -d "email-templates/${REQUESTED_TEMPLATE}" ]; then
+            if [[ ! -d "email-templates/${REQUESTED_TEMPLATE}" ]]; then
               echo "Unknown template: ${REQUESTED_TEMPLATE}" >&2
               exit 1
             fi
             templates="$REQUESTED_TEMPLATE"
           fi
 
-          if [ -z "$templates" ]; then
+          if [[ -z "$templates" ]]; then
             echo "No templates selected" >&2
             exit 1
           fi
 
           echo "templates=$templates" >> "$GITHUB_OUTPUT"
-          echo "Selected for dev: $templates"
+          echo "Selected: $templates"
 
-      - name: Deploy templates to dev
-        shell: bash
+      - name: Deploy templates
+        if: steps.credential.outputs.configured == 'true'
         env:
+          EASYSTORE_ADMIN_TOKEN: ${{ secrets.EASYSTORE_ADMIN_TOKEN }}
           TEMPLATES: ${{ steps.select.outputs.templates }}
+        shell: bash
         run: |
           set -euo pipefail
-
-          if [ -z "${EASYSTORE_ADMIN_TOKEN:-}" ]; then
-            echo "Missing required GitHub Actions secret EASYSTORE_DEV_ADMIN_TOKEN" >&2
-            exit 1
-          fi
-          if [ -z "${EASYSTORE_DEFAULT_DOMAIN:-}" ]; then
-            echo "Missing required repository variable EASYSTORE_DEV_DEFAULT_DOMAIN" >&2
-            exit 1
-          fi
-          if [ -z "${EASYSTORE_POD_ID:-}" ]; then
-            echo "Missing required repository variable EASYSTORE_DEV_POD_ID" >&2
-            exit 1
-          fi
 
           for slug in $TEMPLATES; do
             dir="email-templates/${slug}/"
@@ -203,7 +193,9 @@ jobs:
                 }
               }' > "$payload"
 
-            echo "Deploying ${slug} to dev..."
+            idempotency_key="phase1-dummy:web:$(python -c 'import uuid; print(uuid.uuid4())')"
+
+            echo "Deploying ${slug} through GitHub environment ${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }}..."
             curl \
               --fail-with-body \
               --silent \
@@ -213,121 +205,14 @@ jobs:
               --header "Accept: application/json" \
               --header "Authorization: Bearer ${EASYSTORE_ADMIN_TOKEN}" \
               --header "Content-Type: application/json" \
-              --header "easystore-browser: {}" \
               --header "easystore-pod-id: ${EASYSTORE_POD_ID}" \
               --header "easystore-source: admin" \
-              --header "x-easystore-infra-default-domain: ${EASYSTORE_DEFAULT_DOMAIN}" \
+              --header "x-easystore-infra-default-domain: ${EASYSTORE_STORE_DOMAIN}" \
               --header "x-easystore-infra-pod-id: ${EASYSTORE_POD_ID}" \
               --header "x-easystore-infra-source: admin" \
-              --header "idempotency-key: gha:dev:${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}:${slug}" \
+              --header "idempotency-key: ${idempotency_key}" \
               --data-binary "@${payload}"
 
             echo
-            echo "Deployed ${slug} to dev"
-          done
-
-  deploy-production:
-    name: Deploy to EasyStore production
-    needs: validate
-    if: >-
-      github.event_name == 'push' ||
-      (github.event_name == 'workflow_dispatch' && inputs.target == 'production')
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    concurrency:
-      group: easystore-email-templates-production
-      cancel-in-progress: false
-    env:
-      EASYSTORE_ADMIN_TOKEN: ${{ secrets.EASYSTORE_ADMIN_TOKEN }}
-      EASYSTORE_DEFAULT_DOMAIN: ${{ vars.EASYSTORE_DEFAULT_DOMAIN || 'cardboardcollective.easy.co' }}
-      EASYSTORE_POD_ID: ${{ vars.EASYSTORE_POD_ID || '1007' }}
-    steps:
-      - name: Checkout production deployment source
-        uses: actions/checkout@v4
-
-      - name: Select templates
-        id: select
-        shell: bash
-        env:
-          REQUESTED_TEMPLATE: ${{ github.event_name == 'workflow_dispatch' && inputs.template || 'all' }}
-        run: |
-          set -euo pipefail
-
-          if [ "$REQUESTED_TEMPLATE" = "all" ]; then
-            templates=""
-            for dir in email-templates/*/; do
-              [ -d "$dir" ] || continue
-              templates="${templates} $(basename "$dir")"
-            done
-            templates="${templates# }"
-          else
-            if [ ! -d "email-templates/${REQUESTED_TEMPLATE}" ]; then
-              echo "Unknown template: ${REQUESTED_TEMPLATE}" >&2
-              exit 1
-            fi
-            templates="$REQUESTED_TEMPLATE"
-          fi
-
-          if [ -z "$templates" ]; then
-            echo "No templates selected" >&2
-            exit 1
-          fi
-
-          echo "templates=$templates" >> "$GITHUB_OUTPUT"
-          echo "Selected for production: $templates"
-
-      - name: Deploy templates to production
-        shell: bash
-        env:
-          TEMPLATES: ${{ steps.select.outputs.templates }}
-        run: |
-          set -euo pipefail
-
-          if [ -z "${EASYSTORE_ADMIN_TOKEN:-}" ]; then
-            echo "Missing required GitHub Actions secret EASYSTORE_ADMIN_TOKEN" >&2
-            exit 1
-          fi
-
-          for slug in $TEMPLATES; do
-            dir="email-templates/${slug}/"
-            payload="/tmp/${slug}.json"
-
-            jq -n \
-              --slurpfile config "${dir}template.json" \
-              --rawfile html "${dir}template.html" \
-              --rawfile plain "${dir}plain.txt" \
-              '{
-                template: {
-                  subject: $config[0].subject,
-                  cc_recipients: $config[0].cc_recipients,
-                  content_html: $html,
-                  is_enabled: $config[0].is_enabled,
-                  template_attributes: $config[0].template_attributes
-                },
-                plain_template: {
-                  content: ($plain | sub("\\n$"; ""))
-                }
-              }' > "$payload"
-
-            echo "Deploying ${slug} to production..."
-            curl \
-              --fail-with-body \
-              --silent \
-              --show-error \
-              --request PUT \
-              "https://api.easystore.co/admin/v2/store/settings/templates/${slug}" \
-              --header "Accept: application/json" \
-              --header "Authorization: Bearer ${EASYSTORE_ADMIN_TOKEN}" \
-              --header "Content-Type: application/json" \
-              --header "easystore-browser: {}" \
-              --header "easystore-pod-id: ${EASYSTORE_POD_ID}" \
-              --header "easystore-source: admin" \
-              --header "x-easystore-infra-default-domain: ${EASYSTORE_DEFAULT_DOMAIN}" \
-              --header "x-easystore-infra-pod-id: ${EASYSTORE_POD_ID}" \
-              --header "x-easystore-infra-source: admin" \
-              --header "idempotency-key: gha:production:${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}:${slug}" \
-              --data-binary "@${payload}"
-
-            echo
-            echo "Deployed ${slug} to production"
+            echo "Deployed ${slug}"
           done
