@@ -30,21 +30,19 @@ The CI workflow performs the full payload-generation validation on pull requests
 
 ## Deployment
 
-`.github/workflows/easystore-email-templates.yml` follows the same GitHub Environment convention as the existing EasyStore theme/admin deployment workflow:
+`.github/workflows/easystore-email-templates.yml` follows the existing EasyStore admin/theme deployment convention in this repository:
 
-- `main` deploys through the GitHub `prod` environment.
-- Any non-`main` branch deploys through the GitHub `dev` environment.
+- pushes on `main` deploy through the GitHub `prod` environment;
+- pushes on any non-`main` branch deploy through the GitHub `dev` environment.
 
-A PR merge into a non-`main` branch therefore deploys the merged branch state to dev through the resulting branch push. A merge into `main` deploys production.
+A merge into a non-`main` branch therefore deploys the merged branch state to dev. A merge into `main` deploys production. Manual runs use the selected workflow ref in the same way.
 
-Manual runs use the selected workflow ref in the same way: `main` uses `prod`, while another branch uses `dev`.
-
-Both GitHub environments use the same configuration names; their values differ by environment:
+Both GitHub environments use the same configuration names, with environment-specific values:
 
 - Secret `EASYSTORE_ADMIN_TOKEN`
 - Variable `EASYSTORE_POD_ID`
 - Variable `EASYSTORE_STORE_DOMAIN`
 
-If the selected environment is missing any required value, validation still succeeds but the automatic EasyStore deployment is skipped with a warning, matching the repository's existing admin deployment behavior.
+If the selected environment is missing any required value, validation still succeeds but the automatic EasyStore deployment is skipped with a warning, matching the existing EasyStore admin deployment workflow.
 
 The EasyStore Admin endpoint used here is not a documented public API. Treat it as an internal integration: tokens may expire and request/header requirements may change when EasyStore changes its admin application.
