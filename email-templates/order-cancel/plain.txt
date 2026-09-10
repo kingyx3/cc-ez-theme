@@ -1,10 +1,23 @@
+{% if order.cancel_reason == blank %}
 Hi {{ customer.name }},
 
-A quick update on your order {{ order.name }}: it has been cancelled, and any reserved stock has been released.
+It looks like payment for order {{ order.name }} wasn't completed, so the order was automatically cancelled and the stock released.
 
-If this happened because payment wasn't completed and you'd still like the items, please place a fresh order and complete payment at checkout.
+If you'd still like the items, no worries. You can simply place a new order at cardboard.sg and complete payment at checkout.
 
-Already reordered? You can ignore this email. If you think payment went through, or this cancellation looks unexpected, reply to this email and we'll check it for you.
+Already reordered? You can ignore this email.
 
 Warm regards,
-The Cardboard Collective team
+Cardboard Collective
+{% else %}
+Hi {{ customer.name }},
+
+We're writing to let you know that your order {{ order.name }} has been cancelled.
+
+Cancellation reason: {{ order.cancel_reason }}
+
+Thank you for your interest in our products.
+
+Warm regards,
+Cardboard Collective
+{% endif %}
