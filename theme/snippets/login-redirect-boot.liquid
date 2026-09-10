@@ -304,12 +304,16 @@
       return matches ? matches.length : 0;
     }
 
-    function validateName(field) {
-      var label = NAME_LABELS[field.name];
-      if (!label) return;
-
+    function setNameConstraints(field) {
       field.setAttribute('required', 'required');
       field.setAttribute('minlength', '2');
+    }
+
+    function validateName(field) {
+      var label = field && NAME_LABELS[field.name];
+      if (!label) return;
+
+      setNameConstraints(field);
       field.setCustomValidity(
         letterCount(field.value) >= 2
           ? ''
@@ -317,37 +321,36 @@
       );
     }
 
-    function prepareField(field) {
-      if (!field || field.getAttribute('data-cc-name-validation') === 'true') return;
-      field.setAttribute('data-cc-name-validation', 'true');
-      validateName(field);
-      field.addEventListener('input', function () { validateName(field); });
-      field.addEventListener('change', function () { validateName(field); });
-    }
-
-    function prepareTree(root) {
-      if (!root || root.nodeType !== 1) return;
-      if (root.matches && root.matches(NAME_SELECTOR)) prepareField(root);
-      if (!root.querySelectorAll) return;
-      Array.prototype.forEach.call(root.querySelectorAll(NAME_SELECTOR), prepareField);
+    function validateFormNames(form) {
+      if (!form || !form.querySelectorAll) return;
+      Array.prototype.forEach.call(form.querySelectorAll(NAME_SELECTOR), validateName);
     }
 
     function initNameValidation() {
-      prepareTree(document.documentElement);
+      Array.prototype.forEach.call(document.querySelectorAll(NAME_SELECTOR), setNameConstraints);
 
-      // EasyStore can inject the first name/password completion form after the
-      // initial DOMContentLoaded event, so keep newly inserted name fields under
-      // the same rule instead of only validating fields present at page load.
-      if (window.MutationObserver) {
-        new MutationObserver(function (records) {
-          records.forEach(function (record) {
-            Array.prototype.forEach.call(record.addedNodes, prepareTree);
-          });
-        }).observe(document.body || document.documentElement, {
-          childList: true,
-          subtree: true
-        });
-      }
+      // Delegated handlers cover EasyStore fields inserted after DOMContentLoaded
+      // without an observer, and re-check current values before native form
+      // validation so browser autofill cannot leave stale validity behind.
+      ['focusin', 'input', 'change', 'invalid'].forEach(function (eventName) {
+        document.addEventListener(eventName, function (event) {
+          validateName(event.target);
+        }, true);
+      });
+
+      document.addEventListener('click', function (event) {
+        var submitter = event.target && event.target.closest
+          ? event.target.closest('button, input[type="submit"]')
+          : null;
+        if (!submitter || submitter.type !== 'submit' || !submitter.form) return;
+        validateFormNames(submitter.form);
+      }, true);
+
+      document.addEventListener('keydown', function (event) {
+        var field = event.target;
+        if (event.key !== 'Enter' || !field || !field.form) return;
+        validateFormNames(field.form);
+      }, true);
     }
 
     if (document.readyState === 'loading') {
