@@ -2,6 +2,7 @@
   'use strict';
 
   var MIN_NAME_LENGTH = 2;
+  var MIN_NAME_PATTERN = '[\\s\\S]{2,}';
   var NAME_FIELDS = [
     'customer[first_name]',
     'customer[last_name]',
@@ -13,15 +14,11 @@
     field.setAttribute('minlength', String(MIN_NAME_LENGTH));
     field.setAttribute('required', 'required');
 
-    function syncValidity() {
-      var value = String(field.value || '').trim();
-      field.setCustomValidity(
-        value.length < MIN_NAME_LENGTH ? 'Please enter at least 2 characters.' : ''
-      );
+    // `minlength` covers user-entered values. The pattern also validates values
+    // that EasyStore or the browser prefilled before the customer submits.
+    if (!field.hasAttribute('pattern')) {
+      field.setAttribute('pattern', MIN_NAME_PATTERN);
     }
-
-    field.addEventListener('input', syncValidity);
-    syncValidity();
   }
 
   function init() {
