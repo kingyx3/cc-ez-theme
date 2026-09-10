@@ -22,6 +22,9 @@ on:
 permissions:
   contents: read
 
+env:
+  EASYSTORE_EMAIL_TEMPLATES_API_URL: https://api.easystore.co/admin/v2/store/settings/templates
+
 jobs:
   validate:
     name: Validate templates
@@ -201,7 +204,7 @@ jobs:
               --silent \
               --show-error \
               --request PUT \
-              "https://api.easystore.co/admin/v2/store/settings/templates/${slug}" \
+              "${EASYSTORE_EMAIL_TEMPLATES_API_URL}/${slug}" \
               --header "Accept: application/json" \
               --header "Authorization: Bearer ${EASYSTORE_ADMIN_TOKEN}" \
               --header "Content-Type: application/json" \
