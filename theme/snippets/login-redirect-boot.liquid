@@ -20,13 +20,13 @@
   until those fields submit successfully.
 
   The gate deliberately uses only the human fields this store actually requires:
-  first name, last name, gender, and birthdate. First and last names must each be
-  at least two characters. EasyStore's `customer.is_optional_fields_filled` is an
-  aggregate platform flag and may stay false because of unrelated optional/custom
-  fields even after those four fields are saved. Treating it as a hard requirement
-  can therefore trap a customer on `/account/details` forever. Click ID still
-  cannot satisfy the gate because none of the four explicit checks use customer
-  attributes.
+  first name, last name, gender, and birthdate. First and last names must each
+  contain at least two letters. EasyStore's `customer.is_optional_fields_filled`
+  is an aggregate platform flag and may stay false because of unrelated
+  optional/custom fields even after those four fields are saved. Treating it as a
+  hard requirement can therefore trap a customer on `/account/details` forever.
+  Click ID still cannot satisfy the gate because none of the four explicit checks
+  use customer attributes.
 
   A first account password is not a profile update. EasyStore's registration
   contract creates it as `customer[password]`; `/account/details` instead carries
@@ -56,8 +56,8 @@
 
 {% assign cc_profile_completion_required = false %}
 {% if customer %}
-  {% assign cc_first_name_length = customer.first_name | size %}
-  {% assign cc_last_name_length = customer.last_name | size %}
+  {% assign cc_first_name_length = customer.first_name | strip | size %}
+  {% assign cc_last_name_length = customer.last_name | strip | size %}
   {% if customer.first_name == blank or customer.last_name == blank or cc_first_name_length < 2 or cc_last_name_length < 2 or customer.gender == blank or customer.birthdate == blank %}
     {% assign cc_profile_completion_required = true %}
   {% endif %}
@@ -277,18 +277,83 @@
 {% endif %}
 
 <script>
-  document.addEventListener('DOMContentLoaded', function () {
-    var selector = [
-      '[name="customer[first_name]"]',
-      '[name="customer[last_name]"]',
-      '[name="details[first_name]"]',
-      '[name="details[last_name]"]'
-    ].join(',');
+  (function () {
+    'use strict';
 
-    Array.prototype.forEach.call(document.querySelectorAll(selector), function (field) {
+    var NAME_LABELS = {
+      'customer[first_name]': 'first name',
+      'customer[last_name]': 'last name',
+      'details[first_name]': 'first name',
+      'details[last_name]': 'last name'
+    };
+    var NAME_SELECTOR = Object.keys(NAME_LABELS).map(function (name) {
+      return '[name="' + name + '"]';
+    }).join(',');
+    var LETTER_PATTERN;
+
+    try {
+      LETTER_PATTERN = new RegExp('\\p{L}', 'gu');
+    } catch (error) {
+      // Older engines still get broad Latin-letter support rather than treating
+      // spaces or punctuation as characters that satisfy the name requirement.
+      LETTER_PATTERN = /[A-Za-z\u00C0-\u024F\u1E00-\u1EFF]/g;
+    }
+
+    function letterCount(value) {
+      var matches = String(value || '').match(LETTER_PATTERN);
+      return matches ? matches.length : 0;
+    }
+
+    function validateName(field) {
+      var label = NAME_LABELS[field.name];
+      if (!label) return;
+
       field.setAttribute('required', 'required');
       field.setAttribute('minlength', '2');
-      if (!field.hasAttribute('pattern')) field.setAttribute('pattern', '.{2,}');
-    });
-  });
+      field.setCustomValidity(
+        letterCount(field.value) >= 2
+          ? ''
+          : 'Please enter at least 2 letters for your ' + label + '.'
+      );
+    }
+
+    function prepareField(field) {
+      if (!field || field.getAttribute('data-cc-name-validation') === 'true') return;
+      field.setAttribute('data-cc-name-validation', 'true');
+      validateName(field);
+      field.addEventListener('input', function () { validateName(field); });
+      field.addEventListener('change', function () { validateName(field); });
+    }
+
+    function prepareTree(root) {
+      if (!root || root.nodeType !== 1) return;
+      if (root.matches && root.matches(NAME_SELECTOR)) prepareField(root);
+      if (!root.querySelectorAll) return;
+      Array.prototype.forEach.call(root.querySelectorAll(NAME_SELECTOR), prepareField);
+    }
+
+    function initNameValidation() {
+      prepareTree(document.documentElement);
+
+      // EasyStore can inject the first name/password completion form after the
+      // initial DOMContentLoaded event, so keep newly inserted name fields under
+      // the same rule instead of only validating fields present at page load.
+      if (window.MutationObserver) {
+        new MutationObserver(function (records) {
+          records.forEach(function (record) {
+            Array.prototype.forEach.call(record.addedNodes, prepareTree);
+          });
+        }).observe(document.body || document.documentElement, {
+          childList: true,
+          subtree: true
+        });
+      }
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initNameValidation);
+    } else {
+      initNameValidation();
+    }
+  })();
 </script>
