@@ -27,11 +27,10 @@ class CustomerNameValidationTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertIn(name, boot)
 
-        self.assertIn("field.setAttribute('required', 'required');", boot)
-        self.assertIn("field.setAttribute('minlength', '2');", boot)
+        self.assertIn("field.required = true;", boot)
+        self.assertIn("field.minLength = 2;", boot)
         self.assertIn("new RegExp('\\\\p{L}', 'gu')", boot)
-        self.assertIn("letterCount(field.value) >= 2", boot)
-        self.assertIn("field.setCustomValidity(", boot)
+        self.assertIn("field.setCustomValidity(count >= 2", boot)
         self.assertIn("Please enter at least 2 letters for your ", boot)
         self.assertNotIn("field.setAttribute('pattern', '.{2,}');", boot)
 
@@ -42,9 +41,9 @@ class CustomerNameValidationTests(unittest.TestCase):
             with self.subTest(event_name=event_name):
                 self.assertIn(event_name, boot)
 
-        self.assertIn("validateFormNames(submitter.form);", boot)
-        self.assertIn("event.key !== 'Enter'", boot)
-        self.assertIn("validateFormNames(field.form);", boot)
+        self.assertIn("validateForm(button.form);", boot)
+        self.assertIn("event.key === 'Enter'", boot)
+        self.assertIn("validateForm(event.target.form);", boot)
 
     def test_profile_completion_gate_strips_outer_whitespace_from_saved_names(self) -> None:
         boot = read(BOOT)
