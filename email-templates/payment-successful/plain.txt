@@ -1,0 +1,1 @@
+Hi {{ customer.name }}, we have received your payment for order {{ order.name }}.
