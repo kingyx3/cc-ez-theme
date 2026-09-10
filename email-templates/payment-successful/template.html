@@ -1,0 +1,137 @@
+<meta name="subject" content="Your payment is successful with {{ shop.name }}">
+<meta name="template_type" content="payment-successful">
+
+<style>
+  [data-f-id] {
+    display: none;
+  }
+</style>
+
+<!-- Hero banner -->
+<div>
+  <img src="https://resources.easystore.co/email-templates/heroes/hero-parcel.jpg" style="width: 100%;">
+</div>
+
+<!-- Main content -->
+<div style="padding: 20px;">
+  <h1 style="font-size: 27px; font-weight: 500; margin: 0 0 20px;">Thank you for your payment</h1>
+
+  <div style="font-size: 15px; color: #767676;">
+    <p style="margin: 15px 0;">Hi {{ customer.name }},</p>
+    <p style="margin: 15px 0;">We have received your payment for order <strong>{{ order.number }}</strong></p>
+    <br>
+    <a href="https://{{cart_url}}" style="background-color: {{template_attributes.button_color}}; color: {{template_attributes.button_text_color}}; text-decoration: none; padding: 16px 25px; border: none; border-radius: 10px; font-size: 15px; font-weight: 500;">View Order</a>
+  </div>
+</div>
+
+<!-- Order summary -->
+<div style="padding: 20px;">
+  <h5 style="font-size: 22px; font-weight: 500; margin: 0 0 20px;">Order summary</h5>
+
+  <table style="border-spacing: 0; border-collapse: collapse; width: 100%; border-bottom: 1px solid #eee; font-size: 14px; margin-bottom: 15px;">
+    <tbody>
+      <tr style="display: none;"><td>{% for product in products %}</td></tr>
+      <tr valign="top">
+        <td style="width: 10%; padding-bottom: 20px; padding-right: 10px;">
+          <div style="background-image: url('{{product.image_url}}'); background-size: cover; background-position: center center; width: 70px; height: 70px; border-radius: 10px; border: 1px solid #eee;"></div>
+        </td>
+        <td style="width: 60%; padding-bottom: 20px;">
+          <div style="font-weight: bold;">{{ product.name }}&nbsp;&times;&nbsp;{{ product.quantity }}</div>
+          <div style="font-size: 13px; color: #B8B8B8;">{{ product.variant_name }}</div>
+          <div style="display: none;">{% for property in product.properties %}</div>
+          <div style="font-size: 13px; color: #B8B8B8;">{{property.name}}: {{property.value}}</div>
+          <div style="display: none;">{% endfor %}</div>
+          {% if product.discounted_subtotal_exclude_tax != product.subtotal_exclude_tax %}
+          <div style="font-size: 13px; color: #B8B8B8;">Discount (<span style="color: #ED4848;">- {{ product.total_discount }}</span>)</div>
+          {% endif %}
+        </td>
+        <td style="width: 30%; padding-bottom: 20px; text-align: right;">
+          {% if product.discounted_subtotal_exclude_tax != product.subtotal_exclude_tax %}
+          <s style="font-size: 12px; color: #B8B8B8;">{{ product.subtotal_exclude_tax }}</s>
+          {% endif %}
+          <div style="font-weight: 500;">{{ product.discounted_subtotal_exclude_tax }}</div>
+        </td>
+      </tr>
+      <tr style="display: none;"><td>{% endfor %}</td></tr>
+    </tbody>
+  </table>
+
+  <table style="border-spacing: 0; border-collapse: collapse; width: 100%; font-size: 14px; margin-bottom: 15px;">
+    <tbody>
+      <tr>
+        <td style="padding: 2px 0;"><span>Subtotal</span></td>
+        <td style="padding: 2px 0; text-align: right;"><span>{{order.discounted_total_exclude_tax}}</span></td>
+      </tr>
+
+      <tr style="display: none;"><td>{% if order.total_product_tax %}</td></tr>
+      <tr>
+        <td style="padding: 2px 0;"><span>Tax</span></td>
+        <td style="padding: 2px 0; text-align: right;"><span>{{ order.total_product_tax }}</span></td>
+      </tr>
+      <tr style="display: none;"><td>{% endif %}</td></tr>
+
+      <tr style="display: none;"><td>{% if order.total_shipping_include_tax %}</td></tr>
+      <tr>
+        <td style="padding: 2px 0;"><span>Shipping <span style="font-size: 13px; color: #B8B8B8;">({{ shipping.method }})</span></span></td>
+        <td style="padding: 2px 0; text-align: right;"><span>{{ order.total_shipping_include_tax }}</span></td>
+      </tr>
+      <tr style="display: none;"><td>{% endif %}</td></tr>
+
+      <tr style="display: none;"><td>{% if order.transaction_charge_rate != 0.0 %}</td></tr>
+      <tr>
+        <td style="padding: 2px 0;"><span>Transaction charge rate <span style="font-size: 13px; color: #B8B8B8;">({{order.transaction_charge_rate}}%)</span></span></td>
+        <td style="padding: 2px 0; text-align: right;"><span>{{ order.transaction_charge_rate_fee }}</span></td>
+      </tr>
+      <tr style="display: none;"><td>{% endif %}</td></tr>
+
+      <tr style="display: none;"><td>{% if order.transaction_charge_fee %}</td></tr>
+      <tr>
+        <td style="padding: 2px 0;"><span>Transaction charge</span></td>
+        <td style="padding: 2px 0; text-align: right;"><span>{{ order.transaction_charge_fee }}</span></td>
+      </tr>
+      <tr style="display: none;"><td>{% endif %}</td></tr>
+
+      <tr style="display: none;"><td>{% if order.total_order_discount %}</td></tr>
+      <tr>
+        <td style="padding: 2px 0;">Voucher Discount <span style="font-size: 13px; color: #B8B8B8;">({{ order.discount_code }})</span></td>
+        <td style="padding: 2px 0; text-align: right;"><span>- {{ order.total_order_discount }}</span></td>
+      </tr>
+      <tr style="display: none;"><td>{% endif %}</td></tr>
+
+      <tr style="display: none;"><td>{% if order.shipping_discount != 0 %}</td></tr>
+      <tr>
+        <td style="padding: 2px 0;">Shipping Discount</td>
+        <td style="padding: 2px 0; text-align: right;">- {{ order.shipping_discount }}</td>
+      </tr>
+      <tr style="display: none;"><td>{% endif %}</td></tr>
+
+      <tr style="display: none;"><td>{% if order.credit_used %}</td></tr>
+      <tr>
+        <td style="padding: 2px 0;">Credit used</td>
+        <td style="padding: 2px 0; text-align: right;"><span>- {{ order.credit_used }}</span></td>
+      </tr>
+      <tr style="display: none;"><td>{% endif %}</td></tr>
+
+      <tr style="display: none;"><td>{% if order.point_redemption and order.point_redemption.discount_amount %}</td></tr>
+      <tr>
+        <td style="padding: 2px 0;">Points applied ({{ order.point_redemption.amount }})</td>
+        <td style="padding: 2px 0; text-align: right;">- {{ order.point_redemption.discount_amount }}</td>
+      </tr>
+      <tr style="display: none;"><td>{% endif %}</td></tr>
+
+      <tr style="display: none;"><td>{% if order.total_rounding and order.total_rounding != 0 %}</td></tr>
+      <tr>
+        <td style="padding: 2px 0;"><span>Rounding</span></td>
+        <td style="padding: 2px 0; text-align: right;"><span>{{ order.total_rounding }}</span></td>
+      </tr>
+      <tr style="display: none;"><td>{% endif %}</td></tr>
+    </tbody>
+
+    <tbody>
+      <tr style="font-size: 15px; font-weight: 900;">
+        <td style="padding: 2px 0;">Total</td>
+        <td style="padding: 2px 0; text-align: right;">{{ order.total_price }}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>

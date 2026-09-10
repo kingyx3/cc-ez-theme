@@ -1,0 +1,13 @@
+{
+  "subject": "Your payment is successful with {{ shop.name }}",
+  "cc_recipients": "",
+  "is_enabled": true,
+  "template_attributes": {
+    "logo_img_url": null,
+    "logo_size": 120,
+    "button_color": "#000000",
+    "button_text_color": "#FFFFFF",
+    "footer_link": {},
+    "social_media": {}
+  }
+}
