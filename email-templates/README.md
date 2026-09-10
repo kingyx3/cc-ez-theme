@@ -8,22 +8,28 @@ Each template lives in its own directory named after the EasyStore template slug
 
 ```text
 email-templates/
+├── order-cancel/
+│   ├── template.json   # subject, enabled state, CCs, and template attributes
+│   ├── template.html   # HTML/Liquid body
+│   └── plain.txt       # plain-text body
 └── payment-successful/
-    ├── template.json   # subject, enabled state, CCs, and template attributes
-    ├── template.html   # HTML/Liquid body
-    └── plain.txt       # plain-text body
+    ├── template.json
+    ├── template.html
+    └── plain.txt
 ```
 
 The GitHub Actions workflow assembles the EasyStore JSON payload with `jq`, keeping HTML and plain text readable and reviewable instead of storing them as escaped JSON strings.
 
 ## Validate locally
 
-At minimum, validate the metadata JSON and make sure all three source files are present:
+At minimum, validate each metadata JSON file and make sure all three source files are present:
 
 ```bash
-jq empty email-templates/payment-successful/template.json
-test -s email-templates/payment-successful/template.html
-test -s email-templates/payment-successful/plain.txt
+for dir in email-templates/*/; do
+  jq empty "${dir}template.json"
+  test -s "${dir}template.html"
+  test -s "${dir}plain.txt"
+done
 ```
 
 The CI workflow performs the full payload-generation validation on pull requests.
