@@ -1,1 +1,10 @@
-Hi {{ customer.name }}, thank you for your interest in our products. Unfortunately, your order {{ order.name }} was cancelled.
+Hi {{ customer.name }},
+
+A quick update on your order {{ order.name }}: it has been cancelled, and any reserved stock has been released.
+
+If this happened because payment wasn't completed and you'd still like the items, please place a fresh order and complete payment at checkout.
+
+Already reordered? You can ignore this email. If you think payment went through, or this cancellation looks unexpected, reply to this email and we'll check it for you.
+
+Warm regards,
+The Cardboard Collective team
