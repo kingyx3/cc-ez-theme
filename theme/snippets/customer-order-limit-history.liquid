@@ -20,16 +20,28 @@
 {% endcomment %}
 {% assign customer_order_limit_history_now = 'now' | date: '%s' | plus: 0 %}
 {% assign customer_order_limit_history_count = 0 %}
+{% assign customer_order_limit_history_orders_seen = 0 %}
+{% assign customer_order_limit_history_cancelled_seen = 0 %}
+{% assign customer_order_limit_history_lines_seen = 0 %}
 {% assign customer_order_limit_history_truncated = false %}
 {% capture customer_order_limit_history_lines %}
   {%- if customer -%}
-    {%- assign customer_order_limit_history_orders = customer.orders | default: customer.recent_orders -%}
-    {%- for order in customer_order_limit_history_orders -%}
+    {%- comment -%}
+      Use the same native collections as the visible account order list. Do not
+      pass these collections through default/assign before iterating: the list
+      can render an order and image while that indirect history pass emits none.
+      Payment confirmation is not a condition; unpaid orders consume allowance.
+    {%- endcomment -%}
+    {%- for order in customer.orders -%}
+      {%- assign customer_order_limit_history_orders_seen = customer_order_limit_history_orders_seen | plus: 1 -%}
       {%- comment -%}
         A cancelled order is left out of the payload, decided by the same snippet
         the inline pass uses so both agree on what counts.
       {%- endcomment -%}
       {%- include 'customer-order-limit-cancelled', cancelled_order: order -%}
+      {%- if customer_order_limit_cancelled -%}
+        {%- assign customer_order_limit_history_cancelled_seen = customer_order_limit_history_cancelled_seen | plus: 1 -%}
+      {%- endif -%}
       {%- unless customer_order_limit_cancelled -%}
         {%- assign customer_order_limit_history_epoch = order.created_at | date: '%s' | plus: 0 -%}
         {%- if customer_order_limit_history_epoch == 0 -%}
@@ -39,8 +51,8 @@
           {%- assign customer_order_limit_history_epoch = customer_order_limit_history_now -%}
         {%- endif -%}
         {%- assign customer_order_limit_history_token = order.token | default: order.order_number | default: order.name | default: '' | append: '' | strip -%}
-        {%- assign customer_order_limit_history_items = order.line_items | default: order.items -%}
-        {%- for line_item in customer_order_limit_history_items -%}
+        {%- for line_item in order.line_items -%}
+          {%- assign customer_order_limit_history_lines_seen = customer_order_limit_history_lines_seen | plus: 1 -%}
           {%- if customer_order_limit_history_count >= 500 -%}
             {%- assign customer_order_limit_history_truncated = true -%}
           {%- else -%}
@@ -72,5 +84,5 @@
   {%- endfor -%}
 {% endcapture %}
 <script type="application/json" id="customer-order-limit-history">
-{"customer":{{ customer.id | default: '' | append: '' | json }},"renderedAt":{{ customer_order_limit_history_now | json }},"truncated":{{ customer_order_limit_history_truncated | json }},"currentTab":{{ customer.paginate.filter.current_tab | default: '' | append: '' | json }},"tabs":[{{ customer_order_limit_history_tabs | strip }}],"page":{{ paginate.current_page | default: 1 | plus: 0 | json }},"pages":{{ paginate.pages | default: 1 | plus: 0 | json }},"nextUrl":{{ paginate.next.url | default: '' | append: '' | json }},"lines":[{{ customer_order_limit_history_lines | strip }}]}
+{"schemaVersion":2,"diagnostics":{"ordersSeen":{{ customer_order_limit_history_orders_seen | json }},"cancelledOrdersSeen":{{ customer_order_limit_history_cancelled_seen | json }},"lineItemsSeen":{{ customer_order_limit_history_lines_seen | json }}},"customer":{{ customer.id | default: '' | append: '' | json }},"renderedAt":{{ customer_order_limit_history_now | json }},"truncated":{{ customer_order_limit_history_truncated | json }},"currentTab":{{ customer.paginate.filter.current_tab | default: '' | append: '' | json }},"tabs":[{{ customer_order_limit_history_tabs | strip }}],"page":{{ paginate.current_page | default: 1 | plus: 0 | json }},"pages":{{ paginate.pages | default: 1 | plus: 0 | json }},"nextUrl":{{ paginate.next.url | default: '' | append: '' | json }},"lines":[{{ customer_order_limit_history_lines | strip }}]}
 </script>

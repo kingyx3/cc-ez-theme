@@ -83,6 +83,9 @@
     if (!el) console.log('payload MISSING at /account/orders — the account template is not published, or that URL redirected.');
     else {
       const payload = JSON.parse(el.textContent);
+      out('payload version', payload.schemaVersion ?? 1);
+      out('payload diagnostics', JSON.stringify(payload.diagnostics || {}));
+      out('visible orders', new DOMParser().parseFromString(html, 'text/html').querySelectorAll('article.flex-table-tr').length);
       out('payload lines', payload.lines.length);
       out('matching this handle', payload.lines.filter((l) => l[0] === handle || l[1] === handle).length);
       out('current tab', payload.currentTab || '(none)');

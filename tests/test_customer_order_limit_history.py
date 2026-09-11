@@ -58,7 +58,10 @@ class HistoryPayloadStructureTests(unittest.TestCase):
         )
         self.assertIn("{%- unless customer_order_limit_cancelled -%}", history)
         self.assertIn("order.created_at | date: '%s' | plus: 0", history)
-        self.assertIn("order.line_items | default: order.items", history)
+        self.assertIn("{%- for order in customer.orders -%}", history)
+        self.assertIn("{%- for line_item in order.line_items -%}", history)
+        self.assertNotIn("= customer.orders |", history)
+        self.assertNotIn("= order.line_items |", history)
         self.assertIn("customer_order_limit_history_count >= 500", history)
         # No filtering by handle here: the reading page applies its own config.
         self.assertNotIn("customer_order_limit_handle_1", history)
@@ -259,6 +262,36 @@ class HistoryPayloadRenderingTests(unittest.TestCase):
         self.assertEqual(payload["lines"][1][0], LOWER)
         self.assertEqual(payload["lines"][1][3], 1)
         self.assertTrue(all(isinstance(line[2], int) and line[2] > 0 for line in payload["lines"]))
+
+    def test_unpaid_order_publishes_its_line_and_diagnostics(self) -> None:
+        order = self.order(days_ago=1, sku=HANDLE, quantity=1)
+        order.update(is_paid=False, financial_status_label="Unpaid", status="to_pay")
+        payload = self.payload([order])
+        self.assertEqual(len(payload["lines"]), 1)
+        self.assertEqual(payload["lines"][0][3], 1)
+        self.assertEqual(payload["schemaVersion"], 2)
+        self.assertEqual(payload["diagnostics"], {
+            "ordersSeen": 1, "cancelledOrdersSeen": 0, "lineItemsSeen": 1,
+        })
+
+    def test_history_does_not_filter_native_collections_before_iteration(self) -> None:
+        # Compatibility contract: native account collections must be iterated
+        # directly, like the visible order list. This is not an EasyStore engine
+        # emulator; live preview remains necessary to verify its object handling.
+        environment = self.environment()
+        original_default = environment.filters["default"]
+
+        def scalar_default(value, *args, **kwargs):
+            if isinstance(value, list):
+                raise AssertionError("native collection passed through default")
+            return original_default(value, *args, **kwargs)
+
+        environment.filters["default"] = scalar_default
+        rendered = environment.get_template("customer-order-limit-history").render(
+            customer={"id": 42, "orders": [self.order(days_ago=1, sku=HANDLE)]},
+        )
+        body = re.search(r"<script[^>]*>(.*?)</script>", rendered, re.S)
+        self.assertEqual(len(json.loads(body.group(1))["lines"]), 1)
 
     def test_payload_excludes_cancelled_orders(self) -> None:
         payload = self.payload([
