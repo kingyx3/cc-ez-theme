@@ -11,10 +11,10 @@
  * and never removes a node the platform's widget may still hold. That is the
  * line whose crossing broke signup with "Customer already exists (phone)".
  *
- * Temporary unpublished-preview diagnostic: adding ?otpdiag=1 enables a
- * session-scoped, read-only beforeinput/input observer. It shows only event
- * metadata; it never records OTP digits or changes EasyStore/browser behaviour.
- * Disable with ?otpdiag=0 or by closing the tab.
+ * Temporary unpublished-preview diagnostics:
+ * - ?otpdiag=1 enables the read-only beforeinput/input observer.
+ * - ?otpdiag=2 loads a separate, opt-in same-event distribution experiment.
+ * - ?otpdiag=0 clears both tab-scoped modes.
  */
 (() => {
   // "Continue with email instead", "Sign up using your email address instead".
@@ -22,6 +22,32 @@
   // Longer than this is a paragraph, not the link.
   const LINK_LENGTH = 80;
   const DIAGNOSTIC_KEY = 'ccOtpBeforeInputDiagnostic';
+  const SAME_EVENT_KEY = 'ccOtpSameEventPreview';
+
+  const loadSameEventPreview = () => {
+    const params = new URLSearchParams(window.location.search);
+    let active = false;
+    try {
+      if (params.get('otpdiag') === '2') sessionStorage.setItem(SAME_EVENT_KEY, '2');
+      if (params.get('otpdiag') === '0') sessionStorage.removeItem(SAME_EVENT_KEY);
+      active = sessionStorage.getItem(SAME_EVENT_KEY) === '2';
+    } catch (_) {
+      active = params.get('otpdiag') === '2';
+    }
+    if (!active) return;
+
+    const current = document.currentScript
+      || document.querySelector('script[src*="account-otp-copy.js"]');
+    const source = current && String(current.src || '');
+    if (!/account-otp-copy\.js(?:[?#]|$)/.test(source)) return;
+
+    const script = document.createElement('script');
+    script.src = source.replace(/account-otp-copy\.js(?=([?#]|$))/, 'otp-same-event-preview.js');
+    script.defer = true;
+    document.head.appendChild(script);
+  };
+
+  loadSameEventPreview();
 
   const diagnosticRequested = () => {
     const params = new URLSearchParams(window.location.search);
@@ -74,10 +100,6 @@
       mount();
     }
 
-    // Do not depend on maxlength or a platform class name. The live EasyStore
-    // widget can render six visual cells while still allowing Android to place
-    // the entire code in one underlying input. For this temporary observer, a
-    // six-input ancestor group is enough to identify the OTP row.
     const sixCellGroup = (target) => {
       if (!(target instanceof HTMLInputElement)) return null;
       let node = target.parentElement;
@@ -127,8 +149,6 @@
       ]);
     };
 
-    // Passive capture listeners make this probe observational by construction:
-    // it cannot cancel the browser edit even if the handler changes later.
     ['beforeinput', 'input'].forEach((type) => {
       window.addEventListener(type, observe, { capture: true, passive: true });
     });
@@ -146,32 +166,19 @@
     });
   };
 
-  // Wording the platform shows on a step that is waiting on a code.
   const OTP_STEP = /verification\s+code|one-time\s+password|\botp\b|verify\s+your\s+(?:mobile|phone)|(?:code\s+(?:we\s+)?(?:just\s+)?sent|sent\s+(?:you\s+)?(?:an?|the)\s+code)|resend\s+(?:the\s+)?code/i;
 
   const pageText = () => (document.body && document.body.textContent) || '';
 
-  // What the page shows, never where the URL says it is: a page-path heuristic
-  // is the trap that once turned the header search box into an OTP field. A
-  // form alone is not the signal either - the OTP step renders none, which is
-  // what left that step watched by nothing. Any of the three is an account
-  // step: the platform's own form, the wording it shows while a code is
-  // outstanding, or the link itself.
   const hasAccountStep = () => document.querySelector('form[action*="/account"]') !== null
     || OTP_STEP.test(pageText())
     || EMAIL_SIGNUP.test(pageText());
 
   const start = () => {
-    // Detect the account step before walking every link/button. Ordinary
-    // storefront pages only pay for the existing marker/text probe and skip the
-    // broad control scan completely. Repeat the original guard after hiding so
-    // observation behavior stays tied to the same post-rewrite page state.
     if (!hasAccountStep()) return;
     hideEmailSignup();
     if (!hasAccountStep()) return;
 
-    // The platform renders its next step after a submit, so the page is watched
-    // - but only on a page that has an account step at all.
     let queued = false;
     new MutationObserver(() => {
       if (queued) return;
