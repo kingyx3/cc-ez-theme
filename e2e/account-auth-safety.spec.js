@@ -230,6 +230,10 @@ async function authSite(page, overrides = {}) {
   };
 }
 
+const otpValues = (page) => page.locator('.otp-input').evaluateAll(
+  (inputs) => inputs.map((input) => input.value)
+);
+
 test.describe('OTP and signup ownership without live reCAPTCHA', () => {
   test('platform-distributed autofill fills all six cells and verifies exactly once', async ({ page }) => {
     const site = await authSite(page);
@@ -239,7 +243,7 @@ test.describe('OTP and signup ownership without live reCAPTCHA', () => {
     await expect.poll(() => site.counts.verification).toBe(1);
     await site.settle();
 
-    expect(await page.locator('.otp-input').allInputValues()).toEqual(['1', '2', '3', '4', '5', '6']);
+    expect(await otpValues(page)).toEqual(['1', '2', '3', '4', '5', '6']);
     expect(site.counts.verification).toBe(1);
     expect(site.counts.history).toBe(0);
     expect(await page.evaluate(() => window.__verificationResult)).toEqual({
@@ -265,7 +269,7 @@ test.describe('OTP and signup ownership without live reCAPTCHA', () => {
     await expect.poll(() => site.counts.verification).toBe(1);
     await site.settle();
 
-    expect(await page.locator('.otp-input').allInputValues()).toEqual(['6', '5', '4', '3', '2', '1']);
+    expect(await otpValues(page)).toEqual(['6', '5', '4', '3', '2', '1']);
     expect(site.counts.verification).toBe(1);
     expect(site.counts.history).toBe(0);
     expect(await page.evaluate(() => window.__verificationResult)).toEqual({
