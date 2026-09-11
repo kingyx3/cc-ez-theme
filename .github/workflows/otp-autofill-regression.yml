@@ -1,12 +1,20 @@
-name: OTP platform ownership regression
+name: Account auth safety regression
 
 on:
   pull_request:
     paths:
       - "theme/assets/account-otp-copy.js"
       - "theme/editor_assets/account-otp-copy.js"
+      - "theme/assets/customer-order-limits.js"
+      - "theme/editor_assets/customer-order-limits.js"
+      - "theme/templates/customers/login.liquid"
+      - "theme/templates/customers/register.liquid"
+      - "theme/templates/customers/activate_account.liquid"
+      - "theme/templates/customers/reset_password.liquid"
+      - "theme/templates/customers/details.liquid"
       - "tests/test_otp_cell_autofill.py"
       - "e2e/otp-autofill.spec.js"
+      - "e2e/account-auth-safety.spec.js"
       - "package.json"
       - "package-lock.json"
       - "playwright.config.js"
@@ -17,12 +25,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: otp-ownership-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: account-auth-safety-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  otp-ownership:
-    name: OTP platform ownership
+  account-auth-safety:
+    name: OTP, login, signup, and history isolation
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
@@ -53,14 +61,14 @@ jobs:
           echo "::error::Playwright browser install did not finish after two attempts."
           exit 1
 
-      - name: Run OTP platform ownership suite
-        run: npx playwright test e2e/otp-autofill.spec.js --project=chromium-desktop
+      - name: Run account auth safety suites
+        run: npx playwright test e2e/otp-autofill.spec.js e2e/account-auth-safety.spec.js --project=chromium-desktop
 
-      - name: Upload OTP ownership failure artifacts
+      - name: Upload account auth safety failure artifacts
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: playwright-test-results-otp-ownership
+          name: playwright-test-results-account-auth-safety
           path: test-results/
           if-no-files-found: ignore
           retention-days: 14
