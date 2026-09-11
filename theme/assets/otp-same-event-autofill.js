@@ -18,9 +18,11 @@
   'use strict';
 
   const OTP_STEP = /verification\s+code|one-time\s+password|\botp\b|verify\s+your\s+(?:mobile|phone)|(?:code\s+(?:we\s+)?(?:just\s+)?sent|sent\s+(?:you\s+)?(?:an?|the)\s+code)|resend\s+(?:the\s+)?code/i;
+  const AUTH_PATH = /^\/(?:account(?:\/|$)|verify(?:\/|$))/i;
 
   const onOtpStep = () => {
     if (document.querySelector('#otp-form')) return true;
+    if (!AUTH_PATH.test(String(window.location.pathname || ''))) return false;
     const text = (document.body && document.body.textContent) || '';
     return OTP_STEP.test(text);
   };
