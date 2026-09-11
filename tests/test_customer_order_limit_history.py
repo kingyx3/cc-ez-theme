@@ -183,7 +183,10 @@ class HistoryPayloadStructureTests(unittest.TestCase):
         self.assertIn("const historySupported = () => (", limits)
         self.assertIn("typeof fetch === 'function'", limits)
         self.assertIn("typeof DOMParser === 'function'", limits)
-        self.assertIn("if (shopperSignedOut() || !historySupported()) {", limits)
+        self.assertIn(
+            "if (shopperSignedOut() || accountSetupInProgress() || !historySupported()) {",
+            limits,
+        )
         self.assertIn("    } catch (_error) {\n      historyState = 'unavailable';", limits)
         self.assertIn("else historyState = 'unavailable';", limits)
         self.assertEqual(limits, self.read("editor_assets/customer-order-limits.js"))
