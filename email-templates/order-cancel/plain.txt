@@ -1,23 +1,32 @@
-{% if order.cancel_reason == blank %}
-Hi {{ customer.name }},
+{% assign cancellation_reason = order.cancel_reason | default: '' | strip %}
+{% assign customer_name = customer.name | default: '' | strip %}
+{% assign store_url = shop.visit_store | default: 'https://cardboard.sg' %}
+{% assign is_unpaid_auto_cancel = false %}
+{% if cancellation_reason == blank and order.is_paid == false %}
+  {% assign is_unpaid_auto_cancel = true %}
+{% endif %}
 
+{% if customer_name == blank %}
+Hi there,
+{% else %}
+Hi {{ customer_name }},
+{% endif %}
+
+{% if is_unpaid_auto_cancel %}
 It looks like payment for order {{ order.name }} wasn't completed, so the order was automatically cancelled and the stock released.
 
-If you'd still like the items, no worries. You can simply place a new order at cardboard.sg and complete payment at checkout.
+If you'd still like the items, no worries. You can simply place a new order at {{ store_url }} and complete payment at checkout.
 
 Already reordered? You can ignore this email.
-
-Warm regards,
-Cardboard Collective
 {% else %}
-Hi {{ customer.name }},
-
 We're writing to let you know that your order {{ order.name }} has been cancelled.
+{% if cancellation_reason != blank %}
 
-Cancellation reason: {{ order.cancel_reason }}
+Cancellation reason: {{ cancellation_reason }}
+{% endif %}
 
-Thank you for your interest in our products.
+You can visit our store at {{ store_url }}.
+{% endif %}
 
 Warm regards,
 Cardboard Collective
-{% endif %}
