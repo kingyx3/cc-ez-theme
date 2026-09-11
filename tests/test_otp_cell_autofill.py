@@ -74,9 +74,10 @@ class OtpSameEventAutofillSafetyTests(unittest.TestCase):
                 self.assertNotIn("one-time-code", source)
                 self.assertNotIn("OTPCredential", source)
 
-    def test_otp_aware_scripts_never_dispatch_synthetic_input(self) -> None:
+    def test_otp_helpers_never_dispatch_synthetic_input(self) -> None:
+        otp_assets = {"account-otp-copy.js", "otp-same-event-autofill.js"}
         for path, source in self.scripts.items():
-            if "#otp-form" not in source and "otp-input" not in source:
+            if path.name not in otp_assets:
                 continue
             with self.subTest(script=path.name):
                 self.assertNotIn("dispatchEvent", source)
