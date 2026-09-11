@@ -4,9 +4,8 @@ This store signs customers up by mobile number only. The link belongs to
 EasyStore's own flow at /account/auth, so no theme deploy can take it out of
 the template and the theme hides it at runtime instead.
 
-The email-fallback routine remains visibility-only even though the same loaded
-asset now also contains the separately tested, narrowly-scoped OTP autofill
-handoff.
+The loaded asset is visibility-only. EasyStore owns OTP values, events, and the
+verification request; this helper only hides the email-alternative control.
 """
 from __future__ import annotations
 
@@ -83,9 +82,8 @@ class EmailSignupOverrideTests(unittest.TestCase):
         self.assertIn("text.length > LINK_LENGTH", self.hide_code)
 
     def test_the_email_fallback_routine_hides_and_writes_nothing_else(self) -> None:
-        # OTP autofill has its own safety suite. This test pins only the email
-        # fallback concern so adding a separate behavior to the same asset does
-        # not weaken the visibility-only contract here.
+        # Keep this concern visibility-only. OTP mutation is forbidden across
+        # the whole asset by tests/test_otp_cell_autofill.py.
         self.assertIn("control.hidden = true", self.hide_code)
         for forbidden in (
             "dispatchEvent",

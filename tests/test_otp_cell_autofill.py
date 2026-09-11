@@ -25,22 +25,18 @@ def code_only(source: str) -> str:
     )
 
 
-class OtpAutofillSafetyTests(unittest.TestCase):
-    """Keep Android autofill to one platform-visible completion event.
+class OtpSameEventAutofillSafetyTests(unittest.TestCase):
+    """Regression guard for Android autofill and duplicate verification.
 
-    EasyStore owns the one-time-code widget and posts verification itself. The
-    previous autofill helper spread all six digits before the browser's original
-    first-cell input event reached EasyStore, then dispatched another input on
-    the final cell. That depended on the platform submitting only from cell six.
-    If EasyStore instead submits whenever all cells are complete, both events can
-    post verification and the second request returns "Customer already exists
-    (phone)".
+    Real-device testing showed Android inserting all six SMS digits into the
+    first EasyStore OTP cell as one trusted, non-cancelable input event, with no
+    beforeinput. The safe theme handoff may synchronously split those six plain
+    DOM values during capture of that same event. It must never manufacture a
+    replacement event or compete with EasyStore's verification request.
 
-    The current helper is narrower: it intercepts only an exact six-digit value
-    in the captured six-cell plain-DOM widget, stops the original event at window
-    capture while the DOM is still incomplete, then hands EasyStore one final-
-    cell input event after the sixth digit is written. Unknown/framework-owned
-    widgets, manual typing, partial values, and native paste stay platform-owned.
+    The earlier synthetic-event design could make EasyStore verify twice: the
+    first request created the customer and a second request surfaced "Customer
+    already exists (phone)". These tests keep that failure mode impossible.
     """
 
     @classmethod
@@ -50,9 +46,6 @@ class OtpAutofillSafetyTests(unittest.TestCase):
             for directory in ASSET_DIRECTORIES
             for path in sorted((THEME_ROOT / directory).glob("*.js"))
         }
-        cls.currencies = (
-            THEME_ROOT / "snippets" / "currencies.liquid"
-        ).read_text(encoding="utf-8")
 
     def test_legacy_otp_mutation_modules_stay_removed(self) -> None:
         for directory in ASSET_DIRECTORIES:
@@ -60,7 +53,14 @@ class OtpAutofillSafetyTests(unittest.TestCase):
                 with self.subTest(directory=directory, module=name):
                     self.assertFalse((THEME_ROOT / directory / name).exists())
 
-    def test_no_layout_or_snippet_loads_a_second_otp_mutation_script(self) -> None:
+    def test_temporary_preview_helper_is_removed(self) -> None:
+        for directory in ASSET_DIRECTORIES:
+            with self.subTest(directory=directory):
+                self.assertFalse(
+                    (THEME_ROOT / directory / "otp-same-event-preview.js").exists()
+                )
+
+    def test_no_layout_or_snippet_loads_a_legacy_otp_mutation_script(self) -> None:
         banned = ("otp-cell-autofill", "account-otp-autofill")
         for liquid in THEME_ROOT.rglob("*.liquid"):
             source = liquid.read_text(encoding="utf-8")
@@ -74,44 +74,76 @@ class OtpAutofillSafetyTests(unittest.TestCase):
                 self.assertNotIn("one-time-code", source)
                 self.assertNotIn("OTPCredential", source)
 
-    def test_only_account_otp_copy_may_dispatch_synthetic_input(self) -> None:
+    def test_otp_helpers_never_dispatch_synthetic_input(self) -> None:
+        otp_assets = {"account-otp-copy.js", "otp-same-event-autofill.js"}
         for path, source in self.scripts.items():
-            if "#otp-form" not in source and "otp-input" not in source:
-                continue
-            if path.name == "account-otp-copy.js":
+            if path.name not in otp_assets:
                 continue
             with self.subTest(script=path.name):
+                self.assertNotIn("dispatchEvent", source)
                 self.assertNotIn("new Event('input'", source)
                 self.assertNotIn('new Event("input"', source)
+                self.assertNotIn("new InputEvent", source)
 
-    def test_account_otp_copy_has_one_narrow_completion_handoff(self) -> None:
+    def test_account_otp_copy_only_hides_copy_and_loads_the_narrow_helper(self) -> None:
         for directory in ASSET_DIRECTORIES:
             source = code_only(
                 (THEME_ROOT / directory / "account-otp-copy.js").read_text(encoding="utf-8")
             )
             with self.subTest(directory=directory):
-                self.assertIn("CELL_SELECTOR = '#otp-form .otp-input'", source)
-                self.assertIn("CELL_COUNT = 6", source)
-                self.assertIn("getAttribute('maxlength') !== '1'", source)
-                self.assertIn("frameworkControlled(container)", source)
-                self.assertIn("frameworkControlled(cell)", source)
-                self.assertIn("event.stopImmediatePropagation()", source)
-                self.assertIn(
-                    "window.addEventListener('input', spreadFullOtpAutofill, true)",
-                    source,
-                )
-                self.assertEqual(source.count("dispatchEvent(new Event('input'"), 1)
-                self.assertNotIn("new Event('change'", source)
-                self.assertNotIn('new Event("change"', source)
+                self.assertIn("hideEmailSignup", source)
+                self.assertIn("control.hidden = true", source)
+                self.assertIn("otp-same-event-autofill.js", source)
+                self.assertNotIn("#otp-form", source)
+                self.assertNotIn("otp-input", source)
+                self.assertNotIn("dispatchEvent", source)
+                self.assertNotIn(".value", source)
+                self.assertNotIn("addEventListener('input'", source)
+                self.assertNotIn('addEventListener("input"', source)
                 self.assertNotIn("fetch(", source)
                 self.assertNotIn("XMLHttpRequest", source)
                 self.assertNotIn(".submit(", source)
                 self.assertNotIn(".click(", source)
+                self.assertNotIn("otpdiag", source)
 
-    def test_account_otp_copy_assets_are_identical(self) -> None:
-        storefront = (THEME_ROOT / "assets" / "account-otp-copy.js").read_bytes()
-        editor = (THEME_ROOT / "editor_assets" / "account-otp-copy.js").read_bytes()
-        self.assertEqual(storefront, editor)
+    def test_same_event_helper_has_fail_closed_guards_and_no_verification_side_effects(self) -> None:
+        forbidden = (
+            "dispatchEvent",
+            "preventDefault",
+            "stopPropagation",
+            "stopImmediatePropagation",
+            "fetch(",
+            "XMLHttpRequest",
+            ".submit(",
+            ".click(",
+            "sessionStorage",
+            "otpdiag",
+        )
+
+        for directory in ASSET_DIRECTORIES:
+            source = code_only(
+                (THEME_ROOT / directory / "otp-same-event-autofill.js").read_text(
+                    encoding="utf-8"
+                )
+            )
+            with self.subTest(directory=directory):
+                self.assertIn("event.isTrusted !== true", source)
+                self.assertIn("/^\\d{6}$/", source)
+                self.assertIn("cells[0] !== event.target", source)
+                self.assertIn("cells.slice(1).every", source)
+                self.assertIn("cell.value = code[index]", source)
+                self.assertIn("window.addEventListener('input'", source)
+                self.assertIn("capture: true", source)
+                self.assertIn("passive: true", source)
+                for token in forbidden:
+                    self.assertNotIn(token, source)
+
+    def test_otp_assets_are_mirrored_byte_for_byte(self) -> None:
+        for name in ("account-otp-copy.js", "otp-same-event-autofill.js"):
+            with self.subTest(asset=name):
+                storefront = (THEME_ROOT / "assets" / name).read_bytes()
+                editor = (THEME_ROOT / "editor_assets" / name).read_bytes()
+                self.assertEqual(storefront, editor)
 
 
 class ActivateAccountButtonTests(unittest.TestCase):
@@ -129,9 +161,9 @@ class ActivateAccountButtonTests(unittest.TestCase):
 class NoGeneralizedAuthFlowScriptsTests(unittest.TestCase):
     """Keep broad account-submit interception out of the theme.
 
-    The OTP autofill exception above is scoped to one captured widget and one
-    completion event. It must not grow back into the generalized account form
-    submit guards that previously competed with EasyStore's own auth flow.
+    The OTP helper may change six DOM values during one trusted browser input,
+    but no theme script may compete with EasyStore's own verification request or
+    generalize that behavior into account-submit interception.
     """
 
     def test_global_js_adds_no_account_submit_handling(self) -> None:
