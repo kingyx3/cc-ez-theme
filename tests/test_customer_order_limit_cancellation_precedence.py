@@ -43,11 +43,17 @@ class CancellationPrecedenceTests(unittest.TestCase):
             "is_cancelled": 0,
             "cancelled": True,
             "cancelled_at": "2026-09-10T00:00:00Z",
-            "status": "cancelled",
+            "status": "to_pay",
             "financial_status_label": "Cancelled",
             "fulfillment_status_label": "Cancelled",
         }
         self.assertEqual(self.cancelled(order), "false")
+
+    def test_cancelled_status_still_wins_over_native_zero(self) -> None:
+        self.assertEqual(
+            self.cancelled({"is_cancelled": 0, "status": "cancelled"}),
+            "true",
+        )
 
     def test_native_one_still_cancels_order(self) -> None:
         self.assertEqual(
