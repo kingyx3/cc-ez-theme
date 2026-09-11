@@ -12,17 +12,21 @@
   `is_cancelled` sees nil on the shape that carries `cancelled`, treats the order
   as live, and counts a cancelled order against the customer's allowance.
 
-  The native account-order flag is authoritative when it is present. In
-  particular, `is_cancelled == 0` is exactly how EasyStore's own order list
-  decides that a To Pay order is live. Secondary status/label fields can carry
-  cancellation-looking text on that same native object, so they must not
-  override an explicit 0/false and make a live unpaid order disappear from
-  purchase history.
+  The native account-order flag is authoritative for ambiguous fallback fields
+  when it is present. In particular, `is_cancelled == 0` is exactly how
+  EasyStore's own order list decides that a To Pay order is live. A cancellation
+  boolean/timestamp or payment/fulfillment label must not override that explicit
+  0/false and make a live unpaid order disappear from purchase history.
 
-  When the native flag is absent, only a positive signal cancels an order. A
-  missing, blank, 0 or false fallback field says nothing, so an order whose shape
-  carries none of these fields still counts and the limit stays enforced: an
-  unreadable order is never a free allowance.
+  `order.status` is different: it is the account order list's own tab status. An
+  explicit cancelled/canceled status remains authoritative even when a fixture or
+  platform shape also exposes `is_cancelled == 0`, so orders filed in the
+  cancelled tab do not consume allowance.
+
+  When the native flag is absent, only a positive fallback signal cancels an
+  order. A missing, blank, 0 or false fallback field says nothing, so an order
+  whose shape carries none of these fields still counts and the limit stays
+  enforced: an unreadable order is never a free allowance.
 
   Values are normalized to lowercase strings before comparison because the flag
   arrives as an integer, a boolean or a label depending on the field, and Liquid
@@ -44,8 +48,8 @@
 {% comment %}
   The integer flag used by the native account order list. Do not pass it through
   `default`: 0/false are meaningful explicit values. If the field is readable,
-  it wins over every fallback signal below because the account UI itself uses it
-  to distinguish live To Pay orders from cancelled ones.
+  it wins over the ambiguous fallback fields below because the account UI itself
+  uses it to distinguish live To Pay orders from cancelled ones.
 {% endcomment %}
 {% assign customer_order_limit_cancelled_flag = customer_order_limit_cancelled_order.is_cancelled | append: '' | strip | downcase %}
 {% unless customer_order_limit_cancelled_flag == '' or customer_order_limit_cancelled_flag == 'nil' or customer_order_limit_cancelled_flag == 'null' or customer_order_limit_cancelled_flag == 'none' %}
@@ -54,6 +58,17 @@
     {% assign customer_order_limit_cancelled = true %}
   {% endif %}
 {% endunless %}
+
+{% comment %}
+  The status is the account order list's own tab filter — the order detail page
+  links back to `?filter={{ order.status }}` — so an explicit cancelled tab status
+  is authoritative even if another field says otherwise. The American spelling
+  is read alongside it because the status strings are not this theme's.
+{% endcomment %}
+{% assign customer_order_limit_cancelled_flag = customer_order_limit_cancelled_order.status | default: customer_order_limit_cancelled_order.order_status | default: '' | append: '' | strip | downcase %}
+{% if customer_order_limit_cancelled_flag == 'cancelled' or customer_order_limit_cancelled_flag == 'canceled' %}
+  {% assign customer_order_limit_cancelled = true %}
+{% endif %}
 
 {% unless customer_order_limit_cancelled_native_flag_present %}
   {% comment %} The boolean spelling used by other order-object shapes. {% endcomment %}
@@ -71,18 +86,6 @@
   {% unless customer_order_limit_cancelled_flag == '' or customer_order_limit_cancelled_flag == '0' or customer_order_limit_cancelled_flag == 'false' or customer_order_limit_cancelled_flag == 'nil' or customer_order_limit_cancelled_flag == 'null' or customer_order_limit_cancelled_flag == 'none' %}
     {% assign customer_order_limit_cancelled = true %}
   {% endunless %}
-
-  {% comment %}
-    The status the order is filed under. `order.status` is the account order list's
-    own tab filter — the order detail page links back to `?filter={{ order.status }}`
-    — so a cancelled order can carry the cancelled tab's status when the native
-    cancellation flag is not available. The American spelling is read alongside
-    it because the status strings are not this theme's.
-  {% endcomment %}
-  {% assign customer_order_limit_cancelled_flag = customer_order_limit_cancelled_order.status | default: customer_order_limit_cancelled_order.order_status | default: '' | append: '' | strip | downcase %}
-  {% if customer_order_limit_cancelled_flag == 'cancelled' or customer_order_limit_cancelled_flag == 'canceled' %}
-    {% assign customer_order_limit_cancelled = true %}
-  {% endif %}
 
   {% comment %}
     The payment and fulfillment labels, which some order shapes render as
