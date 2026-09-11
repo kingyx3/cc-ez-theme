@@ -2,6 +2,13 @@
 {{ 'card-navigation-polish.css' | asset_url | stylesheet_tag }}
 
 {% comment %}
+  Temporary unpublished-preview diagnostic for PR #239. The script is inert
+  unless ?cc_otp_diag=1 has been enabled in this browser tab, and is read-only:
+  it only reports OTP event metadata/lengths on screen.
+{% endcomment %}
+<script src="{{ 'otp-beforeinput-diagnostic.js' | asset_url }}" defer="defer"></script>
+
+{% comment %}
   Purchase-limit modules are only useful where a shopper can actually purchase.
   Product and cart pages always need them. Listing pages need them only when the
   global listing add-to-cart control is enabled. EasyStore may expose an unchecked
