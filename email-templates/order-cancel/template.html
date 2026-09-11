@@ -7,79 +7,89 @@
   }
 </style>
 
-{% assign cancellation_reason = order.cancel_reason | default: '' | strip %}
-{% assign customer_name = customer.name | default: '' | strip %}
-{% assign store_url = shop.visit_store | default: 'https://cardboard.sg' %}
-{% assign is_unpaid_auto_cancel = false %}
-{% if cancellation_reason == blank and order.is_paid == false %}
-  {% assign is_unpaid_auto_cancel = true %}
-{% endif %}
+{% if order.cancel_reason == blank %}
+  {% if order.is_paid == false %}
+    <!-- Likely auto-cancelled unpaid order -->
+    <div style="padding: 20px;">
+      <h1 style="font-size: 27px; line-height: 1.3; font-weight: 500; margin: 0 0 20px; color: #222222;">A quick update on your order</h1>
 
-{% if is_unpaid_auto_cancel %}
-<!-- Likely auto-cancelled unpaid order. If EasyStore does not expose order.is_paid, this safely falls back to the neutral branch. -->
-<div style="padding: 20px;">
-  <h1 style="font-size: 27px; line-height: 1.3; font-weight: 500; margin: 0 0 20px; color: #222222;">A quick update on your order</h1>
+      <div style="font-size: 15px; line-height: 1.6; color: #767676;">
+        {% if customer.name == blank %}
+          <p style="margin: 15px 0;">Hi there,</p>
+        {% else %}
+          <p style="margin: 15px 0;">Hi {{ customer.name }},</p>
+        {% endif %}
+        <p style="margin: 15px 0;">It looks like payment for order <strong style="color: #333333;">{{ order.name }}</strong> wasn&#39;t completed, so the order was automatically cancelled and the stock released.</p>
+        <p style="margin: 15px 0;">If you&#39;d still like the items, no worries. You can simply place a new order at <a href="https://cardboard.sg" style="color: #333333; font-weight: 600; text-decoration: underline;">cardboard.sg</a> and complete payment at checkout.</p>
 
-  <div style="font-size: 15px; line-height: 1.6; color: #767676;">
-    {% if customer_name == blank %}
-      <p style="margin: 15px 0;">Hi there,</p>
-    {% else %}
-      <p style="margin: 15px 0;">Hi {{ customer_name | escape }},</p>
-    {% endif %}
-    <p style="margin: 15px 0;">It looks like payment for order <strong style="color: #333333;">{{ order.name | escape }}</strong> wasn&#39;t completed, so the order was automatically cancelled and the stock released.</p>
-    <p style="margin: 15px 0;">If you&#39;d still like the items, no worries. You can simply place a new order at <a href="{{ store_url | escape }}" style="color: #333333; font-weight: 600; text-decoration: underline;">cardboard.sg</a> and complete payment at checkout.</p>
+        <div style="margin: 26px 0;">
+          <a href="https://cardboard.sg" style="display: inline-block; background-color: {{template_attributes.button_color}}; color: {{template_attributes.button_text_color}}; text-decoration: none; padding: 16px 25px; border: none; border-radius: 10px; font-size: 15px; font-weight: 500;">Place a new order</a>
+        </div>
 
-    <div style="margin: 26px 0;">
-      <a href="{{ store_url | escape }}" style="display: inline-block; background-color: {{template_attributes.button_color}}; color: {{template_attributes.button_text_color}}; text-decoration: none; padding: 16px 25px; border: none; border-radius: 10px; font-size: 15px; font-weight: 500;">Place a new order</a>
+        <p style="margin: 15px 0;">Already reordered? You can ignore this email.</p>
+        <p style="margin: 24px 0 0;">Warm regards,<br><strong style="color: #555555; font-weight: 500;">Cardboard Collective</strong></p>
+      </div>
+    </div>
+  {% else %}
+    <!-- Blank reason but paid status is not explicitly false: use neutral copy -->
+    <div style="padding: 20px;">
+      <h1 style="font-size: 27px; line-height: 1.3; font-weight: 500; margin: 0 0 20px; color: #222222;">Order {{ order.name }} has been cancelled</h1>
+
+      <div style="font-size: 15px; line-height: 1.6; color: #767676;">
+        {% if customer.name == blank %}
+          <p style="margin: 15px 0;">Hi there,</p>
+        {% else %}
+          <p style="margin: 15px 0;">Hi {{ customer.name }},</p>
+        {% endif %}
+        <p style="margin: 15px 0;">We&#39;re writing to let you know that your order <strong style="color: #333333;">{{ order.name }}</strong> has been cancelled.</p>
+      </div>
     </div>
 
-    <p style="margin: 15px 0;">Already reordered? You can ignore this email.</p>
-    <p style="margin: 24px 0 0;">Warm regards,<br><strong style="color: #555555; font-weight: 500;">Cardboard Collective</strong></p>
-  </div>
-</div>
+    <div style="padding: 0 20px 20px;">
+      <a href="https://cardboard.sg" style="display: inline-block; background-color: {{template_attributes.button_color}}; color: {{template_attributes.button_text_color}}; text-decoration: none; padding: 16px 25px; border: none; border-radius: 10px; font-size: 15px; font-weight: 500;">Visit our store</a>
+    </div>
+
+    <div style="padding: 0 20px 20px; font-size: 15px; line-height: 1.6; color: #767676;">
+      <p style="margin: 0;">Warm regards,<br><strong style="color: #555555; font-weight: 500;">Cardboard Collective</strong></p>
+    </div>
+  {% endif %}
 {% else %}
-<!-- Manual or otherwise unknown cancellation: use neutral copy and only show a reason when one exists. -->
-<div style="padding: 20px;">
-  <h1 style="font-size: 27px; line-height: 1.3; font-weight: 500; margin: 0 0 20px; color: #222222;">Order {{ order.name | escape }} has been cancelled</h1>
+  <!-- Cancellation with an explicit reason -->
+  <div style="padding: 20px;">
+    <h1 style="font-size: 27px; line-height: 1.3; font-weight: 500; margin: 0 0 20px; color: #222222;">Order {{ order.name }} has been cancelled</h1>
 
-  <div style="font-size: 15px; line-height: 1.6; color: #767676;">
-    {% if customer_name == blank %}
-      <p style="margin: 15px 0;">Hi there,</p>
-    {% else %}
-      <p style="margin: 15px 0;">Hi {{ customer_name | escape }},</p>
-    {% endif %}
-    <p style="margin: 15px 0;">We&#39;re writing to let you know that your order <strong style="color: #333333;">{{ order.name | escape }}</strong> has been cancelled.</p>
-    {% if cancellation_reason != blank %}
+    <div style="font-size: 15px; line-height: 1.6; color: #767676;">
+      {% if customer.name == blank %}
+        <p style="margin: 15px 0;">Hi there,</p>
+      {% else %}
+        <p style="margin: 15px 0;">Hi {{ customer.name }},</p>
+      {% endif %}
+      <p style="margin: 15px 0;">We&#39;re writing to let you know that your order <strong style="color: #333333;">{{ order.name }}</strong> has been cancelled.</p>
       <p style="margin: 15px 0;">For your reference, here are the cancellation details:</p>
-    {% endif %}
+    </div>
   </div>
-</div>
 
-{% if cancellation_reason != blank %}
-<div style="padding: 0 20px 20px;">
-  <hr style="border: none; border-top: 1px solid #eeeeee; margin: 0 0 18px;">
-  <table style="border-spacing: 0; border-collapse: collapse; width: 100%; font-size: 15px;">
-    <tbody>
-      <tr valign="top">
-        <td style="width: 40%; padding: 0 10px 10px 0; color: #333333;"><strong>Order ID</strong></td>
-        <td style="width: 60%; padding: 0 0 10px; color: #666666;">{{ order.name | escape }}</td>
-      </tr>
-      <tr valign="top">
-        <td style="width: 40%; padding: 10px 10px 0 0; color: #333333;"><strong>Cancellation reason</strong></td>
-        <td style="width: 60%; padding: 10px 0 0; color: #666666;">{{ cancellation_reason | escape }}</td>
-      </tr>
-    </tbody>
-  </table>
-</div>
-{% endif %}
-
-<div style="padding: 0 20px 20px;">
-  <div style="margin: 8px 0 0;">
-    <a href="{{ store_url | escape }}" style="display: inline-block; background-color: {{template_attributes.button_color}}; color: {{template_attributes.button_text_color}}; text-decoration: none; padding: 16px 25px; border: none; border-radius: 10px; font-size: 15px; font-weight: 500;">Visit our store</a>
+  <div style="padding: 0 20px 20px;">
+    <hr style="border: none; border-top: 1px solid #eeeeee; margin: 0 0 18px;">
+    <table style="border-spacing: 0; border-collapse: collapse; width: 100%; font-size: 15px;">
+      <tbody>
+        <tr valign="top">
+          <td style="width: 40%; padding: 0 10px 10px 0; color: #333333;"><strong>Order ID</strong></td>
+          <td style="width: 60%; padding: 0 0 10px; color: #666666;">{{ order.name }}</td>
+        </tr>
+        <tr valign="top">
+          <td style="width: 40%; padding: 10px 10px 0 0; color: #333333;"><strong>Cancellation reason</strong></td>
+          <td style="width: 60%; padding: 10px 0 0; color: #666666;">{{ order.cancel_reason }}</td>
+        </tr>
+      </tbody>
+    </table>
   </div>
-</div>
 
-<div style="padding: 0 20px 20px; font-size: 15px; line-height: 1.6; color: #767676;">
-  <p style="margin: 0;">Warm regards,<br><strong style="color: #555555; font-weight: 500;">Cardboard Collective</strong></p>
-</div>
+  <div style="padding: 0 20px 20px;">
+    <a href="https://cardboard.sg" style="display: inline-block; background-color: {{template_attributes.button_color}}; color: {{template_attributes.button_text_color}}; text-decoration: none; padding: 16px 25px; border: none; border-radius: 10px; font-size: 15px; font-weight: 500;">Visit our store</a>
+  </div>
+
+  <div style="padding: 0 20px 20px; font-size: 15px; line-height: 1.6; color: #767676;">
+    <p style="margin: 0;">Warm regards,<br><strong style="color: #555555; font-weight: 500;">Cardboard Collective</strong></p>
+  </div>
 {% endif %}
