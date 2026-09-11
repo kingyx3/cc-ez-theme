@@ -355,9 +355,11 @@ test.describe('purchase history is isolated from account setup', () => {
       window.CustomerOrderLimits.additionViolation(handle, 1), HANDLE
     );
     expect(violation).toMatchObject({
-      maximum: 2,
-      purchased: 2,
       remaining: 0,
+      rule: {
+        maximum: 2,
+        purchased: 2,
+      },
     });
     expect(violation.message).toContain('already ordered 2');
   });
