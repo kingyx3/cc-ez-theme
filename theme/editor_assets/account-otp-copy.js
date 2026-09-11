@@ -60,7 +60,7 @@
     };
 
     show([
-      'OTP DIAG: waiting for Android autofill',
+      'INPUT EVENT PROBE: waiting for Android autofill',
       'Read-only: no digits are recorded or changed.',
       'Need: beforeinput + trusted=true + cancelable=true + dataLength=6'
     ]);
@@ -94,7 +94,7 @@
         && event.isTrusted === true;
 
       show([
-        `OTP DIAG: ${safeCandidate ? 'PREREQUISITE MET' : 'OBSERVED'}`,
+        `INPUT EVENT PROBE: ${safeCandidate ? 'PREREQUISITE MET' : 'OBSERVED'}`,
         'beforeinput: yes',
         `cancelable: ${String(event.cancelable)}`,
         `trusted: ${String(event.isTrusted)}`,
