@@ -9,7 +9,7 @@
 
   `defer_history: true` deliberately skips the expensive inline customer-order
   scan. The client validator already treats zero inline line items as unknown,
-  loads the authoritative account-order payload, caches it in sessionStorage,
+  loads a fresh authoritative account-order payload for each page,
   and holds purchase attempts until the history is known. Keeping inline history
   as the default preserves direct snippet rendering and diagnostic tooling while
   storefront delivery can opt into the cheaper path.

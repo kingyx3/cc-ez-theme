@@ -420,3 +420,33 @@ test.describe('answering the purchase attempt that signing in interrupted', () =
     expect(await store.intent()).toBeNull();
   });
 });
+
+
+test.describe('purchase history after placing another order', () => {
+  for (const target of [PRODUCT, CART]) {
+    test(`returning to ${target} counts an order placed within five minutes`, async ({ page }) => {
+      const store = await storefront(page, { signedIn: true, inlineHistory: false });
+      await store.visit(PRODUCT);
+      await expect.poll(() => page.evaluate(() =>
+        window.CustomerOrderLimits.historyState()
+      )).toBe('loaded');
+      await store.settle();
+
+      // Checkout happened elsewhere; returning must not reuse the pre-order tally.
+      store.scenario.historyUnits = 2;
+      store.scenario.cartQuantity = target === CART ? 2 : 0;
+      await store.visit(target);
+      await store.settle();
+      await expect.poll(() => page.evaluate(() =>
+        window.customerOrderLimitsV2.rules['the-hobbit-omega-booster-pack'].purchased
+      )).toBe(2);
+      if (target === CART) {
+        await expect(page.locator('#checkout')).toBeDisabled();
+        await expect(page.locator('#cart-form')).toHaveAttribute('data-customer-order-limit-checkout-blocked', 'true');
+      } else {
+        await page.click('[data-buy-now]');
+        expect(await store.productError()).toBe(SPENT);
+      }
+    });
+  }
+});

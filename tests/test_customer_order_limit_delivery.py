@@ -2,7 +2,7 @@
 
 The storefront must not re-walk a signed-in customer's order history once per
 configured product before returning every page. The client validator already
-has an authoritative, cached account-history loader and blocks a purchase while
+has an authoritative account-history loader and blocks a purchase while
 that history is unresolved, so storefront delivery deliberately opts into that
 path while direct snippet rendering keeps the original inline behavior.
 """
