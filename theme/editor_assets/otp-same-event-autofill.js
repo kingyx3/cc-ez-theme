@@ -27,8 +27,6 @@
     return OTP_STEP.test(text);
   };
 
-  if (!onOtpStep()) return;
-
   const frameworkControlled = (node) => {
     if (!node) return false;
     const keys = Object.keys(node);
@@ -56,6 +54,7 @@
 
   const spreadDuringOriginalInput = (event) => {
     if (event.isTrusted !== true) return;
+    if (!onOtpStep()) return;
 
     const cells = sixCellGroup(event.target);
     if (!cells) return;
@@ -72,6 +71,8 @@
 
   // Passive capture is deliberate: this code cannot cancel Android's original
   // input event. EasyStore receives that same event after the values are split.
+  // The listener is installed even before the OTP row exists because EasyStore
+  // can render the next account step dynamically in the same document.
   window.addEventListener('input', spreadDuringOriginalInput, {
     capture: true,
     passive: true,
