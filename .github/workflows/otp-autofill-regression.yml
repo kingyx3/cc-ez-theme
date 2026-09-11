@@ -5,14 +5,18 @@ on:
     paths:
       - "theme/assets/account-otp-copy.js"
       - "theme/editor_assets/account-otp-copy.js"
+      - "theme/assets/account-otp-diagnostic.js"
+      - "theme/editor_assets/account-otp-diagnostic.js"
       - "theme/assets/customer-order-limits.js"
       - "theme/editor_assets/customer-order-limits.js"
+      - "theme/snippets/currencies.liquid"
       - "theme/templates/customers/login.liquid"
       - "theme/templates/customers/register.liquid"
       - "theme/templates/customers/activate_account.liquid"
       - "theme/templates/customers/reset_password.liquid"
       - "theme/templates/customers/details.liquid"
       - "tests/test_otp_cell_autofill.py"
+      - "tests/test_otp_diagnostic.py"
       - "e2e/otp-autofill.spec.js"
       - "e2e/account-auth-safety.spec.js"
       - "package.json"
@@ -42,6 +46,9 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: '22'
+
+      - name: Run OTP static safety tests
+        run: python -m unittest tests.test_otp_cell_autofill tests.test_otp_diagnostic
 
       - name: Install E2E dependencies
         run: npm install --no-audit --no-fund
