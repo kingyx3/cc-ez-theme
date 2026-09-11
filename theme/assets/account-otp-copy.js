@@ -11,10 +11,10 @@
  * and never removes a node the platform's widget may still hold. That is the
  * line whose crossing broke signup with "Customer already exists (phone)".
  *
- * Temporary unpublished-preview diagnostic: adding ?otpdiag=1 enables a
- * session-scoped, read-only beforeinput/input observer. It shows only event
- * metadata; it never records OTP digits or changes EasyStore/browser behaviour.
- * Disable with ?otpdiag=0 or by closing the tab.
+ * Temporary unpublished-preview diagnostics:
+ * - ?otpdiag=1 enables the read-only beforeinput/input observer.
+ * - ?otpdiag=2 loads a separate, opt-in same-event distribution experiment.
+ * - ?otpdiag=0 clears both tab-scoped modes.
  */
 (() => {
   // "Continue with email instead", "Sign up using your email address instead".
@@ -22,6 +22,32 @@
   // Longer than this is a paragraph, not the link.
   const LINK_LENGTH = 80;
   const DIAGNOSTIC_KEY = 'ccOtpBeforeInputDiagnostic';
+  const SAME_EVENT_KEY = 'ccOtpSameEventPreview';
+
+  const loadSameEventPreview = () => {
+    const params = new URLSearchParams(window.location.search);
+    let active = false;
+    try {
+      if (params.get('otpdiag') === '2') sessionStorage.setItem(SAME_EVENT_KEY, '2');
+      if (params.get('otpdiag') === '0') sessionStorage.removeItem(SAME_EVENT_KEY);
+      active = sessionStorage.getItem(SAME_EVENT_KEY) === '2';
+    } catch (_) {
+      active = params.get('otpdiag') === '2';
+    }
+    if (!active) return;
+
+    const current = document.currentScript
+      || document.querySelector('script[src*="account-otp-copy.js"]');
+    const source = current && String(current.src || '');
+    if (!/account-otp-copy\.js(?:[?#]|$)/.test(source)) return;
+
+    const script = document.createElement('script');
+    script.src = source.replace(/account-otp-copy\.js(?=([?#]|$))/, 'otp-same-event-preview.js');
+    script.defer = true;
+    document.head.appendChild(script);
+  };
+
+  loadSameEventPreview();
 
   const diagnosticRequested = () => {
     const params = new URLSearchParams(window.location.search);
