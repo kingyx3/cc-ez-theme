@@ -27,7 +27,7 @@ class CustomerOrderLimitTests(unittest.TestCase):
             ("MTG-HOB-DNK-EN", 3),
             ("MTG-HOB-PRK-EN-SET4", 3),
             ("MTG-HOB-OBP-EN", 2),
-            ("MTG-FRA-SLB-EN", 1),
+            ("MTG-FRA-SLB-EN", 4),
             ("MTG-FRA-CBB-EN", 1),
             ("CC-BDL-FRIENDS3-EN-SPM", 1),
             ("CC-BDL-FRIENDS3-EN-MSH", 1),

@@ -297,8 +297,6 @@
   // the account order page, which publishes it as JSON.
   const HISTORY_URL = '/account/orders';
   const HISTORY_PAYLOAD_ID = 'customer-order-limit-history';
-  const HISTORY_CACHE_KEY = 'customerOrderLimitHistory';
-  const HISTORY_MAX_AGE_MS = 300000;
 
   const diagnostics = source.diagnostics || {};
   // Only line items actually read prove the page saw history. Zero orders is
@@ -426,32 +424,6 @@
     document.dispatchEvent(new CustomEvent('customer-order-limits:cart-sync'));
   };
 
-  const cachedHistory = () => {
-    try {
-      const raw = window.sessionStorage?.getItem(HISTORY_CACHE_KEY);
-      if (!raw) return null;
-      const cached = JSON.parse(raw);
-      const sameCustomer = String(cached.customer || '')
-        === String(source.customerId || cached.customer || '');
-      const fresh = quantity(cached.storedAt, 0) + HISTORY_MAX_AGE_MS > nowMs();
-      return sameCustomer && fresh ? cached.payload : null;
-    } catch (_error) {
-      return null;
-    }
-  };
-
-  const storeHistory = (payload) => {
-    try {
-      window.sessionStorage?.setItem(HISTORY_CACHE_KEY, JSON.stringify({
-        customer: payload && payload.customer,
-        storedAt: nowMs(),
-        payload,
-      }));
-    } catch (_error) {
-      // A full or unavailable sessionStorage only costs an extra request.
-    }
-  };
-
   const parseHistoryDocument = (html) => {
     const parsed = new DOMParser().parseFromString(html, 'text/html');
     const payload = parsed.getElementById(HISTORY_PAYLOAD_ID);
@@ -475,17 +447,14 @@
     }
     if (historyRequest) return historyRequest;
 
-    const cached = cachedHistory();
-    if (cached) {
-      historyState = 'loaded';
-      applyHistory(cached);
-      return Promise.resolve();
-    }
-
+    // Checkout can place an order outside this page without notifying the theme.
+    // A session-cached tally can therefore grant the same allowance again.
+    // Read fresh history for each page; concurrent callers share historyRequest.
     historyState = 'pending';
 
     const fetchPayload = (url) => fetch(url, {
       credentials: 'same-origin',
+      cache: 'no-store',
       headers: { Accept: 'text/html' },
     })
       .then((response) => {
@@ -530,7 +499,6 @@
           lines: merged.lines,
         };
         historyState = 'loaded';
-        storeHistory(payload);
         applyHistory(payload);
       })
       .catch(() => {
@@ -1144,6 +1112,14 @@
 
   decorateCartForm(document.getElementById('cart-form'));
   document.dispatchEvent(new CustomEvent('customer-order-limits:ready'));
+
+  // Back/forward cache restores the old JS state without running page setup.
+  // An order may have been placed after leaving this page.
+  window.addEventListener('pageshow', (event) => {
+    if (!event.persisted || shopperSignedOut()) return;
+    historyState = 'unknown';
+    loadHistory();
+  });
 
   // Start loading before the shopper can click, so the held-purchase path above
   // is a rare fallback rather than the normal experience.

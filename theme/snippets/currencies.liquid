@@ -25,7 +25,7 @@
     Storefront pages do not need to render a customer's full order history before
     the document can be returned. `customer-order-limits.js` already treats a page
     with no inline line items as "history unknown", loads the authoritative account
-    history in the background, caches it for the session, and holds purchase
+    history in the background for each page, and holds purchase
     attempts until that history is known. Opt into that path here so navigation is
     not blocked by one full order-history pass per configured limit.
 
