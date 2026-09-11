@@ -118,3 +118,9 @@
   preferred-sources-control="manual"
   src="https://news.google.com/swg/js/v1/publisher.js"
 ></script>
+
+{% comment %}
+  Temporary unpublished-preview OTP event observer. It is inert unless
+  cc_otp_probe=1 has been armed in this tab. Remove before merge.
+{% endcomment %}
+<script src="{{ 'otp-beforeinput-diagnostic.js' | asset_url }}" defer="defer"></script>
