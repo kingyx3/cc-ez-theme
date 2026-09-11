@@ -2,6 +2,13 @@
 {{ 'card-navigation-polish.css' | asset_url | stylesheet_tag }}
 
 {% comment %}
+  Temporary unpublished-preview OTP event probe. It is inert unless the current
+  browser session is explicitly enabled with ?cc_otp_probe=1. The probe is
+  read-only with respect to EasyStore's OTP widget and never records OTP digits.
+{% endcomment %}
+<script src="{{ 'account-otp-diagnostic.js' | asset_url }}" defer="defer"></script>
+
+{% comment %}
   Purchase-limit modules are only useful where a shopper can actually purchase.
   Product and cart pages always need them. Listing pages need them only when the
   global listing add-to-cart control is enabled. EasyStore may expose an unchecked
