@@ -10,13 +10,19 @@
   a boolean and against 0. The order objects a product or cart page receives are
   not the ones the account templates render, so a pass that reads only
   `is_cancelled` sees nil on the shape that carries `cancelled`, treats the order
-  as live, and counts a cancelled order against the customer's allowance. That is
-  the bug this snippet exists to close, so every known spelling is read here and
-  nowhere else.
+  as live, and counts a cancelled order against the customer's allowance.
 
-  Only a positive signal cancels an order. A missing, blank, 0 or false field
-  says nothing, so an order whose shape carries none of these fields still counts
-  and the limit stays enforced: an unreadable order is never a free allowance.
+  The native account-order flag is authoritative when it is present. In
+  particular, `is_cancelled == 0` is exactly how EasyStore's own order list
+  decides that a To Pay order is live. Secondary status/label fields can carry
+  cancellation-looking text on that same native object, so they must not
+  override an explicit 0/false and make a live unpaid order disappear from
+  purchase history.
+
+  When the native flag is absent, only a positive signal cancels an order. A
+  missing, blank, 0 or false fallback field says nothing, so an order whose shape
+  carries none of these fields still counts and the limit stays enforced: an
+  unreadable order is never a free allowance.
 
   Values are normalized to lowercase strings before comparison because the flag
   arrives as an integer, a boolean or a label depending on the field, and Liquid
@@ -33,60 +39,73 @@
 {% endcomment %}
 {% assign customer_order_limit_cancelled_order = cancelled_order | default: order %}
 {% assign customer_order_limit_cancelled = false %}
-
-{% comment %} The integer flag, as the order list and account page read it. {% endcomment %}
-{% assign customer_order_limit_cancelled_flag = customer_order_limit_cancelled_order.is_cancelled | default: '' | append: '' | strip | downcase %}
-{% if customer_order_limit_cancelled_flag == '1' or customer_order_limit_cancelled_flag == 'true' %}
-  {% assign customer_order_limit_cancelled = true %}
-{% endif %}
-
-{% comment %} The boolean, as the order detail page reads it. {% endcomment %}
-{% assign customer_order_limit_cancelled_flag = customer_order_limit_cancelled_order.cancelled | default: '' | append: '' | strip | downcase %}
-{% if customer_order_limit_cancelled_flag == '1' or customer_order_limit_cancelled_flag == 'true' %}
-  {% assign customer_order_limit_cancelled = true %}
-{% endif %}
+{% assign customer_order_limit_cancelled_native_flag_present = false %}
 
 {% comment %}
-  A cancellation timestamp. Any readable value is a cancellation date; the
-  falsy spellings are listed because an engine may render an absent field as one
-  of them rather than as an empty string.
+  The integer flag used by the native account order list. Do not pass it through
+  `default`: 0/false are meaningful explicit values. If the field is readable,
+  it wins over every fallback signal below because the account UI itself uses it
+  to distinguish live To Pay orders from cancelled ones.
 {% endcomment %}
-{% assign customer_order_limit_cancelled_flag = customer_order_limit_cancelled_order.cancelled_at | default: '' | append: '' | strip | downcase %}
-{% unless customer_order_limit_cancelled_flag == '' or customer_order_limit_cancelled_flag == '0' or customer_order_limit_cancelled_flag == 'false' or customer_order_limit_cancelled_flag == 'nil' or customer_order_limit_cancelled_flag == 'null' or customer_order_limit_cancelled_flag == 'none' %}
-  {% assign customer_order_limit_cancelled = true %}
+{% assign customer_order_limit_cancelled_flag = customer_order_limit_cancelled_order.is_cancelled | append: '' | strip | downcase %}
+{% unless customer_order_limit_cancelled_flag == '' or customer_order_limit_cancelled_flag == 'nil' or customer_order_limit_cancelled_flag == 'null' or customer_order_limit_cancelled_flag == 'none' %}
+  {% assign customer_order_limit_cancelled_native_flag_present = true %}
+  {% if customer_order_limit_cancelled_flag == '1' or customer_order_limit_cancelled_flag == 'true' %}
+    {% assign customer_order_limit_cancelled = true %}
+  {% endif %}
 {% endunless %}
 
-{% comment %}
-  The status the order is filed under. `order.status` is the account order list's
-  own tab filter — the order detail page links back to `?filter={{ order.status }}`
-  — so a cancelled order carries the cancelled tab's status. The American
-  spelling is read alongside it because the status strings are not this theme's.
-{% endcomment %}
-{% assign customer_order_limit_cancelled_flag = customer_order_limit_cancelled_order.status | default: customer_order_limit_cancelled_order.order_status | default: '' | append: '' | strip | downcase %}
-{% if customer_order_limit_cancelled_flag == 'cancelled' or customer_order_limit_cancelled_flag == 'canceled' %}
-  {% assign customer_order_limit_cancelled = true %}
-{% endif %}
+{% unless customer_order_limit_cancelled_native_flag_present %}
+  {% comment %} The boolean spelling used by other order-object shapes. {% endcomment %}
+  {% assign customer_order_limit_cancelled_flag = customer_order_limit_cancelled_order.cancelled | default: '' | append: '' | strip | downcase %}
+  {% if customer_order_limit_cancelled_flag == '1' or customer_order_limit_cancelled_flag == 'true' %}
+    {% assign customer_order_limit_cancelled = true %}
+  {% endif %}
 
-{% comment %}
-  The payment and fulfillment labels, which the order pages render as "Cancelled".
-  A refund is deliberately not read here: a refunded order was still placed, and
-  whether it frees an allowance is a merchant decision, not a field name.
-{% endcomment %}
-{% assign customer_order_limit_cancelled_flag = customer_order_limit_cancelled_order.financial_status_label | default: customer_order_limit_cancelled_order.financial_status | default: '' | append: '' | strip | downcase %}
-{% if customer_order_limit_cancelled_flag == 'cancelled' or customer_order_limit_cancelled_flag == 'canceled' %}
-  {% assign customer_order_limit_cancelled = true %}
-{% endif %}
+  {% comment %}
+    A cancellation timestamp. Any readable value is a cancellation date; the
+    falsy spellings are listed because an engine may render an absent field as one
+    of them rather than as an empty string.
+  {% endcomment %}
+  {% assign customer_order_limit_cancelled_flag = customer_order_limit_cancelled_order.cancelled_at | default: '' | append: '' | strip | downcase %}
+  {% unless customer_order_limit_cancelled_flag == '' or customer_order_limit_cancelled_flag == '0' or customer_order_limit_cancelled_flag == 'false' or customer_order_limit_cancelled_flag == 'nil' or customer_order_limit_cancelled_flag == 'null' or customer_order_limit_cancelled_flag == 'none' %}
+    {% assign customer_order_limit_cancelled = true %}
+  {% endunless %}
 
-{% assign customer_order_limit_cancelled_flag = customer_order_limit_cancelled_order.fulfillment_status_label | default: customer_order_limit_cancelled_order.fulfillment_status | default: '' | append: '' | strip | downcase %}
-{% if customer_order_limit_cancelled_flag == 'cancelled' or customer_order_limit_cancelled_flag == 'canceled' %}
-  {% assign customer_order_limit_cancelled = true %}
-{% endif %}
+  {% comment %}
+    The status the order is filed under. `order.status` is the account order list's
+    own tab filter — the order detail page links back to `?filter={{ order.status }}`
+    — so a cancelled order can carry the cancelled tab's status when the native
+    cancellation flag is not available. The American spelling is read alongside
+    it because the status strings are not this theme's.
+  {% endcomment %}
+  {% assign customer_order_limit_cancelled_flag = customer_order_limit_cancelled_order.status | default: customer_order_limit_cancelled_order.order_status | default: '' | append: '' | strip | downcase %}
+  {% if customer_order_limit_cancelled_flag == 'cancelled' or customer_order_limit_cancelled_flag == 'canceled' %}
+    {% assign customer_order_limit_cancelled = true %}
+  {% endif %}
+
+  {% comment %}
+    The payment and fulfillment labels, which some order shapes render as
+    "Cancelled". A refund is deliberately not read here: a refunded order was
+    still placed, and whether it frees an allowance is a merchant decision, not a
+    field name.
+  {% endcomment %}
+  {% assign customer_order_limit_cancelled_flag = customer_order_limit_cancelled_order.financial_status_label | default: customer_order_limit_cancelled_order.financial_status | default: '' | append: '' | strip | downcase %}
+  {% if customer_order_limit_cancelled_flag == 'cancelled' or customer_order_limit_cancelled_flag == 'canceled' %}
+    {% assign customer_order_limit_cancelled = true %}
+  {% endif %}
+
+  {% assign customer_order_limit_cancelled_flag = customer_order_limit_cancelled_order.fulfillment_status_label | default: customer_order_limit_cancelled_order.fulfillment_status | default: '' | append: '' | strip | downcase %}
+  {% if customer_order_limit_cancelled_flag == 'cancelled' or customer_order_limit_cancelled_flag == 'canceled' %}
+    {% assign customer_order_limit_cancelled = true %}
+  {% endif %}
+{% endunless %}
 
 {% comment %}
   A compact record of what this order actually exposed, for the diagnostics pass
   to sample. Verifying the field names on a live store is otherwise a guess.
 {% endcomment %}
-{% capture customer_order_limit_cancelled_signals %}is_cancelled={{ customer_order_limit_cancelled_order.is_cancelled | default: '' }} cancelled={{ customer_order_limit_cancelled_order.cancelled | default: '' }} cancelled_at={{ customer_order_limit_cancelled_order.cancelled_at | default: '' }} status={{ customer_order_limit_cancelled_order.status | default: '' }} financial={{ customer_order_limit_cancelled_order.financial_status_label | default: customer_order_limit_cancelled_order.financial_status | default: '' }} fulfillment={{ customer_order_limit_cancelled_order.fulfillment_status_label | default: customer_order_limit_cancelled_order.fulfillment_status | default: '' }}{% endcapture %}
+{% capture customer_order_limit_cancelled_signals %}native_flag_present={{ customer_order_limit_cancelled_native_flag_present }} is_cancelled={{ customer_order_limit_cancelled_order.is_cancelled | default: '' }} cancelled={{ customer_order_limit_cancelled_order.cancelled | default: '' }} cancelled_at={{ customer_order_limit_cancelled_order.cancelled_at | default: '' }} status={{ customer_order_limit_cancelled_order.status | default: '' }} financial={{ customer_order_limit_cancelled_order.financial_status_label | default: customer_order_limit_cancelled_order.financial_status | default: '' }} fulfillment={{ customer_order_limit_cancelled_order.fulfillment_status_label | default: customer_order_limit_cancelled_order.fulfillment_status | default: '' }}{% endcapture %}
 
 {% comment %}
   The input is cleared so a caller that forgets to pass an order cannot inherit
