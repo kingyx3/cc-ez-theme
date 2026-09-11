@@ -6,8 +6,8 @@
  * run, so we can pin the boundaries the theme controls without pretending to
  * test EasyStore's server-side identity rules:
  *
- * - a platform/browser autofill that distributes six OTP digits stays six cells
- *   and produces exactly one platform verification request;
+ * - one trusted Android-style full-code input is synchronously split into six
+ *   cells while EasyStore still receives only that one original input event;
  * - a rejected verification request is never retried by theme code;
  * - login/register password values are submitted once, unchanged, with no
  *   theme-authored HTML pattern;
@@ -24,6 +24,7 @@ const readTheme = (relativePath) => fs.readFileSync(
 );
 
 const OTP_COPY = readTheme('assets/account-otp-copy.js');
+const OTP_AUTOFILL = readTheme('assets/otp-same-event-autofill.js');
 const LIMITS = readTheme('assets/customer-order-limits.js');
 
 const ORIGIN = 'https://cc-auth.test';
@@ -64,8 +65,12 @@ const historyPayload = JSON.stringify({
   lines: [[HANDLE, '', 1, 2, 'order-1', '', 'line-1']],
 });
 
+// The real Android browser can place all six characters into the first visual
+// EasyStore cell despite the UI looking like six one-character boxes. The
+// harness therefore leaves maxlength off so Playwright can reproduce that one
+// trusted full-code input event directly.
 const OTP_CELLS = Array.from({ length: 6 }, () =>
-  '<input type="number" class="otp-input" maxlength="1" pattern="[0-9]">'
+  '<input type="number" class="otp-input" pattern="[0-9]">'
 ).join('');
 
 const otpStep = () => `
@@ -75,6 +80,7 @@ const otpStep = () => `
   <script>
     (() => {
       const cells = Array.from(document.querySelectorAll('.otp-input'));
+      window.__platformInputEvents = 0;
       const verify = async () => {
         const code = cells.map((cell) => cell.value).join('');
         const response = await fetch('${VERIFY_PATH}', {
@@ -90,6 +96,7 @@ const otpStep = () => `
 
       cells.forEach((cell, index) => {
         cell.addEventListener('input', () => {
+          window.__platformInputEvents += 1;
           if (cells.every((input) => input.value !== '')) verify();
         });
         cell.addEventListener('paste', (event) => {
@@ -103,9 +110,9 @@ const otpStep = () => `
         });
       });
 
-      // Playwright cannot invoke Android's OS-level SMS autofill. This models
-      // the desired browser/platform outcome: one digit is delivered to each
-      // EasyStore-owned cell, using native input events, with no theme handoff.
+      // This remains useful for proving that already-distributed platform input
+      // is left alone. These programmatically dispatched events are untrusted,
+      // so the same-event Android helper deliberately ignores them.
       window.__platformAutofill = (code) => {
         code.split('').forEach((digit, index) => {
           cells[index].value = digit;
@@ -161,6 +168,7 @@ const html = ({ pathname, signedIn, profileRequired }) => `<!doctype html>
     </script>
     <script>${LIMITS}</script>
     <script>${OTP_COPY}</script>
+    <script>${OTP_AUTOFILL}</script>
   </body>
 </html>`;
 
@@ -234,16 +242,25 @@ const otpValues = (page) => page.locator('.otp-input').evaluateAll(
   (inputs) => inputs.map((input) => input.value)
 );
 
+const platformInputEvents = (page) => page.evaluate(() => window.__platformInputEvents);
+
+async function trustedFullCodeInput(page, code) {
+  const first = page.locator('.otp-input').first();
+  await first.focus();
+  await page.keyboard.insertText(code);
+}
+
 test.describe('OTP and signup ownership without live reCAPTCHA', () => {
-  test('platform-distributed autofill fills all six cells and verifies exactly once', async ({ page }) => {
+  test('one trusted Android-style full-code input fills six cells and verifies exactly once', async ({ page }) => {
     const site = await authSite(page);
     await site.visit('/account/auth');
 
-    await page.evaluate(() => window.__platformAutofill('123456'));
+    await trustedFullCodeInput(page, '123456');
     await expect.poll(() => site.counts.verification).toBe(1);
     await site.settle();
 
     expect(await otpValues(page)).toEqual(['1', '2', '3', '4', '5', '6']);
+    expect(await platformInputEvents(page)).toBe(1);
     expect(site.counts.verification).toBe(1);
     expect(site.counts.history).toBe(0);
     expect(await page.evaluate(() => window.__verificationResult)).toEqual({
@@ -252,7 +269,42 @@ test.describe('OTP and signup ownership without live reCAPTCHA', () => {
     });
   });
 
-  test('a platform rejection is surfaced once and never retried by theme code', async ({ page }) => {
+  test('same-event autofill never retries a Customer already exists rejection', async ({ page }) => {
+    const site = await authSite(page, {
+      verifyStatus: 409,
+      verifyText: 'Customer already exists (phone)',
+    });
+    await site.visit('/account/auth');
+
+    await trustedFullCodeInput(page, '654321');
+    await expect.poll(() => site.counts.verification).toBe(1);
+    await site.settle();
+
+    expect(await otpValues(page)).toEqual(['6', '5', '4', '3', '2', '1']);
+    expect(await platformInputEvents(page)).toBe(1);
+    expect(site.counts.verification).toBe(1);
+    expect(site.counts.history).toBe(0);
+    expect(await page.evaluate(() => window.__verificationResult)).toEqual({
+      status: 409,
+      text: 'Customer already exists (phone)',
+    });
+  });
+
+  test('already-distributed platform autofill remains native and verifies exactly once', async ({ page }) => {
+    const site = await authSite(page);
+    await site.visit('/account/auth');
+
+    await page.evaluate(() => window.__platformAutofill('112233'));
+    await expect.poll(() => site.counts.verification).toBe(1);
+    await site.settle();
+
+    expect(await otpValues(page)).toEqual(['1', '1', '2', '2', '3', '3']);
+    expect(await platformInputEvents(page)).toBe(6);
+    expect(site.counts.verification).toBe(1);
+    expect(site.counts.history).toBe(0);
+  });
+
+  test('native paste rejection is surfaced once and never retried by theme code', async ({ page }) => {
     const site = await authSite(page, {
       verifyStatus: 409,
       verifyText: 'Customer already exists (phone)',
