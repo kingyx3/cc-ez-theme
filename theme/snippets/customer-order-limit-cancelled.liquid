@@ -108,7 +108,7 @@
   A compact record of what this order actually exposed, for the diagnostics pass
   to sample. Verifying the field names on a live store is otherwise a guess.
 {% endcomment %}
-{% capture customer_order_limit_cancelled_signals %}native_flag_present={{ customer_order_limit_cancelled_native_flag_present }} is_cancelled={{ customer_order_limit_cancelled_order.is_cancelled | default: '' }} cancelled={{ customer_order_limit_cancelled_order.cancelled | default: '' }} cancelled_at={{ customer_order_limit_cancelled_order.cancelled_at | default: '' }} status={{ customer_order_limit_cancelled_order.status | default: '' }} financial={{ customer_order_limit_cancelled_order.financial_status_label | default: customer_order_limit_cancelled_order.financial_status | default: '' }} fulfillment={{ customer_order_limit_cancelled_order.fulfillment_status_label | default: customer_order_limit_cancelled_order.fulfillment_status | default: '' }}{% endcapture %}
+{% capture customer_order_limit_cancelled_signals %}is_cancelled={{ customer_order_limit_cancelled_order.is_cancelled | default: '' }} cancelled={{ customer_order_limit_cancelled_order.cancelled | default: '' }} cancelled_at={{ customer_order_limit_cancelled_order.cancelled_at | default: '' }} status={{ customer_order_limit_cancelled_order.status | default: '' }} financial={{ customer_order_limit_cancelled_order.financial_status_label | default: customer_order_limit_cancelled_order.financial_status | default: '' }} fulfillment={{ customer_order_limit_cancelled_order.fulfillment_status_label | default: customer_order_limit_cancelled_order.fulfillment_status | default: '' }}{% endcapture %}
 
 {% comment %}
   The input is cleared so a caller that forgets to pass an order cannot inherit
