@@ -105,6 +105,32 @@ class OtpFieldsAreLeftAloneTests(unittest.TestCase):
         editor = (THEME_ROOT / "editor_assets" / "account-otp-copy.js").read_bytes()
         self.assertEqual(storefront, editor)
 
+    def test_temporary_beforeinput_diagnostic_is_read_only_and_mirrored(self) -> None:
+        name = "otp-beforeinput-diagnostic.js"
+        storefront_path = THEME_ROOT / "assets" / name
+        editor_path = THEME_ROOT / "editor_assets" / name
+
+        self.assertTrue(storefront_path.exists())
+        self.assertEqual(storefront_path.read_bytes(), editor_path.read_bytes())
+
+        source = code_only(storefront_path.read_text(encoding="utf-8"))
+        self.assertIn("cc_otp_diag", source)
+        self.assertIn("addEventListener('beforeinput'", source)
+        self.assertIn("addEventListener('input'", source)
+        self.assertNotIn("preventDefault(", source)
+        self.assertNotIn("stopPropagation(", source)
+        self.assertNotIn("stopImmediatePropagation(", source)
+        self.assertNotIn("dispatchEvent(", source)
+        self.assertNotIn("new Event(", source)
+        self.assertNotIn("new InputEvent(", source)
+        self.assertNotIn("fetch(", source)
+        self.assertNotIn("XMLHttpRequest", source)
+        self.assertNotIn(".submit(", source)
+        self.assertNotIn(".click(", source)
+        self.assertNotRegex(source, r"\.value\s*=")
+        self.assertNotRegex(source, r"setAttribute\s*\(\s*['\"]value['\"]")
+        self.assertIn("'otp-beforeinput-diagnostic.js' | asset_url", self.currencies)
+
 
 class ActivateAccountButtonTests(unittest.TestCase):
     """The activate template renders no ".btn", so its own inline handler threw
