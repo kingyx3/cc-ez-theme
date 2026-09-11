@@ -25,12 +25,13 @@ const CELLS = Array.from({ length: 6 }, () =>
   '<input type="number" class="otp-input field__input no-float-label" pattern="[0-9]">'
 ).join('');
 
-const PAGE = `<!doctype html><html><body>
+const OTP_ROW = `
   <p>Enter the verification code we sent to your mobile.</p>
   <div id="otp-form"><div class="d-flex">${CELLS}</div></div>
   <button id="resend-otp">Resend OTP</button>
-  <a id="email-alternative" href="#email">Continue with email instead</a>
-</body></html>`;
+  <a id="email-alternative" href="#email">Continue with email instead</a>`;
+
+const PAGE = `<!doctype html><html><body>${OTP_ROW}</body></html>`;
 
 const installWidget = () => {
   window.__submits = 0;
@@ -77,7 +78,7 @@ const state = () => ({
   code: window.__submittedCode,
   platformInputs: window.__platformInputs,
   cells: Array.from(document.querySelectorAll('.otp-input')).map((input) => input.value),
-  emailAlternativeHidden: document.getElementById('email-alternative').hidden,
+  emailAlternativeHidden: document.getElementById('email-alternative')?.hidden ?? false,
 });
 
 async function widget(page) {
@@ -109,6 +110,27 @@ test.describe('OTP same-event handoff', () => {
     expect(got.platformInputs).toEqual([{ index: 0, code: '123456' }]);
     // No synthetic final-cell input was created by the theme.
     expect(got.submits).toBe(0);
+  });
+
+  test('still works when EasyStore renders the OTP row after the helper loads', async ({ page }) => {
+    const errors = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    await page.setContent('<!doctype html><html><body><p>Account setup</p></body></html>');
+    await page.evaluate(OTP_AUTOFILL);
+    await page.evaluate((row) => {
+      document.body.innerHTML = row;
+    }, OTP_ROW);
+    await page.evaluate(installWidget);
+
+    const first = page.locator('.otp-input').first();
+    await first.focus();
+    await page.keyboard.insertText('654321');
+    await page.waitForTimeout(50);
+
+    expect(errors, 'dynamic OTP rendering must not throw').toEqual([]);
+    const got = await page.evaluate(state);
+    expect(got.cells).toEqual(['6', '5', '4', '3', '2', '1']);
+    expect(got.platformInputs).toEqual([{ index: 0, code: '654321' }]);
   });
 
   test('leaves manual typing entirely platform-native', async ({ page }) => {
