@@ -25,22 +25,21 @@ def code_only(source: str) -> str:
     )
 
 
-class OtpAutofillSafetyTests(unittest.TestCase):
-    """Keep Android autofill to one platform-visible completion event.
+class OtpFieldsAreLeftAloneTests(unittest.TestCase):
+    """Regression guard for the "Customer already exists (phone)" outage.
 
-    EasyStore owns the one-time-code widget and posts verification itself. The
-    previous autofill helper spread all six digits before the browser's original
-    first-cell input event reached EasyStore, then dispatched another input on
-    the final cell. That depended on the platform submitting only from cell six.
-    If EasyStore instead submits whenever all cells are complete, both events can
-    post verification and the second request returns "Customer already exists
-    (phone)".
+    The one-time-code step at /account/auth is rendered by EasyStore, not by
+    this theme, and the widget posts its verification itself. Theme scripts that
+    wrote into those cells and dispatched synthetic input/change events made the
+    widget fire that request more than once: the first call created the customer
+    and the second came back "Customer already exists (phone)", so signup broke
+    for every new phone number.
 
-    The current helper is narrower: it intercepts only an exact six-digit value
-    in the captured six-cell plain-DOM widget, stops the original event at window
-    capture while the DOM is still incomplete, then hands EasyStore one final-
-    cell input event after the sixth digit is written. Unknown/framework-owned
-    widgets, manual typing, partial values, and native paste stay platform-owned.
+    The widget also submits over fetch rather than a native form submit, so a
+    submit-event guard cannot deduplicate it from the theme side. It can change
+    independently of this theme, which means even a synthetic-event design that
+    submits once against a captured replica can submit twice against later
+    platform behavior. The theme therefore stays out of the OTP cells entirely.
     """
 
     @classmethod
@@ -74,35 +73,28 @@ class OtpAutofillSafetyTests(unittest.TestCase):
                 self.assertNotIn("one-time-code", source)
                 self.assertNotIn("OTPCredential", source)
 
-    def test_only_account_otp_copy_may_dispatch_synthetic_input(self) -> None:
+    def test_otp_aware_scripts_never_dispatch_synthetic_input(self) -> None:
         for path, source in self.scripts.items():
             if "#otp-form" not in source and "otp-input" not in source:
-                continue
-            if path.name == "account-otp-copy.js":
                 continue
             with self.subTest(script=path.name):
                 self.assertNotIn("new Event('input'", source)
                 self.assertNotIn('new Event("input"', source)
 
-    def test_account_otp_copy_has_one_narrow_completion_handoff(self) -> None:
+    def test_account_otp_copy_is_visibility_only(self) -> None:
         for directory in ASSET_DIRECTORIES:
             source = code_only(
                 (THEME_ROOT / directory / "account-otp-copy.js").read_text(encoding="utf-8")
             )
             with self.subTest(directory=directory):
-                self.assertIn("CELL_SELECTOR = '#otp-form .otp-input'", source)
-                self.assertIn("CELL_COUNT = 6", source)
-                self.assertIn("getAttribute('maxlength') !== '1'", source)
-                self.assertIn("frameworkControlled(container)", source)
-                self.assertIn("frameworkControlled(cell)", source)
-                self.assertIn("event.stopImmediatePropagation()", source)
-                self.assertIn(
-                    "window.addEventListener('input', spreadFullOtpAutofill, true)",
-                    source,
-                )
-                self.assertEqual(source.count("dispatchEvent(new Event('input'"), 1)
-                self.assertNotIn("new Event('change'", source)
-                self.assertNotIn('new Event("change"', source)
+                self.assertIn("hideEmailSignup", source)
+                self.assertIn("control.hidden = true", source)
+                self.assertNotIn("#otp-form", source)
+                self.assertNotIn("otp-input", source)
+                self.assertNotIn("dispatchEvent", source)
+                self.assertNotIn(".value", source)
+                self.assertNotIn("addEventListener('input'", source)
+                self.assertNotIn('addEventListener("input"', source)
                 self.assertNotIn("fetch(", source)
                 self.assertNotIn("XMLHttpRequest", source)
                 self.assertNotIn(".submit(", source)
@@ -129,9 +121,9 @@ class ActivateAccountButtonTests(unittest.TestCase):
 class NoGeneralizedAuthFlowScriptsTests(unittest.TestCase):
     """Keep broad account-submit interception out of the theme.
 
-    The OTP autofill exception above is scoped to one captured widget and one
-    completion event. It must not grow back into the generalized account form
-    submit guards that previously competed with EasyStore's own auth flow.
+    Speculative theme scripts in the account flows caused the outage. Read-only
+    step detection may keep redirects and history loads out of account setup,
+    but no theme script may compete with EasyStore's own verification request.
     """
 
     def test_global_js_adds_no_account_submit_handling(self) -> None:

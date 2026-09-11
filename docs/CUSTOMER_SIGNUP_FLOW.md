@@ -57,6 +57,27 @@ The theme-rendered `/account/login` form is already password-first: it asks for 
 
 EasyStore can also render parts of the account flow itself. Theme code must not write values into, dispatch events into, or auto-click controls in those platform-owned verification widgets. The theme's responsibility is to avoid bypassing EasyStore's native first-password creation step; once the account genuinely has a password, the platform can use its normal returning-customer password flow.
 
+## Customer identity and deletion
+
+Order history belongs to the authenticated EasyStore customer account. Deleting
+that customer and registering the same mobile number as a supposedly new
+customer is therefore not a valid way to test preservation of order history: a
+new account identity must not be assumed to inherit the deleted account's
+orders.
+
+Release validation keeps the two cases separate:
+
+- validate signup with a mobile number that has never been registered, and
+  confirm EasyStore receives one verification request;
+- validate purchase limits with an existing customer whose known prior orders
+  must continue to count.
+
+If a deleted mobile number is rejected after exactly one native verification
+request, that is an EasyStore account-identity condition rather than something
+the theme can safely retry or work around. Restore or sign in to the original
+account when its orders must remain attached; otherwise EasyStore support must
+confirm whether the deleted identity can be purged or the number released.
+
 ## Return to the page before signup
 
 The page the shopper was on before entering login/signup is stored under `cc:pending-login-redirect` in `sessionStorage`. A Buy Now flow preserves its product URL; a signup/login opened from another storefront page preserves that prior same-origin storefront page instead.

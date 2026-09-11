@@ -124,6 +124,12 @@ A purchase attempted while history is still unknown is **held** rather than meas
 
 Every failure path falls open to cart-only enforcement rather than blocking a sale: a failed or redirected request, a missing payload (an account template that was not updated), a browser without `fetch` or `DOMParser`, a shopper proven to be signed out, or a customer who is still in account setup. `window.CustomerOrderLimits.historyState()` reports which case applies — `inline`, `loaded`, `pending`, `unknown`, or `unavailable`.
 
+The history is account-scoped. Do not delete and recreate a customer to test
+this path: the recreated identity cannot be assumed to own the deleted
+customer's orders. Test a new signup with a never-registered mobile number, and
+test history enforcement separately with an established customer whose orders
+are visible under that same account.
+
 The shared validator integrates with the native theme paths:
 
 - product page, featured product, and quick-view quantity validation;

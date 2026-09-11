@@ -1,10 +1,9 @@
 /*
- * Runtime guard for the Android six-digits-in-one-cell OTP regression.
+ * Runtime guard for EasyStore's ownership of its one-time-code widget.
  *
- * The important invariant is not just the final values. EasyStore owns the
- * verification request, so it must observe one completed input event total.
- * These replicas cover both the handler captured from the live widget and the
- * platform change that made the August implementation unsafe.
+ * The theme may hide the platform's email-alternative link, but it must never
+ * mutate an OTP cell, stop an input event, or manufacture a replacement event.
+ * EasyStore receives exactly what the browser or shopper produced.
  */
 const { test, expect } = require('@playwright/test');
 const fs = require('fs');
@@ -22,9 +21,10 @@ const CELLS = Array.from({ length: 6 }, () =>
 const PAGE = `<!doctype html><html><body>
   <div id="otp-form"><div class="d-flex">${CELLS}</div></div>
   <button id="resend-otp">Resend OTP</button>
+  <a id="email-alternative" href="#email">Continue with email instead</a>
 </body></html>`;
 
-const installWidget = (mode) => {
+const installWidget = () => {
   window.__submits = 0;
   window.__submittedCode = null;
   window.__platformInputs = [];
@@ -41,17 +41,7 @@ const installWidget = (mode) => {
         index,
         code: otpInputs.map((cell) => cell.value).join(''),
       });
-
-      if (mode === 'last-cell') {
-        if (index === otpInputs.length - 1) submitOTP();
-        return;
-      }
-
-      // Models the platform change that invalidated the August assumption: any
-      // input event can complete verification once all visible cells are full.
-      if (mode === 'any-complete' && otpInputs.every((cell) => cell.value !== '')) {
-        submitOTP();
-      }
+      if (index === otpInputs.length - 1) submitOTP();
     });
 
     input.addEventListener('paste', (event) => {
@@ -65,20 +55,16 @@ const installWidget = (mode) => {
       if (otpInputs.every((cell) => cell.value !== '')) submitOTP();
     });
   });
-};
 
-const installHelpers = () => {
-  window.autofill = (code, cellIndex = 0) => {
-    const cells = document.querySelectorAll('.otp-input');
-    cells[cellIndex].value = code;
-    cells[cellIndex].dispatchEvent(new Event('input', { bubbles: true }));
+  window.autofill = (code) => {
+    otpInputs[0].value = code;
+    otpInputs[0].dispatchEvent(new Event('input', { bubbles: true }));
   };
 
   window.typeCode = (code) => {
-    const cells = document.querySelectorAll('.otp-input');
     code.split('').forEach((digit, index) => {
-      cells[index].value = digit;
-      cells[index].dispatchEvent(new Event('input', { bubbles: true }));
+      otpInputs[index].value = digit;
+      otpInputs[index].dispatchEvent(new Event('input', { bubbles: true }));
     });
   };
 };
@@ -88,73 +74,38 @@ const state = () => ({
   code: window.__submittedCode,
   platformInputs: window.__platformInputs,
   cells: Array.from(document.querySelectorAll('.otp-input')).map((input) => input.value),
+  emailAlternativeHidden: document.getElementById('email-alternative').hidden,
 });
 
-async function widget(page, mode = 'last-cell', beforeModule = null) {
+async function widget(page) {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.setContent(PAGE);
-  await page.evaluate(installWidget, mode);
-  await page.evaluate(installHelpers);
-  if (beforeModule) await page.evaluate(beforeModule);
+  await page.evaluate(installWidget);
   await page.evaluate(MODULE);
 
   return {
     read: async () => {
       await page.waitForTimeout(50);
-      expect(errors, 'OTP helper must not throw').toEqual([]);
+      expect(errors, 'the visibility helper must not throw').toEqual([]);
       return page.evaluate(state);
     },
   };
 }
 
-test.describe('OTP autofill single platform event', () => {
-  test('spreads six digits and hands the captured last-cell widget one completion event', async ({ page }) => {
-    const w = await widget(page, 'last-cell');
+test.describe('OTP platform ownership', () => {
+  test('passes Android full-code input to EasyStore unchanged', async ({ page }) => {
+    const w = await widget(page);
     await page.evaluate(() => window.autofill('123456'));
     const got = await w.read();
 
-    expect(got.cells).toEqual(['1', '2', '3', '4', '5', '6']);
-    expect(got.platformInputs).toEqual([{ index: 5, code: '123456' }]);
-    expect(got.submits).toBe(1);
-    expect(got.code).toBe('123456');
+    expect(got.cells).toEqual(['123456', '', '', '', '', '']);
+    expect(got.platformInputs).toEqual([{ index: 0, code: '123456' }]);
+    expect(got.submits).toBe(0);
   });
 
-  test('still submits once when the platform submits on any completed input', async ({ page }) => {
-    const w = await widget(page, 'any-complete');
-    await page.evaluate(() => window.autofill('123456'));
-    const got = await w.read();
-
-    expect(got.cells).toEqual(['1', '2', '3', '4', '5', '6']);
-    expect(got.platformInputs).toEqual([{ index: 5, code: '123456' }]);
-    expect(got.submits).toBe(1);
-  });
-
-  test('a repeated autofill event never reaches the platform twice', async ({ page }) => {
-    const w = await widget(page, 'any-complete');
-    await page.evaluate(() => {
-      window.autofill('123456');
-      window.autofill('123456');
-    });
-    const got = await w.read();
-
-    expect(got.cells).toEqual(['1', '2', '3', '4', '5', '6']);
-    expect(got.platformInputs).toEqual([{ index: 5, code: '123456' }]);
-    expect(got.submits).toBe(1);
-  });
-
-  test('a full code landing in a later cell is normalized before the single handoff', async ({ page }) => {
-    const w = await widget(page, 'any-complete');
-    await page.evaluate(() => window.autofill('654321', 2));
-    const got = await w.read();
-
-    expect(got.cells).toEqual(['6', '5', '4', '3', '2', '1']);
-    expect(got.platformInputs).toEqual([{ index: 5, code: '654321' }]);
-    expect(got.submits).toBe(1);
-  });
-
-  test('manual typing remains entirely platform-native', async ({ page }) => {
-    const w = await widget(page, 'any-complete');
+  test('leaves manual typing entirely platform-native', async ({ page }) => {
+    const w = await widget(page);
     await page.evaluate(() => window.typeCode('112233'));
     const got = await w.read();
 
@@ -164,12 +115,12 @@ test.describe('OTP autofill single platform event', () => {
     expect(got.code).toBe('112233');
   });
 
-  test('native paste remains entirely platform-native', async ({ page }) => {
-    const w = await widget(page, 'last-cell');
+  test('leaves native paste entirely platform-native', async ({ page }) => {
+    const w = await widget(page);
     await page.evaluate(() => {
       const data = new DataTransfer();
       data.setData('text', '123456');
-      document.querySelectorAll('.otp-input')[0].dispatchEvent(
+      document.querySelector('.otp-input').dispatchEvent(
         new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true })
       );
     });
@@ -180,25 +131,13 @@ test.describe('OTP autofill single platform event', () => {
     expect(got.submits).toBe(1);
   });
 
-  test('partial multi-digit input is left alone', async ({ page }) => {
-    const w = await widget(page, 'any-complete');
-    await page.evaluate(() => window.autofill('1234'));
+  test('hides only the email alternative', async ({ page }) => {
+    const w = await widget(page);
     const got = await w.read();
 
-    expect(got.cells).toEqual(['1234', '', '', '', '', '']);
-    expect(got.platformInputs).toEqual([{ index: 0, code: '1234' }]);
-    expect(got.submits).toBe(0);
-  });
-
-  test('framework-controlled cells fail closed with no synthetic handoff', async ({ page }) => {
-    const w = await widget(page, 'last-cell', () => {
-      document.querySelectorAll('.otp-input')[0].__reactFiber$probe = {};
-    });
-    await page.evaluate(() => window.autofill('123456'));
-    const got = await w.read();
-
-    expect(got.cells).toEqual(['123456', '', '', '', '', '']);
-    expect(got.platformInputs).toEqual([{ index: 0, code: '123456' }]);
+    expect(got.emailAlternativeHidden).toBe(true);
+    expect(got.cells).toEqual(['', '', '', '', '', '']);
+    expect(got.platformInputs).toEqual([]);
     expect(got.submits).toBe(0);
   });
 });

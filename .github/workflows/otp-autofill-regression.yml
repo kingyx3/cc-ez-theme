@@ -1,4 +1,4 @@
-name: OTP autofill regression
+name: OTP platform ownership regression
 
 on:
   pull_request:
@@ -17,12 +17,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: otp-autofill-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: otp-ownership-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  otp-autofill:
-    name: OTP single-event regression
+  otp-ownership:
+    name: OTP platform ownership
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
@@ -53,14 +53,14 @@ jobs:
           echo "::error::Playwright browser install did not finish after two attempts."
           exit 1
 
-      - name: Run OTP autofill regression suite
+      - name: Run OTP platform ownership suite
         run: npx playwright test e2e/otp-autofill.spec.js --project=chromium-desktop
 
-      - name: Upload OTP failure artifacts
+      - name: Upload OTP ownership failure artifacts
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: playwright-test-results-otp-autofill
+          name: playwright-test-results-otp-ownership
           path: test-results/
           if-no-files-found: ignore
           retention-days: 14
