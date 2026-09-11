@@ -5,6 +5,8 @@ on:
     paths:
       - "theme/assets/account-otp-copy.js"
       - "theme/editor_assets/account-otp-copy.js"
+      - "theme/assets/otp-same-event-autofill.js"
+      - "theme/editor_assets/otp-same-event-autofill.js"
       - "theme/assets/customer-order-limits.js"
       - "theme/editor_assets/customer-order-limits.js"
       - "theme/templates/customers/login.liquid"
