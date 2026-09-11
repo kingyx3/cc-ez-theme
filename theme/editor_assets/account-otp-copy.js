@@ -12,9 +12,9 @@
  * line whose crossing broke signup with "Customer already exists (phone)".
  *
  * Temporary unpublished-preview diagnostic: adding ?otpdiag=1 enables a
- * session-scoped, read-only beforeinput observer. It shows only event metadata;
- * it never records OTP digits or changes EasyStore/browser behaviour. Disable
- * with ?otpdiag=0 or by closing the tab.
+ * session-scoped, read-only beforeinput/input observer. It shows only event
+ * metadata; it never records OTP digits or changes EasyStore/browser behaviour.
+ * Disable with ?otpdiag=0 or by closing the tab.
  */
 (() => {
   // "Continue with email instead", "Sign up using your email address instead".
@@ -74,28 +74,46 @@
       mount();
     }
 
+    // Do not depend on maxlength or a platform class name. The live EasyStore
+    // widget can render six visual cells while still allowing Android to place
+    // the entire code in one underlying input. For this temporary observer, a
+    // six-input ancestor group is enough to identify the OTP row.
     const sixCellGroup = (target) => {
-      if (!(target instanceof HTMLInputElement) || target.maxLength !== 1) return null;
+      if (!(target instanceof HTMLInputElement)) return null;
       let node = target.parentElement;
       for (let depth = 0; node && depth < 5; depth += 1, node = node.parentElement) {
-        const cells = Array.from(node.querySelectorAll('input[maxlength="1"]'));
+        const cells = Array.from(node.querySelectorAll('input')).filter((cell) => {
+          const type = String(cell.getAttribute('type') || 'text').toLowerCase();
+          return type !== 'hidden' && type !== 'submit' && type !== 'button';
+        });
         if (cells.length === 6 && cells.includes(target)) return cells;
       }
       return null;
     };
 
-    window.addEventListener('beforeinput', (event) => {
+    let sawBeforeInput = false;
+
+    const observe = (event) => {
       const cells = sixCellGroup(event.target);
       if (!cells) return;
 
       const dataLength = typeof event.data === 'string' ? event.data.length : null;
-      const safeCandidate = dataLength === 6
+      const isBeforeInput = event.type === 'beforeinput';
+      if (isBeforeInput) sawBeforeInput = true;
+
+      const safeCandidate = isBeforeInput
+        && dataLength === 6
         && event.cancelable === true
         && event.isTrusted === true;
 
+      const status = safeCandidate
+        ? 'PREREQUISITE MET'
+        : (!isBeforeInput && !sawBeforeInput ? 'INPUT WITHOUT BEFOREINPUT' : 'OBSERVED');
+
       show([
-        `INPUT EVENT PROBE: ${safeCandidate ? 'PREREQUISITE MET' : 'OBSERVED'}`,
-        'beforeinput: yes',
+        `INPUT EVENT PROBE: ${status}`,
+        `event: ${event.type}`,
+        `beforeinputSeen: ${String(sawBeforeInput)}`,
         `cancelable: ${String(event.cancelable)}`,
         `trusted: ${String(event.isTrusted)}`,
         `inputType: ${event.inputType || '(none)'}`,
@@ -103,9 +121,17 @@
         `targetCell: ${String(cells.indexOf(event.target) + 1)} of 6`,
         safeCandidate
           ? 'Result: guarded interception is technically possible for this event.'
-          : 'Result: do NOT intercept unless trusted=true, cancelable=true, dataLength=6.'
+          : (!isBeforeInput && !sawBeforeInput
+            ? 'Result: Android reached input without a matched beforeinput. Do not intercept at input.'
+            : 'Result: do NOT intercept unless trusted=true, cancelable=true, dataLength=6.')
       ]);
-    }, true);
+    };
+
+    // Passive capture listeners make this probe observational by construction:
+    // it cannot cancel the browser edit even if the handler changes later.
+    ['beforeinput', 'input'].forEach((type) => {
+      window.addEventListener(type, observe, { capture: true, passive: true });
+    });
   };
 
   startBeforeInputDiagnostic();
