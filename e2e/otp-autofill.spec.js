@@ -1,24 +1,32 @@
 /*
- * Runtime guard for EasyStore's ownership of its one-time-code widget.
+ * Runtime guard for the narrow Android OTP handoff.
  *
- * The theme may hide the platform's email-alternative link, but it must never
- * mutate an OTP cell, stop an input event, or manufacture a replacement event.
- * EasyStore receives exactly what the browser or shopper produced.
+ * EasyStore still owns verification. The theme may synchronously split one
+ * trusted six-digit Android input across the six plain-DOM cells, but it must
+ * not cancel that event or manufacture a replacement event. Manual typing,
+ * native paste, and already-distributed input remain platform-native.
  */
 const { test, expect } = require('@playwright/test');
 const fs = require('fs');
 const path = require('path');
 
-const MODULE = fs.readFileSync(
+const OTP_COPY = fs.readFileSync(
   path.join(__dirname, '..', 'theme', 'assets', 'account-otp-copy.js'),
   'utf8'
 );
+const OTP_AUTOFILL = fs.readFileSync(
+  path.join(__dirname, '..', 'theme', 'assets', 'otp-same-event-autofill.js'),
+  'utf8'
+);
 
+// Leave maxlength off so Playwright can reproduce Android's observed behavior:
+// one trusted input inserts all six digits into the first visual cell.
 const CELLS = Array.from({ length: 6 }, () =>
-  '<input type="number" class="otp-input field__input no-float-label" maxlength="1" pattern="[0-9]">'
+  '<input type="number" class="otp-input field__input no-float-label" pattern="[0-9]">'
 ).join('');
 
 const PAGE = `<!doctype html><html><body>
+  <p>Enter the verification code we sent to your mobile.</p>
   <div id="otp-form"><div class="d-flex">${CELLS}</div></div>
   <button id="resend-otp">Resend OTP</button>
   <a id="email-alternative" href="#email">Continue with email instead</a>
@@ -56,11 +64,6 @@ const installWidget = () => {
     });
   });
 
-  window.autofill = (code) => {
-    otpInputs[0].value = code;
-    otpInputs[0].dispatchEvent(new Event('input', { bubbles: true }));
-  };
-
   window.typeCode = (code) => {
     code.split('').forEach((digit, index) => {
       otpInputs[index].value = digit;
@@ -82,25 +85,29 @@ async function widget(page) {
   page.on('pageerror', (error) => errors.push(error.message));
   await page.setContent(PAGE);
   await page.evaluate(installWidget);
-  await page.evaluate(MODULE);
+  await page.evaluate(OTP_COPY);
+  await page.evaluate(OTP_AUTOFILL);
 
   return {
     read: async () => {
       await page.waitForTimeout(50);
-      expect(errors, 'the visibility helper must not throw').toEqual([]);
+      expect(errors, 'OTP helpers must not throw').toEqual([]);
       return page.evaluate(state);
     },
   };
 }
 
-test.describe('OTP platform ownership', () => {
-  test('passes Android full-code input to EasyStore unchanged', async ({ page }) => {
+test.describe('OTP same-event handoff', () => {
+  test('splits one trusted full-code input while EasyStore receives only that original event', async ({ page }) => {
     const w = await widget(page);
-    await page.evaluate(() => window.autofill('123456'));
+    const first = page.locator('.otp-input').first();
+    await first.focus();
+    await page.keyboard.insertText('123456');
     const got = await w.read();
 
-    expect(got.cells).toEqual(['123456', '', '', '', '', '']);
+    expect(got.cells).toEqual(['1', '2', '3', '4', '5', '6']);
     expect(got.platformInputs).toEqual([{ index: 0, code: '123456' }]);
+    // No synthetic final-cell input was created by the theme.
     expect(got.submits).toBe(0);
   });
 
@@ -131,7 +138,7 @@ test.describe('OTP platform ownership', () => {
     expect(got.submits).toBe(1);
   });
 
-  test('hides only the email alternative', async ({ page }) => {
+  test('hides only the email alternative before any OTP interaction', async ({ page }) => {
     const w = await widget(page);
     const got = await w.read();
 
