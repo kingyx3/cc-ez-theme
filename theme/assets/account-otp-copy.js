@@ -1,120 +1,37 @@
 /*
- * Account OTP step adjustments for the platform-owned EasyStore flow.
+ * Hides the platform's "continue with email instead" link and loads the
+ * narrowly-scoped same-event Android OTP autofill helper.
  *
- * This store signs customers up by mobile number only, so the copy helper hides
- * the platform's "continue with email instead" link. Android can also place all
- * six SMS digits in one EasyStore OTP cell. The autofill helper below repairs
- * that one browser event without taking ownership of verification: EasyStore
- * receives exactly one completed input event, targeted at the final cell.
- *
- * The autofill boundary is deliberately narrower than the reverted fixes. A
- * full-code browser event is stopped at window capture before EasyStore sees it;
- * only five digits are written while that event exists. The sixth digit is then
- * written and one input event is handed to the final cell. That means neither an
- * old "submit only on cell 6" handler nor a newer "submit whenever all cells are
- * full" handler can see two completed events. Manual typing and native paste are
- * untouched. If the known six-cell plain-DOM shape changes or framework state
- * appears, the helper fails closed and leaves the platform alone.
+ * The copy helper itself remains visibility-only: it never touches an OTP
+ * input, sets a value, dispatches an event, submits, clicks, or intercepts a
+ * request. The separate autofill helper is responsible only for splitting one
+ * trusted six-digit Android input across EasyStore's six plain-DOM cells while
+ * allowing that same original event to continue.
  */
 (() => {
-  const CELL_SELECTOR = '#otp-form .otp-input';
-  const CELL_COUNT = 6;
-
-  let replayingOtpInput = false;
-  let lastOtpCells = null;
-  let lastOtpCode = '';
-
-  const frameworkControlled = (node) => {
-    if (!node) return false;
-    const keys = Object.keys(node);
-    return keys.some((key) => key.startsWith('__react') || key.startsWith('__ng'))
-      || Boolean(node.__vue__ || node.__vue_app__ || node.__vnode || node.__svelte_meta);
-  };
-
-  const sameCells = (left, right) => Boolean(left)
-    && left.length === right.length
-    && left.every((cell, index) => cell === right[index]);
-
-  const safeOtpCells = (target) => {
-    const cells = Array.from(document.querySelectorAll(CELL_SELECTOR));
-    if (cells.length !== CELL_COUNT || !cells.includes(target)) return null;
-
-    const container = document.getElementById('otp-form');
-    if (!container || frameworkControlled(container)) return null;
-
-    const parent = cells[0].parentElement;
-    if (!parent || cells.some((cell) => cell.parentElement !== parent)) return null;
-
-    const unsafe = cells.some((cell) => {
-      if (cell.tagName !== 'INPUT' || cell.disabled || cell.readOnly) return true;
-      if (cell.getAttribute('maxlength') !== '1') return true;
-      const type = (cell.getAttribute('type') || 'text').toLowerCase();
-      if (!['number', 'tel', 'text'].includes(type)) return true;
-      return frameworkControlled(cell);
-    });
-
-    return unsafe ? null : cells;
-  };
-
-  const spreadFullOtpAutofill = (event) => {
-    if (replayingOtpInput) return;
-
-    const target = event.target;
-    if (!target || !target.matches || !target.matches(CELL_SELECTOR)) return;
-
-    const cells = safeOtpCells(target);
-    if (!cells) return;
-
-    if (target.value === '') {
-      lastOtpCells = null;
-      lastOtpCode = '';
-      return;
-    }
-
-    const digits = String(target.value || '').replace(/\D/g, '');
-    if (digits.length !== CELL_COUNT) return;
-
-    // The original multi-digit browser event must never reach EasyStore. If it
-    // did, a platform handler that submits whenever all cells are populated
-    // could verify once here and again on the final-cell handoff below.
-    event.stopImmediatePropagation();
-
-    const repeated = lastOtpCode === digits && sameCells(lastOtpCells, cells);
-    const last = cells[cells.length - 1];
-
-    // Keep the DOM incomplete for the full lifetime of the stopped event.
-    cells.forEach((cell, index) => {
-      cell.value = index === cells.length - 1 ? '' : digits[index];
-    });
-
-    // Android may emit the same autofill event more than once for a single tap.
-    // Restore the display, but do not hand the same code to EasyStore twice.
-    if (repeated) {
-      last.value = digits[digits.length - 1];
-      return;
-    }
-
-    lastOtpCells = cells.slice();
-    lastOtpCode = digits;
-
-    replayingOtpInput = true;
-    try {
-      last.value = digits[digits.length - 1];
-      last.dispatchEvent(new Event('input', { bubbles: true }));
-    } finally {
-      replayingOtpInput = false;
-    }
-  };
-
-  // Window capture runs before document, container, and cell handlers. That is
-  // the boundary needed to sanitize a full-code browser event before EasyStore
-  // can observe it. The listener is inert everywhere without the exact widget.
-  window.addEventListener('input', spreadFullOtpAutofill, true);
-
   // "Continue with email instead", "Sign up using your email address instead".
   const EMAIL_SIGNUP = /\be-?mail\b[^.!?]{0,32}\binstead\b/i;
   // Longer than this is a paragraph, not the link.
   const LINK_LENGTH = 80;
+
+  const loadOtpAutofill = () => {
+    const current = document.currentScript
+      || document.querySelector('script[src*="account-otp-copy.js"]');
+    const source = current && String(current.src || '');
+    if (!/account-otp-copy\.js(?:[?#]|$)/.test(source)) return;
+    if (document.querySelector('script[data-cc-otp-autofill="same-event"]')) return;
+
+    const script = document.createElement('script');
+    script.src = source.replace(
+      /account-otp-copy\.js(?=([?#]|$))/,
+      'otp-same-event-autofill.js'
+    );
+    script.defer = true;
+    script.dataset.ccOtpAutofill = 'same-event';
+    document.head.appendChild(script);
+  };
+
+  loadOtpAutofill();
 
   const hideEmailSignup = () => {
     document.querySelectorAll('a, button').forEach((control) => {

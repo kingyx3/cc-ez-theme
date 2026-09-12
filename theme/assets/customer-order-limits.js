@@ -82,6 +82,25 @@
     /^\/account(\/|$)/.test(String(window.location.pathname || ''))
   );
 
+  // EasyStore can expose `customer` before phone verification and first-account
+  // setup have finished. Purchase history is irrelevant on those pages, and a
+  // theme request must not share the platform-owned OTP/signup network path.
+  const AUTH_PATH = /^\/account\/(login|register|recover|auth|activate|reset)/i;
+  const AUTHENTICATING_MARKUP = [
+    '#otp-form',
+    '.otp-input',
+    'input[name="customer[password]"]',
+    'input[name="customer[email_or_phone]"]',
+    'form[action^="/account/login"]',
+    'form[action^="/account/auth"]',
+  ].join(', ');
+
+  const accountSetupInProgress = () => (
+    AUTH_PATH.test(String(window.location.pathname || ''))
+    || Boolean(document.querySelector(AUTHENTICATING_MARKUP))
+    || window.ccProfileCompletionRequired === true
+  );
+
   // Cached once the page proves sign-in state either way. While the state is
   // unproven the answer stays "not signed out" so no purchase is ever
   // redirected on a guess: a wrong redirect breaks buying for real customers.
@@ -297,6 +316,7 @@
   // the account order page, which publishes it as JSON.
   const HISTORY_URL = '/account/orders';
   const HISTORY_PAYLOAD_ID = 'customer-order-limit-history';
+  const HISTORY_MAX_DETAIL_REQUESTS = 24;
 
   const diagnostics = source.diagnostics || {};
   // Only line items actually read prove the page saw history. Zero orders is
@@ -426,9 +446,112 @@
 
   const parseHistoryDocument = (html) => {
     const parsed = new DOMParser().parseFromString(html, 'text/html');
-    const payload = parsed.getElementById(HISTORY_PAYLOAD_ID);
-    if (!payload) throw new Error('history payload missing');
-    return JSON.parse(payload.textContent || '{}');
+    const payloadElement = parsed.getElementById(HISTORY_PAYLOAD_ID);
+    if (!payloadElement) throw new Error('history payload missing');
+    return {
+      parsed,
+      payload: JSON.parse(payloadElement.textContent || '{}'),
+    };
+  };
+
+  const detailOrderUrls = (parsed) => {
+    const urls = [];
+    parsed.querySelectorAll('article.flex-table-tr').forEach((article) => {
+      // The list page is authoritative for cancellation. Do not fetch or count
+      // a detail page for an order EasyStore already marks as cancelled.
+      if (article.querySelector('.order-status .label-tag-alert')) return;
+      const link = article.querySelector(
+        'a.h3[href^="/account/orders/"], a[href^="/account/orders/"]'
+      );
+      const href = String(link?.getAttribute('href') || '').trim();
+      if (href && !urls.includes(href)) urls.push(href);
+    });
+    return urls;
+  };
+
+  const historyRequestUrl = (value) => {
+    try {
+      return new URL(String(value || ''), window.location.href);
+    } catch (_error) {
+      return null;
+    }
+  };
+
+  const detailHistoryLines = (url, fallbackEpoch) => fetch(url, {
+    credentials: 'same-origin',
+    cache: 'no-store',
+    headers: { Accept: 'text/html' },
+  })
+    .then((response) => {
+      if (!response.ok) throw new Error(`history detail request failed: ${response.status}`);
+      return response.text();
+    })
+    .then((html) => {
+      const parsed = new DOMParser().parseFromString(html, 'text/html');
+      if (parsed.querySelector('.label-tag-alert')) return [];
+
+      const dateText = parsed.querySelector('.order-date')?.textContent?.trim() || '';
+      const parsedDate = Date.parse(dateText);
+      const epoch = Number.isFinite(parsedDate)
+        ? Math.floor(parsedDate / 1000)
+        : fallbackEpoch;
+      const detailUrl = historyRequestUrl(url);
+      const token = detailUrl
+        ? detailUrl.pathname.split('/').filter(Boolean).pop() || ''
+        : '';
+
+      return Array.from(parsed.querySelectorAll('.product-qty-badge'))
+        .map((badge, index) => {
+          const row = badge.closest('.flex-table-tr');
+          const productLink = badge.closest('a[href*="/products/"]')
+            || row?.querySelector('a[href*="/products/"]');
+          const handle = productHandleFromUrl(productLink?.getAttribute('href'));
+          const units = quantity(badge.textContent, 0);
+          if (!handle || units < 1) return null;
+          return [
+            handle,
+            '',
+            epoch,
+            units,
+            token,
+            '',
+            `detail:${token}:${index}`,
+          ];
+        })
+        .filter(Boolean);
+    });
+
+  const hydrateHistoryDetails = (documentPayload, detailFetched) => {
+    const { parsed, payload } = documentPayload;
+    const existingLines = historyLines(payload);
+    const payloadDiagnostics = payload.diagnostics || {};
+    if (existingLines.length || quantity(payloadDiagnostics.ordersSeen, 0) < 1) {
+      return Promise.resolve(payload);
+    }
+
+    const unseen = detailOrderUrls(parsed).filter((url) => !detailFetched.has(url));
+    const remaining = Math.max(0, HISTORY_MAX_DETAIL_REQUESTS - detailFetched.size);
+    const candidates = unseen.slice(0, remaining);
+    candidates.forEach((url) => detailFetched.add(url));
+    if (!candidates.length) {
+      if (unseen.length) payload.truncated = true;
+      return Promise.resolve(payload);
+    }
+
+    const fallbackEpoch = quantity(payload.renderedAt, Math.floor(Date.now() / 1000));
+    return Promise.all(
+      candidates.map((url) => detailHistoryLines(url, fallbackEpoch).catch(() => []))
+    ).then((results) => {
+      const lines = results.reduce((all, result) => all.concat(result), []);
+      if (lines.length) payload.lines = lines;
+      payload.truncated = Boolean(payload.truncated) || candidates.length < unseen.length;
+      payload.diagnostics = {
+        ...payloadDiagnostics,
+        lineItemsSeen: lines.length,
+        detailPagesSeen: results.filter((result) => result.length > 0).length,
+      };
+      return payload;
+    });
   };
 
   // Loading needs fetch and DOMParser. Without them the limit stays cart-only
@@ -441,7 +564,7 @@
 
   const loadHistory = () => {
     if (historyKnown() || historyState === 'unavailable') return Promise.resolve();
-    if (shopperSignedOut() || !historySupported()) {
+    if (shopperSignedOut() || accountSetupInProgress() || !historySupported()) {
       historyState = 'unavailable';
       return Promise.resolve();
     }
@@ -452,6 +575,11 @@
     // Read fresh history for each page; concurrent callers share historyRequest.
     historyState = 'pending';
 
+    // Detail URLs repeat across EasyStore's status tabs. Scope their identity
+    // and request budget to this one load so duplicates are fetched once while
+    // a back/forward-cache refresh can still read a newly placed order.
+    const detailFetched = new Set();
+
     const fetchPayload = (url) => fetch(url, {
       credentials: 'same-origin',
       cache: 'no-store',
@@ -461,7 +589,8 @@
         if (!response.ok) throw new Error(`history request failed: ${response.status}`);
         return response.text();
       })
-      .then(parseHistoryDocument);
+      .then(parseHistoryDocument)
+      .then((documentPayload) => hydrateHistoryDetails(documentPayload, detailFetched));
 
     const walk = (url, fetched, collected) => {
       if (fetched.size >= HISTORY_MAX_REQUESTS) return Promise.resolve(collected);
@@ -965,15 +1094,6 @@
   // markup; the rest are the fields the theme's login and register templates
   // render. The path is checked too, but never on its own: EasyStore owns those
   // URLs, and the OTP step renders no form to recognise it by.
-  const AUTHENTICATING_MARKUP = [
-    '#otp-form',
-    '.otp-input',
-    'input[name="customer[password]"]',
-    'input[name="customer[email_or_phone]"]',
-    'form[action^="/account/login"]',
-    'form[action^="/account/auth"]',
-  ].join(', ');
-
   const stillAuthenticating = () => (
     onAccountPage() || Boolean(document.querySelector(AUTHENTICATING_MARKUP))
   );
