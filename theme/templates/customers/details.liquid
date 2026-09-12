@@ -121,7 +121,7 @@
                       The fallback keeps a title on screen whatever the store's
                       translations hold.
                     {% endcomment %}
-                    <input type="text" id="DetailEmail" class="address_form" name="details[email]" value="{{customer.cust_email}}" placeholder="{% include 'translation-fallback', translation_key: 'customer.login.email', fallback: 'Email', escape_output: true %}">
+                    <input type="text" id="DetailEmail" class="address_form" name="details[email]" value="{{customer.cust_email}}" placeholder="{% include 'translation-fallback', translation_key: 'customer.login.email', fallback: 'Email', escape_output: true %}" required>
                     <label for="DetailEmail">{% include 'translation-fallback', translation_key: 'customer.login.email', fallback: 'Email', escape_output: true %}</label>
                   </div>
                 </div>
