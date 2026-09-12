@@ -1,1 +1,1 @@
-Hi {{ customer.name }}, thank you for your interest in our products. Unfortunately, your order {{ order.name }} was cancelled.
+Hi {{ customer.name }}, a quick update: your order {{ order.name }} has been cancelled. If you would still like the items, please visit https://cardboard.sg to place a new order. Already reordered? You can ignore this email.
