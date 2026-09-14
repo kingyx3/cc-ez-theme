@@ -1,5 +1,5 @@
 {
-  "subject": "Order {{ order.name }} cancelled",
+  "subject": "A quick update on your order {{ order.name }}",
   "cc_recipients": "",
   "is_enabled": true,
   "template_attributes": {
