@@ -14,7 +14,9 @@
     "MAX_BODY_BYTES": "1048576",
     "SLACK_TIMEOUT_MS": "5000",
     "SLACK_MODE": "workflow",
-    "ALLOWED_TOPICS": "app/uninstall,store/update,product/create,product/update,product/delete,customer/create,customer/delete,order/create,order/update,order/paid,order/cancel,order/partially_paid,fulfillment/create,fulfillment/update,fulfillment/cancel,refund/create,channel/inventory_update"
+    // Slack webhook notifications are paused. Restore the topic list below to ALLOWED_TOPICS to resume:
+    // app/uninstall,store/update,product/create,product/update,product/delete,customer/create,customer/delete,order/create,order/update,order/paid,order/cancel,order/partially_paid,fulfillment/create,fulfillment/update,fulfillment/cancel,refund/create,channel/inventory_update
+    "ALLOWED_TOPICS": "__paused__"
   },
   "durable_objects": {
     "bindings": [
