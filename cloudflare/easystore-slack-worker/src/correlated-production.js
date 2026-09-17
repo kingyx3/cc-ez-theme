@@ -80,6 +80,17 @@ export default {
   },
 
   queue(batch, env, ctx) {
+    if (String(env.ALLOWED_TOPICS ?? "").trim() === "__paused__") {
+      for (const message of batch.messages) {
+        message.ack();
+        console.log(JSON.stringify({
+          event: "slack_notification_paused",
+          queueMessageId: message.id,
+          topic: message.body?.topic ?? message.body?.event?.topic ?? null,
+        }));
+      }
+      return undefined;
+    }
     return productionWorker.queue(batch, env, ctx);
   },
 };
