@@ -290,6 +290,7 @@
       return '[name="' + name + '"]';
     }).join(',');
     var profileFormSelector = '#details_form, #customer-attr-form';
+    var profileRequiredSelector = '#details_form [required], #customer-attr-form [required]';
     var letters;
     try { letters = new RegExp('\\p{L}', 'gu'); }
     catch (error) { letters = /[A-Za-z\u00C0-\u024F\u1E00-\u1EFF]/g; }
@@ -304,7 +305,9 @@
     function validateRequired(field) {
       if (!field || !field.required || !field.validity || !field.closest || !field.closest(profileFormSelector)) return;
       if (labels[field.name]) return;
-      field.setCustomValidity(field.validity.valueMissing ? 'Please complete the "' + labelFor(field) + '" field.' : '');
+      var selectedOption = field.tagName === 'SELECT' && field.options ? field.options[field.selectedIndex] : null;
+      var missing = field.validity.valueMissing || Boolean(selectedOption && selectedOption.disabled);
+      field.setCustomValidity(missing ? 'Please complete the "' + labelFor(field) + '" field.' : '');
     }
 
     function validate(field) {
@@ -326,7 +329,7 @@
 
     function init() {
       Array.prototype.forEach.call(document.querySelectorAll(selector), validate);
-      Array.prototype.forEach.call(document.querySelectorAll(profileFormSelector + ' [required]'), validateRequired);
+      Array.prototype.forEach.call(document.querySelectorAll(profileRequiredSelector), validateRequired);
       ['focusin', 'input', 'change', 'invalid'].forEach(function (type) {
         document.addEventListener(type, function (event) { validate(event.target); }, true);
       });
