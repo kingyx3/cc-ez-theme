@@ -289,13 +289,30 @@
     var selector = Object.keys(labels).map(function (name) {
       return '[name="' + name + '"]';
     }).join(',');
+    var profileFormSelector = '#details_form, #customer-attr-form';
     var letters;
     try { letters = new RegExp('\\p{L}', 'gu'); }
     catch (error) { letters = /[A-Za-z\u00C0-\u024F\u1E00-\u1EFF]/g; }
 
+    function labelFor(field) {
+      if (!field) return 'required field';
+      var label = field.id ? document.querySelector('label[for="' + field.id + '"]') : null;
+      var text = String((label && label.textContent) || field.getAttribute('placeholder') || '').trim();
+      return text || 'required field';
+    }
+
+    function validateRequired(field) {
+      if (!field || !field.required || !field.validity || !field.closest || !field.closest(profileFormSelector)) return;
+      if (labels[field.name]) return;
+      field.setCustomValidity(field.validity.valueMissing ? 'Please complete the "' + labelFor(field) + '" field.' : '');
+    }
+
     function validate(field) {
       var label = field && labels[field.name];
-      if (!label) return;
+      if (!label) {
+        validateRequired(field);
+        return;
+      }
       var count = (String(field.value || '').match(letters) || []).length;
       field.required = true;
       field.minLength = 2;
@@ -304,11 +321,12 @@
 
     function validateForm(form) {
       if (!form) return;
-      Array.prototype.forEach.call(form.querySelectorAll(selector), validate);
+      Array.prototype.forEach.call(form.querySelectorAll(selector + ', [required]'), validate);
     }
 
     function init() {
       Array.prototype.forEach.call(document.querySelectorAll(selector), validate);
+      Array.prototype.forEach.call(document.querySelectorAll(profileFormSelector + ' [required]'), validateRequired);
       ['focusin', 'input', 'change', 'invalid'].forEach(function (type) {
         document.addEventListener(type, function (event) { validate(event.target); }, true);
       });
