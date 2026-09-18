@@ -52,6 +52,14 @@ class AccountRequiredFieldCopyTests(unittest.TestCase):
         self.assertIn("field.setAttribute('aria-invalid', 'true');", source)
         self.assertIn("if (first && first.focus) first.focus();", source)
 
+    def test_validation_summary_deduplicates_controls_with_the_same_label(self) -> None:
+        source = BOOT.read_text(encoding="utf-8")
+
+        self.assertIn("var seenLabels = {};", source)
+        self.assertIn("if (labelKey && seenLabels[labelKey]) return;", source)
+        self.assertIn("if (labelKey) seenLabels[labelKey] = true;", source)
+        self.assertIn("heading.textContent = list.children.length === 1", source)
+
     def test_account_page_reuses_its_existing_error_box(self) -> None:
         source = BOOT.read_text(encoding="utf-8")
 
