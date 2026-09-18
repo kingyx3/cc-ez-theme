@@ -35,6 +35,30 @@ class RequiredAccountEmailTests(unittest.TestCase):
         self.assertIn("String(field.type || '').toLowerCase() !== 'password'", source)
         self.assertIn("invalid\\s+email\\s+address\\s+format", source)
 
+    def test_server_errors_share_the_profile_validation_summary(self) -> None:
+        source = RUNTIME.read_text(encoding="utf-8")
+
+        self.assertIn("const ensureSummaryContainer = (form) =>", source)
+        self.assertIn("data-profile-validation-summary", source)
+        self.assertIn("data-profile-server-note", source)
+        self.assertIn("data-profile-validation-note", source)
+        self.assertIn("renderServerErrorsInSummary(form)", source)
+
+    def test_correcting_email_clears_stale_server_format_error(self) -> None:
+        source = RUNTIME.read_text(encoding="utf-8")
+
+        self.assertIn("const clearResolvedEmailServerError = (form, field) =>", source)
+        self.assertIn("invalid\\s+email\\s+address\\s+format", source)
+        self.assertIn("clearResolvedEmailServerError(form, email);", source)
+
+    def test_back_link_is_separated_from_account_heading(self) -> None:
+        source = RUNTIME.read_text(encoding="utf-8")
+
+        self.assertIn("const tidyBackLink = (form) =>", source)
+        self.assertIn("wrapper.insertBefore(back, heading);", source)
+        self.assertIn("back.style.display = 'inline-block';", source)
+        self.assertIn("heading.style.display = 'block';", source)
+
     def test_runtime_and_editor_helpers_stay_identical(self) -> None:
         self.assertEqual(
             RUNTIME.read_text(encoding="utf-8"),
