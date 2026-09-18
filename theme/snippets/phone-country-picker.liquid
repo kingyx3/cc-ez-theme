@@ -1,9 +1,13 @@
 {% comment %}
-  Safe fallback for stores where identity normalization is enabled.
-  The regular phone input remains visible in the customer details form.
+  Keep EasyStore's ISO country_code field as the no-JS fallback, then enhance it
+  into a compact country-code selector beside the regular phone field. Known
+  countries may use a local number; Other requires a full + international number.
 {% endcomment %}
 <input
   type="hidden"
   name="{{ country_code_field_name | escape }}"
   value="{{ default_country_code | escape }}"
+  data-phone-country-code
+  data-phone-input-id="{{ phone_input_id | escape }}"
 >
+<script src="{{ 'account-phone-input.js' | asset_url }}" defer="defer"></script>
