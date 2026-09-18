@@ -39,6 +39,14 @@ class AccountRequiredFieldCopyTests(unittest.TestCase):
         self.assertIn("String(field.value || '').trim() === ''", source)
         self.assertIn("if (field.disabled)", source)
 
+    def test_invalid_email_is_blocked_before_account_details_post(self) -> None:
+        source = BOOT.read_text(encoding="utf-8")
+
+        self.assertIn("emailField.setAttribute('type', 'email');", source)
+        self.assertIn("field.name === 'details[email]'", source)
+        self.assertIn("field.validity.typeMismatch", source)
+        self.assertIn("Please enter a valid email address.", source)
+
     def test_profile_forms_render_an_in_page_validation_summary_before_submit(self) -> None:
         source = BOOT.read_text(encoding="utf-8")
 
