@@ -211,28 +211,44 @@
     if (heading) heading.textContent = remaining === 1 ? 'Please fix this field:' : 'Please fix these fields:';
   };
 
-  const tidyBackLink = (form) => {
-    const heading = form.querySelector('.customer.account h1');
-    if (!heading || !heading.parentElement) return;
+  const removeBackLink = (form) => {
+    const back = form.querySelector('.customer.account a[href="/account"]');
+    if (back) back.remove();
+  };
 
-    const wrapper = heading.parentElement;
-    const back = Array.from(wrapper.children).find((element) => (
-      element.tagName === 'A' && String(element.getAttribute('href') || '') === '/account'
-    ));
-    if (!back) return;
+  const alignActionButtons = (form) => {
+    const cancel = form.querySelector('button[data-theme-action="history-back"]');
+    const submit = form.querySelector('p.text-right > input[type="submit"].button:not(.button--small)');
+    if (!cancel || !submit) return;
 
-    wrapper.insertBefore(back, heading);
-    back.style.display = 'inline-block';
-    back.style.marginBottom = '0.75rem';
-    heading.style.display = 'block';
-    heading.style.marginTop = '0';
+    cancel.setAttribute('data-account-details-action', '');
+    submit.setAttribute('data-account-details-action', '');
+
+    if (document.getElementById('AccountDetailsActionStyles')) return;
+    const style = document.createElement('style');
+    style.id = 'AccountDetailsActionStyles';
+    style.textContent = [
+      '#details_form [data-account-details-action] {',
+      '  min-width: 12rem !important;',
+      '  min-height: 4.4rem !important;',
+      '  padding: 0 2.4rem !important;',
+      '  border-radius: 1rem !important;',
+      '  box-sizing: border-box;',
+      '}',
+      '#details_form [data-account-details-action]::before,',
+      '#details_form [data-account-details-action]::after {',
+      '  border-radius: inherit !important;',
+      '}',
+    ].join('\n');
+    document.head.appendChild(style);
   };
 
   const start = () => {
     const form = document.querySelector(FORM_SELECTOR);
     if (!form) return;
 
-    tidyBackLink(form);
+    removeBackLink(form);
+    alignActionButtons(form);
 
     const email = form.querySelector(EMAIL_SELECTOR);
     if (email) {
