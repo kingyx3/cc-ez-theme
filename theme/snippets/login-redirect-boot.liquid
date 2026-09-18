@@ -420,13 +420,19 @@
       note.setAttribute('data-profile-validation-note', '');
 
       var heading = document.createElement('strong');
-      heading.textContent = fields.length === 1 ? 'Please fix this field:' : 'Please fix these fields:';
       note.appendChild(heading);
 
       var list = document.createElement('ul');
+      var seenLabels = {};
       fields.forEach(function (field) {
-        var item = document.createElement('li');
+        field.setAttribute('aria-invalid', 'true');
+
         var fieldLabel = labelFor(field);
+        var labelKey = fieldLabel ? fieldLabel.toLowerCase() : '';
+        if (labelKey && seenLabels[labelKey]) return;
+        if (labelKey) seenLabels[labelKey] = true;
+
+        var item = document.createElement('li');
         var message = String(field.validationMessage || '').trim();
         if (!message) message = fieldLabel ? 'Please check the "' + fieldLabel + '" field.' : 'Please check this field.';
         if (fieldLabel && message.toLowerCase().indexOf(fieldLabel.toLowerCase()) === -1) {
@@ -434,8 +440,8 @@
         }
         item.textContent = message;
         list.appendChild(item);
-        field.setAttribute('aria-invalid', 'true');
       });
+      heading.textContent = list.children.length === 1 ? 'Please fix this field:' : 'Please fix these fields:';
       note.appendChild(list);
       container.replaceChildren(note);
 
