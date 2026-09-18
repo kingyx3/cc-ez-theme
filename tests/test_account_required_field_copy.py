@@ -14,10 +14,23 @@ class AccountRequiredFieldCopyTests(unittest.TestCase):
 
         self.assertIn("var profileFormSelector = '#details_form, #customer-attr-form';", source)
         self.assertIn("function labelFor(field)", source)
-        self.assertIn(
-            "'Please complete the \"' + labelFor(field) + '\" field.'",
-            source,
-        )
+        self.assertIn("'details[gender]': 'Gender'", source)
+        self.assertIn("'details[birthdate]': 'Date of Birth'", source)
+        self.assertIn("'details[email]': 'Email'", source)
+        self.assertIn("fieldLabel ? 'Please complete the \"' + fieldLabel + '\" field.'", source)
+        self.assertIn(": 'Please complete this field.'", source)
+        self.assertNotIn("return 'required field';", source)
+
+    def test_label_lookup_uses_rendered_controls_before_generic_copy(self) -> None:
+        source = BOOT.read_text(encoding="utf-8")
+
+        self.assertIn("field.labels && field.labels.length", source)
+        self.assertIn("field.closest('.field')", source)
+        self.assertIn("field.getAttribute('aria-label')", source)
+        self.assertIn("field.getAttribute('placeholder')", source)
+        self.assertIn("field.options[field.selectedIndex]", source)
+        self.assertIn("optionText.replace(/^select\\s+/i, '')", source)
+        self.assertIn("var match = name.match(/\\[([^\\[\\]]+)\\]$/);", source)
 
     def test_required_dropdown_placeholder_and_whitespace_are_missing(self) -> None:
         source = BOOT.read_text(encoding="utf-8")
