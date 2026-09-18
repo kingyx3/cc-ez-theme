@@ -50,6 +50,7 @@ class InternationalAccountPhoneTests(unittest.TestCase):
         self.assertIn("const loadAccountPhoneInput = () =>", source)
         self.assertIn("account-details-validation.js", source)
         self.assertIn("account-phone-input.js", source)
+        self.assertIn("source.pathname = source.pathname.replace", source)
         self.assertIn("data-account-phone-input-loader", source)
         self.assertIn("document.head.appendChild(script);", source)
 
