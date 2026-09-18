@@ -356,6 +356,10 @@
       var textLike = field.tagName !== 'SELECT' && !/^(checkbox|radio)$/i.test(String(field.type || ''));
       var missing = field.validity.valueMissing || Boolean(selectedOption && selectedOption.disabled) || (textLike && String(field.value || '').trim() === '');
       var fieldLabel = labelFor(field);
+      if (field.name === 'details[email]' && !missing && field.validity.typeMismatch) {
+        field.setCustomValidity('Please enter a valid email address.');
+        return;
+      }
       field.setCustomValidity(
         missing
           ? (fieldLabel ? 'Please complete the "' + fieldLabel + '" field.' : 'Please complete this field.')
@@ -457,6 +461,8 @@
       Array.prototype.forEach.call(document.querySelectorAll(profileFormSelector), function (form) {
         form.noValidate = true;
       });
+      var emailField = document.querySelector('#details_form [name="details[email]"]');
+      if (emailField) emailField.setAttribute('type', 'email');
       Array.prototype.forEach.call(document.querySelectorAll(selector), validate);
       Array.prototype.forEach.call(document.querySelectorAll(profileRequiredSelector), validateRequired);
 
