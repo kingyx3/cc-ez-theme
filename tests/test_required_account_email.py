@@ -6,8 +6,9 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 DETAILS = ROOT / "theme" / "templates" / "customers" / "details.liquid"
-RUNTIME = ROOT / "theme" / "assets" / "account-recovery-copy.js"
-EDITOR = ROOT / "theme" / "editor_assets" / "account-recovery-copy.js"
+LAYOUT = ROOT / "theme" / "layout" / "theme.liquid"
+RUNTIME = ROOT / "theme" / "assets" / "account-details-validation.js"
+EDITOR = ROOT / "theme" / "editor_assets" / "account-details-validation.js"
 
 
 class RequiredAccountEmailTests(unittest.TestCase):
@@ -16,6 +17,10 @@ class RequiredAccountEmailTests(unittest.TestCase):
         match = re.search(r'<input[^>]*id="DetailEmail"[^>]*>', source)
         self.assertIsNotNone(match, "account details email input is missing")
         self.assertRegex(match.group(0), r"\brequired\b")
+
+    def test_account_details_validation_helper_is_loaded(self) -> None:
+        source = LAYOUT.read_text(encoding="utf-8")
+        self.assertIn("'account-details-validation.js' | asset_url", source)
 
     def test_client_validation_catches_easystore_leading_punctuation_case(self) -> None:
         source = RUNTIME.read_text(encoding="utf-8")
