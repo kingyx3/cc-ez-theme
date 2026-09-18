@@ -1,7 +1,7 @@
 {% comment %}
   Keep EasyStore's ISO country_code field as the no-JS fallback, then enhance it
   into a compact country-code selector beside the regular phone field. Known
-  countries may use a local number; Other requires a full + international number.
+  countries may use a local number; Other uses a separate numeric calling code.
 {% endcomment %}
 <input
   type="hidden"
@@ -10,4 +10,3 @@
   data-phone-country-code
   data-phone-input-id="{{ phone_input_id | escape }}"
 >
-<script src="{{ 'account-phone-input.js' | asset_url }}" defer="defer"></script>
