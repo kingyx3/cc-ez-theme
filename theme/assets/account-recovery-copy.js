@@ -97,6 +97,10 @@
  * net for server-only rules, remember non-password profile fields immediately
  * before a valid POST and restore them if EasyStore renders the form with an
  * error response.
+ *
+ * Server errors are normalized into the same validation summary the profile
+ * validator already uses. That prevents a stale platform error from sitting in
+ * a second box under Account Details after the shopper has corrected the field.
  */
 (() => {
   'use strict';
@@ -108,6 +112,7 @@
   const DRAFT_MAX_AGE_MS = 10 * 60 * 1000;
   const EMAIL_MESSAGE = 'Please enter a valid email address.';
   const EMAIL_PATTERN = '[A-Za-z0-9](?:[A-Za-z0-9._%+\\-]*[A-Za-z0-9])?@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+';
+  const EMAIL_SERVER_ERROR = /invalid\s+email\s+address\s+format/i;
 
   const strictEmail = (value) => {
     const email = String(value || '').trim();
@@ -188,10 +193,17 @@
     }
   };
 
-  const hasServerError = (form) => {
-    if (form.querySelector('.errors, .error, [data-form-error], [role="alert"]')) return true;
-    return /invalid\s+email\s+address\s+format/i.test(form.textContent || '');
-  };
+  const rawServerErrorNodes = (form) => Array.from(
+    form.querySelectorAll('.errors, .error, [data-form-error]'),
+  ).filter((node) => (
+    !node.closest('[data-profile-validation-summary]')
+    && !node.hasAttribute('data-profile-validation-note')
+  ));
+
+  const hasServerError = (form) => (
+    rawServerErrorNodes(form).length > 0
+    || EMAIL_SERVER_ERROR.test(form.textContent || '')
+  );
 
   const restoreDraft = (form) => {
     const values = readDraft();
@@ -209,9 +221,108 @@
     clearDraft();
   };
 
+  const ensureSummaryContainer = (form) => {
+    const existing = form.querySelector('[data-profile-validation-summary]');
+    if (existing) return existing;
+
+    const container = document.createElement('div');
+    container.setAttribute('data-profile-validation-summary', '');
+    const wrapper = form.querySelector('.customer.account');
+    if (wrapper) wrapper.insertBefore(container, wrapper.firstChild);
+    else form.insertBefore(container, form.firstChild);
+    return container;
+  };
+
+  const collectServerErrors = (form) => {
+    const nodes = rawServerErrorNodes(form);
+    const messages = [];
+    const seen = {};
+
+    nodes.forEach((node) => {
+      let items = Array.from(node.querySelectorAll('li'));
+      if (!items.length) items = [node];
+      items.forEach((item) => {
+        const text = String(item.textContent || '').trim();
+        const key = text.toLowerCase();
+        if (!text || seen[key]) return;
+        seen[key] = true;
+        messages.push(text);
+      });
+    });
+
+    return { nodes, messages };
+  };
+
+  const renderServerErrorsInSummary = (form) => {
+    const server = collectServerErrors(form);
+    if (!server.messages.length) return;
+
+    server.nodes.forEach((node) => node.remove());
+
+    const note = document.createElement('div');
+    note.className = 'errors note';
+    note.setAttribute('role', 'alert');
+    note.setAttribute('aria-live', 'assertive');
+    note.setAttribute('data-profile-validation-note', '');
+    note.setAttribute('data-profile-server-note', '');
+
+    const heading = document.createElement('strong');
+    heading.textContent = server.messages.length === 1 ? 'Please fix this field:' : 'Please fix these fields:';
+    note.appendChild(heading);
+
+    const list = document.createElement('ul');
+    server.messages.forEach((message) => {
+      const item = document.createElement('li');
+      item.textContent = message;
+      list.appendChild(item);
+    });
+    note.appendChild(list);
+
+    ensureSummaryContainer(form).replaceChildren(note);
+  };
+
+  const clearResolvedEmailServerError = (form, field) => {
+    if (!field || !strictEmail(field.value)) return;
+
+    const note = form.querySelector('[data-profile-server-note]');
+    if (!note) return;
+
+    Array.from(note.querySelectorAll('li')).forEach((item) => {
+      if (EMAIL_SERVER_ERROR.test(item.textContent || '')) item.remove();
+    });
+
+    const remaining = note.querySelectorAll('li').length;
+    if (!remaining) {
+      note.remove();
+      return;
+    }
+
+    const heading = note.querySelector('strong');
+    if (heading) heading.textContent = remaining === 1 ? 'Please fix this field:' : 'Please fix these fields:';
+  };
+
+  const tidyBackLink = (form) => {
+    const heading = form.querySelector('.customer.account h1');
+    if (!heading || !heading.parentElement) return;
+
+    const wrapper = heading.parentElement;
+    const back = Array.from(wrapper.children).find((element) => (
+      element.tagName === 'A' && String(element.getAttribute('href') || '') === '/account'
+    ));
+    if (!back) return;
+
+    wrapper.insertBefore(back, heading);
+    back.style.display = 'inline-block';
+    back.style.marginBottom = '0.75rem';
+    heading.style.display = 'block';
+    heading.style.marginTop = '0';
+  };
+
   const start = () => {
     const form = document.querySelector(FORM_SELECTOR);
     if (!form) return;
+
+    tidyBackLink(form);
 
     const email = form.querySelector(EMAIL_SELECTOR);
     if (email) {
@@ -219,17 +330,25 @@
       email.setAttribute('pattern', EMAIL_PATTERN);
       email.setAttribute('title', EMAIL_MESSAGE);
       validateEmail(email);
-      ['input', 'change', 'blur'].forEach((type) => {
-        email.addEventListener(type, () => validateEmail(email));
+
+      ['input', 'change'].forEach((type) => {
+        email.addEventListener(type, () => {
+          validateEmail(email);
+          clearResolvedEmailServerError(form, email);
+        });
       });
+      email.addEventListener('blur', () => validateEmail(email));
     }
 
+    const serverRejectedSubmission = hasServerError(form);
     if (document.getElementById('UpdateSuccess')) {
       clearDraft();
-    } else if (hasServerError(form)) {
+    } else if (serverRejectedSubmission) {
       restoreDraft(form);
       validateEmail(email);
     }
+
+    if (serverRejectedSubmission) renderServerErrorsInSummary(form);
 
     form.addEventListener('submit', () => {
       validateEmail(email);
