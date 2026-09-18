@@ -56,13 +56,22 @@ class RequiredAccountEmailTests(unittest.TestCase):
         self.assertIn("invalid\\s+email\\s+address\\s+format", source)
         self.assertIn("clearResolvedEmailServerError(form, email);", source)
 
-    def test_back_link_is_separated_from_account_heading(self) -> None:
+    def test_account_details_back_link_is_removed(self) -> None:
         source = RUNTIME.read_text(encoding="utf-8")
 
-        self.assertIn("const tidyBackLink = (form) =>", source)
-        self.assertIn("wrapper.insertBefore(back, heading);", source)
-        self.assertIn("back.style.display = 'inline-block';", source)
-        self.assertIn("heading.style.display = 'block';", source)
+        self.assertIn("const removeBackLink = (form) =>", source)
+        self.assertIn("a[href=\"/account\"]", source)
+        self.assertIn("if (back) back.remove();", source)
+
+    def test_cancel_and_submit_share_the_same_shape(self) -> None:
+        source = RUNTIME.read_text(encoding="utf-8")
+
+        self.assertIn("const alignActionButtons = (form) =>", source)
+        self.assertIn("data-account-details-action", source)
+        self.assertIn("min-width: 12rem !important;", source)
+        self.assertIn("min-height: 4.4rem !important;", source)
+        self.assertIn("border-radius: 1rem !important;", source)
+        self.assertIn("border-radius: inherit !important;", source)
 
     def test_runtime_and_editor_helpers_stay_identical(self) -> None:
         self.assertEqual(
