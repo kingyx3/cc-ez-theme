@@ -286,16 +286,93 @@
       'details[first_name]': 'first name',
       'details[last_name]': 'last name'
     };
+    var fieldLabels = {
+      'customer[first_name]': 'First name',
+      'customer[last_name]': 'Last name',
+      'details[first_name]': 'First name',
+      'details[last_name]': 'Last name',
+      'details[gender]': 'Gender',
+      'details[birthdate]': 'Date of Birth',
+      'details[email]': 'Email',
+      'details[phone]': 'Phone',
+      'details[country_code]': 'Country code'
+    };
     var selector = Object.keys(labels).map(function (name) {
       return '[name="' + name + '"]';
     }).join(',');
+    var profileFormSelector = '#details_form, #customer-attr-form';
+    var profileRequiredSelector = '#details_form [required], #customer-attr-form [required]';
     var letters;
     try { letters = new RegExp('\\p{L}', 'gu'); }
     catch (error) { letters = /[A-Za-z\u00C0-\u024F\u1E00-\u1EFF]/g; }
 
+    function labelFor(field) {
+      if (!field) return '';
+
+      var known = fieldLabels[field.name];
+      if (known) return known;
+
+      var label = field.labels && field.labels.length ? field.labels[0] : null;
+      if (!label && field.closest) {
+        var fieldWrapper = field.closest('.field');
+        if (fieldWrapper) label = fieldWrapper.querySelector('label');
+      }
+
+      var text = String(
+        (label && label.textContent) ||
+        field.getAttribute('aria-label') ||
+        field.getAttribute('placeholder') ||
+        ''
+      ).trim();
+      if (text) return text;
+
+      if (field.tagName === 'SELECT' && field.options && field.options.length) {
+        var selected = field.options[field.selectedIndex];
+        var optionText = String((selected && selected.textContent) || field.options[0].textContent || '').trim();
+        optionText = optionText.replace(/^select\s+/i, '').trim();
+        if (optionText) return optionText;
+      }
+
+      var name = String(field.name || '');
+      var match = name.match(/\[([^\[\]]+)\]$/);
+      var key = match ? match[1] : name;
+      if (key && !/^\d+$/.test(key)) {
+        return key
+          .replace(/[_-]+/g, ' ')
+          .replace(/\b\w/g, function (character) { return character.toUpperCase(); });
+      }
+
+      return '';
+    }
+
+    function validateRequired(field) {
+      if (!field || !field.required || !field.validity || !field.closest || !field.closest(profileFormSelector)) return;
+      if (labels[field.name]) return;
+      if (field.disabled) {
+        field.setCustomValidity('');
+        return;
+      }
+      var selectedOption = field.tagName === 'SELECT' && field.options ? field.options[field.selectedIndex] : null;
+      var textLike = field.tagName !== 'SELECT' && !/^(checkbox|radio)$/i.test(String(field.type || ''));
+      var missing = field.validity.valueMissing || Boolean(selectedOption && selectedOption.disabled) || (textLike && String(field.value || '').trim() === '');
+      var fieldLabel = labelFor(field);
+      if (field.name === 'details[email]' && !missing && field.validity.typeMismatch) {
+        field.setCustomValidity('Please enter a valid email address.');
+        return;
+      }
+      field.setCustomValidity(
+        missing
+          ? (fieldLabel ? 'Please complete the "' + fieldLabel + '" field.' : 'Please complete this field.')
+          : ''
+      );
+    }
+
     function validate(field) {
       var label = field && labels[field.name];
-      if (!label) return;
+      if (!label) {
+        validateRequired(field);
+        return;
+      }
       var count = (String(field.value || '').match(letters) || []).length;
       field.required = true;
       field.minLength = 2;
@@ -304,20 +381,123 @@
 
     function validateForm(form) {
       if (!form) return;
-      Array.prototype.forEach.call(form.querySelectorAll(selector), validate);
+      Array.prototype.forEach.call(form.querySelectorAll(selector + ', [required]'), validate);
+    }
+
+    function invalidFields(form) {
+      if (!form || !form.elements) return [];
+      return Array.prototype.filter.call(form.elements, function (field) {
+        return Boolean(field && field.willValidate && field.validity && !field.validity.valid);
+      });
+    }
+
+    function summaryContainer(form) {
+      if (!form) return null;
+      if (form.id === 'customer-attr-form') return document.getElementById('error-content');
+
+      var existing = form.querySelector('[data-profile-validation-summary]');
+      if (existing) return existing;
+
+      var container = document.createElement('div');
+      container.setAttribute('data-profile-validation-summary', '');
+      var wrapper = form.querySelector('.customer.account');
+      if (wrapper) wrapper.insertBefore(container, wrapper.firstChild);
+      else form.insertBefore(container, form.firstChild);
+      return container;
+    }
+
+    function clearValidationSummary(form) {
+      var container = summaryContainer(form);
+      if (!container) return;
+      var note = container.querySelector('[data-profile-validation-note]');
+      if (note) note.remove();
+    }
+
+    function showValidationSummary(form, fields) {
+      var container = summaryContainer(form);
+      if (!container || !fields.length) return;
+
+      var note = document.createElement('div');
+      note.className = 'errors note';
+      note.setAttribute('role', 'alert');
+      note.setAttribute('aria-live', 'assertive');
+      note.setAttribute('data-profile-validation-note', '');
+
+      var heading = document.createElement('strong');
+      note.appendChild(heading);
+
+      var list = document.createElement('ul');
+      var seenLabels = {};
+      fields.forEach(function (field) {
+        field.setAttribute('aria-invalid', 'true');
+
+        var fieldLabel = labelFor(field);
+        var labelKey = fieldLabel ? fieldLabel.toLowerCase() : '';
+        if (labelKey && seenLabels[labelKey]) return;
+        if (labelKey) seenLabels[labelKey] = true;
+
+        var item = document.createElement('li');
+        var message = String(field.validationMessage || '').trim();
+        if (!message) message = fieldLabel ? 'Please check the "' + fieldLabel + '" field.' : 'Please check this field.';
+        if (fieldLabel && message.toLowerCase().indexOf(fieldLabel.toLowerCase()) === -1) {
+          message = fieldLabel + ': ' + message;
+        }
+        item.textContent = message;
+        list.appendChild(item);
+      });
+      heading.textContent = list.children.length === 1 ? 'Please fix this field:' : 'Please fix these fields:';
+      note.appendChild(list);
+      container.replaceChildren(note);
+
+      var first = fields[0];
+      if (first && first.focus) first.focus();
+    }
+
+    function isProfileForm(form) {
+      return Boolean(form && form.matches && form.matches(profileFormSelector));
     }
 
     function init() {
-      Array.prototype.forEach.call(document.querySelectorAll(selector), validate);
-      ['focusin', 'input', 'change', 'invalid'].forEach(function (type) {
-        document.addEventListener(type, function (event) { validate(event.target); }, true);
+      Array.prototype.forEach.call(document.querySelectorAll(profileFormSelector), function (form) {
+        form.noValidate = true;
       });
+      var emailField = document.querySelector('#details_form [name="details[email]"]');
+      if (emailField) emailField.setAttribute('type', 'email');
+      Array.prototype.forEach.call(document.querySelectorAll(selector), validate);
+      Array.prototype.forEach.call(document.querySelectorAll(profileRequiredSelector), validateRequired);
+
+      ['focusin', 'input', 'change', 'invalid'].forEach(function (type) {
+        document.addEventListener(type, function (event) {
+          validate(event.target);
+          if ((type === 'input' || type === 'change') && event.target && event.target.removeAttribute && event.target.validity && event.target.validity.valid) {
+            event.target.removeAttribute('aria-invalid');
+          }
+        }, true);
+      });
+
       document.addEventListener('click', function (event) {
         var button = event.target && event.target.closest ? event.target.closest('button, input[type="submit"]') : null;
         if (button && button.type === 'submit') validateForm(button.form);
       }, true);
+
       document.addEventListener('keydown', function (event) {
         if (event.key === 'Enter' && event.target && event.target.form) validateForm(event.target.form);
+      }, true);
+
+      document.addEventListener('submit', function (event) {
+        var form = event.target;
+        if (!isProfileForm(form)) return;
+
+        validateForm(form);
+        var invalid = invalidFields(form);
+        if (!invalid.length) {
+          clearValidationSummary(form);
+          return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+        showValidationSummary(form, invalid);
       }, true);
     }
 
