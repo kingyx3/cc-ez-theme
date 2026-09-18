@@ -15,6 +15,32 @@
 (() => {
   'use strict';
 
+  const loadAccountPhoneInput = () => {
+    if (window.__ccAccountPhoneInputLoaded) return;
+    if (document.querySelector('script[data-account-phone-input-loader]')) return;
+
+    const ownScript = Array.from(document.scripts).find((script) => (
+      /account-details-validation\.js(?:[?#]|$)/.test(String(script.src || ''))
+    ));
+    if (!ownScript || !ownScript.src) return;
+
+    let source;
+    try {
+      source = new URL(ownScript.src, window.location.href);
+    } catch (_error) {
+      return;
+    }
+    source.pathname = source.pathname.replace(/account-details-validation\.js$/, 'account-phone-input.js');
+
+    const script = document.createElement('script');
+    script.src = source.toString();
+    script.defer = true;
+    script.setAttribute('data-account-phone-input-loader', '');
+    document.head.appendChild(script);
+  };
+
+  loadAccountPhoneInput();
+
   const FORM_SELECTOR = '#details_form';
   const EMAIL_SELECTOR = '[name="details[email]"]';
   const DETAIL_FIELD_SELECTOR = 'input[name^="details["], select[name^="details["], textarea[name^="details["]';
