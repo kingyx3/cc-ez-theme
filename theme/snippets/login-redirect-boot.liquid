@@ -286,6 +286,17 @@
       'details[first_name]': 'first name',
       'details[last_name]': 'last name'
     };
+    var fieldLabels = {
+      'customer[first_name]': 'First name',
+      'customer[last_name]': 'Last name',
+      'details[first_name]': 'First name',
+      'details[last_name]': 'Last name',
+      'details[gender]': 'Gender',
+      'details[birthdate]': 'Date of Birth',
+      'details[email]': 'Email',
+      'details[phone]': 'Phone',
+      'details[country_code]': 'Country code'
+    };
     var selector = Object.keys(labels).map(function (name) {
       return '[name="' + name + '"]';
     }).join(',');
@@ -296,10 +307,42 @@
     catch (error) { letters = /[A-Za-z\u00C0-\u024F\u1E00-\u1EFF]/g; }
 
     function labelFor(field) {
-      if (!field) return 'required field';
-      var label = field.id ? document.querySelector('label[for="' + field.id + '"]') : null;
-      var text = String((label && label.textContent) || field.getAttribute('placeholder') || '').trim();
-      return text || 'required field';
+      if (!field) return '';
+
+      var known = fieldLabels[field.name];
+      if (known) return known;
+
+      var label = field.labels && field.labels.length ? field.labels[0] : null;
+      if (!label && field.closest) {
+        var fieldWrapper = field.closest('.field');
+        if (fieldWrapper) label = fieldWrapper.querySelector('label');
+      }
+
+      var text = String(
+        (label && label.textContent) ||
+        field.getAttribute('aria-label') ||
+        field.getAttribute('placeholder') ||
+        ''
+      ).trim();
+      if (text) return text;
+
+      if (field.tagName === 'SELECT' && field.options && field.options.length) {
+        var selected = field.options[field.selectedIndex];
+        var optionText = String((selected && selected.textContent) || field.options[0].textContent || '').trim();
+        optionText = optionText.replace(/^select\s+/i, '').trim();
+        if (optionText) return optionText;
+      }
+
+      var name = String(field.name || '');
+      var match = name.match(/\[([^\[\]]+)\]$/);
+      var key = match ? match[1] : name;
+      if (key && !/^\d+$/.test(key)) {
+        return key
+          .replace(/[_-]+/g, ' ')
+          .replace(/\b\w/g, function (character) { return character.toUpperCase(); });
+      }
+
+      return '';
     }
 
     function validateRequired(field) {
@@ -312,7 +355,12 @@
       var selectedOption = field.tagName === 'SELECT' && field.options ? field.options[field.selectedIndex] : null;
       var textLike = field.tagName !== 'SELECT' && !/^(checkbox|radio)$/i.test(String(field.type || ''));
       var missing = field.validity.valueMissing || Boolean(selectedOption && selectedOption.disabled) || (textLike && String(field.value || '').trim() === '');
-      field.setCustomValidity(missing ? 'Please complete the "' + labelFor(field) + '" field.' : '');
+      var fieldLabel = labelFor(field);
+      field.setCustomValidity(
+        missing
+          ? (fieldLabel ? 'Please complete the "' + fieldLabel + '" field.' : 'Please complete this field.')
+          : ''
+      );
     }
 
     function validate(field) {
@@ -380,7 +428,7 @@
         var item = document.createElement('li');
         var fieldLabel = labelFor(field);
         var message = String(field.validationMessage || '').trim();
-        if (!message) message = 'Please check this field.';
+        if (!message) message = fieldLabel ? 'Please check the "' + fieldLabel + '" field.' : 'Please check this field.';
         if (fieldLabel && message.toLowerCase().indexOf(fieldLabel.toLowerCase()) === -1) {
           message = fieldLabel + ': ' + message;
         }
