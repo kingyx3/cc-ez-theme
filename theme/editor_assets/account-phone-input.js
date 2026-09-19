@@ -132,18 +132,20 @@
     const style = doc.createElement('style');
     style.id = STYLE_ID;
     style.textContent = [
-      '.account-phone-input { display:grid; grid-template-columns:minmax(11rem,14rem) minmax(0,1fr); gap:1rem; align-items:start; width:100%; }',
+      '.account-phone-input { display:grid; grid-template-columns:minmax(11rem,14rem) minmax(0,1fr); gap:1rem; align-items:center; width:100%; }',
       '.account-phone-input--other { grid-template-columns:minmax(11rem,14rem) minmax(8rem,10rem) minmax(0,1fr); }',
-      '.account-phone-input > .field { margin-top:0; margin-bottom:0; }',
+      '.account-phone-input > .field, .account-phone-input > .account-phone-input__number-shell { margin:0!important; padding:0!important; align-self:center; }',
       '.account-phone-input__number-shell { min-width:0; }',
-      '.account-phone-input__number-shell > input { width:100%; box-sizing:border-box; }',
-      '.account-phone-input__country select, .account-phone-input__dial input { width:100%; box-sizing:border-box; }',
-      '.account-phone-input__country select { min-height:4.4rem; border:1px solid currentColor; border-radius:999px; padding:0 3.2rem 0 1.6rem; background:transparent; color:inherit; font:inherit; }',
-      '.account-phone-input--auth { align-items:stretch; }',
-      '.account-phone-input--auth > .field, .account-phone-input--auth > .account-phone-input__number-shell { margin:0; align-self:stretch; }',
-      '.account-phone-input--auth .account-phone-input__country .select { height:4.4rem; }',
-      '.account-phone-input--auth .account-phone-input__country select, .account-phone-input--auth .account-phone-input__number input { height:4.4rem; min-height:4.4rem; margin:0; }',
+      '.account-phone-input__country .select { display:block; height:4rem; margin:0; }',
+      '.account-phone-input__country select, .account-phone-input__dial input, .account-phone-input__number input { width:100%; box-sizing:border-box; }',
+      '.account-phone-input__country select, .account-phone-input__number input { height:4rem!important; min-height:4rem!important; margin:0!important; border:0!important; border-radius:3.5rem!important; box-shadow:0 0 0 .1rem rgba(var(--color-foreground),1), inset 0 2px 3px rgba(0,0,0,.05)!important; }',
+      '.account-phone-input__country select { background:transparent; color:inherit; font:inherit; }',
+      '.account-phone-input--auth .account-phone-input__country select { padding:0 4rem 0 1.6rem!important; }',
+      '.account-phone-input--auth .account-phone-input__number { display:block!important; height:4rem!important; position:relative!important; top:0!important; transform:none!important; }',
+      '.account-phone-input--auth .account-phone-input__number input { display:block!important; position:relative!important; top:0!important; transform:none!important; }',
       '.account-phone-input--auth .account-phone-input__country > label { display:none; }',
+      '.account-phone-input--details .account-phone-input__country select { padding:1.4rem 4rem 0 2rem!important; }',
+      '.account-phone-input--locked .account-phone-input__country select, .account-phone-input--locked .account-phone-input__number input { background:rgba(0,0,0,.045)!important; cursor:not-allowed; }',
       '.account-phone-input__hint { grid-column:1 / -1; margin:.4rem 0 0; font-size:1.2rem; line-height:1.4; }',
       '@media screen and (max-width:560px) {',
       '  .account-phone-input, .account-phone-input--other { grid-template-columns:minmax(9.5rem,11rem) minmax(0,1fr); gap:.8rem; }',
@@ -429,6 +431,27 @@
     form.addEventListener('click', prepareBeforeAppClick, true);
   };
 
+  const lockExistingDetailsPhone = (phone, component, hiddenCountry, initialPhone, initialCountry) => {
+    if (hiddenCountry.getAttribute('data-phone-verified') !== 'true' || !String(initialPhone || '').trim()) return false;
+    const form = phone.form || (phone.closest && phone.closest('form'));
+
+    component.wrapper.classList.add('account-phone-input--locked');
+    phone.readOnly = true;
+    phone.setAttribute('aria-readonly', 'true');
+    phone.setAttribute('data-verified-phone-locked', 'true');
+    component.select.disabled = true;
+    component.select.setAttribute('aria-disabled', 'true');
+    component.dialInput.disabled = true;
+
+    if (form) {
+      form.addEventListener('submit', () => {
+        setFrameworkAwarePhoneValue(phone, initialPhone, false);
+        hiddenCountry.value = initialCountry;
+      }, true);
+    }
+    return true;
+  };
+
   const enhanceDetailsPhone = (hiddenCountry) => {
     if (!hiddenCountry || hiddenCountry.dataset.phoneCountryEnhanced === 'true') return;
     const phoneId = hiddenCountry.getAttribute('data-phone-input-id') || 'DetailPhone';
@@ -439,13 +462,15 @@
     phone.setAttribute('type', 'tel');
     phone.setAttribute('inputmode', 'tel');
     phone.setAttribute('autocomplete', 'tel-national');
+    const initialPhone = String(phone.value || '');
     const initialCountry = String(hiddenCountry.value || '').trim().toUpperCase();
     const component = buildComponent(phone, byIso(initialCountry) ? initialCountry : 'SG', '');
     if (!component) return;
     component.wrapper.classList.add('account-phone-input--details');
     inferFromInternational(phone, component, hiddenCountry);
     attachCommonListeners(phone, component, hiddenCountry, false)();
-    interceptSubmit(phone, component, hiddenCountry, false);
+    const locked = lockExistingDetailsPhone(phone, component, hiddenCountry, initialPhone, initialCountry);
+    if (!locked) interceptSubmit(phone, component, hiddenCountry, false);
   };
 
   const isOtpInput = (phone) => {
