@@ -2,11 +2,27 @@
   Keep EasyStore's ISO country_code field as the no-JS fallback, then enhance it
   into a compact country-code selector beside the regular phone field. Known
   countries may use a local number; Other uses a separate numeric calling code.
+
+  On the account-details page, customer.authentications is EasyStore's source of
+  truth for whether the connected phone identity has completed verification.
+  Expose only that boolean to the enhancer so verified identities can be locked
+  without treating an unrelated address phone as verified.
 {% endcomment %}
+{% assign phone_auth_verified = false %}
+{% if customer %}
+  {% for kv in customer.authentications %}
+    {% assign auth_key = kv[0] %}
+    {% assign auth_value = kv[1] %}
+    {% if auth_key == 'phone' and auth_value.is_connected and auth_value.is_verified %}
+      {% assign phone_auth_verified = true %}
+    {% endif %}
+  {% endfor %}
+{% endif %}
 <input
   type="hidden"
   name="{{ country_code_field_name | escape }}"
   value="{{ default_country_code | escape }}"
   data-phone-country-code
   data-phone-input-id="{{ phone_input_id | escape }}"
+  data-phone-verified="{% if phone_auth_verified %}true{% else %}false{% endif %}"
 >
