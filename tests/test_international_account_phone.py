@@ -48,7 +48,7 @@ class InternationalAccountPhoneTests(unittest.TestCase):
         source = DETAILS_RUNTIME.read_text(encoding="utf-8")
 
         self.assertIn("const loadAccountPhoneInput = () =>", source)
-        self.assertIn("account-details-validation.js", source)
+        self.assertIn("account-details-validation\\.js", source)
         self.assertIn("account-phone-input.js", source)
         self.assertIn("source.pathname = source.pathname.replace", source)
         self.assertIn("data-account-phone-input-loader", source)
