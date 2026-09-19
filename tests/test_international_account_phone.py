@@ -48,6 +48,13 @@ class InternationalAccountPhoneTests(unittest.TestCase):
         self.assertIn('data-phone-input-id="{{ phone_input_id | escape }}"', source)
         self.assertNotIn("account-phone-input.js", source)
 
+    def test_phone_picker_marks_only_easystore_verified_phone_authentication(self) -> None:
+        source = SNIPPET.read_text(encoding="utf-8")
+
+        self.assertIn("{% for kv in customer.authentications %}", source)
+        self.assertIn("auth_key == 'phone' and auth_value.is_connected and auth_value.is_verified", source)
+        self.assertIn('data-phone-verified="{% if phone_auth_verified %}true{% else %}false{% endif %}"', source)
+
     def test_details_page_always_renders_phone_country_hook(self) -> None:
         source = DETAILS_TEMPLATE.read_text(encoding="utf-8")
 
@@ -83,15 +90,15 @@ class InternationalAccountPhoneTests(unittest.TestCase):
         self.assertIn("label.textContent = '+ code';", source)
         self.assertIn("account-phone-input--other", source)
 
-    def test_auth_country_and_number_controls_share_geometry(self) -> None:
+    def test_country_and_number_controls_use_one_explicit_geometry(self) -> None:
         source = RUNTIME.read_text(encoding="utf-8")
 
-        self.assertIn(".account-phone-input--auth { align-items:stretch; }", source)
-        self.assertIn(".account-phone-input--auth .account-phone-input__country .select { height:4.4rem; }", source)
-        self.assertIn(
-            ".account-phone-input--auth .account-phone-input__country select, .account-phone-input--auth .account-phone-input__number input { height:4.4rem; min-height:4.4rem; margin:0; }",
-            source,
-        )
+        self.assertIn("align-items:center", source)
+        self.assertIn("margin:0!important; padding:0!important; align-self:center", source)
+        self.assertIn("height:4rem!important; min-height:4rem!important; margin:0!important", source)
+        self.assertIn("border-radius:3.5rem!important", source)
+        self.assertIn(".account-phone-input--auth .account-phone-input__number { display:block!important; height:4rem!important", source)
+        self.assertIn(".account-phone-input--details .account-phone-input__country select { padding:1.4rem 4rem 0 2rem!important; }", source)
 
     def test_insert_code_marker_is_the_primary_auth_field_hook(self) -> None:
         source = RUNTIME.read_text(encoding="utf-8")
@@ -159,6 +166,12 @@ class InternationalAccountPhoneTests(unittest.TestCase):
         self.assertIn("const DROP_DOMESTIC_ZERO = new Set([", source)
         self.assertIn("'MY', 'ID', 'PH', 'TH', 'VN', 'TW', 'JP', 'KR', 'IN', 'AU', 'NZ', 'GB'", source)
 
+    def test_unknown_international_number_keeps_subscriber_after_inferred_dial_code(self) -> None:
+        source = RUNTIME.read_text(encoding="utf-8")
+
+        self.assertIn("component.dialInput.value = raw.slice(0, guessedDialLength);", source)
+        self.assertIn("phone.value = raw.slice(guessedDialLength);", source)
+
     def test_controlled_auth_input_is_synchronized_before_app_click(self) -> None:
         source = RUNTIME.read_text(encoding="utf-8")
 
@@ -171,6 +184,18 @@ class InternationalAccountPhoneTests(unittest.TestCase):
         self.assertIn("form.addEventListener('pointerdown', prepareBeforeAppClick, true);", source)
         self.assertIn("form.addEventListener('click', prepareBeforeAppClick, true);", source)
         self.assertIn("controlled field state before any click-driven EasyStore/reCAPTCHA flow", source)
+
+    def test_verified_account_phone_is_read_only_and_restored_on_submit(self) -> None:
+        source = RUNTIME.read_text(encoding="utf-8")
+
+        self.assertIn("const lockExistingDetailsPhone = (phone, component, hiddenCountry, initialPhone, initialCountry) =>", source)
+        self.assertIn("hiddenCountry.getAttribute('data-phone-verified') !== 'true'", source)
+        self.assertIn("phone.readOnly = true;", source)
+        self.assertIn("phone.setAttribute('data-verified-phone-locked', 'true');", source)
+        self.assertIn("component.select.disabled = true;", source)
+        self.assertIn("setFrameworkAwarePhoneValue(phone, initialPhone, false);", source)
+        self.assertIn("hiddenCountry.value = initialCountry;", source)
+        self.assertIn("if (!locked) interceptSubmit(phone, component, hiddenCountry, false);", source)
 
     def test_auth_forms_keep_native_easystore_endpoints_names_and_csrf(self) -> None:
         register = REGISTER_TEMPLATE.read_text(encoding="utf-8")
