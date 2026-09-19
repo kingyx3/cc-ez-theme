@@ -40,8 +40,6 @@ const pageHtml = () => `<!doctype html>
         }
       }, true);
 
-      // Mirrors the important part of the store's Insert Code click guard:
-      // an 8-digit SG number or an already-international + number is accepted.
       document.addEventListener('click', function (event) {
         var input = document.querySelector('input[data-es-mobile-only="true"]');
         var button = event.target.closest && event.target.closest('button[type="submit"]');
@@ -66,7 +64,7 @@ const pageHtml = () => `<!doctype html>
   </body>
 </html>`;
 
-const detailsHtml = () => `<!doctype html>
+const detailsHtml = (verified) => `<!doctype html>
 <html>
   <head><meta charset="utf-8"></head>
   <body>
@@ -80,6 +78,7 @@ const detailsHtml = () => `<!doctype html>
           value="SG"
           data-phone-country-code
           data-phone-input-id="DetailPhone"
+          data-phone-verified="${verified ? 'true' : 'false'}"
         >
         <label for="DetailPhone">Phone</label>
       </div>
@@ -143,8 +142,8 @@ test.describe('international account phone UI with Insert Code', () => {
     await expect.poll(() => page.evaluate(() => window.__submittedPhone)).toBe('81234567');
   });
 
-  test('existing account phone is locked and restored before profile submit', async ({ page }) => {
-    await page.setContent(detailsHtml());
+  test('OTP-verified account phone is locked and restored before profile submit', async ({ page }) => {
+    await page.setContent(detailsHtml(true));
 
     const country = page.locator('[data-phone-country-select]');
     const phone = page.locator('#DetailPhone');
@@ -163,5 +162,16 @@ test.describe('international account phone UI with Insert Code', () => {
 
     await expect.poll(() => page.evaluate(() => window.__detailsPhone)).toBe('6582230039');
     await expect.poll(() => page.evaluate(() => window.__detailsCountry)).toBe('SG');
+  });
+
+  test('unverified account phone remains editable', async ({ page }) => {
+    await page.setContent(detailsHtml(false));
+
+    const country = page.locator('[data-phone-country-select]');
+    const phone = page.locator('#DetailPhone');
+
+    await expect(phone).not.toHaveAttribute('readonly', '');
+    await expect(phone).not.toHaveAttribute('data-verified-phone-locked', 'true');
+    await expect(country).toBeEnabled();
   });
 });
