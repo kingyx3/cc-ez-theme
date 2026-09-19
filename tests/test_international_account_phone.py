@@ -11,6 +11,9 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 SNIPPET = ROOT / "theme" / "snippets" / "phone-country-picker.liquid"
 DETAILS_TEMPLATE = ROOT / "theme" / "templates" / "customers" / "details.liquid"
+REGISTER_TEMPLATE = ROOT / "theme" / "templates" / "customers" / "register.liquid"
+LOGIN_TEMPLATE = ROOT / "theme" / "templates" / "customers" / "login.liquid"
+ACTIVATE_TEMPLATE = ROOT / "theme" / "templates" / "customers" / "activate_account.liquid"
 RUNTIME = ROOT / "theme" / "assets" / "account-phone-input.js"
 EDITOR = ROOT / "theme" / "editor_assets" / "account-phone-input.js"
 DETAILS_RUNTIME = ROOT / "theme" / "assets" / "account-details-validation.js"
@@ -80,6 +83,16 @@ class InternationalAccountPhoneTests(unittest.TestCase):
         self.assertIn("label.textContent = '+ code';", source)
         self.assertIn("account-phone-input--other", source)
 
+    def test_auth_country_and_number_controls_share_geometry(self) -> None:
+        source = RUNTIME.read_text(encoding="utf-8")
+
+        self.assertIn(".account-phone-input--auth { align-items:stretch; }", source)
+        self.assertIn(".account-phone-input--auth .account-phone-input__country .select { height:4.4rem; }", source)
+        self.assertIn(
+            ".account-phone-input--auth .account-phone-input__country select, .account-phone-input--auth .account-phone-input__number input { height:4.4rem; min-height:4.4rem; margin:0; }",
+            source,
+        )
+
     def test_insert_code_marker_is_the_primary_auth_field_hook(self) -> None:
         source = RUNTIME.read_text(encoding="utf-8")
 
@@ -134,26 +147,59 @@ class InternationalAccountPhoneTests(unittest.TestCase):
 
         self.assertIn("const SG_PHONE_MESSAGE = 'Please enter an 8-digit Singapore mobile number.';", source)
         self.assertIn("if (isAuth && country && country.iso === 'SG' && local.length !== 8)", source)
-        self.assertIn("if (country && country.iso === 'SG')", source)
-        self.assertIn("phone.value = local;", source)
+        self.assertIn("const nextValue = country && country.iso === 'SG'", source)
+        self.assertIn("? local", source)
 
     def test_foreign_auth_submission_combines_country_code_and_local_number(self) -> None:
         source = RUNTIME.read_text(encoding="utf-8")
 
         self.assertIn("const prepareInternationalValue = (country, dial, local) =>", source)
         self.assertIn("return '+' + digitsOnly(dial) + national;", source)
-        self.assertIn("phone.value = prepareInternationalValue(country, dial, local);", source)
+        self.assertIn("setFrameworkAwarePhoneValue(phone, nextValue, true);", source)
         self.assertIn("const DROP_DOMESTIC_ZERO = new Set([", source)
         self.assertIn("'MY', 'ID', 'PH', 'TH', 'VN', 'TW', 'JP', 'KR', 'IN', 'AU', 'NZ', 'GB'", source)
 
-    def test_click_driven_insert_code_flow_is_normalized_before_click(self) -> None:
+    def test_controlled_auth_input_is_synchronized_before_app_click(self) -> None:
         source = RUNTIME.read_text(encoding="utf-8")
 
+        self.assertIn("const setFrameworkAwarePhoneValue = (phone, value, notify) =>", source)
+        self.assertIn("Object.getOwnPropertyDescriptor(InputCtor.prototype, 'value')", source)
+        self.assertIn("descriptor.set.call(phone, nextValue)", source)
+        self.assertIn("new view.Event('input', { bubbles: true })", source)
+        self.assertIn("data-account-phone-preparing", source)
         self.assertIn("const prepareBeforeAppClick = (event) =>", source)
         self.assertIn("form.addEventListener('pointerdown', prepareBeforeAppClick, true);", source)
         self.assertIn("form.addEventListener('click', prepareBeforeAppClick, true);", source)
-        self.assertIn("normalizeAuthValue(phone, component);", source)
-        self.assertIn("pointerdown happens first", source)
+        self.assertIn("controlled field state before any click-driven EasyStore/reCAPTCHA flow", source)
+
+    def test_auth_forms_keep_native_easystore_endpoints_names_and_csrf(self) -> None:
+        register = REGISTER_TEMPLATE.read_text(encoding="utf-8")
+        login = LOGIN_TEMPLATE.read_text(encoding="utf-8")
+        activate = ACTIVATE_TEMPLATE.read_text(encoding="utf-8")
+        details = DETAILS_TEMPLATE.read_text(encoding="utf-8")
+        runtime = RUNTIME.read_text(encoding="utf-8")
+
+        self.assertIn('action="/account/register"', register)
+        self.assertIn('name="customer[email_or_phone]"', register)
+        self.assertIn('name="_token" value="{% csrf %}"', register)
+        self.assertIn('action="/account/login"', login)
+        self.assertIn('name="customer[email_or_phone]"', login)
+        self.assertIn('action="/account/recover"', login)
+        self.assertIn('name="email_or_phone"', login)
+        self.assertIn("action='/account/activate'", activate)
+        self.assertIn('name="customer[email_or_phone]"', activate)
+        self.assertIn("action='/account/details'", details)
+        self.assertIn('name="details[phone]"', details)
+        self.assertIn("country_code_field_name: 'details[country_code]'", details)
+
+        self.assertNotIn("fetch(", runtime)
+        self.assertNotIn("XMLHttpRequest", runtime)
+        self.assertNotIn("setAttribute('action'", runtime)
+        self.assertNotIn("setAttribute('name'", runtime)
+        self.assertEqual(
+            re.findall(r"sessionStorage\.setItem\((AUTH_[A-Z_]+)", runtime),
+            ["AUTH_COUNTRY_KEY", "AUTH_DIAL_KEY"],
+        )
 
     def test_unlisted_country_uses_numeric_custom_calling_code(self) -> None:
         source = RUNTIME.read_text(encoding="utf-8")
