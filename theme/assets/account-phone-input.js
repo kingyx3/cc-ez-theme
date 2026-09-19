@@ -335,6 +335,7 @@
     } else {
       const guessedDialLength = Math.min(3, Math.max(1, raw.length - PHONE_MIN_DIGITS));
       component.dialInput.value = raw.slice(0, guessedDialLength);
+      phone.value = raw.slice(guessedDialLength);
     }
     if (hiddenCountry) hiddenCountry.value = '';
     syncOtherUi(component, phone);
