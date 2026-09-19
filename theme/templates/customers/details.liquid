@@ -129,9 +129,7 @@
                 <div class="grid__item sm-mt-1">
                   <div class="field">
                     <input type="text" id="DetailPhone" class="address_form" name="details[phone]" value="{{customer.phone | _default: customer.default_address.phone }}" placeholder="{{ 'customer.addresses.phone' | t }}">
-                    {% if is_identity_normalizer_canary_enabled %}
-                      {% include 'phone-country-picker', phone_input_id: 'DetailPhone', country_code_field_name: 'details[country_code]', default_country_code: customer.country_code %}
-                    {% endif %}
+                    {% include 'phone-country-picker', phone_input_id: 'DetailPhone', country_code_field_name: 'details[country_code]', default_country_code: customer.country_code %}
                     <label for="DetailPhone">{{ 'customer.addresses.phone' | t }}</label>
                   </div>
                 </div>
