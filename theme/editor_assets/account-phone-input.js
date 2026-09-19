@@ -104,6 +104,25 @@
     }
   };
 
+  const setFrameworkAwarePhoneValue = (phone, value, notify) => {
+    const nextValue = String(value == null ? '' : value);
+    const view = phone && phone.ownerDocument ? phone.ownerDocument.defaultView : null;
+    const InputCtor = view && view.HTMLInputElement;
+    const descriptor = InputCtor && InputCtor.prototype
+      ? Object.getOwnPropertyDescriptor(InputCtor.prototype, 'value')
+      : null;
+
+    phone.setAttribute('data-account-phone-preparing', 'true');
+    if (descriptor && descriptor.set) descriptor.set.call(phone, nextValue);
+    else phone.value = nextValue;
+
+    if (notify && view && view.Event && phone.dispatchEvent) {
+      phone.dispatchEvent(new view.Event('input', { bubbles: true }));
+    }
+    phone.removeAttribute('data-account-phone-preparing');
+    return nextValue;
+  };
+
   const rootFor = (node) => (node && node.getRootNode ? node.getRootNode() : document);
 
   const ensureStyles = (root) => {
@@ -120,6 +139,10 @@
       '.account-phone-input__number-shell > input { width:100%; box-sizing:border-box; }',
       '.account-phone-input__country select, .account-phone-input__dial input { width:100%; box-sizing:border-box; }',
       '.account-phone-input__country select { min-height:4.4rem; border:1px solid currentColor; border-radius:999px; padding:0 3.2rem 0 1.6rem; background:transparent; color:inherit; font:inherit; }',
+      '.account-phone-input--auth { align-items:stretch; }',
+      '.account-phone-input--auth > .field, .account-phone-input--auth > .account-phone-input__number-shell { margin:0; align-self:stretch; }',
+      '.account-phone-input--auth .account-phone-input__country .select { height:4.4rem; }',
+      '.account-phone-input--auth .account-phone-input__country select, .account-phone-input--auth .account-phone-input__number input { height:4.4rem; min-height:4.4rem; margin:0; }',
       '.account-phone-input--auth .account-phone-input__country > label { display:none; }',
       '.account-phone-input__hint { grid-column:1 / -1; margin:.4rem 0 0; font-size:1.2rem; line-height:1.4; }',
       '@media screen and (max-width:560px) {',
@@ -319,6 +342,7 @@
 
   const attachCommonListeners = (phone, component, hiddenCountry, isAuth) => {
     const update = () => {
+      if (phone.getAttribute('data-account-phone-preparing') === 'true') return;
       if (isAuth && isInternational(phone.value)) inferFromInternational(phone, component, null);
       if (isAuth && !isInternational(phone.value)) {
         const numeric = digitsOnly(phone.value);
@@ -345,17 +369,16 @@
   };
 
   const normalizeAuthValue = (phone, component) => {
-    if (isInternational(phone.value)) return String(phone.value || '').trim();
-    const local = digitsOnly(phone.value);
+    const currentValue = String(phone.value || '').trim();
+    if (isInternational(currentValue)) return currentValue;
+    const local = digitsOnly(currentValue);
     if (!local) return '';
     const country = byIso(component.select.value);
-    if (country && country.iso === 'SG') {
-      phone.value = local;
-      return phone.value;
-    }
-    const dial = country ? country.dial : component.dialInput.value;
-    phone.value = prepareInternationalValue(country, dial, local);
-    return phone.value;
+    const nextValue = country && country.iso === 'SG'
+      ? local
+      : prepareInternationalValue(country, country ? country.dial : component.dialInput.value, local);
+    if (phone.value !== nextValue) setFrameworkAwarePhoneValue(phone, nextValue, true);
+    return nextValue;
   };
 
   const interceptSubmit = (phone, component, hiddenCountry, isAuth) => {
@@ -400,7 +423,8 @@
       normalizeAuthValue(phone, component);
     };
     // The Insert Code app also validates on click. pointerdown happens first,
-    // so foreign local numbers are converted before any click-driven app flow.
+    // so foreign local numbers are converted and synchronized with the app's
+    // controlled field state before any click-driven EasyStore/reCAPTCHA flow.
     form.addEventListener('pointerdown', prepareBeforeAppClick, true);
     form.addEventListener('click', prepareBeforeAppClick, true);
   };
