@@ -335,7 +335,6 @@
     } else {
       const guessedDialLength = Math.min(3, Math.max(1, raw.length - PHONE_MIN_DIGITS));
       component.dialInput.value = raw.slice(0, guessedDialLength);
-      phone.value = raw.slice(guessedDialLength);
     }
     if (hiddenCountry) hiddenCountry.value = '';
     syncOtherUi(component, phone);
@@ -432,7 +431,7 @@
   };
 
   const lockExistingDetailsPhone = (phone, component, hiddenCountry, initialPhone, initialCountry) => {
-    if (!String(initialPhone || '').trim()) return false;
+    if (hiddenCountry.getAttribute('data-phone-verified') !== 'true' || !String(initialPhone || '').trim()) return false;
     const form = phone.form || (phone.closest && phone.closest('form'));
 
     component.wrapper.classList.add('account-phone-input--locked');
