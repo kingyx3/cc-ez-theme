@@ -10,6 +10,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 SNIPPET = ROOT / "theme" / "snippets" / "phone-country-picker.liquid"
+DETAILS_TEMPLATE = ROOT / "theme" / "templates" / "customers" / "details.liquid"
 RUNTIME = ROOT / "theme" / "assets" / "account-phone-input.js"
 EDITOR = ROOT / "theme" / "editor_assets" / "account-phone-input.js"
 DETAILS_RUNTIME = ROOT / "theme" / "assets" / "account-details-validation.js"
@@ -43,6 +44,15 @@ class InternationalAccountPhoneTests(unittest.TestCase):
         self.assertIn("data-phone-country-code", source)
         self.assertIn('data-phone-input-id="{{ phone_input_id | escape }}"', source)
         self.assertNotIn("account-phone-input.js", source)
+
+    def test_details_page_always_renders_phone_country_hook(self) -> None:
+        source = DETAILS_TEMPLATE.read_text(encoding="utf-8")
+
+        self.assertIn(
+            "{% include 'phone-country-picker', phone_input_id: 'DetailPhone', country_code_field_name: 'details[country_code]', default_country_code: customer.country_code %}",
+            source,
+        )
+        self.assertNotIn("{% if is_identity_normalizer_canary_enabled %}", source)
 
     def test_phone_helper_is_loaded_from_existing_global_account_asset(self) -> None:
         source = DETAILS_RUNTIME.read_text(encoding="utf-8")
