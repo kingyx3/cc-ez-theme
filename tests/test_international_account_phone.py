@@ -1,4 +1,9 @@
-"""International customer phone input stays aligned with EasyStore, Insert Code, and CRM."""
+"""International profile phone input stays aligned with EasyStore and CRM.
+
+Auth identity fields are intentionally excluded: EasyStore/Insert Code own those
+inputs because theme-authored writes have previously caused duplicate-account
+behaviour in signup/OTP flows.
+"""
 
 from __future__ import annotations
 
@@ -77,7 +82,7 @@ class InternationalAccountPhoneTests(unittest.TestCase):
     def test_local_number_country_choices_match_crm_normalizer_exactly(self) -> None:
         self.assertEqual(crm_country_dial_codes(), storefront_country_dial_codes())
 
-    def test_ui_adds_country_selector_and_numeric_other_dial_code(self) -> None:
+    def test_details_ui_adds_country_selector_and_numeric_other_dial_code(self) -> None:
         source = RUNTIME.read_text(encoding="utf-8")
 
         self.assertIn("wrapper.className = 'account-phone-input';", source)
@@ -94,108 +99,41 @@ class InternationalAccountPhoneTests(unittest.TestCase):
         source = RUNTIME.read_text(encoding="utf-8")
 
         self.assertIn("align-items:center", source)
-        self.assertIn("margin:0!important; padding:0!important; align-self:center", source)
         self.assertIn("height:4rem!important; min-height:4rem!important; margin:0!important", source)
         self.assertIn("border-radius:3.5rem!important", source)
-        self.assertIn(".account-phone-input--auth .account-phone-input__number { display:block!important; height:4rem!important", source)
-        self.assertIn(".account-phone-input--details .account-phone-input__country select { padding:1.4rem 4rem 0 2rem!important; }", source)
+        self.assertIn(".account-phone-input__number { height:4rem!important; min-height:4rem!important; }", source)
+        self.assertIn(".account-phone-input__country .select { display:block; height:4rem!important", source)
 
-    def test_insert_code_marker_is_the_primary_auth_field_hook(self) -> None:
+    def test_theme_helper_never_takes_ownership_of_auth_identity_inputs(self) -> None:
         source = RUNTIME.read_text(encoding="utf-8")
 
-        self.assertIn("'input[data-es-mobile-only=\"true\"]'", source)
-        self.assertIn("'input[data-cc-phone-owned=\"true\"]'", source)
-        self.assertIn("'#RegisterForm-EmailOrPhone'", source)
-        self.assertIn("'#CustomerEmail'", source)
-        self.assertIn("'#RecoverEmail'", source)
-        self.assertIn("const authPhoneInputsInRoot = (root) =>", source)
-        self.assertIn("identity.indexOf('mobile number')", source)
-
-    def test_enhanced_auth_field_takes_ownership_from_insert_code_validator(self) -> None:
-        source = RUNTIME.read_text(encoding="utf-8")
-
-        self.assertIn("const releaseInsertCodeOwnership = (phone) =>", source)
-        self.assertIn("phone.removeAttribute('data-es-mobile-only');", source)
-        self.assertIn("phone.setAttribute('data-cc-phone-owned', 'true');", source)
-        self.assertIn("phone.setAttribute('data-placeholder', 'Mobile number');", source)
-        self.assertIn("phone.setAttribute('aria-label', 'Mobile number');", source)
-        self.assertIn("phone.placeholder = 'Mobile number';", source)
-
-    def test_insert_code_app_dom_does_not_require_theme_field_wrapper(self) -> None:
-        source = RUNTIME.read_text(encoding="utf-8")
-
-        self.assertIn("let phoneContainer = phone.closest && phone.closest('.field');", source)
-        self.assertIn("if (!phoneContainer)", source)
-        self.assertIn("phoneContainer.className = 'account-phone-input__number account-phone-input__number-shell';", source)
-        self.assertIn("phoneContainer.appendChild(phone);", source)
-        self.assertIn("ensurePhoneId(phone)", source)
-
-    def test_auth_detection_stays_scoped_to_account_flows_and_excludes_otp(self) -> None:
-        source = RUNTIME.read_text(encoding="utf-8")
-
-        self.assertIn("const isOtpInput = (phone) =>", source)
-        self.assertIn("const isAuthContext = (phone) =>", source)
-        self.assertIn("/(?:otp|one[- ]?time|verification|security code)/", source)
-        self.assertIn("/\\/account\\/(?:login|register|recover|activate|auth|signup)", source)
-
-    def test_dynamic_insert_code_and_open_component_roots_are_rechecked(self) -> None:
-        source = RUNTIME.read_text(encoding="utf-8")
-
-        self.assertIn("const visitRoots = (root, callback) =>", source)
-        self.assertIn("if (element.shadowRoot) visitRoots(element.shadowRoot, callback);", source)
-        self.assertIn("if (element.contentDocument) visitRoots(element.contentDocument, callback);", source)
-        self.assertIn("const observer = new MutationObserver(enhanceAll);", source)
-        self.assertIn("attributeFilter: ['data-es-mobile-only']", source)
-        self.assertIn("window.setTimeout(() => observer.disconnect(), 10000);", source)
-        self.assertIn("[250, 750, 1500, 3000, 6000]", source)
-
-    def test_singapore_auth_submission_keeps_existing_eight_digit_identity_shape(self) -> None:
-        source = RUNTIME.read_text(encoding="utf-8")
-
-        self.assertIn("const SG_PHONE_MESSAGE = 'Please enter an 8-digit Singapore mobile number.';", source)
-        self.assertIn("if (isAuth && country && country.iso === 'SG' && local.length !== 8)", source)
-        self.assertIn("const nextValue = country && country.iso === 'SG'", source)
-        self.assertIn("? local", source)
-
-    def test_foreign_auth_submission_combines_country_code_and_local_number(self) -> None:
-        source = RUNTIME.read_text(encoding="utf-8")
-
-        self.assertIn("const prepareInternationalValue = (country, dial, local) =>", source)
-        self.assertIn("return '+' + digitsOnly(dial) + national;", source)
-        self.assertIn("setFrameworkAwarePhoneValue(phone, nextValue, true);", source)
-        self.assertIn("const DROP_DOMESTIC_ZERO = new Set([", source)
-        self.assertIn("'MY', 'ID', 'PH', 'TH', 'VN', 'TW', 'JP', 'KR', 'IN', 'AU', 'NZ', 'GB'", source)
-
-    def test_unknown_international_number_keeps_subscriber_after_inferred_dial_code(self) -> None:
-        source = RUNTIME.read_text(encoding="utf-8")
-
-        self.assertIn("component.dialInput.value = raw.slice(0, guessedDialLength);", source)
-        self.assertIn("phone.value = raw.slice(guessedDialLength);", source)
-
-    def test_controlled_auth_input_is_synchronized_before_app_click(self) -> None:
-        source = RUNTIME.read_text(encoding="utf-8")
-
-        self.assertIn("const setFrameworkAwarePhoneValue = (phone, value, notify) =>", source)
-        self.assertIn("Object.getOwnPropertyDescriptor(InputCtor.prototype, 'value')", source)
-        self.assertIn("descriptor.set.call(phone, nextValue)", source)
-        self.assertIn("new view.Event('input', { bubbles: true })", source)
-        self.assertIn("data-account-phone-preparing", source)
-        self.assertIn("const prepareBeforeAppClick = (event) =>", source)
-        self.assertIn("form.addEventListener('pointerdown', prepareBeforeAppClick, true);", source)
-        self.assertIn("form.addEventListener('click', prepareBeforeAppClick, true);", source)
-        self.assertIn("controlled field state before any click-driven EasyStore/reCAPTCHA flow", source)
+        self.assertIn("Authentication is intentionally out of scope", source)
+        self.assertNotIn("data-es-mobile-only", source)
+        self.assertNotIn("data-cc-phone-owned", source)
+        self.assertNotIn("RegisterForm-EmailOrPhone", source)
+        self.assertNotIn("CustomerEmail", source)
+        self.assertNotIn("RecoverEmail", source)
+        self.assertNotIn("normalizeAuthValue", source)
+        self.assertNotIn("prepareBeforeAppClick", source)
+        self.assertNotIn("pointerdown", source)
+        self.assertNotIn("dispatchEvent", source)
+        self.assertNotIn("sessionStorage", source)
+        self.assertNotIn("AUTH_COUNTRY_KEY", source)
 
     def test_verified_account_phone_is_read_only_and_restored_on_submit(self) -> None:
         source = RUNTIME.read_text(encoding="utf-8")
 
-        self.assertIn("const lockExistingDetailsPhone = (phone, component, hiddenCountry, initialPhone, initialCountry) =>", source)
+        self.assertIn(
+            "const lockExistingDetailsPhone = (phone, component, hiddenCountry, initialPhone, initialCountry) =>",
+            source,
+        )
         self.assertIn("hiddenCountry.getAttribute('data-phone-verified') !== 'true'", source)
         self.assertIn("phone.readOnly = true;", source)
         self.assertIn("phone.setAttribute('data-verified-phone-locked', 'true');", source)
         self.assertIn("component.select.disabled = true;", source)
-        self.assertIn("setFrameworkAwarePhoneValue(phone, initialPhone, false);", source)
+        self.assertIn("phone.value = initialPhone;", source)
         self.assertIn("hiddenCountry.value = initialCountry;", source)
-        self.assertIn("if (!locked) interceptSubmit(phone, component, hiddenCountry, false);", source)
+        self.assertIn("if (!locked) interceptDetailsSubmit(phone, component, hiddenCountry);", source)
 
     def test_auth_forms_keep_native_easystore_endpoints_names_and_csrf(self) -> None:
         register = REGISTER_TEMPLATE.read_text(encoding="utf-8")
@@ -221,12 +159,8 @@ class InternationalAccountPhoneTests(unittest.TestCase):
         self.assertNotIn("XMLHttpRequest", runtime)
         self.assertNotIn("setAttribute('action'", runtime)
         self.assertNotIn("setAttribute('name'", runtime)
-        self.assertEqual(
-            re.findall(r"sessionStorage\.setItem\((AUTH_[A-Z_]+)", runtime),
-            ["AUTH_COUNTRY_KEY", "AUTH_DIAL_KEY"],
-        )
 
-    def test_unlisted_country_uses_numeric_custom_calling_code(self) -> None:
+    def test_unlisted_details_country_uses_numeric_custom_calling_code(self) -> None:
         source = RUNTIME.read_text(encoding="utf-8")
 
         self.assertIn("const DIAL_MESSAGE = 'Please enter a valid country calling code.';", source)
@@ -247,7 +181,6 @@ class InternationalAccountPhoneTests(unittest.TestCase):
 
         self.assertIn("const PHONE_MIN_DIGITS = 7;", source)
         self.assertIn("const PHONE_MAX_DIGITS = 15;", source)
-        self.assertIn("/^\\+[1-9]\\d{6,14}$/", source)
 
     def test_runtime_and_editor_assets_stay_identical(self) -> None:
         self.assertEqual(
