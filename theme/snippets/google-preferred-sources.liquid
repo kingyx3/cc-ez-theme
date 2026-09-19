@@ -118,3 +118,9 @@
   preferred-sources-control="manual"
   src="https://news.google.com/swg/js/v1/publisher.js"
 ></script>
+
+{% comment %}
+  This snippet is included globally after the footer, so it also hosts the
+  storefront-wide customer support bubble without adding another layout hook.
+{% endcomment %}
+{% include 'whatsapp-help-bubble' %}
