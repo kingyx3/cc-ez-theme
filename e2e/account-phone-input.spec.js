@@ -7,7 +7,7 @@ const ACCOUNT_PHONE = fs.readFileSync(
   'utf8'
 );
 
-const pageHtml = () => `<!doctype html>
+const authHtml = () => `<!doctype html>
 <html>
   <head><meta charset="utf-8"></head>
   <body>
@@ -30,15 +30,11 @@ const pageHtml = () => `<!doctype html>
     <script>
       window.__insertCodeBlocked = false;
       window.__submittedPhone = null;
-      window.__controlledPhone = '';
-      window.__submitAction = null;
-      window.__submitName = null;
+      window.__inputEvents = 0;
 
-      document.addEventListener('input', function (event) {
-        if (event.target && event.target.id === 'insert-code-phone') {
-          window.__controlledPhone = event.target.value;
-        }
-      }, true);
+      document.getElementById('insert-code-phone').addEventListener('input', function () {
+        window.__inputEvents += 1;
+      });
 
       document.addEventListener('click', function (event) {
         var input = document.querySelector('input[data-es-mobile-only="true"]');
@@ -54,10 +50,7 @@ const pageHtml = () => `<!doctype html>
 
       document.getElementById('mobile-auth').addEventListener('submit', function (event) {
         event.preventDefault();
-        var input = document.getElementById('insert-code-phone');
-        window.__submittedPhone = input.value;
-        window.__submitAction = event.currentTarget.getAttribute('action');
-        window.__submitName = input.getAttribute('name');
+        window.__submittedPhone = document.getElementById('insert-code-phone').value;
       });
     </script>
     <script>${ACCOUNT_PHONE}</script>
@@ -66,7 +59,14 @@ const pageHtml = () => `<!doctype html>
 
 const detailsHtml = (verified) => `<!doctype html>
 <html>
-  <head><meta charset="utf-8"></head>
+  <head>
+    <meta charset="utf-8">
+    <style>
+      :root { --color-foreground: 0,0,0; }
+      .field { position: relative; width: 100%; }
+      .field input, select { width: 100%; box-sizing: border-box; height: 4rem; }
+    </style>
+  </head>
   <body>
     <form id="details_form" action="/account/details" method="post">
       <input type="hidden" name="_token" value="csrf-token">
@@ -97,49 +97,57 @@ const detailsHtml = (verified) => `<!doctype html>
   </body>
 </html>`;
 
-test.describe('international account phone UI with Insert Code', () => {
-  test('enhances and exactly aligns the live mobile-only controls', async ({ page }) => {
-    await page.setContent(pageHtml());
+test.describe('EasyStore auth phone ownership', () => {
+  test('theme helper does not enhance or rewrite the Insert Code auth field', async ({ page }) => {
+    await page.setContent(authHtml());
+
+    const phone = page.locator('#insert-code-phone');
+    await expect(page.locator('[data-phone-country-select]')).toHaveCount(0);
+    await expect(phone).toHaveAttribute('data-es-mobile-only', 'true');
+    await expect(phone).not.toHaveAttribute('data-cc-phone-owned');
+    await expect(phone).toHaveAttribute('placeholder', 'Enter your mobile number');
+    expect(await page.evaluate(() => window.__inputEvents)).toBe(0);
+  });
+
+  test('Singapore identity reaches EasyStore exactly as the customer entered it', async ({ page }) => {
+    await page.setContent(authHtml());
+
+    await page.locator('#insert-code-phone').fill('81234567');
+    const beforeClickEvents = await page.evaluate(() => window.__inputEvents);
+    await page.getByRole('button', { name: 'Continue' }).click();
+
+    await expect.poll(() => page.evaluate(() => window.__insertCodeBlocked)).toBe(false);
+    await expect.poll(() => page.evaluate(() => window.__submittedPhone)).toBe('81234567');
+    expect(await page.evaluate(() => window.__inputEvents)).toBe(beforeClickEvents);
+  });
+
+  test('explicit international identity reaches EasyStore unchanged', async ({ page }) => {
+    await page.setContent(authHtml());
+
+    await page.locator('#insert-code-phone').fill('+60123456789');
+    const beforeClickEvents = await page.evaluate(() => window.__inputEvents);
+    await page.getByRole('button', { name: 'Continue' }).click();
+
+    await expect.poll(() => page.evaluate(() => window.__insertCodeBlocked)).toBe(false);
+    await expect.poll(() => page.evaluate(() => window.__submittedPhone)).toBe('+60123456789');
+    expect(await page.evaluate(() => window.__inputEvents)).toBe(beforeClickEvents);
+  });
+});
+
+test.describe('account details international phone UI', () => {
+  test('country selector and phone input are exactly aligned', async ({ page }) => {
+    await page.setContent(detailsHtml(false));
 
     const country = page.locator('[data-phone-country-select]');
-    const phone = page.locator('#insert-code-phone');
+    const phone = page.locator('#DetailPhone');
 
     await expect(country).toBeVisible();
-    await expect(country).toHaveValue('SG');
-    await expect(phone).toHaveAttribute('data-cc-phone-owned', 'true');
-    await expect(phone).not.toHaveAttribute('data-es-mobile-only', 'true');
-    await expect(phone).toHaveAttribute('placeholder', 'Mobile number');
-
     const countryBox = await country.boundingBox();
     const phoneBox = await phone.boundingBox();
     expect(countryBox).not.toBeNull();
     expect(phoneBox).not.toBeNull();
     expect(Math.abs(countryBox.y - phoneBox.y)).toBeLessThanOrEqual(1);
     expect(Math.abs(countryBox.height - phoneBox.height)).toBeLessThanOrEqual(1);
-  });
-
-  test('foreign local number reaches EasyStore controlled state and original endpoint contract', async ({ page }) => {
-    await page.setContent(pageHtml());
-
-    await page.locator('[data-phone-country-select]').selectOption('MY');
-    await page.locator('#insert-code-phone').fill('0123456789');
-    await page.getByRole('button', { name: 'Continue' }).click();
-
-    await expect.poll(() => page.evaluate(() => window.__insertCodeBlocked)).toBe(false);
-    await expect.poll(() => page.evaluate(() => window.__controlledPhone)).toBe('+60123456789');
-    await expect.poll(() => page.evaluate(() => window.__submittedPhone)).toBe('+60123456789');
-    await expect.poll(() => page.evaluate(() => window.__submitAction)).toBe('/account/register');
-    await expect.poll(() => page.evaluate(() => window.__submitName)).toBe('customer[email_or_phone]');
-  });
-
-  test('Singapore keeps the existing eight-digit local identity shape', async ({ page }) => {
-    await page.setContent(pageHtml());
-
-    await page.locator('#insert-code-phone').fill('81234567');
-    await page.getByRole('button', { name: 'Continue' }).click();
-
-    await expect.poll(() => page.evaluate(() => window.__insertCodeBlocked)).toBe(false);
-    await expect.poll(() => page.evaluate(() => window.__submittedPhone)).toBe('81234567');
   });
 
   test('OTP-verified account phone is locked and restored before profile submit', async ({ page }) => {
