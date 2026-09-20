@@ -36,6 +36,7 @@
   const PHONE_MAX_DIGITS = 15;
   const PHONE_MESSAGE = 'Please enter a valid phone number with 7 to 15 digits.';
   const DIAL_MESSAGE = 'Please enter a valid country calling code.';
+  const COUNTRY_MISMATCH_MESSAGE = 'Phone number does not match the selected country code.';
   const STYLE_ID = 'AccountPhoneInputStyles';
   let generatedId = 0;
 
@@ -227,7 +228,14 @@
   };
 
   const validateComponent = (phone, component) => {
+    const country = byIso(component.select.value);
     if (isInternational(phone.value)) {
+      const digits = internationalDigits(phone.value);
+      if (country && digits.indexOf(country.dial) !== 0) {
+        phone.setCustomValidity(COUNTRY_MISMATCH_MESSAGE);
+        component.dialInput.setCustomValidity('');
+        return false;
+      }
       const valid = validInternational(phone.value);
       phone.setCustomValidity(valid ? '' : PHONE_MESSAGE);
       component.dialInput.setCustomValidity('');
@@ -241,7 +249,6 @@
       return true;
     }
 
-    const country = byIso(component.select.value);
     const dial = country ? country.dial : digitsOnly(component.dialInput.value);
     if (!country && (dial.length < 1 || dial.length > 3 || dial.charAt(0) === '0')) {
       component.dialInput.setCustomValidity(DIAL_MESSAGE);
