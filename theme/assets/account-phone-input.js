@@ -227,8 +227,7 @@
   };
 
   const validateComponent = (phone, component) => {
-    const country = byIso(component.select.value);
-    if (!country && isInternational(phone.value)) {
+    if (isInternational(phone.value)) {
       const valid = validInternational(phone.value);
       phone.setCustomValidity(valid ? '' : PHONE_MESSAGE);
       component.dialInput.setCustomValidity('');
@@ -242,6 +241,7 @@
       return true;
     }
 
+    const country = byIso(component.select.value);
     const dial = country ? country.dial : digitsOnly(component.dialInput.value);
     if (!country && (dial.length < 1 || dial.length > 3 || dial.charAt(0) === '0')) {
       component.dialInput.setCustomValidity(DIAL_MESSAGE);
@@ -294,7 +294,11 @@
     form.dataset.accountPhoneSubmitEnhanced = 'true';
 
     form.addEventListener('submit', (event) => {
-      if (!state.dirty) return;
+      if (!state.dirty) {
+        phone.value = state.initialPhone;
+        hiddenCountry.value = state.initialCountry;
+        return;
+      }
       if (!validateComponent(phone, component)) {
         event.preventDefault();
         event.stopPropagation();
@@ -364,9 +368,8 @@
     const initialCountry = String(hiddenCountry.value || '').trim().toUpperCase();
     const supportedInitialCountry = byIso(initialCountry);
 
-    // Do not reinterpret existing customer data for a country outside the
-    // storefront/CRM table. Keeping the native field is safer than silently
-    // defaulting an established DE/FR/etc. customer to Singapore.
+    // Never reinterpret an established customer whose ISO country is outside
+    // the shared storefront/CRM table. Native EasyStore values stay untouched.
     if (initialCountry && !supportedInitialCountry) {
       lockVerifiedPhone(phone, null, hiddenCountry, initialPhone, initialCountry);
       return;
@@ -379,9 +382,9 @@
     if (!component) return;
     component.wrapper.classList.add('account-phone-input--details');
 
-    if (isInternational(initialPhone)) inferFromInternational(phone, component, hiddenCountry);
-
-    const state = { dirty: false };
+    // Initial render is display-only: never split/rewrite an existing stored
+    // number. International parsing only happens after an actual phone edit.
+    const state = { dirty: false, initialPhone, initialCountry };
     attachListeners(phone, component, hiddenCountry, state);
     const locked = lockVerifiedPhone(phone, component, hiddenCountry, initialPhone, initialCountry);
     if (!locked) interceptDetailsSubmit(phone, component, hiddenCountry, state);
