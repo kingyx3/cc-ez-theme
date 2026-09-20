@@ -32,9 +32,6 @@
     { iso: 'CA', dial: '1', label: 'CA +1' },
   ];
 
-  const DROP_DOMESTIC_ZERO = new Set([
-    'MY', 'ID', 'PH', 'TH', 'VN', 'TW', 'JP', 'KR', 'IN', 'AU', 'NZ', 'GB',
-  ]);
   const PHONE_MIN_DIGITS = 7;
   const PHONE_MAX_DIGITS = 15;
   const PHONE_MESSAGE = 'Please enter a valid phone number with 7 to 15 digits.';
@@ -55,12 +52,11 @@
     return '';
   };
 
-  const stripDomesticZero = (iso, value) => {
-    const digits = digitsOnly(value);
-    if (DROP_DOMESTIC_ZERO.has(String(iso || '').toUpperCase()) && digits.charAt(0) === '0') {
-      return digits.slice(1);
-    }
-    return digits;
+  const validInternational = (value) => {
+    const digits = internationalDigits(value);
+    return digits.length >= PHONE_MIN_DIGITS &&
+      digits.length <= PHONE_MAX_DIGITS &&
+      digits.charAt(0) !== '0';
   };
 
   const countryMatchesForInternational = (value) => {
@@ -76,19 +72,14 @@
     );
   };
 
-  const rootFor = (node) => (node && node.getRootNode ? node.getRootNode() : document);
-
-  const ensureStyles = (root) => {
-    const styleRoot = root && root.nodeType === 11 ? root : document.head;
-    if (!styleRoot || !styleRoot.querySelector || styleRoot.querySelector('#' + STYLE_ID)) return;
-    const doc = styleRoot.ownerDocument || document;
-    const style = doc.createElement('style');
+  const ensureStyles = () => {
+    if (!document.head || document.getElementById(STYLE_ID)) return;
+    const style = document.createElement('style');
     style.id = STYLE_ID;
     style.textContent = [
       '.account-phone-input { display:grid; grid-template-columns:minmax(11rem,14rem) minmax(0,1fr); gap:1rem; align-items:center; width:100%; }',
       '.account-phone-input--other { grid-template-columns:minmax(11rem,14rem) minmax(8rem,10rem) minmax(0,1fr); }',
-      '.account-phone-input > .field, .account-phone-input > .account-phone-input__number-shell { margin:0!important; padding:0!important; align-self:center; }',
-      '.account-phone-input__number-shell { min-width:0; }',
+      '.account-phone-input > .field { margin:0!important; padding:0!important; align-self:center; }',
       '.account-phone-input__country .select { display:block; height:4rem!important; min-height:4rem!important; margin:0!important; }',
       '.account-phone-input__country select, .account-phone-input__dial input, .account-phone-input__number input { width:100%; box-sizing:border-box; }',
       '.account-phone-input__country select, .account-phone-input__number input { display:block!important; height:4rem!important; min-height:4rem!important; margin:0!important; border:0!important; border-radius:3.5rem!important; box-shadow:0 0 0 .1rem rgba(var(--color-foreground),1), inset 0 2px 3px rgba(0,0,0,.05)!important; position:relative!important; top:0!important; transform:none!important; }',
@@ -102,7 +93,7 @@
       '  .account-phone-input--other .account-phone-input__number { grid-column:1 / -1; }',
       '}',
     ].join('\n');
-    styleRoot.appendChild(style);
+    document.head.appendChild(style);
   };
 
   const ensurePhoneId = (phone) => {
@@ -113,28 +104,27 @@
   };
 
   const createCountrySelect = (phone) => {
-    const doc = phone.ownerDocument || document;
-    const countryField = doc.createElement('div');
+    const countryField = document.createElement('div');
     countryField.className = 'field on_focus account-phone-input__country';
-    const selectWrapper = doc.createElement('div');
+    const selectWrapper = document.createElement('div');
     selectWrapper.className = 'select';
-    const select = doc.createElement('select');
+    const select = document.createElement('select');
     select.id = ensurePhoneId(phone) + 'CountryCode';
     select.setAttribute('data-phone-country-select', '');
     select.setAttribute('aria-label', 'Country code');
 
     COUNTRIES.forEach((country) => {
-      const option = doc.createElement('option');
+      const option = document.createElement('option');
       option.value = country.iso;
       option.textContent = country.label;
       select.appendChild(option);
     });
-    const other = doc.createElement('option');
+    const other = document.createElement('option');
     other.value = '';
     other.textContent = 'Other';
     select.appendChild(other);
 
-    const label = doc.createElement('label');
+    const label = document.createElement('label');
     label.setAttribute('for', select.id);
     label.textContent = 'Country code';
     selectWrapper.appendChild(select);
@@ -144,11 +134,10 @@
   };
 
   const createDialField = (phone) => {
-    const doc = phone.ownerDocument || document;
-    const field = doc.createElement('div');
+    const field = document.createElement('div');
     field.className = 'field account-phone-input__dial';
     field.hidden = true;
-    const input = doc.createElement('input');
+    const input = document.createElement('input');
     input.type = 'tel';
     input.id = ensurePhoneId(phone) + 'DialCode';
     input.inputMode = 'numeric';
@@ -156,7 +145,7 @@
     input.maxLength = 3;
     input.placeholder = '+ code';
     input.setAttribute('aria-label', 'Country calling code');
-    const label = doc.createElement('label');
+    const label = document.createElement('label');
     label.setAttribute('for', input.id);
     label.textContent = '+ code';
     field.appendChild(input);
@@ -164,50 +153,28 @@
     return { dialField: field, dialInput: input };
   };
 
-  const buildComponent = (phone, initialIso, initialDial) => {
-    const existing = phone.closest && phone.closest('.account-phone-input');
-    if (existing) {
-      return {
-        wrapper: existing,
-        select: existing.querySelector('[data-phone-country-select]'),
-        dialField: existing.querySelector('.account-phone-input__dial'),
-        dialInput: existing.querySelector('.account-phone-input__dial input'),
-        hint: existing.querySelector('.account-phone-input__hint'),
-      };
-    }
+  const buildComponent = (phone, initialIso) => {
+    const phoneContainer = phone.closest && phone.closest('.field');
+    if (!phoneContainer || !phoneContainer.parentNode) return null;
+    phoneContainer.classList.add('account-phone-input__number');
 
-    const doc = phone.ownerDocument || document;
-    let phoneContainer = phone.closest && phone.closest('.field');
-    if (!phoneContainer) {
-      if (!phone.parentNode) return null;
-      phoneContainer = doc.createElement('div');
-      phoneContainer.className = 'account-phone-input__number account-phone-input__number-shell';
-      phone.parentNode.insertBefore(phoneContainer, phone);
-      phoneContainer.appendChild(phone);
-    } else {
-      phoneContainer.classList.add('account-phone-input__number');
-    }
-    if (!phoneContainer.parentNode) return null;
-
-    ensureStyles(rootFor(phone));
-    const wrapper = doc.createElement('div');
+    ensureStyles();
+    const wrapper = document.createElement('div');
     wrapper.className = 'account-phone-input';
     const country = createCountrySelect(phone);
     const dial = createDialField(phone);
-    const hint = doc.createElement('small');
+    const hint = document.createElement('small');
     hint.className = 'account-phone-input__hint';
     hint.id = ensurePhoneId(phone) + 'InternationalHint';
     hint.hidden = true;
-    hint.textContent = 'For Other, enter the country calling code and the local number without a domestic leading 0.';
+    hint.textContent = 'For Other, enter a full international number or a country calling code plus the local number.';
 
-    const parent = phoneContainer.parentNode;
-    parent.insertBefore(wrapper, phoneContainer);
+    phoneContainer.parentNode.insertBefore(wrapper, phoneContainer);
     wrapper.appendChild(country.countryField);
     wrapper.appendChild(dial.dialField);
     wrapper.appendChild(phoneContainer);
     wrapper.appendChild(hint);
     country.select.value = byIso(initialIso) ? String(initialIso).toUpperCase() : '';
-    dial.dialInput.value = digitsOnly(initialDial).slice(0, 3);
     return { wrapper, select: country.select, dialField: dial.dialField, dialInput: dial.dialInput, hint };
   };
 
@@ -221,29 +188,69 @@
     if (!isOther) component.dialInput.setCustomValidity('');
   };
 
-  const prepareInternationalValue = (country, dial, local) => {
-    const national = country ? stripDomesticZero(country.iso, local) : digitsOnly(local);
-    return '+' + digitsOnly(dial) + national;
+  const useCountry = (phone, component, hiddenCountry, country, raw) => {
+    component.select.value = country.iso;
+    component.dialInput.value = country.dial;
+    phone.value = raw.slice(country.dial.length);
+    hiddenCountry.value = country.iso;
+    syncOtherUi(component, phone);
+  };
+
+  const inferFromInternational = (phone, component, hiddenCountry) => {
+    if (!isInternational(phone.value)) return false;
+    const raw = internationalDigits(phone.value);
+    if (!raw) return false;
+
+    const storedCountry = byIso(hiddenCountry.value);
+    if (storedCountry && raw.indexOf(storedCountry.dial) === 0) {
+      useCountry(phone, component, hiddenCountry, storedCountry, raw);
+      return true;
+    }
+
+    const matches = countryMatchesForInternational(phone.value);
+    if (matches.length === 1) {
+      useCountry(phone, component, hiddenCountry, matches[0], raw);
+      return true;
+    }
+
+    component.select.value = '';
+    hiddenCountry.value = '';
+    if (matches.length > 1) {
+      component.dialInput.value = matches[0].dial;
+      phone.value = raw.slice(matches[0].dial.length);
+    } else {
+      component.dialInput.value = '';
+      phone.value = '+' + raw;
+    }
+    syncOtherUi(component, phone);
+    return true;
   };
 
   const validateComponent = (phone, component) => {
+    const country = byIso(component.select.value);
+    if (!country && isInternational(phone.value)) {
+      const valid = validInternational(phone.value);
+      phone.setCustomValidity(valid ? '' : PHONE_MESSAGE);
+      component.dialInput.setCustomValidity('');
+      return valid;
+    }
+
     const local = digitsOnly(phone.value);
     if (!local) {
       phone.setCustomValidity('');
       component.dialInput.setCustomValidity('');
       return true;
     }
-    const country = byIso(component.select.value);
+
     const dial = country ? country.dial : digitsOnly(component.dialInput.value);
-    if (!country && (dial.length < 1 || dial.length > 3)) {
+    if (!country && (dial.length < 1 || dial.length > 3 || dial.charAt(0) === '0')) {
       component.dialInput.setCustomValidity(DIAL_MESSAGE);
       phone.setCustomValidity('');
       return false;
     }
     component.dialInput.setCustomValidity('');
 
-    const national = country ? stripDomesticZero(country.iso, local) : local;
-    const totalDigits = dial.length + national.length;
+    const totalDigits = dial.length + local.length;
     if (totalDigits < PHONE_MIN_DIGITS || totalDigits > PHONE_MAX_DIGITS) {
       phone.setCustomValidity(PHONE_MESSAGE);
       return false;
@@ -252,35 +259,7 @@
     return true;
   };
 
-  const inferFromInternational = (phone, component, hiddenCountry) => {
-    if (!isInternational(phone.value)) return false;
-    const raw = internationalDigits(phone.value);
-    const matches = countryMatchesForInternational(phone.value);
-    if (matches.length === 1) {
-      const country = matches[0];
-      component.select.value = country.iso;
-      component.dialInput.value = country.dial;
-      phone.value = raw.slice(country.dial.length);
-      hiddenCountry.value = country.iso;
-      syncOtherUi(component, phone);
-      return true;
-    }
-
-    component.select.value = '';
-    if (matches.length > 1) {
-      component.dialInput.value = matches[0].dial;
-      phone.value = raw.slice(matches[0].dial.length);
-    } else {
-      const guessedDialLength = Math.min(3, Math.max(1, raw.length - PHONE_MIN_DIGITS));
-      component.dialInput.value = raw.slice(0, guessedDialLength);
-      phone.value = raw.slice(guessedDialLength);
-    }
-    hiddenCountry.value = '';
-    syncOtherUi(component, phone);
-    return true;
-  };
-
-  const attachListeners = (phone, component, hiddenCountry) => {
+  const attachListeners = (phone, component, hiddenCountry, state) => {
     const update = () => {
       const country = byIso(component.select.value);
       if (country) component.dialInput.value = country.dial;
@@ -289,24 +268,33 @@
       validateComponent(phone, component);
     };
 
-    component.select.addEventListener('change', update);
+    component.select.addEventListener('change', () => {
+      state.dirty = true;
+      update();
+    });
     component.dialInput.addEventListener('input', () => {
+      state.dirty = true;
       const numeric = digitsOnly(component.dialInput.value).slice(0, 3);
       if (component.dialInput.value !== numeric) component.dialInput.value = numeric;
       update();
     });
-    phone.addEventListener('input', update);
+    phone.addEventListener('input', () => {
+      state.dirty = true;
+      if (isInternational(phone.value)) inferFromInternational(phone, component, hiddenCountry);
+      update();
+    });
     phone.addEventListener('change', update);
     phone.addEventListener('blur', update);
-    return update;
+    update();
   };
 
-  const interceptDetailsSubmit = (phone, component, hiddenCountry) => {
+  const interceptDetailsSubmit = (phone, component, hiddenCountry, state) => {
     const form = phone.form || (phone.closest && phone.closest('form'));
     if (!form || form.dataset.accountPhoneSubmitEnhanced === 'true') return;
     form.dataset.accountPhoneSubmitEnhanced = 'true';
 
     form.addEventListener('submit', (event) => {
+      if (!state.dirty) return;
       if (!validateComponent(phone, component)) {
         event.preventDefault();
         event.stopPropagation();
@@ -318,29 +306,39 @@
       if (form.checkValidity && !form.checkValidity()) return;
 
       const country = byIso(component.select.value);
-      const local = digitsOnly(phone.value);
-      if (!local) return;
       if (country) {
-        phone.value = stripDomesticZero(country.iso, local);
+        phone.value = digitsOnly(phone.value);
         hiddenCountry.value = country.iso;
-      } else {
-        phone.value = prepareInternationalValue(null, component.dialInput.value, local);
-        hiddenCountry.value = '';
+        return;
       }
+
+      if (isInternational(phone.value)) {
+        phone.value = '+' + internationalDigits(phone.value);
+        hiddenCountry.value = '';
+        return;
+      }
+
+      const local = digitsOnly(phone.value);
+      const dial = digitsOnly(component.dialInput.value);
+      if (!local) return;
+      phone.value = '+' + dial + local;
+      hiddenCountry.value = '';
     }, true);
   };
 
-  const lockExistingDetailsPhone = (phone, component, hiddenCountry, initialPhone, initialCountry) => {
+  const lockVerifiedPhone = (phone, component, hiddenCountry, initialPhone, initialCountry) => {
     if (hiddenCountry.getAttribute('data-phone-verified') !== 'true' || !String(initialPhone || '').trim()) return false;
     const form = phone.form || (phone.closest && phone.closest('form'));
 
-    component.wrapper.classList.add('account-phone-input--locked');
     phone.readOnly = true;
     phone.setAttribute('aria-readonly', 'true');
     phone.setAttribute('data-verified-phone-locked', 'true');
-    component.select.disabled = true;
-    component.select.setAttribute('aria-disabled', 'true');
-    component.dialInput.disabled = true;
+    if (component) {
+      component.wrapper.classList.add('account-phone-input--locked');
+      component.select.disabled = true;
+      component.select.setAttribute('aria-disabled', 'true');
+      component.dialInput.disabled = true;
+    }
 
     if (form) {
       form.addEventListener('submit', () => {
@@ -354,26 +352,42 @@
   const enhanceDetailsPhone = (hiddenCountry) => {
     if (!hiddenCountry || hiddenCountry.dataset.phoneCountryEnhanced === 'true') return;
     const phoneId = hiddenCountry.getAttribute('data-phone-input-id') || 'DetailPhone';
-    const doc = hiddenCountry.ownerDocument || document;
-    const phone = doc.getElementById(phoneId);
+    const phone = document.getElementById(phoneId);
     if (!phone) return;
+
     hiddenCountry.dataset.phoneCountryEnhanced = 'true';
     phone.setAttribute('type', 'tel');
     phone.setAttribute('inputmode', 'tel');
     phone.setAttribute('autocomplete', 'tel-national');
+
     const initialPhone = String(phone.value || '');
     const initialCountry = String(hiddenCountry.value || '').trim().toUpperCase();
-    const component = buildComponent(phone, byIso(initialCountry) ? initialCountry : 'SG', '');
+    const supportedInitialCountry = byIso(initialCountry);
+
+    // Do not reinterpret existing customer data for a country outside the
+    // storefront/CRM table. Keeping the native field is safer than silently
+    // defaulting an established DE/FR/etc. customer to Singapore.
+    if (initialCountry && !supportedInitialCountry) {
+      lockVerifiedPhone(phone, null, hiddenCountry, initialPhone, initialCountry);
+      return;
+    }
+
+    const initialIso = supportedInitialCountry
+      ? initialCountry
+      : (isInternational(initialPhone) ? '' : 'SG');
+    const component = buildComponent(phone, initialIso);
     if (!component) return;
     component.wrapper.classList.add('account-phone-input--details');
-    inferFromInternational(phone, component, hiddenCountry);
-    attachListeners(phone, component, hiddenCountry)();
-    const locked = lockExistingDetailsPhone(phone, component, hiddenCountry, initialPhone, initialCountry);
-    if (!locked) interceptDetailsSubmit(phone, component, hiddenCountry);
+
+    if (isInternational(initialPhone)) inferFromInternational(phone, component, hiddenCountry);
+
+    const state = { dirty: false };
+    attachListeners(phone, component, hiddenCountry, state);
+    const locked = lockVerifiedPhone(phone, component, hiddenCountry, initialPhone, initialCountry);
+    if (!locked) interceptDetailsSubmit(phone, component, hiddenCountry, state);
   };
 
   const start = () => {
-    ensureStyles(document);
     document.querySelectorAll('[data-phone-country-code]').forEach(enhanceDetailsPhone);
   };
 
