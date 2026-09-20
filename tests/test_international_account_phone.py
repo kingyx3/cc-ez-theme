@@ -53,12 +53,17 @@ class InternationalAccountPhoneTests(unittest.TestCase):
         self.assertIn('data-phone-input-id="{{ phone_input_id | escape }}"', source)
         self.assertNotIn("account-phone-input.js", source)
 
-    def test_phone_picker_marks_only_easystore_verified_phone_authentication(self) -> None:
+    def test_phone_picker_uses_existing_easystore_phone_authentication_shape(self) -> None:
         source = SNIPPET.read_text(encoding="utf-8")
+        details = DETAILS_TEMPLATE.read_text(encoding="utf-8")
 
         self.assertIn("{% for kv in customer.authentications %}", source)
         self.assertIn("auth_key == 'phone' and auth_value.is_connected and auth_value.is_verified", source)
         self.assertIn('data-phone-verified="{% if phone_auth_verified %}true{% else %}false{% endif %}"', source)
+        # The stock EasyStore details template already consumes the same object
+        # shape, so the lock does not invent a new platform contract.
+        self.assertIn("{% for kv in customer.authentications %}", details)
+        self.assertIn("{% if value.is_verified %}", details)
 
     def test_details_page_always_renders_phone_country_hook(self) -> None:
         source = DETAILS_TEMPLATE.read_text(encoding="utf-8")
@@ -120,11 +125,45 @@ class InternationalAccountPhoneTests(unittest.TestCase):
         self.assertNotIn("sessionStorage", source)
         self.assertNotIn("AUTH_COUNTRY_KEY", source)
 
+    def test_stored_iso_wins_when_dial_code_is_ambiguous(self) -> None:
+        source = RUNTIME.read_text(encoding="utf-8")
+
+        self.assertIn("const storedCountry = byIso(hiddenCountry.value);", source)
+        self.assertIn("raw.indexOf(storedCountry.dial) === 0", source)
+        self.assertIn("useCountry(phone, component, hiddenCountry, storedCountry, raw);", source)
+        self.assertIn("{ iso: 'US', dial: '1'", source)
+        self.assertIn("{ iso: 'CA', dial: '1'", source)
+
+    def test_existing_unsupported_country_is_never_defaulted_to_singapore(self) -> None:
+        source = RUNTIME.read_text(encoding="utf-8")
+
+        self.assertIn("if (initialCountry && !supportedInitialCountry)", source)
+        self.assertIn("lockVerifiedPhone(phone, null, hiddenCountry, initialPhone, initialCountry);", source)
+        self.assertIn("return;", source)
+        self.assertNotIn("byIso(initialCountry) ? initialCountry : 'SG'", source)
+
+    def test_untouched_profile_phone_is_not_rewritten_on_unrelated_submit(self) -> None:
+        source = RUNTIME.read_text(encoding="utf-8")
+
+        self.assertIn("const state = { dirty: false };", source)
+        self.assertIn("state.dirty = true;", source)
+        self.assertIn("if (!state.dirty) return;", source)
+        self.assertNotIn("DROP_DOMESTIC_ZERO", source)
+        self.assertNotIn("stripDomesticZero", source)
+
+    def test_other_country_accepts_explicit_international_identity(self) -> None:
+        source = RUNTIME.read_text(encoding="utf-8")
+
+        self.assertIn("const validInternational = (value) =>", source)
+        self.assertIn("if (!country && isInternational(phone.value))", source)
+        self.assertIn("phone.value = '+' + internationalDigits(phone.value);", source)
+        self.assertIn("hiddenCountry.value = '';", source)
+
     def test_verified_account_phone_is_read_only_and_restored_on_submit(self) -> None:
         source = RUNTIME.read_text(encoding="utf-8")
 
         self.assertIn(
-            "const lockExistingDetailsPhone = (phone, component, hiddenCountry, initialPhone, initialCountry) =>",
+            "const lockVerifiedPhone = (phone, component, hiddenCountry, initialPhone, initialCountry) =>",
             source,
         )
         self.assertIn("hiddenCountry.getAttribute('data-phone-verified') !== 'true'", source)
@@ -133,7 +172,7 @@ class InternationalAccountPhoneTests(unittest.TestCase):
         self.assertIn("component.select.disabled = true;", source)
         self.assertIn("phone.value = initialPhone;", source)
         self.assertIn("hiddenCountry.value = initialCountry;", source)
-        self.assertIn("if (!locked) interceptDetailsSubmit(phone, component, hiddenCountry);", source)
+        self.assertIn("if (!locked) interceptDetailsSubmit(phone, component, hiddenCountry, state);", source)
 
     def test_auth_forms_keep_native_easystore_endpoints_names_and_csrf(self) -> None:
         register = REGISTER_TEMPLATE.read_text(encoding="utf-8")
@@ -159,22 +198,6 @@ class InternationalAccountPhoneTests(unittest.TestCase):
         self.assertNotIn("XMLHttpRequest", runtime)
         self.assertNotIn("setAttribute('action'", runtime)
         self.assertNotIn("setAttribute('name'", runtime)
-
-    def test_unlisted_details_country_uses_numeric_custom_calling_code(self) -> None:
-        source = RUNTIME.read_text(encoding="utf-8")
-
-        self.assertIn("const DIAL_MESSAGE = 'Please enter a valid country calling code.';", source)
-        self.assertIn("if (!country && (dial.length < 1 || dial.length > 3))", source)
-        self.assertIn("component.dialInput.setCustomValidity(DIAL_MESSAGE);", source)
-        self.assertIn("phone.value = prepareInternationalValue(null, component.dialInput.value, local);", source)
-        self.assertIn("hiddenCountry.value = '';", source)
-
-    def test_known_details_country_keeps_easystore_iso_contract(self) -> None:
-        source = RUNTIME.read_text(encoding="utf-8")
-
-        self.assertIn("phone.value = stripDomesticZero(country.iso, local);", source)
-        self.assertIn("hiddenCountry.value = country.iso;", source)
-        self.assertIn("countryMatchesForInternational", source)
 
     def test_phone_length_stays_within_crm_identity_bounds(self) -> None:
         source = RUNTIME.read_text(encoding="utf-8")
