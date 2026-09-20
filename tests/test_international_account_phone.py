@@ -56,7 +56,10 @@ class InternationalAccountPhoneTests(unittest.TestCase):
         source = SNIPPET.read_text(encoding="utf-8")
         details = DETAILS_TEMPLATE.read_text(encoding="utf-8")
         self.assertIn("{% for kv in customer.authentications %}", source)
-        self.assertIn("auth_key == 'phone' and auth_value.is_connected and auth_value.is_verified", source)
+        self.assertIn(
+            "auth_key == 'phone' and auth_value.is_connected and auth_value.is_verified and customer.phone != blank",
+            source,
+        )
         self.assertIn('data-phone-verified="{% if phone_auth_verified %}true{% else %}false{% endif %}"', source)
         self.assertIn("{% for kv in customer.authentications %}", details)
         self.assertIn("{% if value.is_verified %}", details)
