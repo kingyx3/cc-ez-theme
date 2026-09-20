@@ -494,8 +494,11 @@ class StorefrontConfigurationTests(unittest.TestCase):
         )
         self.assertEqual(header.count('href="/collections/the-hobbit"'), 2)
         self.assertEqual(
-            header.count('href="/collections/marvel-super-heroes"'), 2
+            header.count('href="/collections/marvel-super-heroes"'), 0
         )
+        self.assertEqual(header.count('href="/collections/star-trek"'), 2)
+        self.assertEqual(header.count('href="/collections/secret-lair"'), 2)
+        self.assertEqual(header.count('href="/collections/pokemon"'), 2)
         self.assertEqual(
             header.count('href="/collections/secrets-of-strixhaven"'), 0
         )
@@ -505,41 +508,57 @@ class StorefrontConfigurationTests(unittest.TestCase):
         first_crackers = header.index(
             'href="/collections/late-night-crackers"'
         )
+        first_star_trek = header.index(
+            'href="/collections/star-trek"', first_crackers
+        )
         first_preorder = header.index(
-            'href="/collections/reality-fracture"', first_crackers
+            'href="/collections/reality-fracture"', first_star_trek
         )
         first_hobbit = header.index(
             'href="/collections/the-hobbit"', first_preorder
         )
-        first_marvel = header.index(
-            'href="/collections/marvel-super-heroes"', first_hobbit
+        first_secret_lair = header.index(
+            'href="/collections/secret-lair"', first_hobbit
         )
-        first_about = header.index('href="/pages/about-us"', first_marvel)
+        first_pokemon = header.index(
+            'href="/collections/pokemon"', first_secret_lair
+        )
+        first_about = header.index('href="/pages/about-us"', first_pokemon)
         self.assertLess(first_browse, first_crackers)
-        self.assertLess(first_crackers, first_preorder)
+        self.assertLess(first_crackers, first_star_trek)
+        self.assertLess(first_star_trek, first_preorder)
         self.assertLess(first_preorder, first_hobbit)
-        self.assertLess(first_hobbit, first_marvel)
-        self.assertLess(first_marvel, first_about)
+        self.assertLess(first_hobbit, first_secret_lair)
+        self.assertLess(first_secret_lair, first_pokemon)
+        self.assertLess(first_pokemon, first_about)
 
         second_browse = header.index("navigation-browse", first_browse + 1)
         second_crackers = header.index(
             'href="/collections/late-night-crackers"', first_about
         )
+        second_star_trek = header.index(
+            'href="/collections/star-trek"', second_crackers
+        )
         second_preorder = header.index(
-            'href="/collections/reality-fracture"', second_crackers
+            'href="/collections/reality-fracture"', second_star_trek
         )
         second_hobbit = header.index(
             'href="/collections/the-hobbit"', second_preorder
         )
-        second_marvel = header.index(
-            'href="/collections/marvel-super-heroes"', second_hobbit
+        second_secret_lair = header.index(
+            'href="/collections/secret-lair"', second_hobbit
         )
-        second_about = header.index('href="/pages/about-us"', second_marvel)
+        second_pokemon = header.index(
+            'href="/collections/pokemon"', second_secret_lair
+        )
+        second_about = header.index('href="/pages/about-us"', second_pokemon)
         self.assertLess(second_browse, second_crackers)
-        self.assertLess(second_crackers, second_preorder)
+        self.assertLess(second_crackers, second_star_trek)
+        self.assertLess(second_star_trek, second_preorder)
         self.assertLess(second_preorder, second_hobbit)
-        self.assertLess(second_hobbit, second_marvel)
-        self.assertLess(second_marvel, second_about)
+        self.assertLess(second_hobbit, second_secret_lair)
+        self.assertLess(second_secret_lair, second_pokemon)
+        self.assertLess(second_pokemon, second_about)
         self.assertIn('class="header__nav-item--about"', header)
         self.assertEqual(self.sections["header"]["settings"]["logo_max_width"], 90)
 
@@ -569,6 +588,20 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertIn(".browse-menu__flyout", stylesheet)
         self.assertIn("left: 100%;", stylesheet)
         self.assertIn("pointer-events: auto;", stylesheet)
+
+        compact_query = "@media screen and (min-width: 990px) and (max-width: 1199px)"
+        self.assertEqual(stylesheet.count(compact_query), 1)
+        compact = stylesheet.split(compact_query, 1)[1].split("\n}\n", 1)[0]
+        self.assertIn(
+            ".header__inline-menu > .list-menu--inline > li > .header__menu-item,",
+            compact,
+        )
+        self.assertIn("font-size: 1.3rem;", compact)
+        self.assertIn("letter-spacing: 0.02em;", compact)
+        self.assertIn("padding-left: 0.5rem;", compact)
+        self.assertIn("padding-right: 0.5rem;", compact)
+        self.assertIn("summary.header__menu-item", compact)
+        self.assertIn("padding-right: 2rem;", compact)
 
     def test_unsupported_saved_items_code_is_absent(self) -> None:
         unsupported_term = "wish" + "list"
