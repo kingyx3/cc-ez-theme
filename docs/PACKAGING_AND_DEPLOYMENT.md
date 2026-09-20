@@ -214,7 +214,8 @@ If `EASYSTORE_ADMIN_TOKEN` is missing, packaging still succeeds and the deploy j
 - [ ] Product titles use available card width on desktop and mobile.
 - [ ] Announcement hover/focus contrast is readable.
 - [ ] Search history and the mobile drawer work with keyboard and pointer input.
-- [ ] Desktop and mobile navigation show a Browse collection dropdown before Crack-a-Pack, Hobbit, Marvel, Strixhaven, and About Us.
+- [ ] Desktop and mobile navigation show a Browse collection dropdown before Crack-a-Pack, Star Trek, Reality Fracture, Hobbit, Secret Lair, Pokemon TCG, and About Us.
+- [ ] At desktop widths between 990px and 1199px, every navigation label stays on one line.
 - [ ] Hovering or focusing a parent collection in the desktop Browse menu reveals its child collection flyout.
 - [ ] The footer shows Follow us and Contact Us, with no payment or quick-link blocks.
 - [ ] The Terms of Service footer link opens `https://cardboard.sg/pages/terms-of-service`.

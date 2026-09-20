@@ -259,6 +259,31 @@ body {
   }
 }
 
+/*
+ * Compact desktop navigation between 990px and 1199px.
+ *
+ * The inline menu is one no-wrap row from 990px up. With eight shortcuts the
+ * row needs about 795px at full size, which the navigation column only offers
+ * from roughly 1120px; below that the flex items shrink and labels break onto
+ * two lines. Slightly smaller type and tighter padding keep every label on one
+ * line down to 990px, measured on the live storefront with about 50px spare.
+ * The band runs to 1199px because the full-size row fits at 1120px by only a
+ * couple of pixels, which font rendering differences would erase.
+ */
+@media screen and (min-width: 990px) and (max-width: 1199px) {
+  .header__inline-menu > .list-menu--inline > li > .header__menu-item,
+  .header__inline-menu > .list-menu--inline > li > details-disclosure > details > .header__menu-item {
+    font-size: 1.3rem;
+    letter-spacing: 0.02em;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
+
+  .header__inline-menu > .list-menu--inline > li > details-disclosure > details > summary.header__menu-item {
+    padding-right: 2rem;
+  }
+}
+
 .button,
 .btn {
   border-radius: 0.8rem;
