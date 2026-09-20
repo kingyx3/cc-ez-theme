@@ -46,7 +46,6 @@ def storefront_country_dial_codes() -> dict[str, str]:
 class InternationalAccountPhoneTests(unittest.TestCase):
     def test_no_js_details_fallback_keeps_easystore_country_code_contract(self) -> None:
         source = SNIPPET.read_text(encoding="utf-8")
-
         self.assertIn('name="{{ country_code_field_name | escape }}"', source)
         self.assertIn('value="{{ default_country_code | escape }}"', source)
         self.assertIn("data-phone-country-code", source)
@@ -56,18 +55,14 @@ class InternationalAccountPhoneTests(unittest.TestCase):
     def test_phone_picker_uses_existing_easystore_phone_authentication_shape(self) -> None:
         source = SNIPPET.read_text(encoding="utf-8")
         details = DETAILS_TEMPLATE.read_text(encoding="utf-8")
-
         self.assertIn("{% for kv in customer.authentications %}", source)
         self.assertIn("auth_key == 'phone' and auth_value.is_connected and auth_value.is_verified", source)
         self.assertIn('data-phone-verified="{% if phone_auth_verified %}true{% else %}false{% endif %}"', source)
-        # The stock EasyStore details template already consumes the same object
-        # shape, so the lock does not invent a new platform contract.
         self.assertIn("{% for kv in customer.authentications %}", details)
         self.assertIn("{% if value.is_verified %}", details)
 
     def test_details_page_always_renders_phone_country_hook(self) -> None:
         source = DETAILS_TEMPLATE.read_text(encoding="utf-8")
-
         self.assertIn(
             "{% include 'phone-country-picker', phone_input_id: 'DetailPhone', country_code_field_name: 'details[country_code]', default_country_code: customer.country_code %}",
             source,
@@ -76,7 +71,6 @@ class InternationalAccountPhoneTests(unittest.TestCase):
 
     def test_phone_helper_is_loaded_from_existing_global_account_asset(self) -> None:
         source = DETAILS_RUNTIME.read_text(encoding="utf-8")
-
         self.assertIn("const loadAccountPhoneInput = () =>", source)
         self.assertIn("account-details-validation\\.js", source)
         self.assertIn("account-phone-input.js", source)
@@ -89,7 +83,6 @@ class InternationalAccountPhoneTests(unittest.TestCase):
 
     def test_details_ui_adds_country_selector_and_numeric_other_dial_code(self) -> None:
         source = RUNTIME.read_text(encoding="utf-8")
-
         self.assertIn("wrapper.className = 'account-phone-input';", source)
         self.assertIn("countryField.className = 'field on_focus account-phone-input__country';", source)
         self.assertIn("label.textContent = 'Country code';", source)
@@ -102,7 +95,6 @@ class InternationalAccountPhoneTests(unittest.TestCase):
 
     def test_country_and_number_controls_use_one_explicit_geometry(self) -> None:
         source = RUNTIME.read_text(encoding="utf-8")
-
         self.assertIn("align-items:center", source)
         self.assertIn("height:4rem!important; min-height:4rem!important; margin:0!important", source)
         self.assertIn("border-radius:3.5rem!important", source)
@@ -111,7 +103,6 @@ class InternationalAccountPhoneTests(unittest.TestCase):
 
     def test_theme_helper_never_takes_ownership_of_auth_identity_inputs(self) -> None:
         source = RUNTIME.read_text(encoding="utf-8")
-
         self.assertIn("Authentication is intentionally out of scope", source)
         self.assertNotIn("data-es-mobile-only", source)
         self.assertNotIn("data-cc-phone-owned", source)
@@ -125,9 +116,8 @@ class InternationalAccountPhoneTests(unittest.TestCase):
         self.assertNotIn("sessionStorage", source)
         self.assertNotIn("AUTH_COUNTRY_KEY", source)
 
-    def test_stored_iso_wins_when_dial_code_is_ambiguous(self) -> None:
+    def test_stored_iso_wins_when_dial_code_is_ambiguous_after_an_edit(self) -> None:
         source = RUNTIME.read_text(encoding="utf-8")
-
         self.assertIn("const storedCountry = byIso(hiddenCountry.value);", source)
         self.assertIn("raw.indexOf(storedCountry.dial) === 0", source)
         self.assertIn("useCountry(phone, component, hiddenCountry, storedCountry, raw);", source)
@@ -136,32 +126,30 @@ class InternationalAccountPhoneTests(unittest.TestCase):
 
     def test_existing_unsupported_country_is_never_defaulted_to_singapore(self) -> None:
         source = RUNTIME.read_text(encoding="utf-8")
-
         self.assertIn("if (initialCountry && !supportedInitialCountry)", source)
         self.assertIn("lockVerifiedPhone(phone, null, hiddenCountry, initialPhone, initialCountry);", source)
-        self.assertIn("return;", source)
         self.assertNotIn("byIso(initialCountry) ? initialCountry : 'SG'", source)
 
-    def test_untouched_profile_phone_is_not_rewritten_on_unrelated_submit(self) -> None:
+    def test_untouched_profile_phone_is_restored_before_unrelated_submit(self) -> None:
         source = RUNTIME.read_text(encoding="utf-8")
-
-        self.assertIn("const state = { dirty: false };", source)
+        self.assertIn("const state = { dirty: false, initialPhone, initialCountry };", source)
         self.assertIn("state.dirty = true;", source)
-        self.assertIn("if (!state.dirty) return;", source)
+        self.assertIn("if (!state.dirty) {", source)
+        self.assertIn("phone.value = state.initialPhone;", source)
+        self.assertIn("hiddenCountry.value = state.initialCountry;", source)
+        self.assertIn("Initial render is display-only", source)
         self.assertNotIn("DROP_DOMESTIC_ZERO", source)
         self.assertNotIn("stripDomesticZero", source)
 
     def test_other_country_accepts_explicit_international_identity(self) -> None:
         source = RUNTIME.read_text(encoding="utf-8")
-
         self.assertIn("const validInternational = (value) =>", source)
-        self.assertIn("if (!country && isInternational(phone.value))", source)
+        self.assertIn("if (isInternational(phone.value))", source)
         self.assertIn("phone.value = '+' + internationalDigits(phone.value);", source)
         self.assertIn("hiddenCountry.value = '';", source)
 
     def test_verified_account_phone_is_read_only_and_restored_on_submit(self) -> None:
         source = RUNTIME.read_text(encoding="utf-8")
-
         self.assertIn(
             "const lockVerifiedPhone = (phone, component, hiddenCountry, initialPhone, initialCountry) =>",
             source,
@@ -180,7 +168,6 @@ class InternationalAccountPhoneTests(unittest.TestCase):
         activate = ACTIVATE_TEMPLATE.read_text(encoding="utf-8")
         details = DETAILS_TEMPLATE.read_text(encoding="utf-8")
         runtime = RUNTIME.read_text(encoding="utf-8")
-
         self.assertIn('action="/account/register"', register)
         self.assertIn('name="customer[email_or_phone]"', register)
         self.assertIn('name="_token" value="{% csrf %}"', register)
@@ -193,7 +180,6 @@ class InternationalAccountPhoneTests(unittest.TestCase):
         self.assertIn("action='/account/details'", details)
         self.assertIn('name="details[phone]"', details)
         self.assertIn("country_code_field_name: 'details[country_code]'", details)
-
         self.assertNotIn("fetch(", runtime)
         self.assertNotIn("XMLHttpRequest", runtime)
         self.assertNotIn("setAttribute('action'", runtime)
@@ -201,19 +187,12 @@ class InternationalAccountPhoneTests(unittest.TestCase):
 
     def test_phone_length_stays_within_crm_identity_bounds(self) -> None:
         source = RUNTIME.read_text(encoding="utf-8")
-
         self.assertIn("const PHONE_MIN_DIGITS = 7;", source)
         self.assertIn("const PHONE_MAX_DIGITS = 15;", source)
 
     def test_runtime_and_editor_assets_stay_identical(self) -> None:
-        self.assertEqual(
-            RUNTIME.read_text(encoding="utf-8"),
-            EDITOR.read_text(encoding="utf-8"),
-        )
-        self.assertEqual(
-            DETAILS_RUNTIME.read_text(encoding="utf-8"),
-            DETAILS_EDITOR.read_text(encoding="utf-8"),
-        )
+        self.assertEqual(RUNTIME.read_text(encoding="utf-8"), EDITOR.read_text(encoding="utf-8"))
+        self.assertEqual(DETAILS_RUNTIME.read_text(encoding="utf-8"), DETAILS_EDITOR.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":
