@@ -57,7 +57,7 @@ const authHtml = () => `<!doctype html>
   </body>
 </html>`;
 
-const detailsHtml = (verified) => `<!doctype html>
+const detailsHtml = ({ verified = false, phone = '6582230039', country = 'SG' } = {}) => `<!doctype html>
 <html>
   <head>
     <meta charset="utf-8">
@@ -71,11 +71,11 @@ const detailsHtml = (verified) => `<!doctype html>
     <form id="details_form" action="/account/details" method="post">
       <input type="hidden" name="_token" value="csrf-token">
       <div class="field">
-        <input id="DetailPhone" name="details[phone]" value="6582230039" placeholder="Phone">
+        <input id="DetailPhone" name="details[phone]" value="${phone}" placeholder="Phone">
         <input
           type="hidden"
           name="details[country_code]"
-          value="SG"
+          value="${country}"
           data-phone-country-code
           data-phone-input-id="DetailPhone"
           data-phone-verified="${verified ? 'true' : 'false'}"
@@ -136,7 +136,7 @@ test.describe('EasyStore auth phone ownership', () => {
 
 test.describe('account details international phone UI', () => {
   test('country selector and phone input are exactly aligned', async ({ page }) => {
-    await page.setContent(detailsHtml(false));
+    await page.setContent(detailsHtml());
 
     const country = page.locator('[data-phone-country-select]');
     const phone = page.locator('#DetailPhone');
@@ -151,7 +151,7 @@ test.describe('account details international phone UI', () => {
   });
 
   test('OTP-verified account phone is locked and restored before profile submit', async ({ page }) => {
-    await page.setContent(detailsHtml(true));
+    await page.setContent(detailsHtml({ verified: true }));
 
     const country = page.locator('[data-phone-country-select]');
     const phone = page.locator('#DetailPhone');
@@ -173,7 +173,7 @@ test.describe('account details international phone UI', () => {
   });
 
   test('unverified account phone remains editable', async ({ page }) => {
-    await page.setContent(detailsHtml(false));
+    await page.setContent(detailsHtml());
 
     const country = page.locator('[data-phone-country-select]');
     const phone = page.locator('#DetailPhone');
@@ -181,5 +181,58 @@ test.describe('account details international phone UI', () => {
     await expect(phone).not.toHaveAttribute('readonly', '');
     await expect(phone).not.toHaveAttribute('data-verified-phone-locked', 'true');
     await expect(country).toBeEnabled();
+  });
+
+  test('stored US ISO wins the ambiguous +1 dial code without rewriting the stored number', async ({ page }) => {
+    await page.setContent(detailsHtml({ phone: '+12025550123', country: 'US' }));
+
+    await expect(page.locator('[data-phone-country-select]')).toHaveValue('US');
+    await expect(page.locator('#DetailPhone')).toHaveValue('+12025550123');
+
+    await page.getByRole('button', { name: 'Submit' }).click();
+    await expect.poll(() => page.evaluate(() => window.__detailsPhone)).toBe('+12025550123');
+    await expect.poll(() => page.evaluate(() => window.__detailsCountry)).toBe('US');
+  });
+
+  test('untouched known-country local number is preserved byte for byte', async ({ page }) => {
+    await page.setContent(detailsHtml({ phone: '0123456789', country: 'MY' }));
+
+    await expect(page.locator('[data-phone-country-select]')).toHaveValue('MY');
+    await page.getByRole('button', { name: 'Submit' }).click();
+
+    await expect.poll(() => page.evaluate(() => window.__detailsPhone)).toBe('0123456789');
+    await expect.poll(() => page.evaluate(() => window.__detailsCountry)).toBe('MY');
+  });
+
+  test('existing unsupported country is not silently defaulted to Singapore', async ({ page }) => {
+    await page.setContent(detailsHtml({ phone: '030123456', country: 'DE' }));
+
+    await expect(page.locator('[data-phone-country-select]')).toHaveCount(0);
+    await expect(page.locator('#DetailPhone')).toHaveValue('030123456');
+    await page.getByRole('button', { name: 'Submit' }).click();
+
+    await expect.poll(() => page.evaluate(() => window.__detailsPhone)).toBe('030123456');
+    await expect.poll(() => page.evaluate(() => window.__detailsCountry)).toBe('DE');
+  });
+
+  test('an actual known-country edit preserves the local number and ISO contract', async ({ page }) => {
+    await page.setContent(detailsHtml({ phone: '', country: 'MY' }));
+
+    await page.locator('#DetailPhone').fill('0123456789');
+    await page.getByRole('button', { name: 'Submit' }).click();
+
+    await expect.poll(() => page.evaluate(() => window.__detailsPhone)).toBe('0123456789');
+    await expect.poll(() => page.evaluate(() => window.__detailsCountry)).toBe('MY');
+  });
+
+  test('Other accepts an explicit international number without inventing an ISO country', async ({ page }) => {
+    await page.setContent(detailsHtml({ phone: '', country: '' }));
+
+    await page.locator('[data-phone-country-select]').selectOption('');
+    await page.locator('#DetailPhone').fill('+4915112345678');
+    await page.getByRole('button', { name: 'Submit' }).click();
+
+    await expect.poll(() => page.evaluate(() => window.__detailsPhone)).toBe('+4915112345678');
+    await expect.poll(() => page.evaluate(() => window.__detailsCountry)).toBe('');
   });
 });
