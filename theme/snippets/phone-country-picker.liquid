@@ -5,15 +5,16 @@
 
   On the account-details page, customer.authentications is EasyStore's source of
   truth for whether the connected phone identity has completed verification.
-  Expose only that boolean to the enhancer so verified identities can be locked
-  without treating an unrelated address phone as verified.
+  Only lock the field when EasyStore also exposes a real customer.phone value;
+  the template can otherwise fall back to default_address.phone, which is not
+  evidence that the displayed address number is the verified login identity.
 {% endcomment %}
 {% assign phone_auth_verified = false %}
 {% if customer %}
   {% for kv in customer.authentications %}
     {% assign auth_key = kv[0] %}
     {% assign auth_value = kv[1] %}
-    {% if auth_key == 'phone' and auth_value.is_connected and auth_value.is_verified %}
+    {% if auth_key == 'phone' and auth_value.is_connected and auth_value.is_verified and customer.phone != blank %}
       {% assign phone_auth_verified = true %}
     {% endif %}
   {% endfor %}
