@@ -144,6 +144,15 @@ class InternationalAccountPhoneTests(unittest.TestCase):
         self.assertNotIn("DROP_DOMESTIC_ZERO", source)
         self.assertNotIn("stripDomesticZero", source)
 
+    def test_explicit_international_phone_must_match_selected_country(self) -> None:
+        source = RUNTIME.read_text(encoding="utf-8")
+        self.assertIn(
+            "const COUNTRY_MISMATCH_MESSAGE = 'Phone number does not match the selected country code.';",
+            source,
+        )
+        self.assertIn("if (country && digits.indexOf(country.dial) !== 0)", source)
+        self.assertIn("phone.setCustomValidity(COUNTRY_MISMATCH_MESSAGE);", source)
+
     def test_other_country_accepts_explicit_international_identity(self) -> None:
         source = RUNTIME.read_text(encoding="utf-8")
         self.assertIn("const validInternational = (value) =>", source)
