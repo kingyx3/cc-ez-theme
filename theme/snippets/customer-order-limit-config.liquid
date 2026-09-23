@@ -52,12 +52,8 @@
 {% include 'customer-order-limit-row', limit_handle: 'late-night-crackers-ep4-2', limit_maximum: 1, limit_refresh: '' %}
 
 {% comment %}
-  Per-order ceilings are configured separately so changing one never changes a
-  customer's windowed allowance. The order validator loads first and layers its
-  stricter current-cart cap on top of the customer validator when both exist.
+  Per-order limits are bootstrapped separately. They have their own config file
+  and cart pass, so adding or changing an order ceiling never changes this
+  customer-limit matrix.
 {% endcomment %}
-<script>
-  window.perOrderLimitsV1 = { rules: {} };
-</script>
-{% include 'per-order-limit-config' %}
-<script src="{{ 'per-order-limits.js' | asset_url }}" defer="defer"></script>
+{% include 'per-order-limits' %}
