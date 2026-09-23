@@ -50,10 +50,3 @@
 {% include 'customer-order-limit-row', limit_handle: 'late-night-crackers-ep3', limit_maximum: 2, limit_refresh: '' %}
 {% include 'customer-order-limit-row', limit_handle: 'late-night-crackers-ep4-1', limit_maximum: 4, limit_refresh: '' %}
 {% include 'customer-order-limit-row', limit_handle: 'late-night-crackers-ep4-2', limit_maximum: 1, limit_refresh: '' %}
-
-{% comment %}
-  Per-order limits are bootstrapped separately. They have their own config file
-  and cart pass, so adding or changing an order ceiling never changes this
-  customer-limit matrix.
-{% endcomment %}
-{% include 'per-order-limits' %}
