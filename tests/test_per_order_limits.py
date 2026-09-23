@@ -34,7 +34,7 @@ class PerOrderLimitTests(unittest.TestCase):
 
         example = (
             "{% include 'per-order-limit-row', order_limit_handle: "
-            "'MTG-HOB-CBB-EN', order_limit_maximum: 2 %}"
+            "'MTG-HOB-CBB-EN', order_limit_maximum: 1 %}"
         )
         self.assertIn(example, config)
         self.assertIn("Adding or changing an order limit is one row", row)
