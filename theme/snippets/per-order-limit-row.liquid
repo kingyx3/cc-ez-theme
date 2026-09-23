@@ -1,23 +1,22 @@
 {% comment %}
-  One per-order purchase limit selector.
+  One per-order purchase limit, start to finish from configuration.
 
-  Input:  order_limit_handle   Exact EasyStore product handle/SKU, or a trailing
-                               wildcard prefix such as `MTG-HOB-*`. Blank
-                               disables the row. A wildcard is only supported at
-                               the end; regex-style patterns are deliberately not
-                               accepted so matching stays predictable.
-          order_limit_maximum  units of each matched SKU allowed in one
-                               order/cart. 0 disables the row.
+  Input:  order_limit_handle   Exact EasyStore product handle (or SKU where the
+                               storefront exposes that identifier). Blank
+                               disables the row.
+          order_limit_maximum  units allowed in one order/cart. 0 disables the
+                               row.
 
-  The row only publishes configuration. Cart quantities are published once by
-  customer-order-limit-config.liquid, so adding a large selector matrix does not
-  re-walk the cart once per rule.
+  Adding or changing an order limit is one row in per-order-limit-config.liquid
+  and nothing else. This row only publishes the rule; per-order-limits.liquid
+  scans the cart once for all configured rows, so the configuration can grow
+  without re-walking the cart once per product.
 {% endcomment %}
-{% assign per_order_limit_row_selector = order_limit_handle | default: '' | append: '' | strip | downcase %}
+{% assign per_order_limit_row_handle = order_limit_handle | default: '' | append: '' | strip | downcase %}
 {% assign per_order_limit_row_maximum = order_limit_maximum | default: 0 | plus: 0 %}
-{% if per_order_limit_row_selector != '' and per_order_limit_row_maximum > 0 %}
+{% if per_order_limit_row_handle != '' and per_order_limit_row_maximum > 0 %}
   <script>
-    window.perOrderLimitsV1.rules[{{ per_order_limit_row_selector | json }}] = {
+    window.perOrderLimitsV1.rules[{{ per_order_limit_row_handle | json }}] = {
       maximum: {{ per_order_limit_row_maximum | json }}
     };
   </script>
