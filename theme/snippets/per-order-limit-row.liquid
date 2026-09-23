@@ -1,30 +1,24 @@
 {% comment %}
-  One per-order purchase limit.
+  One per-order purchase limit selector.
 
-  Input:  order_limit_handle   EasyStore product handle or SKU. Blank disables
-                               the row.
-          order_limit_maximum  units allowed in one order/cart. 0 disables the
-                               row.
+  Input:  order_limit_handle   Exact EasyStore product handle/SKU, or a trailing
+                               wildcard prefix such as `MTG-HOB-*`. Blank
+                               disables the row. A wildcard is only supported at
+                               the end; regex-style patterns are deliberately not
+                               accepted so matching stays predictable.
+          order_limit_maximum  units of each matched SKU allowed in one
+                               order/cart. 0 disables the row.
 
-  The row publishes its current cart quantity so the client can enforce an
-  order-only limit even when no per-customer rule exists for the same SKU.
+  The row only publishes configuration. Cart quantities are published once by
+  customer-order-limit-config.liquid, so adding a large selector matrix does not
+  re-walk the cart once per rule.
 {% endcomment %}
-{% assign per_order_limit_row_handle = order_limit_handle | default: '' | append: '' | strip | downcase %}
+{% assign per_order_limit_row_selector = order_limit_handle | default: '' | append: '' | strip | downcase %}
 {% assign per_order_limit_row_maximum = order_limit_maximum | default: 0 | plus: 0 %}
-{% if per_order_limit_row_handle != '' and per_order_limit_row_maximum > 0 %}
-  {% assign per_order_limit_row_cart = 0 %}
-  {% for cart_item in cart.items %}
-    {% assign per_order_limit_row_cart_handle = cart_item.product.handle | default: cart_item.handle | default: '' | append: '' | strip | downcase %}
-    {% assign per_order_limit_row_cart_sku = cart_item.sku | default: cart_item.variant.sku | default: cart_item.product.sku | default: '' | append: '' | strip | downcase %}
-    {% if per_order_limit_row_cart_handle == per_order_limit_row_handle or per_order_limit_row_cart_sku == per_order_limit_row_handle %}
-      {% assign per_order_limit_row_cart_quantity = cart_item.quantity | default: cart_item.qty | default: 0 | plus: 0 %}
-      {% assign per_order_limit_row_cart = per_order_limit_row_cart | plus: per_order_limit_row_cart_quantity %}
-    {% endif %}
-  {% endfor %}
+{% if per_order_limit_row_selector != '' and per_order_limit_row_maximum > 0 %}
   <script>
-    window.perOrderLimitsV1.rules[{{ per_order_limit_row_handle | json }}] = {
-      maximum: {{ per_order_limit_row_maximum | json }},
-      cartQuantity: {{ per_order_limit_row_cart | json }}
+    window.perOrderLimitsV1.rules[{{ per_order_limit_row_selector | json }}] = {
+      maximum: {{ per_order_limit_row_maximum | json }}
     };
   </script>
 {% endif %}
