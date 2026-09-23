@@ -15,9 +15,12 @@ class PerOrderLimitTests(unittest.TestCase):
 
     def test_per_order_configuration_is_separate_from_customer_limits(self) -> None:
         customer = self.read("snippets/customer-order-limit-config.liquid")
+        currencies = self.read("snippets/currencies.liquid")
         order = self.read("snippets/per-order-limit-config.liquid")
 
-        self.assertIn("{% include 'per-order-limits' %}", customer)
+        self.assertNotIn("per-order-limit", customer)
+        self.assertIn("{% include 'customer-order-limits' %}", currencies)
+        self.assertIn("{% include 'per-order-limits' %}", currencies)
         self.assertIn("separate from customer-order-limit-config.liquid", order)
         self.assertIn("order_limit_handle", order)
         self.assertIn("order_limit_maximum", order)
