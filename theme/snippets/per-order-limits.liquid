@@ -1,0 +1,27 @@
+{% comment %}
+  Per-order limit bootstrap.
+
+  Configuration stays one exact row per product in per-order-limit-config.liquid.
+  This snippet prepares shared cart state once, renders every configured row, and
+  loads the client validator. Adding a product limit therefore never requires a
+  second edit outside the config file.
+
+  Both the product handle and SKU are indexed when EasyStore exposes them. That
+  lets an exact row use either identifier without making every row walk cart.items.
+{% endcomment %}
+<script>
+  window.perOrderLimitsV1 = { rules: {}, cart: {} };
+  {% for cart_item in cart.items %}
+    {% assign per_order_cart_handle = cart_item.product.handle | default: cart_item.handle | default: '' | append: '' | strip | downcase %}
+    {% assign per_order_cart_sku = cart_item.sku | default: cart_item.variant.sku | default: cart_item.product.sku | default: '' | append: '' | strip | downcase %}
+    {% assign per_order_cart_quantity = cart_item.quantity | default: cart_item.qty | default: 0 | plus: 0 %}
+    {% if per_order_cart_handle != '' %}
+      window.perOrderLimitsV1.cart[{{ per_order_cart_handle | json }}] = (window.perOrderLimitsV1.cart[{{ per_order_cart_handle | json }}] || 0) + {{ per_order_cart_quantity | json }};
+    {% endif %}
+    {% if per_order_cart_sku != '' and per_order_cart_sku != per_order_cart_handle %}
+      window.perOrderLimitsV1.cart[{{ per_order_cart_sku | json }}] = (window.perOrderLimitsV1.cart[{{ per_order_cart_sku | json }}] || 0) + {{ per_order_cart_quantity | json }};
+    {% endif %}
+  {% endfor %}
+</script>
+{% include 'per-order-limit-config' %}
+<script src="{{ 'per-order-limits.js' | asset_url }}" defer="defer"></script>
