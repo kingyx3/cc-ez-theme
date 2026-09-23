@@ -17,7 +17,8 @@
 {% if per_order_limit_row_handle != '' and per_order_limit_row_maximum > 0 %}
   <script>
     window.perOrderLimitsV1.rules[{{ per_order_limit_row_handle | json }}] = {
-      maximum: {{ per_order_limit_row_maximum | json }}
+      maximum: {{ per_order_limit_row_maximum | json }},
+      cartQuantity: window.perOrderLimitsV1.cart[{{ per_order_limit_row_handle | json }}] || 0
     };
   </script>
 {% endif %}
