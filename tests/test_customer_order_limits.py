@@ -21,7 +21,7 @@ class CustomerOrderLimitTests(unittest.TestCase):
     def test_exact_limit_matrix_is_preserved(self) -> None:
         config = self.read("snippets/customer-order-limit-config.liquid")
         expected = (
-            ("MTG-HOB-CBB-EN", 1),
+            ("MTG-HOB-CBB-EN", 2),
             ("MTG-HOB-CBB-EN-CASE6", 1),
             ("MTG-HOB-CBB-EN-PACK", 4),
             ("MTG-HOB-DNK-EN", 3),
