@@ -24,9 +24,9 @@
   only. The cart is scanned once by per-order-limits.liquid and shared across all
   rows rather than scanned again for every configured product.
 
-  The active values below currently mirror the per-customer handle/maximum
-  matrix. They remain independently managed: future changes to one config do not
-  automatically change the other.
+  The active values below were seeded from the per-customer handle/maximum
+  matrix, but remain independently managed. Intentional differences are allowed;
+  changing one config does not automatically change the other.
 {% endcomment %}
 
 {% include 'per-order-limit-row', order_limit_handle: 'MTG-HOB-CBB-EN', order_limit_maximum: 1 %}
