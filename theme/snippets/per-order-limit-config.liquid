@@ -24,8 +24,26 @@
   only. The cart is scanned once by per-order-limits.liquid and shared across all
   rows rather than scanned again for every configured product.
 
-  The examples above are documentation only. Keep active business values below
-  this comment; customer-wide limits remain in customer-order-limit-config.liquid.
+  The active values below currently mirror the per-customer handle/maximum
+  matrix. They remain independently managed: future changes to one config do not
+  automatically change the other.
 {% endcomment %}
 
+{% include 'per-order-limit-row', order_limit_handle: 'MTG-HOB-CBB-EN', order_limit_maximum: 1 %}
+{% include 'per-order-limit-row', order_limit_handle: 'MTG-HOB-CBB-EN-CASE6', order_limit_maximum: 1 %}
+{% include 'per-order-limit-row', order_limit_handle: 'MTG-HOB-CBB-EN-PACK', order_limit_maximum: 4 %}
+{% include 'per-order-limit-row', order_limit_handle: 'MTG-HOB-DNK-EN', order_limit_maximum: 3 %}
+{% include 'per-order-limit-row', order_limit_handle: 'MTG-HOB-PRK-EN-SET4', order_limit_maximum: 3 %}
+{% include 'per-order-limit-row', order_limit_handle: 'MTG-HOB-OBP-EN', order_limit_maximum: 30 %}
+{% include 'per-order-limit-row', order_limit_handle: 'MTG-FRA-SLB-EN', order_limit_maximum: 4 %}
 {% include 'per-order-limit-row', order_limit_handle: 'MTG-FRA-CBB-EN', order_limit_maximum: 1 %}
+{% include 'per-order-limit-row', order_limit_handle: 'CC-BDL-FRIENDS3-EN-SPM', order_limit_maximum: 1 %}
+{% include 'per-order-limit-row', order_limit_handle: 'CC-BDL-FRIENDS3-EN-MSH', order_limit_maximum: 1 %}
+{% include 'per-order-limit-row', order_limit_handle: 'CC-BDL-SPIDERVAULT-EN', order_limit_maximum: 1 %}
+{% include 'per-order-limit-row', order_limit_handle: 'CC-BDL-UNEXPECTED-EN', order_limit_maximum: 2 %}
+{% include 'per-order-limit-row', order_limit_handle: 'CC-BDL-MANYREALITIES-EN', order_limit_maximum: 1 %}
+{% include 'per-order-limit-row', order_limit_handle: 'CC-BDL-TWINBOX-EN', order_limit_maximum: 2 %}
+{% include 'per-order-limit-row', order_limit_handle: 'MTG-HOB-GFB-EN', order_limit_maximum: 1 %}
+{% include 'per-order-limit-row', order_limit_handle: 'late-night-crackers-ep3', order_limit_maximum: 2 %}
+{% include 'per-order-limit-row', order_limit_handle: 'late-night-crackers-ep4-1', order_limit_maximum: 4 %}
+{% include 'per-order-limit-row', order_limit_handle: 'late-night-crackers-ep4-2', order_limit_maximum: 1 %}
