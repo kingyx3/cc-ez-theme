@@ -1,0 +1,21 @@
+{% comment %}
+  Per-order purchase limits: one independent row per product/SKU.
+
+  These limits are separate from customer-order-limit-config.liquid. A product
+  may have either limit, both limits, or neither. Changing or removing a row here
+  never changes the per-customer allowance or its refresh window.
+
+  Each row takes two values:
+
+    order_limit_handle   EasyStore product handle or SKU. It is matched against
+                         both values on cart items, normalized to lowercase.
+    order_limit_maximum  units of that SKU allowed in one order/cart. 0 or a
+                         missing row leaves the product unlimited per order.
+
+  Example (disabled until a business limit is chosen):
+
+    {% raw %}{% include 'per-order-limit-row', order_limit_handle: 'MTG-HOB-CBB-EN', order_limit_maximum: 2 %}{% endraw %}
+
+  Keep business values here only; customer-wide limits remain in
+  customer-order-limit-config.liquid.
+{% endcomment %}
