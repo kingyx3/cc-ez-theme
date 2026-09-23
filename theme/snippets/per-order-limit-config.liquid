@@ -1,5 +1,5 @@
 {% comment %}
-  Per-order purchase limits: independently managed from customer limits.
+  Per-order purchase limits: one exact row per product handle/SKU.
 
   These limits are separate from customer-order-limit-config.liquid. A product
   may have either limit, both limits, or neither. Changing or removing a row here
@@ -7,29 +7,23 @@
 
   Each row takes two values:
 
-    order_limit_handle   Either an exact EasyStore product handle/SKU, or a
-                         trailing-wildcard family such as `MTG-HOB-*`. Matching
-                         is case-insensitive after normalization.
-    order_limit_maximum  units of each matched SKU allowed in one order/cart. 0
-                         or a missing row leaves the product unlimited per order.
+    order_limit_handle   Exact EasyStore product handle (or SKU where the
+                         storefront exposes that identifier), normalized to
+                         lowercase at runtime.
+    order_limit_maximum  units of that product allowed in one order/cart. 0 or a
+                         missing row leaves the product unlimited per order.
 
-  Matching precedence is deterministic and does not depend on row order:
+  A single row is the whole configuration change. To add another independently
+  managed order limit, add another row; no numbered slot, JavaScript list, or
+  second file needs to be updated:
 
-    1. An exact handle/SKU match wins over every wildcard family.
-    2. Otherwise the longest matching wildcard prefix wins.
+    {% raw %}{% include 'per-order-limit-row', order_limit_handle: 'MTG-HOB-CBB-EN', order_limit_maximum: 2 %}{% endraw %}
+    {% raw %}{% include 'per-order-limit-row', order_limit_handle: 'MTG-HOB-DNK-EN', order_limit_maximum: 4 %}{% endraw %}
 
-  That means a broad family can set a default and exact rows can override it:
+  This scales to large handle matrices because the rows publish configuration
+  only. The cart is scanned once by per-order-limits.liquid and shared across all
+  rows rather than scanned again for every configured product.
 
-    {% raw %}{% include 'per-order-limit-row', order_limit_handle: 'MTG-HOB-*', order_limit_maximum: 2 %}{% endraw %}
-    {% raw %}{% include 'per-order-limit-row', order_limit_handle: 'MTG-HOB-CBB-EN-CASE6', order_limit_maximum: 1 %}{% endraw %}
-
-  Multiple families can be added as separate rows. Only a single trailing `*` is
-  supported; embedded wildcards and regex-style expressions are ignored by the
-  storefront validator so a typo cannot unexpectedly match a wider range.
-
-  The wildcard applies the same limit independently to every matched SKU. It is
-  not a pooled/group allowance across the entire family.
-
-  Examples are documentation only. Keep active business values below this
-  comment; customer-wide limits remain in customer-order-limit-config.liquid.
+  The examples above are documentation only. Keep active business values below
+  this comment; customer-wide limits remain in customer-order-limit-config.liquid.
 {% endcomment %}
