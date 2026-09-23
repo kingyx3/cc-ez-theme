@@ -1,0 +1,49 @@
+{% comment %}
+  Per-order purchase limits: one exact row per product handle/SKU.
+
+  These limits are separate from customer-order-limit-config.liquid. A product
+  may have either limit, both limits, or neither. Changing or removing a row here
+  never changes the per-customer allowance or its refresh window.
+
+  Each row takes two values:
+
+    order_limit_handle   Exact EasyStore product handle (or SKU where the
+                         storefront exposes that identifier), normalized to
+                         lowercase at runtime.
+    order_limit_maximum  units of that product allowed in one order/cart. 0 or a
+                         missing row leaves the product unlimited per order.
+
+  A single row is the whole configuration change. To add another independently
+  managed order limit, add another row; no numbered slot, JavaScript list, or
+  second file needs to be updated:
+
+    {% raw %}{% include 'per-order-limit-row', order_limit_handle: 'MTG-HOB-CBB-EN', order_limit_maximum: 1 %}{% endraw %}
+    {% raw %}{% include 'per-order-limit-row', order_limit_handle: 'MTG-HOB-DNK-EN', order_limit_maximum: 4 %}{% endraw %}
+
+  This scales to large handle matrices because the rows publish configuration
+  only. The cart is scanned once by per-order-limits.liquid and shared across all
+  rows rather than scanned again for every configured product.
+
+  The active values below were seeded from the per-customer handle/maximum
+  matrix, but remain independently managed. Intentional differences are allowed;
+  changing one config does not automatically change the other.
+{% endcomment %}
+
+{% include 'per-order-limit-row', order_limit_handle: 'MTG-HOB-CBB-EN', order_limit_maximum: 1 %}
+{% include 'per-order-limit-row', order_limit_handle: 'MTG-HOB-CBB-EN-CASE6', order_limit_maximum: 1 %}
+{% include 'per-order-limit-row', order_limit_handle: 'MTG-HOB-CBB-EN-PACK', order_limit_maximum: 4 %}
+{% include 'per-order-limit-row', order_limit_handle: 'MTG-HOB-DNK-EN', order_limit_maximum: 3 %}
+{% include 'per-order-limit-row', order_limit_handle: 'MTG-HOB-PRK-EN-SET4', order_limit_maximum: 3 %}
+{% include 'per-order-limit-row', order_limit_handle: 'MTG-HOB-OBP-EN', order_limit_maximum: 30 %}
+{% include 'per-order-limit-row', order_limit_handle: 'MTG-FRA-SLB-EN', order_limit_maximum: 4 %}
+{% include 'per-order-limit-row', order_limit_handle: 'MTG-FRA-CBB-EN', order_limit_maximum: 2 %}
+{% include 'per-order-limit-row', order_limit_handle: 'CC-BDL-FRIENDS3-EN-SPM', order_limit_maximum: 1 %}
+{% include 'per-order-limit-row', order_limit_handle: 'CC-BDL-FRIENDS3-EN-MSH', order_limit_maximum: 1 %}
+{% include 'per-order-limit-row', order_limit_handle: 'CC-BDL-SPIDERVAULT-EN', order_limit_maximum: 1 %}
+{% include 'per-order-limit-row', order_limit_handle: 'CC-BDL-UNEXPECTED-EN', order_limit_maximum: 2 %}
+{% include 'per-order-limit-row', order_limit_handle: 'CC-BDL-MANYREALITIES-EN', order_limit_maximum: 1 %}
+{% include 'per-order-limit-row', order_limit_handle: 'CC-BDL-TWINBOX-EN', order_limit_maximum: 2 %}
+{% include 'per-order-limit-row', order_limit_handle: 'MTG-HOB-GFB-EN', order_limit_maximum: 1 %}
+{% include 'per-order-limit-row', order_limit_handle: 'late-night-crackers-ep3', order_limit_maximum: 2 %}
+{% include 'per-order-limit-row', order_limit_handle: 'late-night-crackers-ep4-1', order_limit_maximum: 4 %}
+{% include 'per-order-limit-row', order_limit_handle: 'late-night-crackers-ep4-2', order_limit_maximum: 1 %}

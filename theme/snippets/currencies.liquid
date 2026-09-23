@@ -36,6 +36,12 @@
   {% assign defer_history = true %}
   {% include 'customer-order-limits' %}
   {% assign defer_history = false %}
+  {% comment %}
+    Per-order ceilings are independent of customer history and use their own
+    one-row-per-handle configuration. Render them beside the customer validator,
+    not inside its config, so either system can be tested and managed separately.
+  {% endcomment %}
+  {% include 'per-order-limits' %}
 
   <script>
     window.purchaseCartQuantities = {};

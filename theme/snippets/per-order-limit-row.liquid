@@ -1,0 +1,26 @@
+{% comment %}
+  One per-order purchase limit, start to finish from configuration.
+
+  Input:  order_limit_handle   Exact EasyStore product handle (or SKU where the
+                               storefront exposes that identifier). Blank
+                               disables the row.
+          order_limit_maximum  units allowed in one order/cart. 0 disables the
+                               row.
+
+  Adding or changing an order limit is one row in per-order-limit-config.liquid
+  and nothing else. This row only publishes the rule; per-order-limits.liquid
+  scans the cart once for all configured rows, so the configuration can grow
+  without re-walking the cart once per product.
+{% endcomment %}
+{% assign per_order_limit_row_handle = order_limit_handle | default: '' | append: '' | strip | downcase %}
+{% assign per_order_limit_row_maximum = order_limit_maximum | default: 0 | plus: 0 %}
+{% if per_order_limit_row_handle != '' and per_order_limit_row_maximum > 0 %}
+  <script>
+    window.perOrderLimitsV1.rules[{{ per_order_limit_row_handle | json }}] = {
+      maximum: {{ per_order_limit_row_maximum | json }},
+      cartQuantity: window.perOrderLimitsV1.cart[{{ per_order_limit_row_handle | json }}] || 0
+    };
+  </script>
+{% endif %}
+{% assign order_limit_handle = '' %}
+{% assign order_limit_maximum = 0 %}
