@@ -46,6 +46,31 @@ class HomepageCollectionComponentTests(unittest.TestCase):
                         best_sellers["settings"][setting_name],
                     )
 
+    def test_star_trek_and_reality_fracture_use_canonical_presentation(self) -> None:
+        canonical = self.sections["1684403242688"]["settings"]
+        presentation_settings = (
+            "products_per_row",
+            "products_to_show",
+            "show_view_all",
+            "image_ratio",
+            "show_secondary_image",
+            "swipe_on_mobile",
+            "prioritize_initial_images",
+            "center_title",
+            "show_product_info",
+            "product_bg_color",
+        )
+
+        for section_id in ("1787270400000", "1787270400001"):
+            section = self.sections[section_id]
+            with self.subTest(section=section["settings"]["title"]):
+                self.assertEqual(section["type"], "featured-collection")
+                for setting_name in presentation_settings:
+                    self.assertEqual(
+                        section["settings"][setting_name],
+                        canonical[setting_name],
+                    )
+
     def test_only_the_first_homepage_collection_is_image_prioritized(self) -> None:
         section_ids = self.homepage["content_for_index"]
         prioritized = [
@@ -85,6 +110,9 @@ class HomepageCollectionComponentTests(unittest.TestCase):
         products = (
             THEME_ROOT / "snippets" / "featured-collection-products.liquid"
         ).read_text(encoding="utf-8")
+        product_card = (
+            THEME_ROOT / "snippets" / "product-card.liquid"
+        ).read_text(encoding="utf-8")
 
         self.assertIn("{% include 'featured-collection-header'", section)
         self.assertIn("{% include 'featured-collection-products'", section)
@@ -99,9 +127,15 @@ class HomepageCollectionComponentTests(unittest.TestCase):
         self.assertIn('class="sales-collection__grid', products)
         self.assertIn("{% include 'product-card'", products)
         self.assertIn("show_add_to_cart_button: false", products)
+        self.assertIn("suppress_variant_images: true", products)
         self.assertIn("section.settings.products_per_row", products)
         self.assertIn("section.settings.swipe_on_mobile", products)
         self.assertIn("section.settings.prioritize_initial_images", products)
+        self.assertIn(
+            "settings.collection_show_variant_img and suppress_variant_images != true",
+            product_card,
+        )
+        self.assertIn("{% assign suppress_variant_images = false %}", product_card)
 
 
 if __name__ == "__main__":

@@ -33,9 +33,14 @@
     fetch a visible first row without making every image compete with the actual
     LCP candidate. Only the most likely LCP image should receive high priority.
 
-  `include` shares one scope in EasyStore Liquid, so both flags are lowered again
-  at the end of this snippet. Without that, one prioritized card would affect
-  later cards and later sections.
+  suppress_variant_images
+    optional. Featured homepage collections use this to keep every product card
+    on the same visual baseline even when individual products expose variant
+    thumbnails. Collection/search surfaces retain the merchant-level setting.
+
+  `include` shares one scope in EasyStore Liquid, so caller flags are lowered
+  again at the end of this snippet. Without that, one card could affect later
+  cards and later sections.
 {% endcomment %}
 {% assign product_card_image_eager = false %}
 {% if card_image_eager %}
@@ -113,7 +118,7 @@
         {% include 'price' %}
         {% include 'low-inventory-notice' %}
       </div>
-      {% if settings.collection_show_variant_img %}
+      {% if settings.collection_show_variant_img and suppress_variant_images != true %}
         <div class="card-information__wrapper d-flex flex-align-center">
           {% assign has_variant_img = false %}
           {% assign variant_img_count = 0 %}
@@ -157,3 +162,4 @@
 
 {% assign card_image_eager = false %}
 {% assign card_image_high_priority = false %}
+{% assign suppress_variant_images = false %}
