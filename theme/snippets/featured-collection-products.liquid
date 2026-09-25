@@ -7,7 +7,12 @@
         receives high priority. Later homepage collections stay lazy so they do
         not compete with the page's LCP candidate on mobile.
 
-        Both flags are set on every iteration because `include` shares one scope
+        Featured collections also suppress product-specific variant thumbnail
+        rows. That keeps Star Trek, Reality Fracture, Hobbit, Strixhaven, and the
+        other homepage collections on the same reusable card baseline regardless
+        of how each product models its variants.
+
+        Caller flags are set on every iteration because `include` shares one scope
         with this snippet.
       {% endcomment %}
       {% assign eager_card_count = section.settings.products_per_row | default: 4 %}
@@ -21,7 +26,7 @@
           {% assign card_image_high_priority = true %}
         {% endif %}
         <li class="grid__item{% if products_to_display > 2 and section.settings.swipe_on_mobile and products_to_show > 2 %} slider__slide{% endif %}">
-          {% include 'product-card', show_secondary_image: section.settings.show_secondary_image, show_add_to_cart_button: false, image_ratio: section.settings.image_ratio, show_product_info: section.settings.show_product_info %}
+          {% include 'product-card', show_secondary_image: section.settings.show_secondary_image, show_add_to_cart_button: false, image_ratio: section.settings.image_ratio, show_product_info: section.settings.show_product_info, suppress_variant_images: true %}
         </li>
       {% endfor %}
     </ul>
