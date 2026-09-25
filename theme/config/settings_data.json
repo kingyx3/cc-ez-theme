@@ -179,7 +179,7 @@
             "eyebrow": "PRE-ORDER NOW OPEN",
             "title": "Star Trek Collection",
             "subtitle": "Explore Star Trek pre-orders before release.",
-            "accent_color": "#00897B",
+            "accent_color": "#8C5A00",
             "collection__id": "star-trek",
             "products_per_row": 3,
             "products_to_show": 3,
