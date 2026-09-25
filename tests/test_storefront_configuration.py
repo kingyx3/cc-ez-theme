@@ -326,6 +326,11 @@ class StorefrontConfigurationTests(unittest.TestCase):
                 "star-trek",
                 3,
             ),
+            "1787270400001": (
+                "Reality Fracture",
+                "reality-fracture",
+                3,
+            ),
             "1684403242688": ("The Hobbit Collection", "the-hobbit", 3),
             "1684412368816": ("Marvel Collection", "marvel-super-heroes", 3),
             "1684412368817": (
@@ -378,6 +383,7 @@ class StorefrontConfigurationTests(unittest.TestCase):
             [
                 "1667498127486",
                 "1787270400000",
+                "1787270400001",
                 "1684403242688",
                 "1684412368816",
                 "1684412368817",
@@ -506,23 +512,23 @@ class StorefrontConfigurationTests(unittest.TestCase):
         first_crackers = header.index(
             'href="/collections/late-night-crackers"'
         )
-        first_preorder = header.index(
-            'href="/collections/reality-fracture"', first_crackers
-        )
         first_star_trek = header.index(
-            'href="/collections/star-trek"', first_preorder
+            'href="/collections/star-trek"', first_crackers
+        )
+        first_reality_fracture = header.index(
+            'href="/collections/reality-fracture"', first_star_trek
         )
         first_hobbit = header.index(
-            'href="/collections/the-hobbit"', first_star_trek
+            'href="/collections/the-hobbit"', first_reality_fracture
         )
         first_marvel = header.index(
             'href="/collections/marvel-super-heroes"', first_hobbit
         )
         first_about = header.index('href="/pages/about-us"', first_marvel)
         self.assertLess(first_browse, first_crackers)
-        self.assertLess(first_crackers, first_preorder)
-        self.assertLess(first_preorder, first_star_trek)
-        self.assertLess(first_star_trek, first_hobbit)
+        self.assertLess(first_crackers, first_star_trek)
+        self.assertLess(first_star_trek, first_reality_fracture)
+        self.assertLess(first_reality_fracture, first_hobbit)
         self.assertLess(first_hobbit, first_marvel)
         self.assertLess(first_marvel, first_about)
 
@@ -530,23 +536,23 @@ class StorefrontConfigurationTests(unittest.TestCase):
         second_crackers = header.index(
             'href="/collections/late-night-crackers"', first_about
         )
-        second_preorder = header.index(
-            'href="/collections/reality-fracture"', second_crackers
-        )
         second_star_trek = header.index(
-            'href="/collections/star-trek"', second_preorder
+            'href="/collections/star-trek"', second_crackers
+        )
+        second_reality_fracture = header.index(
+            'href="/collections/reality-fracture"', second_star_trek
         )
         second_hobbit = header.index(
-            'href="/collections/the-hobbit"', second_star_trek
+            'href="/collections/the-hobbit"', second_reality_fracture
         )
         second_marvel = header.index(
             'href="/collections/marvel-super-heroes"', second_hobbit
         )
         second_about = header.index('href="/pages/about-us"', second_marvel)
         self.assertLess(second_browse, second_crackers)
-        self.assertLess(second_crackers, second_preorder)
-        self.assertLess(second_preorder, second_star_trek)
-        self.assertLess(second_star_trek, second_hobbit)
+        self.assertLess(second_crackers, second_star_trek)
+        self.assertLess(second_star_trek, second_reality_fracture)
+        self.assertLess(second_reality_fracture, second_hobbit)
         self.assertLess(second_hobbit, second_marvel)
         self.assertLess(second_marvel, second_about)
         self.assertIn('class="header__nav-item--about"', header)
