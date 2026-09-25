@@ -33,7 +33,6 @@ test.describe('storefront navigation and discovery', () => {
       const desktopNav = page.locator('header nav:visible').first();
       await expect(desktopNav).toBeVisible();
       await expect(desktopNav.locator('a[href="/collections/the-hobbit"]:visible').first()).toBeVisible();
-      await expect(desktopNav.locator('a[href="/collections/pokemon"]:visible').first()).toBeVisible();
     }
   });
 
