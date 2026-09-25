@@ -53,8 +53,8 @@
             "main_linklist": "main-menu",
             "message": true,
             "home_page_only": false,
-            "message_text": "Pre-orders for Reality Fracture are now open!",
-            "message_link": "https://cardboard.sg/collections/reality-fracture",
+            "message_text": "Pre-orders for Star Trek are now open!",
+            "message_link": "https://cardboard.sg/collections/star-trek",
             "color_bg": "#131722",
             "announcement_text_color": "#FFFFFF",
             "color_text": "#000000",
@@ -102,14 +102,14 @@
             "main-product-bok5afngub5-ooz1xoo": {
               "type": "text",
               "settings": {
-                "image": "https://cdn.store-assets.com/s/943101/f/8656465.png",
+                "image": "https://s3-ap-southeast-1.amazonaws.com/eesb.themes/onboarding/candy/en_placeholder_featured-single-product.jpg",
                 "text": "Secure payments"
               }
             },
             "main-product-0wkbnnri6s7r-budfnl": {
               "type": "text",
               "settings": {
-                "image": "https://cdn.store-assets.com/s/943101/f/8656462.png",
+                "image": "https://s3-ap-southeast-1.amazonaws.com/eesb.themes/onboarding/candy/en_placeholder_featured-blog.jpg",
                 "text": "Authentic products"
               }
             }
