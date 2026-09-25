@@ -102,14 +102,14 @@
             "main-product-bok5afngub5-ooz1xoo": {
               "type": "text",
               "settings": {
-                "image": "https://s3-ap-southeast-1.amazonaws.com/eesb.themes/onboarding/candy/en_placeholder_featured-single-product.jpg",
+                "image": "https://cdn.store-assets.com/s/943101/f/8656465.png",
                 "text": "Secure payments"
               }
             },
             "main-product-0wkbnnri6s7r-budfnl": {
               "type": "text",
               "settings": {
-                "image": "https://s3-ap-southeast-1.amazonaws.com/eesb.themes/onboarding/candy/en_placeholder_featured-single-product.jpg",
+                "image": "https://cdn.store-assets.com/s/943101/f/8656462.png",
                 "text": "Authentic products"
               }
             }
@@ -134,7 +134,7 @@
               "settings": {
                 "title": "Follow us",
                 "twitter": "",
-                "facebook": "https://www.facebook.com/cardboardcollectivesg/",
+                "facebook": "https://www.facebook.com/cardboardsg",
                 "carousell": "https://www.carousell.sg/u/cardboard_collective/",
                 "tiktok": "",
                 "whatsapp": "https://chat.whatsapp.com/L4f286YJNlxI7jPxfuzEV0",
