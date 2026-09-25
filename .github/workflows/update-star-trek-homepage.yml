@@ -1,0 +1,97 @@
+name: Apply Star Trek storefront update
+
+on:
+  push:
+    paths:
+      - .github/workflows/update-star-trek-homepage.yml
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Update homepage, navigation, and regression test
+        shell: python
+        run: |
+          from pathlib import Path
+          import json
+
+          for relative in (
+              'theme/config/settings_data.json',
+              'theme/editor_config/settings_data.json',
+          ):
+              path = Path(relative)
+              data = json.loads(path.read_text(encoding='utf-8'))
+              section = data['presets']['editor']['sections']['1787270400000']['settings']
+              section['eyebrow'] = 'PRE-ORDER NOW OPEN'
+              section['title'] = 'Star Trek Collection'
+              section['subtitle'] = 'Explore Star Trek pre-orders before release.'
+              section['collection__id'] = 'star-trek'
+              path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
+
+          header_path = Path('theme/sections/header.liquid')
+          header = header_path.read_text(encoding='utf-8')
+          mobile_anchor = '<li><a href="/collections/reality-fracture" class="menu-drawer__menu-item list-menu__item link link--text focus-inset">Reality Fracture</a></li>'
+          mobile_star_trek = '<li><a href="/collections/star-trek" class="menu-drawer__menu-item list-menu__item link link--text focus-inset">Star Trek</a></li>'
+          desktop_anchor = '<li><a href="/collections/reality-fracture" class="header__menu-item list-menu__item link link--text focus-inset">Reality Fracture</a></li>'
+          desktop_star_trek = '<li><a href="/collections/star-trek" class="header__menu-item list-menu__item link link--text focus-inset">Star Trek</a></li>'
+          if mobile_star_trek not in header:
+              header = header.replace(mobile_anchor, mobile_anchor + '\n                      ' + mobile_star_trek, 1)
+          if desktop_star_trek not in header:
+              header = header.replace(desktop_anchor, desktop_anchor + '\n          ' + desktop_star_trek, 1)
+          header_path.write_text(header, encoding='utf-8')
+
+          test_path = Path('tests/test_storefront_configuration.py')
+          test = test_path.read_text(encoding='utf-8')
+          test = test.replace(
+              '"[Pre-order] Reality Fracture",\n                "reality-fracture",',
+              '"Star Trek Collection",\n                "star-trek",',
+              1,
+          )
+          test = test.replace(
+              'self.assertEqual(\n            header.count(\'href="/collections/reality-fracture"\'), 2\n        )',
+              'self.assertEqual(\n            header.count(\'href="/collections/reality-fracture"\'), 2\n        )\n        self.assertEqual(header.count(\'href="/collections/star-trek"\'), 2)',
+              1,
+          )
+          test = test.replace(
+              "first_hobbit = header.index(\n            'href=\"/collections/the-hobbit\"', first_preorder\n        )",
+              "first_star_trek = header.index(\n            'href=\"/collections/star-trek\"', first_preorder\n        )\n        first_hobbit = header.index(\n            'href=\"/collections/the-hobbit\"', first_star_trek\n        )",
+              1,
+          )
+          test = test.replace(
+              'self.assertLess(first_preorder, first_hobbit)',
+              'self.assertLess(first_preorder, first_star_trek)\n        self.assertLess(first_star_trek, first_hobbit)',
+              1,
+          )
+          test = test.replace(
+              "second_hobbit = header.index(\n            'href=\"/collections/the-hobbit\"', second_preorder\n        )",
+              "second_star_trek = header.index(\n            'href=\"/collections/star-trek\"', second_preorder\n        )\n        second_hobbit = header.index(\n            'href=\"/collections/the-hobbit\"', second_star_trek\n        )",
+              1,
+          )
+          test = test.replace(
+              'self.assertLess(second_preorder, second_hobbit)',
+              'self.assertLess(second_preorder, second_star_trek)\n        self.assertLess(second_star_trek, second_hobbit)',
+              1,
+          )
+          test_path.write_text(test, encoding='utf-8')
+
+      - name: Run storefront configuration tests
+        run: python -m unittest tests.test_storefront_configuration
+
+      - name: Commit storefront changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add theme/config/settings_data.json theme/editor_config/settings_data.json theme/sections/header.liquid tests/test_storefront_configuration.py
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "Add Star Trek homepage collection and navigation"
+          git push origin HEAD:main
