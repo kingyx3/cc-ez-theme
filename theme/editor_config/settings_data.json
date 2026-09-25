@@ -177,10 +177,10 @@
         "1787270400000": {
           "settings": {
             "eyebrow": "PRE-ORDER NOW OPEN",
-            "title": "[Pre-order] Reality Fracture",
-            "subtitle": "Reserve the newest Reality Fracture products before release.",
+            "title": "Star Trek Collection",
+            "subtitle": "Explore Star Trek pre-orders before release.",
             "accent_color": "#00897B",
-            "collection__id": "reality-fracture",
+            "collection__id": "star-trek",
             "products_per_row": 3,
             "products_to_show": 3,
             "show_view_all": true,
