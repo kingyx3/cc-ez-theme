@@ -326,6 +326,11 @@ class StorefrontConfigurationTests(unittest.TestCase):
                 "star-trek",
                 3,
             ),
+            "1787270400001": (
+                "Reality Fracture",
+                "reality-fracture",
+                3,
+            ),
             "1684403242688": ("The Hobbit Collection", "the-hobbit", 3),
             "1684412368816": ("Marvel Collection", "marvel-super-heroes", 3),
             "1684412368817": (
@@ -378,6 +383,7 @@ class StorefrontConfigurationTests(unittest.TestCase):
             [
                 "1667498127486",
                 "1787270400000",
+                "1787270400001",
                 "1684403242688",
                 "1684412368816",
                 "1684412368817",
