@@ -1,0 +1,78 @@
+name: Apply Star Trek nav order
+
+on:
+  push:
+    branches:
+      - fix/star-trek-homepage-nav
+    paths:
+      - .github/workflows/apply-star-trek-nav-order.yml
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/star-trek-homepage-nav
+          fetch-depth: 0
+
+      - name: Move Star Trek before Reality Fracture
+        shell: python
+        run: |
+          from pathlib import Path
+
+          header_path = Path('theme/sections/header.liquid')
+          header = header_path.read_text(encoding='utf-8')
+          replacements = [
+              (
+                  '                      <li><a href="/collections/reality-fracture" class="menu-drawer__menu-item list-menu__item link link--text focus-inset">Reality Fracture</a></li>\n                      <li><a href="/collections/star-trek" class="menu-drawer__menu-item list-menu__item link link--text focus-inset">Star Trek</a></li>',
+                  '                      <li><a href="/collections/star-trek" class="menu-drawer__menu-item list-menu__item link link--text focus-inset">Star Trek</a></li>\n                      <li><a href="/collections/reality-fracture" class="menu-drawer__menu-item list-menu__item link link--text focus-inset">Reality Fracture</a></li>',
+              ),
+              (
+                  '          <li><a href="/collections/reality-fracture" class="header__menu-item list-menu__item link link--text focus-inset">Reality Fracture</a></li>\n          <li><a href="/collections/star-trek" class="header__menu-item list-menu__item link link--text focus-inset">Star Trek</a></li>',
+                  '          <li><a href="/collections/star-trek" class="header__menu-item list-menu__item link link--text focus-inset">Star Trek</a></li>\n          <li><a href="/collections/reality-fracture" class="header__menu-item list-menu__item link link--text focus-inset">Reality Fracture</a></li>',
+              ),
+          ]
+          for old, new in replacements:
+              if old not in header:
+                  raise RuntimeError('Could not locate expected navigation pair')
+              header = header.replace(old, new, 1)
+          header_path.write_text(header, encoding='utf-8')
+
+          test_path = Path('tests/test_storefront_configuration.py')
+          test = test_path.read_text(encoding='utf-8')
+          old_first = '''        first_preorder = header.index(\n            'href="/collections/reality-fracture"', first_crackers\n        )\n        first_star_trek = header.index(\n            'href="/collections/star-trek"', first_preorder\n        )\n        first_hobbit = header.index(\n            'href="/collections/the-hobbit"', first_star_trek\n        )'''
+          new_first = '''        first_star_trek = header.index(\n            'href="/collections/star-trek"', first_crackers\n        )\n        first_reality_fracture = header.index(\n            'href="/collections/reality-fracture"', first_star_trek\n        )\n        first_hobbit = header.index(\n            'href="/collections/the-hobbit"', first_reality_fracture\n        )'''
+          old_first_assert = '''        self.assertLess(first_crackers, first_preorder)\n        self.assertLess(first_preorder, first_star_trek)\n        self.assertLess(first_star_trek, first_hobbit)'''
+          new_first_assert = '''        self.assertLess(first_crackers, first_star_trek)\n        self.assertLess(first_star_trek, first_reality_fracture)\n        self.assertLess(first_reality_fracture, first_hobbit)'''
+          old_second = '''        second_preorder = header.index(\n            'href="/collections/reality-fracture"', second_crackers\n        )\n        second_star_trek = header.index(\n            'href="/collections/star-trek"', second_preorder\n        )\n        second_hobbit = header.index(\n            'href="/collections/the-hobbit"', second_star_trek\n        )'''
+          new_second = '''        second_star_trek = header.index(\n            'href="/collections/star-trek"', second_crackers\n        )\n        second_reality_fracture = header.index(\n            'href="/collections/reality-fracture"', second_star_trek\n        )\n        second_hobbit = header.index(\n            'href="/collections/the-hobbit"', second_reality_fracture\n        )'''
+          old_second_assert = '''        self.assertLess(second_crackers, second_preorder)\n        self.assertLess(second_preorder, second_star_trek)\n        self.assertLess(second_star_trek, second_hobbit)'''
+          new_second_assert = '''        self.assertLess(second_crackers, second_star_trek)\n        self.assertLess(second_star_trek, second_reality_fracture)\n        self.assertLess(second_reality_fracture, second_hobbit)'''
+          for old, new in (
+              (old_first, new_first),
+              (old_first_assert, new_first_assert),
+              (old_second, new_second),
+              (old_second_assert, new_second_assert),
+          ):
+              if old not in test:
+                  raise RuntimeError('Could not locate expected nav-order test block')
+              test = test.replace(old, new, 1)
+          test_path.write_text(test, encoding='utf-8')
+
+      - name: Run storefront configuration test
+        run: python -m unittest tests.test_storefront_configuration
+
+      - name: Commit nav order
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add theme/sections/header.liquid tests/test_storefront_configuration.py
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "Place Star Trek before Reality Fracture in navigation"
+          git push origin HEAD:fix/star-trek-homepage-nav
