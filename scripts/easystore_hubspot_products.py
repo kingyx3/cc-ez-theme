@@ -133,6 +133,85 @@ def _extract_list(document: Any, *keys: str) -> list[dict[str, Any]]:
     return []
 
 
+# Mirrors the largest first-tier limit already proven against EasyStore's equally
+# untrustworthy checkouts.json and orders.json pagination (docs/CUSTOMER_CRM_SYNC.md).
+_LARGE_PRODUCT_PAGE_LIMIT = 250
+
+
+def _fetch_product_visibility_bucket(
+    domain: str,
+    access_token: str,
+    visibility: str,
+) -> Iterator[dict[str, Any]]:
+    """Yield every EasyStore Product in one visibility bucket.
+
+    ``products.json`` can exhibit the same untrustworthy ``page`` parameter
+    already documented for ``checkouts.json`` and ``orders.json``: a later
+    page can repeat records an earlier page already served instead of
+    advancing. ``iter_easystore_pages`` refuses to loop on that rather than
+    risk an infinite fetch. Before failing the run, one larger-``limit``
+    request is tried: an answer shorter than that limit proves it is the
+    whole bucket, the same proof the Checkout and Order stages rely on. An
+    answer that is still saturated at the larger limit cannot prove
+    completeness, so the original page-repeat error is raised instead of
+    risking a silently incomplete Product sync.
+    """
+
+    def fetch(page: int, *, limit: int = EASYSTORE_PAGE_SIZE) -> list[dict[str, Any]]:
+        query = urlencode(
+            {
+                "page": page,
+                "limit": limit,
+                "sort": "id.asc",
+                "visibility": visibility,
+            }
+        )
+        document = _http_json(
+            f"https://{domain}/api/3.0/products.json?{query}",
+            headers={"EasyStore-Access-Token": access_token},
+        )
+        return _extract_list(document, "products", "data", "results")
+
+    # Collected into a list, not streamed with `yield from`, so a page-repeat
+    # discovered partway through never leaks the pages already read: the
+    # exception must surface before this generator has yielded anything, or
+    # the caller would see the same records twice once the larger-limit
+    # fetch below re-reads the whole bucket from page 1.
+    try:
+        collected = list(
+            iter_easystore_pages(
+                fetch,
+                page_size=EASYSTORE_PAGE_SIZE,
+                what=f"products.json visibility={visibility}",
+                error=SyncError,
+            )
+        )
+    except SyncError as error:
+        if "page parameter does nothing" not in str(error):
+            raise
+    else:
+        yield from collected
+        return
+
+    records = fetch(1, limit=_LARGE_PRODUCT_PAGE_LIMIT)
+    if len(records) >= _LARGE_PRODUCT_PAGE_LIMIT:
+        raise SyncError(
+            f"EasyStore products.json visibility={visibility} repeats pages at "
+            f"limit={EASYSTORE_PAGE_SIZE} and is still saturated at "
+            f"limit={_LARGE_PRODUCT_PAGE_LIMIT}, so a complete snapshot cannot "
+            "be proven. Refusing to sync a possibly-incomplete Product bucket."
+        )
+
+    print(
+        f"WARNING: EasyStore products.json visibility={visibility} repeated a "
+        f"page at limit={EASYSTORE_PAGE_SIZE}; recovered the complete bucket "
+        f"with one limit={_LARGE_PRODUCT_PAGE_LIMIT} request ({len(records)} "
+        "products).",
+        file=sys.stderr,
+    )
+    yield from records
+
+
 def iter_easystore_products(store_domain: str, access_token: str) -> Iterator[dict[str, Any]]:
     domain = store_domain.strip().removeprefix("https://").removeprefix("http://").rstrip("/")
 
@@ -141,27 +220,7 @@ def iter_easystore_products(store_domain: str, access_token: str) -> Iterator[di
     # unpublished product cannot disappear from the source and leave a stale
     # Active Product behind in HubSpot.
     for visibility in EASYSTORE_PRODUCT_VISIBILITIES:
-        def fetch(page: int, *, _visibility: str = visibility) -> list[dict[str, Any]]:
-            query = urlencode(
-                {
-                    "page": page,
-                    "limit": EASYSTORE_PAGE_SIZE,
-                    "sort": "id.asc",
-                    "visibility": _visibility,
-                }
-            )
-            document = _http_json(
-                f"https://{domain}/api/3.0/products.json?{query}",
-                headers={"EasyStore-Access-Token": access_token},
-            )
-            return _extract_list(document, "products", "data", "results")
-
-        for product in iter_easystore_pages(
-            fetch,
-            page_size=EASYSTORE_PAGE_SIZE,
-            what=f"products.json visibility={visibility}",
-            error=SyncError,
-        ):
+        for product in _fetch_product_visibility_bucket(domain, access_token, visibility):
             # The visibility filter itself is an explicit publication signal.
             # Some list payloads may omit published_at, so preserve that signal
             # without overriding a publication field EasyStore did return.
