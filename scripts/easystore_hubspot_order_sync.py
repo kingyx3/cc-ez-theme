@@ -37,6 +37,10 @@ TERMINAL_ORDER_STATUSES = frozenset({"cancelled", "archived", "deleted"})
 _ORDER_SOURCE_STATUS_BY_ID: dict[str, str] = {}
 _BASE_DESIRED_LINES = orders.desired_lines
 
+# Mirrors the largest first-tier limit already proven against EasyStore's equally
+# untrustworthy checkouts.json pagination (docs/EASYSTORE_CHECKOUT_CART_SYNC.md).
+_LARGE_ORDER_PAGE_LIMIT = 250
+
 
 def source_status_for_order(order: dict[str, Any]) -> str | None:
     """Return the EasyStore list-bucket status recorded for this Order."""
@@ -49,6 +53,71 @@ def is_terminal_source_order(order: dict[str, Any]) -> bool:
     """Whether this Order came from a terminal EasyStore lifecycle bucket."""
 
     return source_status_for_order(order) in TERMINAL_ORDER_STATUSES
+
+
+def _fetch_order_status_bucket(
+    domain: str,
+    access_token: str,
+    source_status: str,
+) -> Iterator[dict[str, Any]]:
+    """Yield every Order in one EasyStore status bucket.
+
+    ``orders.json`` has started exhibiting the same untrustworthy ``page``
+    parameter already documented for ``checkouts.json``
+    (docs/EASYSTORE_CHECKOUT_CART_SYNC.md): a later page can repeat records an
+    earlier page already served instead of advancing. ``iter_easystore_pages``
+    refuses to loop on that rather than risk an infinite fetch. Before failing
+    the run, one larger-``limit`` request is tried: an answer shorter than
+    that limit proves it is the whole bucket, the same proof the Checkout
+    stage relies on. An answer that is still saturated at the larger limit
+    cannot prove completeness, so the original page-repeat error is raised
+    instead of risking a silently incomplete Order sync.
+    """
+
+    def fetch(page: int, *, limit: int = orders.EASYSTORE_PAGE_SIZE) -> list[dict[str, Any]]:
+        query = urlencode(
+            {
+                "page": page,
+                "limit": limit,
+                "sort": "id.asc",
+                "status": source_status,
+            }
+        )
+        document = orders._http_json(
+            f"https://{domain}/api/3.0/orders.json?{query}",
+            headers={"EasyStore-Access-Token": access_token},
+        )
+        return orders._extract_list(document, "orders", "data", "results")
+
+    try:
+        yield from orders.iter_easystore_pages(
+            fetch,
+            page_size=orders.EASYSTORE_PAGE_SIZE,
+            what=f"orders.json?status={source_status}",
+            error=orders.SyncError,
+        )
+        return
+    except orders.SyncError as error:
+        if "page parameter does nothing" not in str(error):
+            raise
+
+    records = fetch(1, limit=_LARGE_ORDER_PAGE_LIMIT)
+    if len(records) >= _LARGE_ORDER_PAGE_LIMIT:
+        raise orders.SyncError(
+            f"EasyStore orders.json?status={source_status} repeats pages at "
+            f"limit={orders.EASYSTORE_PAGE_SIZE} and is still saturated at "
+            f"limit={_LARGE_ORDER_PAGE_LIMIT}, so a complete snapshot cannot be "
+            "proven. Refusing to sync a possibly-incomplete Order bucket."
+        )
+
+    print(
+        f"WARNING: EasyStore orders.json?status={source_status} repeated a page "
+        f"at limit={orders.EASYSTORE_PAGE_SIZE}; recovered the complete bucket "
+        f"with one limit={_LARGE_ORDER_PAGE_LIMIT} request ({len(records)} "
+        "orders).",
+        file=sys.stderr,
+    )
+    yield from records
 
 
 def iter_easystore_orders_all_statuses(
@@ -70,28 +139,7 @@ def iter_easystore_orders_all_statuses(
     _ORDER_SOURCE_STATUS_BY_ID.clear()
 
     for source_status in EASYSTORE_SYNC_ORDER_STATUSES:
-
-        def fetch(page: int, source_status: str = source_status) -> list[dict[str, Any]]:
-            query = urlencode(
-                {
-                    "page": page,
-                    "limit": orders.EASYSTORE_PAGE_SIZE,
-                    "sort": "id.asc",
-                    "status": source_status,
-                }
-            )
-            document = orders._http_json(
-                f"https://{domain}/api/3.0/orders.json?{query}",
-                headers={"EasyStore-Access-Token": access_token},
-            )
-            return orders._extract_list(document, "orders", "data", "results")
-
-        for order in orders.iter_easystore_pages(
-            fetch,
-            page_size=orders.EASYSTORE_PAGE_SIZE,
-            what=f"orders.json?status={source_status}",
-            error=orders.SyncError,
-        ):
+        for order in _fetch_order_status_bucket(domain, access_token, source_status):
             order_id = orders.nonempty(order.get("id"))
             if order_id is not None:
                 if order_id in seen_order_ids:
@@ -164,6 +212,8 @@ _impl._ORDER_SOURCE_STATUS_BY_ID = _ORDER_SOURCE_STATUS_BY_ID
 _impl.source_status_for_order = source_status_for_order
 _impl.is_terminal_source_order = is_terminal_source_order
 _impl.iter_easystore_orders_all_statuses = iter_easystore_orders_all_statuses
+_impl._fetch_order_status_bucket = _fetch_order_status_bucket
+_impl._LARGE_ORDER_PAGE_LIMIT = _LARGE_ORDER_PAGE_LIMIT
 _impl.desired_lines_with_terminal_product_tolerance = (
     desired_lines_with_terminal_product_tolerance
 )
