@@ -34,7 +34,14 @@
                   {% else %}
                     {% assign product_image_alt = image.alt | _default: product.title %}
                     <button type="button" class="product-media-open js-image-modal-toggle" aria-label="Enlarge {{ product_image_alt | escape }}">
-                      <img src="{{ image.src | img_url: 'social-share' }}" alt="{{ product_image_alt | escape }}" width="1200" height="1200" {% if forloop.first %}loading="eager" fetchpriority="high"{% else %}loading="lazy"{% endif %}>
+                      <img
+                        srcset="{{ image.src | img_url: '375x' }} 375w, {{ image.src | img_url: '750x' }} 750w, {{ image.src | img_url: '1200x' }} 1200w"
+                        sizes="(min-width: 750px) 50vw, 100vw"
+                        src="{{ image.src | img_url: 'social-share' }}"
+                        alt="{{ product_image_alt | escape }}"
+                        width="1200"
+                        height="1200"
+                        {% if forloop.first %}loading="eager" fetchpriority="high"{% else %}loading="lazy"{% endif %}>
                     </button>
                   {% endif %}
                 </li>

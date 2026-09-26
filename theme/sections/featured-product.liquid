@@ -49,7 +49,15 @@
                         <iframe title="{{ featured_product.title | escape }} video" width="90%" height="320" src="https://www.youtube.com/embed/{{ featured_product.featured_image.id }}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
                       {% else %}
                         <button type="button" class="product-media-open js-image-modal-toggle" aria-label="Enlarge {{ featured_product.title | escape }}">
-                          <img id="main-image-{{ section.__key }}" src="{{ featured_product.selected_or_first_available_variant.featured_image.src | img_url: 'social-share' }}" alt="{{ featured_product.selected_or_first_available_variant.featured_image.alt | _default: featured_product.title | escape }}" width="1200" height="1200" loading="eager">
+                          <img
+                            id="main-image-{{ section.__key }}"
+                            srcset="{{ featured_product.selected_or_first_available_variant.featured_image.src | img_url: '375x' }} 375w, {{ featured_product.selected_or_first_available_variant.featured_image.src | img_url: '750x' }} 750w, {{ featured_product.selected_or_first_available_variant.featured_image.src | img_url: '1200x' }} 1200w"
+                            sizes="(min-width: 750px) 50vw, 100vw"
+                            src="{{ featured_product.selected_or_first_available_variant.featured_image.src | img_url: 'social-share' }}"
+                            alt="{{ featured_product.selected_or_first_available_variant.featured_image.alt | _default: featured_product.title | escape }}"
+                            width="1200"
+                            height="1200"
+                            loading="eager">
                         </button>
                       {% endif %}
                     </li>
@@ -61,7 +69,14 @@
                         <iframe title="{{ featured_product.title | escape }} video" width="90%" height="320" src="https://www.youtube.com/embed/{{ image.id }}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
                       {% else %}
                         <button type="button" class="product-media-open js-image-modal-toggle" aria-label="Enlarge {{ image.alt | _default: featured_product.title | escape }}">
-                          <img src="{{ image.src | img_url: 'social-share' }}" alt="{{ image.alt | _default: featured_product.title | escape }}" width="1200" height="1200" loading="lazy">
+                          <img
+                            srcset="{{ image.src | img_url: '375x' }} 375w, {{ image.src | img_url: '750x' }} 750w, {{ image.src | img_url: '1200x' }} 1200w"
+                            sizes="(min-width: 750px) 50vw, 100vw"
+                            src="{{ image.src | img_url: 'social-share' }}"
+                            alt="{{ image.alt | _default: featured_product.title | escape }}"
+                            width="1200"
+                            height="1200"
+                            loading="lazy">
                         </button>
                       {% endif %}
                     </li>
