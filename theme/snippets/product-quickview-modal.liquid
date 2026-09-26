@@ -22,5 +22,12 @@
   <div class="product-quickview-modal-backdrop"></div>
 </product-quickview-modal>
 
-{{ 'product-form.js' | asset_url | script_tag }}
-{{ 'product-quickview.js' | asset_url | script_tag }}
+{% comment %}
+  Deferred: this snippet is included on every page, so these were parsed and
+  executed synchronously even on templates with no product on screen. Both
+  files only define a custom element and bind event handlers that fire on
+  later user interaction (opening the quick view, submitting the form), so
+  nothing here depends on running before the rest of the page parses.
+{% endcomment %}
+<script src="{{ 'product-form.js' | asset_url }}" defer="defer"></script>
+<script src="{{ 'product-quickview.js' | asset_url }}" defer="defer"></script>

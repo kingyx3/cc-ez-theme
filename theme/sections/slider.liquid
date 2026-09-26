@@ -74,7 +74,13 @@
 </div>
 
 
-{{ 'splide.min.js' | asset_url | script_tag }}
+{% comment %}
+  Deferred: the init below only ever runs from a DOMContentLoaded listener, and
+  deferred scripts are guaranteed to finish executing before that event fires,
+  so Splide is always defined by the time `new Splide(...)` runs. Loading it
+  synchronously here blocked HTML parsing on every page carrying a hero slider.
+{% endcomment %}
+<script src="{{ 'splide.min.js' | asset_url }}" defer="defer"></script>
 
 <script>
 
