@@ -999,8 +999,8 @@ a.product__text {
 
 @media screen and (min-width: 990px) {
   .product__description-wrapper {
-    padding-top: 4rem;
-    margin-top: 4rem;
+    padding-top: 2rem;
+    margin-top: 1.5rem;
     border-top: 0.1rem solid rgba(var(--color-foreground), 0.08);
   }
 }
