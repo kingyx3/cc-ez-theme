@@ -1086,6 +1086,29 @@ a.product__text {
   height: 1.6rem;
 }
 
+/* The promotions app's own product-picker markup assumes a full page-width
+   section: depending on the promotion type it renders as either a single
+   non-wrapping flex row with horizontal overflow scroll
+   (.sf_promo-main-container-margin) or a grid of up to 5 columns
+   (.sf_promo-product-grid-container), and at its own narrower breakpoints
+   still keeps that same one-row-at-a-time shape - none of which fits the
+   modal's fixed, narrower width well. Force a consistent 2-column wrapping
+   grid instead, for either markup variant and at any viewport size. */
+.promo-modal .sf_promo-main-container-margin,
+.promo-modal .sf_promo-product-grid-container {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.2rem;
+  max-width: 100%;
+  overflow: visible;
+}
+
+.promo-modal .secondary-prod,
+.promo-modal .sf_promo-main-prod {
+  width: 100%;
+  min-width: 0;
+}
+
 .product__description-wrapper {
   max-width: 72rem;
   margin: 0 auto;
