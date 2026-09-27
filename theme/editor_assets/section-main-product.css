@@ -124,9 +124,9 @@
   }
 
   .product:not(.product--no-media):not(.featured-product) .product__media-wrapper {
-    flex: 0 1 44rem;
-    max-width: 44rem;
-    width: 44rem;
+    flex: 0 1 50rem;
+    max-width: 50rem;
+    width: 50rem;
     padding-bottom: 0;
   }
 
@@ -163,9 +163,26 @@
     flex-direction: column;
     justify-content: center;
     padding-left: 4rem;
-    flex: 1 1 34rem;
-    max-width: 40rem;
+    flex: 1 1 42rem;
+    max-width: 52rem;
     width: auto;
+  }
+
+  /* A wider column lets the title wrap onto fewer lines, and tightening the
+     vertical rhythm around the form trims the rest - both shorten the buy
+     box's natural height, which the photo (above) mirrors. */
+  .product:not(.product--no-media):not(.featured-product) .product-wrapper_color {
+    padding: clamp(1.6rem, 2vw, 2rem);
+  }
+
+  .product:not(.product--no-media):not(.featured-product) .product__info-container .product-form,
+  .product:not(.product--no-media):not(.featured-product) .product__info-container .product__description {
+    margin: 1.5rem 0;
+  }
+
+  .product:not(.product--no-media):not(.featured-product) .product-form__buttons {
+    margin-top: 1.5rem;
+    gap: 1rem;
   }
 
   .product:not(.product--no-media) .product__info-container .product-form{
