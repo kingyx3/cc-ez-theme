@@ -76,6 +76,47 @@ class StorefrontConfigurationTests(unittest.TestCase):
             main_product,
         )
 
+    def test_promo_app_quantity_input_is_labeled_without_touching_its_value(
+        self,
+    ) -> None:
+        # The installed promotions app injects '.sf_promo-quantity-input' into
+        # #sf_promo-container via innerHTML from its own /products/*/promotions
+        # response, asynchronously and with no accessible name at all - this
+        # theme does not own or control that markup. Confirmed live: it fails
+        # axe's "label" rule on the product page. The theme can only add the
+        # missing name after the app inserts the element, so this must never
+        # touch the input's value, type, max, or any attribute other than the
+        # label - a MutationObserver-based patch that never intercepts the
+        # app's own event handlers or resubmits/mutates the field itself.
+        main_product = (
+            THEME_ROOT / "sections" / "main-product.liquid"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("getElementById('sf_promo-container')", main_product)
+        self.assertIn("sf_promo-quantity-input", main_product)
+        self.assertIn(
+            ":not([aria-label]):not([aria-labelledby])",
+            main_product,
+            "must never overwrite a name the app already supplied",
+        )
+        self.assertIn("setAttribute('aria-label'", main_product)
+        self.assertIn("new MutationObserver(", main_product)
+        self.assertIn("childList: true", main_product)
+        self.assertIn(
+            "{{ 'products.product.quantity' | t | json }}",
+            main_product,
+            "the label text must be the platform's own translated string, "
+            "safely JSON-encoded for use inside a <script> tag",
+        )
+
+        # Never anything beyond adding the label: no write to .value, .max,
+        # .disabled, or removal/replacement of the app's own input.
+        script_start = main_product.index("sf_promo-quantity-input:not(")
+        patch_script = main_product[script_start : script_start + 800]
+        for forbidden in (".value =", ".max =", ".disabled =", ".remove(", "innerHTML ="):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, patch_script)
+
         product_form = (
             THEME_ROOT / "assets" / "product-form.js"
         ).read_text(encoding="utf-8")

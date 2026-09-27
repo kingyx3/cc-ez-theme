@@ -410,6 +410,33 @@
     }
   })();
 
+  // The installed promotions app renders its own quantity stepper into
+  // #sf_promo-container from its /products/*/promotions response (see
+  // getPromotionList() above), asynchronously and well after this script runs.
+  // That markup ships with no accessible name at all - no <label>, aria-label,
+  // or placeholder - so it fails the "label" accessibility check for every
+  // shopper on assistive technology. This theme does not own that markup and
+  // cannot change it at the source, but it can add the missing name once the
+  // app inserts it: purely additive, it never touches the input's value, type,
+  // max, or any event handler the app itself wires up.
+  (() => {
+    const promoContainer = document.getElementById('sf_promo-container');
+    if (!promoContainer) return;
+
+    const promoQuantityLabel = {{ 'products.product.quantity' | t | json }};
+    const labelPromoQuantityInputs = () => {
+      promoContainer
+        .querySelectorAll('input.sf_promo-quantity-input:not([aria-label]):not([aria-labelledby])')
+        .forEach((input) => input.setAttribute('aria-label', promoQuantityLabel));
+    };
+
+    labelPromoQuantityInputs();
+    new MutationObserver(labelPromoQuantityInputs).observe(promoContainer, {
+      childList: true,
+      subtree: true,
+    });
+  })();
+
 </script>
 
 
