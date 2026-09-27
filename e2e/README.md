@@ -1,6 +1,6 @@
 # EasyStore browser E2E tests
 
-These Playwright tests exercise a deployed EasyStore storefront rather than rendering Liquid locally. Every pull request runs the complete browser/device and Axe matrix. By default PRs target `https://cardboard.sg`; set the repository Actions variable `E2E_PR_BASE_URL` when a deployed preview storefront is available so the same suite validates that preview instead.
+These Playwright tests exercise a deployed EasyStore storefront rather than rendering Liquid locally. Every pull request runs the complete browser/device and Axe matrix. A PR's branch is never live on `https://cardboard.sg` - only a push to `main` publishes there - so by default PR runs target the `dev` deploy target instead, `https://cardboardcollectivedev-2.easy.co`. Set the repository Actions variable `E2E_PR_BASE_URL` to point PR runs at a different deployed preview storefront instead.
 
 ## Run locally
 
