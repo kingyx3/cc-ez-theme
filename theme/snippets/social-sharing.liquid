@@ -87,11 +87,11 @@
         </div>
         <button type="button" class="share-button__close hidden no-js-hidden">
           {% include 'svg-definitions' with 'icon-close' %}
-          <span class="visually-hidden">{{ 'general.share.close' | t }}</span>
+          <span class="visually-hidden">{% include 'translation-fallback', translation_key: 'general.share.close', fallback: 'Close' %}</span>
         </button>
         <button type="button" class="share-button__copy no-js-hidden">
           {% include 'svg-definitions' with 'icon-clipboard' %}
-          <span class="visually-hidden">{{ 'general.share.copy_to_clipboard' | t }}</span>
+          <span class="visually-hidden">{% include 'translation-fallback', translation_key: 'general.share.copy_to_clipboard', fallback: 'Copy to clipboard' %}</span>
         </button>
       </div>
       

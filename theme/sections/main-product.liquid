@@ -48,13 +48,14 @@
               {% endfor %}
             </ul>
             <div class="slider-buttons no-js-hidden {% if product.images.size < 2 %} medium-hide small-hide {% endif %}">
-              <button type="button" class="slider-button slider-button--prev" name="previous" aria-label="{{ 'accessibility.previous_slide' | t }}">{% include 'svg-definitions' with 'icon-caret' %}</button>
+              <button type="button" class="slider-button slider-button--prev" name="previous" aria-label="{% include 'translation-fallback', translation_key: 'accessibility.previous_slide', fallback: 'Previous slide', escape_output: true %}">{% include 'svg-definitions' with 'icon-caret' %}</button>
               <div class="slider-counter caption" aria-live="polite">
                 <span class="slider-counter--current">1</span>
                 <span aria-hidden="true"> / </span>
                 <span class="slider-counter--total">{{ product.images.size }}</span>
               </div>
-              <button type="button" class="slider-button slider-button--next" name="next" aria-label="{{ 'accessibility.next_slide' | t }}">{% include 'svg-definitions' with 'icon-caret' %}</button>
+              <button type="button" class="slider-button slider-button--next" name="next" aria-label="{% include 'translation-fallback', translation_key: 'accessibility.next_slide', fallback: 'Next slide', escape_output: true %}">{% include 'svg-definitions' with 'icon-caret' %}</button>
+              {% assign escape_output = null %}
             </div>
           </slider-component>
           {% app_snippet 'product/content_left' %}
@@ -197,7 +198,7 @@
               </div>
               
               <div class="form__message hidden" tabindex="-1" role="alert">
-                <span class="visually-hidden">{{ 'accessibility.error' | t }} </span>
+                <span class="visually-hidden">{% include 'translation-fallback', translation_key: 'accessibility.error', fallback: 'Error' %} </span>
                 {% include 'svg-definitions' with 'icon-error' %}
                 <div class="js-error-content"></div>
               </div>
@@ -222,8 +223,9 @@
                   type="button"
                   class="buy-now-limit-modal__close"
                   data-checkout-limit-cancel
-                  aria-label="{{ 'accessibility.close' | t }}"
+                  aria-label="{% include 'translation-fallback', translation_key: 'accessibility.close', fallback: 'Close', escape_output: true %}"
                 >
+                  {% assign escape_output = null %}
                   {% include 'svg-definitions' with 'icon-close' %}
                 </button>
 
@@ -286,7 +288,7 @@
   
     <!-- The Modal -->
   <div id="product-modal" class="modal hide" role="dialog" aria-modal="true" aria-label="Product image preview" aria-hidden="true">
-    <button type="button" class="js-image-modal-close product-media-modal__toggle product-modal-close" aria-label="{{ 'accessibility.close' | t }}">{% include 'svg-definitions' with 'icon-close' %}</button>
+    <button type="button" class="js-image-modal-close product-media-modal__toggle product-modal-close" aria-label="{% include 'translation-fallback', translation_key: 'accessibility.close', fallback: 'Close', escape_output: true %}">{% assign escape_output = null %}{% include 'svg-definitions' with 'icon-close' %}</button>
     <img class="modal-content" id="modal-img" alt="" width="1200" height="1200">
   </div>
 
@@ -406,6 +408,42 @@
     } catch (error) {
       // Private browsing and strict storage policies should not block shopping.
     }
+  })();
+
+  // The installed promotions app renders its own markup into
+  // #sf_promo-container from its /products/*/promotions response (see
+  // getPromotionList() above), asynchronously and well after this script runs.
+  // That markup has repeatedly shipped without the basic attributes assistive
+  // technology needs - a quantity <input> with no label at all, then (on a
+  // later promo config, same app) a product thumbnail image with no alt. This
+  // theme does not own that markup and cannot change it at the source, so this
+  // patches each known gap once the app inserts it, additively: it never
+  // touches an element's value, type, max, src, or any event handler the app
+  // itself wires up, and never overwrites an attribute the app already set.
+  // The app's markup can change shape again; add another patch here rather
+  // than resolving the underlying finding as fixed if a new one shows up.
+  (() => {
+    const promoContainer = document.getElementById('sf_promo-container');
+    if (!promoContainer) return;
+
+    const promoQuantityLabel = {{ 'products.product.quantity' | t | json }};
+    const patchPromoAccessibility = () => {
+      promoContainer
+        .querySelectorAll('input.sf_promo-quantity-input:not([aria-label]):not([aria-labelledby])')
+        .forEach((input) => input.setAttribute('aria-label', promoQuantityLabel));
+
+      // Redundant with the promotion text already shown alongside it, so an
+      // empty alt (decorative) is the correct fix, not a guessed description.
+      promoContainer
+        .querySelectorAll('img.sf_promo-prod-img:not([alt])')
+        .forEach((img) => img.setAttribute('alt', ''));
+    };
+
+    patchPromoAccessibility();
+    new MutationObserver(patchPromoAccessibility).observe(promoContainer, {
+      childList: true,
+      subtree: true,
+    });
   })();
 
 </script>
