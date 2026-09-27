@@ -130,6 +130,9 @@
   }
 
   .product:not(.product--no-media):not(.featured-product) .product__info-wrapper {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
     padding-left: 4rem;
     flex: 1 1 40rem;
     max-width: 46rem;
