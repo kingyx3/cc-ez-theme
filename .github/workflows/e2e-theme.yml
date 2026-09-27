@@ -28,7 +28,19 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  E2E_BASE_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.base_url || vars.E2E_PR_BASE_URL || vars.E2E_BASE_URL || 'https://cardboard.sg' }}
+  # package-theme.yml imports and publishes every push - including a PR
+  # branch's - through the GitHub `dev` environment at
+  # https://cardboardcollectivedev-2.easy.co, never touching production
+  # (`prod`, and https://cardboard.sg with it, is reserved for pushes to
+  # `main`). A `pull_request` run of this suite defaulting to cardboard.sg
+  # was therefore always exercising production instead of the change under
+  # review: it could not fail on anything this PR touched, and it could fail
+  # on live production content this PR had no way to fix - both observed on
+  # PR #260, where the same live promotions-app markup tripped the
+  # accessibility check on every push regardless of what the branch fixed.
+  # `vars.E2E_PR_BASE_URL` still overrides this, e.g. to point at a
+  # per-branch preview if one exists instead of the shared dev store.
+  E2E_BASE_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.base_url || vars.E2E_PR_BASE_URL || (github.event_name == 'pull_request' && 'https://cardboardcollectivedev-2.easy.co') || vars.E2E_BASE_URL || 'https://cardboard.sg' }}
   # Left empty on purpose: the suite reads the theme's configured limits and
   # opens one of those products. Set the repository variable only to pin a
   # specific product.
