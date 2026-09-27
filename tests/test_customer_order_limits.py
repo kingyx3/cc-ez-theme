@@ -27,6 +27,7 @@ class CustomerOrderLimitTests(unittest.TestCase):
             ("MTG-HOB-DNK-EN", 3),
             ("MTG-HOB-PRK-EN-SET4", 3),
             ("MTG-HOB-OBP-EN", 30),
+            ("mtg-fdn-cmd-en-u", 1),
             ("MTG-FRA-SLB-EN", 4),
             ("MTG-FRA-CBB-EN", 2),
             ("CC-BDL-FRIENDS3-EN-SPM", 1),
@@ -74,7 +75,7 @@ class CustomerOrderLimitTests(unittest.TestCase):
         for handle in unlimited:
             self.assertNotIn(handle, config)
 
-        self.assertEqual(len(rows), 18)
+        self.assertEqual(len(rows), 19)
         self.assertIn("normalized to lowercase", config)
         self.assertIn("Delete the row to leave a product", config)
         self.assertNotIn("split:", config)
