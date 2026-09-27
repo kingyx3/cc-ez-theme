@@ -263,22 +263,23 @@
             {% include 'social-sharing', share_id: section.__key %}
           </div>
 
-        
+
         </div>
 
-        {% app_snippet 'product/description_top' %}
-
-        {% if product.description != blank %}
-          <div class="product-description product__description rte" itemprop="description">
-            {{ product.description }}
-          </div> 
-        {% endif %}
-
-
-      </div> 
+      </div>
       {% app_snippet 'product/content_right' %}
     </div>
   </div>
+
+  {% app_snippet 'product/description_top' %}
+
+  {% if product.description != blank %}
+    <div class="product__description-wrapper">
+      <div class="product-description product__description rte" itemprop="description">
+        {{ product.description }}
+      </div>
+    </div>
+  {% endif %}
 
   {% app_snippet 'product/description_bottom' %}
 
