@@ -722,6 +722,56 @@ class StorefrontConfigurationTests(unittest.TestCase):
             with self.subTest(path=path.relative_to(THEME_ROOT)):
                 self.assertIsNone(broken_fallback.search(source))
 
+    def test_product_page_accessibility_labels_use_translation_fallbacks(self) -> None:
+        # `accessibility.*` and `general.share.*` are not translated on this
+        # store: a bare `{{ 'accessibility.close' | t }}` rendered the literal
+        # key text as the control's accessible name (confirmed on the live
+        # product page), instead of falling back to readable English the way
+        # every other product-page label already does via
+        # snippets/translation-fallback.liquid. These labels are screen-reader
+        # and title-tooltip only, so the regression is invisible to a sighted
+        # click-through QA pass and only shows up in the rendered markup.
+        main_product = (
+            THEME_ROOT / "sections" / "main-product.liquid"
+        ).read_text(encoding="utf-8")
+        social_sharing = (
+            THEME_ROOT / "snippets" / "social-sharing.liquid"
+        ).read_text(encoding="utf-8")
+
+        expected = {
+            "accessibility.previous_slide": main_product,
+            "accessibility.next_slide": main_product,
+            "accessibility.error": main_product,
+            "general.share.close": social_sharing,
+            "general.share.copy_to_clipboard": social_sharing,
+        }
+        for translation_key, source in expected.items():
+            with self.subTest(translation_key=translation_key):
+                self.assertIn(translation_key, source)
+                self.assertIn(
+                    f"translation_key: '{translation_key}'",
+                    source,
+                    f"{translation_key} must be resolved through translation-fallback",
+                )
+
+        self.assertEqual(
+            main_product.count("translation_key: 'accessibility.close'"),
+            2,
+            "both the image-modal and buy-now-limit-modal close buttons "
+            "must use translation-fallback for accessibility.close",
+        )
+
+        broken_bare_t = re.compile(
+            r"'(accessibility\.[a-z_]+|general\.share\.[a-z_]+)'\s*\|\s*t\b"
+        )
+        for path in (
+            THEME_ROOT / "sections" / "main-product.liquid",
+            THEME_ROOT / "snippets" / "social-sharing.liquid",
+        ):
+            source = path.read_text(encoding="utf-8")
+            with self.subTest(path=path.relative_to(THEME_ROOT)):
+                self.assertIsNone(broken_bare_t.search(source))
+
     def test_liquid_javascript_strings_are_safely_encoded(self) -> None:
         script_pattern = re.compile(
             r"<script(?:\s[^>]*)?>(.*?)</script>", re.IGNORECASE | re.DOTALL
