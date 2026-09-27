@@ -108,6 +108,18 @@
             {% endfor %}
           </div>
 
+          <button
+            type="button"
+            class="product-addon-trigger"
+            data-promo-modal-open="PromoModal-{{ section.__key }}"
+            aria-haspopup="dialog"
+            aria-controls="PromoModal-{{ section.__key }}"
+            hidden
+          >
+            {% include 'svg-definitions' with 'icon-discount' %}
+            {% include 'translation-fallback', translation_key: 'products.product.view_addon_deals', fallback: 'View add-on deals', escape_output: true %}
+          </button>
+
           <product-form class="product-form">
             <form action="/cart/add" method="post" enctype="multipart/form-data" data-addtocart='{{prod_d}}' id="AddToCartForm-{{ section.__key }}">
 
@@ -273,7 +285,34 @@
     </div>
   </div>
 
-  {% app_snippet 'product/description_top' %}
+  {% comment %}
+    The promotions app has no concept of a modal - it always renders
+    #promotion-section inline wherever this snippet is called. Wrapping the
+    call in a closed-by-default <dialog> keeps that markup (and the AJAX
+    call the app's own script fires) exactly where it already worked, but
+    out of the page's normal flow until data-promo-modal-open below reveals
+    it: no reserved height between the product row and the description on
+    the (common) case where a product carries no add-on deal at all.
+  {% endcomment %}
+  <dialog
+    id="PromoModal-{{ section.__key }}"
+    class="promo-modal"
+    aria-modal="true"
+    aria-label="{% include 'translation-fallback', translation_key: 'products.product.view_addon_deals', fallback: 'View add-on deals', escape_output: true %}"
+  >
+    <div class="promo-modal__content">
+      <button
+        type="button"
+        class="promo-modal__close"
+        data-promo-modal-close
+        aria-label="{% include 'translation-fallback', translation_key: 'accessibility.close', fallback: 'Close', escape_output: true %}"
+      >
+        {% assign escape_output = null %}
+        {% include 'svg-definitions' with 'icon-close' %}
+      </button>
+      {% app_snippet 'product/description_top' %}
+    </div>
+  </dialog>
 
   {% if product.description != blank %}
     <div class="product__description-wrapper">
@@ -377,7 +416,57 @@
     document.addEventListener('keydown', (event) => {
       if (event.key === 'Escape' && product_modal.classList.contains('show')) closeProductModal();
     });
-  
+
+    // The promotions app injects its markup into #sf_promo-container
+    // asynchronously, well after this script runs, and leaves it empty (or
+    // whitespace-only) for a product with no active promotion - so reveal
+    // the add-on trigger only once that container actually gains content,
+    // rather than assuming a deal exists.
+    var promoModal = document.getElementById("PromoModal-{{ section.__key }}");
+    var promoTrigger = document.querySelector('[data-promo-modal-open="PromoModal-{{ section.__key }}"]');
+    var promoContainer = promoModal ? promoModal.querySelector('#sf_promo-container') : null;
+
+    if (promoModal && promoTrigger && promoContainer) {
+      var openPromoModal = function() {
+        if (typeof promoModal.showModal === 'function') {
+          if (!promoModal.open) promoModal.showModal();
+        } else {
+          promoModal.setAttribute('open', '');
+        }
+      };
+
+      var closePromoModal = function() {
+        if (typeof promoModal.close === 'function') {
+          if (promoModal.open) promoModal.close();
+        } else {
+          promoModal.removeAttribute('open');
+        }
+      };
+
+      promoTrigger.addEventListener('click', openPromoModal);
+      promoModal.querySelectorAll('[data-promo-modal-close]').forEach(function(button) {
+        button.addEventListener('click', closePromoModal);
+      });
+      promoModal.addEventListener('click', function(event) {
+        if (event.target === promoModal) closePromoModal();
+      });
+
+      var revealPromoTriggerIfLoaded = function() {
+        if (promoContainer.children.length > 0) {
+          promoTrigger.hidden = false;
+          return true;
+        }
+        return false;
+      };
+
+      if (!revealPromoTriggerIfLoaded()) {
+        var promoObserver = new MutationObserver(function() {
+          if (revealPromoTriggerIfLoaded()) promoObserver.disconnect();
+        });
+        promoObserver.observe(promoContainer, { childList: true });
+      }
+    }
+
   });
 
   // Keep a small, valid product history without breaking the product page when

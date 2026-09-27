@@ -995,20 +995,95 @@ a.product__text {
   }
 }
 
-/* The installed promotions app renders #promotion-section with no width of
-   its own, so on a page with an active promotion it spans the full
-   page-width setting - full-bleed edge to edge - directly between the
-   centered, narrower product row above and description below it. Capping
-   and centering it to match the row keeps every block's edges aligned. */
-#promotion-section {
-  margin-top: 2rem;
+/* Add-on deal trigger + modal. The promotions app has no concept of a
+   modal and always renders #promotion-section inline; main-product.liquid
+   wraps that call in a closed-by-default <dialog> instead, so a product
+   with no active add-on deal reserves no space between the photo/buy-box
+   row and the description, and a product that does have one surfaces it a
+   tap away rather than as a full-bleed strip breaking the row's edges. */
+.product-addon-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0.4rem 0 1rem;
+  padding: 0.9rem 1.6rem;
+  border: 0.1rem solid rgba(var(--color-foreground), 0.15);
+  border-radius: 4rem;
+  background: transparent;
+  color: rgb(var(--color-foreground));
+  font-size: 1.4rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color var(--duration-short) ease, background-color var(--duration-short) ease;
 }
 
-@media screen and (min-width: 990px) {
-  #promotion-section {
-    max-width: 122rem;
-    margin: 2.5rem auto 0;
-  }
+.product-addon-trigger[hidden] {
+  display: none;
+}
+
+.product-addon-trigger:hover {
+  border-color: rgba(var(--color-foreground), 0.4);
+  background: rgba(var(--color-foreground), 0.04);
+}
+
+.product-addon-trigger .icon {
+  width: 1.6rem;
+  height: 1.6rem;
+  flex-shrink: 0;
+}
+
+.promo-modal {
+  box-sizing: border-box;
+  width: min(calc(100% - 3rem), 64rem);
+  max-width: 64rem;
+  max-height: min(82vh, 70rem);
+  padding: 0;
+  border: 0;
+  border-radius: 2.4rem;
+  color: rgb(var(--color-foreground));
+  background: rgb(var(--color-background));
+  box-shadow: 0 2.4rem 7rem rgba(0, 0, 0, 0.28);
+}
+
+.promo-modal::backdrop {
+  background: rgba(14, 18, 22, 0.58);
+  backdrop-filter: blur(0.2rem);
+}
+
+.promo-modal__content {
+  position: relative;
+  max-height: min(82vh, 70rem);
+  overflow-y: auto;
+  /* Extra top padding clears the absolutely positioned close button,
+     whatever width the app's own promo ribbon renders at. */
+  padding: clamp(3.6rem, 8vw, 4.8rem) clamp(2rem, 5vw, 3rem) clamp(2rem, 5vw, 3rem);
+}
+
+.promo-modal__close {
+  position: absolute;
+  top: 1.4rem;
+  right: 1.4rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 4rem;
+  height: 4rem;
+  padding: 0;
+  border: 0.1rem solid rgba(var(--color-foreground), 0.14);
+  border-radius: 50%;
+  color: rgb(var(--color-foreground));
+  background: rgb(var(--color-background));
+  cursor: pointer;
+  z-index: 1;
+}
+
+.promo-modal__close:hover {
+  background: rgba(var(--color-foreground), 0.06);
+}
+
+.promo-modal__close .icon {
+  width: 1.6rem;
+  height: 1.6rem;
 }
 
 .product__description-wrapper {

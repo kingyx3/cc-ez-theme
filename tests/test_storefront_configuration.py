@@ -816,9 +816,9 @@ class StorefrontConfigurationTests(unittest.TestCase):
 
         self.assertEqual(
             main_product.count("translation_key: 'accessibility.close'"),
-            2,
-            "both the image-modal and buy-now-limit-modal close buttons "
-            "must use translation-fallback for accessibility.close",
+            3,
+            "the image-modal, buy-now-limit-modal, and promo-modal close "
+            "buttons must all use translation-fallback for accessibility.close",
         )
 
         broken_bare_t = re.compile(
