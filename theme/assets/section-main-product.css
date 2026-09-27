@@ -124,9 +124,9 @@
   }
 
   .product:not(.product--no-media):not(.featured-product) .product__media-wrapper {
-    flex: 0 1 52rem;
-    max-width: 52rem;
-    width: 52rem;
+    flex: 0 1 44rem;
+    max-width: 44rem;
+    width: 44rem;
     padding-bottom: 0;
   }
 
@@ -163,8 +163,8 @@
     flex-direction: column;
     justify-content: center;
     padding-left: 4rem;
-    flex: 1 1 40rem;
-    max-width: 46rem;
+    flex: 1 1 34rem;
+    max-width: 40rem;
     width: auto;
   }
 
