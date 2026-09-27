@@ -36,7 +36,12 @@ class PerOrderLimitTests(unittest.TestCase):
             "{% include 'per-order-limit-row', order_limit_handle: "
             "'MTG-HOB-CBB-EN', order_limit_maximum: 1 %}"
         )
+        fdn_commander = (
+            "{% include 'per-order-limit-row', order_limit_handle: "
+            "'mtg-fdn-cmd-en-u', order_limit_maximum: 1 %}"
+        )
         self.assertIn(example, config)
+        self.assertIn(fdn_commander, config)
         self.assertIn("Adding or changing an order limit is one row", row)
         self.assertIsNone(re.search(r"per_order_limit_\w*_\d", row))
         self.assertIsNone(re.search(r"order_limit_(handle|maximum)_\d", config))
