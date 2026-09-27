@@ -64,6 +64,34 @@ class SeoThemeTests(unittest.TestCase):
         self.assertIn('"position": 3', breadcrumb_schema)
         self.assertIn("canonical_url | json", breadcrumb_schema)
 
+    def test_current_breadcrumb_ellipsis_is_not_applied_to_a_flex_item(self) -> None:
+        # `text-overflow: ellipsis` never renders on an element that is itself
+        # `display: flex` (the flex algorithm blockifies its children instead of
+        # laying out the element's own text run) - confirmed on a live mobile
+        # screenshot of the product page, where the long final crumb (the
+        # product title) ran off the right edge of the screen with no "..." and
+        # no wrap, while the earlier `<a>` crumbs truncated correctly because
+        # the ellipsis styles sat on a plain child element, not the flex `<li>`
+        # itself. The current crumb needs the same shape: the ellipsis rule
+        # belongs to an inner span, not to `.breadcrumbs__current` on the `<li>`.
+        breadcrumbs = (THEME_ROOT / "snippets" / "breadcrumbs.liquid").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn(".breadcrumbs__current-text {", breadcrumbs)
+        self.assertIn("text-overflow: ellipsis", breadcrumbs)
+        self.assertNotRegex(
+            breadcrumbs,
+            r"\.breadcrumbs__current\s*\{[^}]*text-overflow",
+            msg="the ellipsis rule must target the inner span, not the flex <li>",
+        )
+        self.assertEqual(
+            breadcrumbs.count('<span class="breadcrumbs__current-text">'),
+            2,
+            "both the collection and product current-crumb branches must wrap "
+            "their text in the ellipsis span",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

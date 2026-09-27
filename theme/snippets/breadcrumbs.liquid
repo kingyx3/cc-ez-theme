@@ -45,7 +45,7 @@
   }
 
   .breadcrumbs__link,
-  .breadcrumbs__current {
+  .breadcrumbs__current-text {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -87,7 +87,7 @@
 
     {% if collection and template contains 'collection' %}
       <li class="breadcrumbs__item breadcrumbs__current" aria-current="page">
-        {{ collection.title | escape }}
+        <span class="breadcrumbs__current-text">{{ collection.title | escape }}</span>
       </li>
     {% elsif product and template contains 'product' %}
       {% if collection and collection.title != blank %}
@@ -96,7 +96,7 @@
         </li>
       {% endif %}
       <li class="breadcrumbs__item breadcrumbs__current" aria-current="page">
-        {{ product.title | escape }}
+        <span class="breadcrumbs__current-text">{{ product.title | escape }}</span>
       </li>
     {% endif %}
   </ol>
