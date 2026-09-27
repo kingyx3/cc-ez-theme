@@ -127,6 +127,35 @@
     flex: 0 1 52rem;
     max-width: 52rem;
     width: 52rem;
+    padding-bottom: 0;
+  }
+
+  /* The buy box's natural content height varies with title length, badges,
+     and variant options, and is often taller than a square product photo.
+     Rather than centering the shorter photo inside its own fixed square (see
+     the aspect-ratio override below), stretch the photo through the whole
+     chain down to the visible frame so it fills the row's real height -
+     already equal to the buy box's height via the flex row's default
+     stretch - instead of leaving blank space under a shorter square image. */
+  .product:not(.product--no-media):not(.featured-product) .product__media-wrapper .image-modal-wrapper,
+  .product:not(.product--no-media):not(.featured-product) .product__media-wrapper .slider-component,
+  .product:not(.product--no-media):not(.featured-product) .product__media-wrapper .product__media-list {
+    height: 100%;
+  }
+
+  .product:not(.product--no-media):not(.featured-product) .product__media-wrapper .product__media-list {
+    margin-bottom: 0;
+  }
+
+  .product:not(.product--no-media):not(.featured-product) .product__media-wrapper .product__media-item {
+    align-items: stretch;
+    height: 100%;
+  }
+
+  .product:not(.product--no-media):not(.featured-product) .product__media-item > .product-media-open {
+    height: 100%;
+    aspect-ratio: auto;
+    max-height: none;
   }
 
   .product:not(.product--no-media):not(.featured-product) .product__info-wrapper {
