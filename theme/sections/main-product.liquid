@@ -465,6 +465,23 @@
         });
         promoObserver.observe(promoContainer, { childList: true });
       }
+
+      // The promotions app also renders a compact list of individual deal
+      // tags elsewhere on the page (product/field_top, near the price),
+      // each wired to its own global window.promoScrollToView(id), which
+      // just does document.getElementById('sf_promo-'+id).scrollIntoView().
+      // That target now lives inside this closed-by-default dialog, so a
+      // tag click has to open the modal first - override the app's global
+      // with a version that does, then scrolls once the dialog has painted.
+      window.promoScrollToView = function(id) {
+        openPromoModal();
+        window.requestAnimationFrame(function() {
+          var target = document.getElementById('sf_promo-' + id);
+          if (target && typeof target.scrollIntoView === 'function') {
+            target.scrollIntoView({ block: 'start' });
+          }
+        });
+      };
     }
 
   });
