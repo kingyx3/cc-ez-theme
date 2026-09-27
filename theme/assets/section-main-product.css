@@ -130,6 +130,14 @@
     padding-bottom: 0;
   }
 
+  /* Only the tablet range (750-989px, further down) gives every slide
+     width: 100%; nothing equivalent existed for desktop, so past the first
+     image, slides fell back to the default grid item width - each item
+     partially visible instead of one full-width photo per swipe/scroll. */
+  .product:not(.product--no-media):not(.featured-product) .product__media-list .product__media-item {
+    width: 100%;
+  }
+
   .product:not(.product--no-media):not(.featured-product) .product__info-wrapper {
     display: flex;
     flex-direction: column;
@@ -984,6 +992,22 @@ a.product__text {
 @media screen and (max-width: 549px) {
   .buy-now-limit-modal__actions {
     grid-template-columns: 1fr;
+  }
+}
+
+/* The installed promotions app renders #promotion-section with no width of
+   its own, so on a page with an active promotion it spans the full
+   page-width setting - full-bleed edge to edge - directly between the
+   centered, narrower product row above and description below it. Capping
+   and centering it to match the row keeps every block's edges aligned. */
+#promotion-section {
+  margin-top: 2rem;
+}
+
+@media screen and (min-width: 990px) {
+  #promotion-section {
+    max-width: 122rem;
+    margin: 2.5rem auto 0;
   }
 }
 
