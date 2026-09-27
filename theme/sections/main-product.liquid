@@ -410,28 +410,37 @@
     }
   })();
 
-  // The installed promotions app renders its own quantity stepper into
+  // The installed promotions app renders its own markup into
   // #sf_promo-container from its /products/*/promotions response (see
   // getPromotionList() above), asynchronously and well after this script runs.
-  // That markup ships with no accessible name at all - no <label>, aria-label,
-  // or placeholder - so it fails the "label" accessibility check for every
-  // shopper on assistive technology. This theme does not own that markup and
-  // cannot change it at the source, but it can add the missing name once the
-  // app inserts it: purely additive, it never touches the input's value, type,
-  // max, or any event handler the app itself wires up.
+  // That markup has repeatedly shipped without the basic attributes assistive
+  // technology needs - a quantity <input> with no label at all, then (on a
+  // later promo config, same app) a product thumbnail image with no alt. This
+  // theme does not own that markup and cannot change it at the source, so this
+  // patches each known gap once the app inserts it, additively: it never
+  // touches an element's value, type, max, src, or any event handler the app
+  // itself wires up, and never overwrites an attribute the app already set.
+  // The app's markup can change shape again; add another patch here rather
+  // than resolving the underlying finding as fixed if a new one shows up.
   (() => {
     const promoContainer = document.getElementById('sf_promo-container');
     if (!promoContainer) return;
 
     const promoQuantityLabel = {{ 'products.product.quantity' | t | json }};
-    const labelPromoQuantityInputs = () => {
+    const patchPromoAccessibility = () => {
       promoContainer
         .querySelectorAll('input.sf_promo-quantity-input:not([aria-label]):not([aria-labelledby])')
         .forEach((input) => input.setAttribute('aria-label', promoQuantityLabel));
+
+      // Redundant with the promotion text already shown alongside it, so an
+      // empty alt (decorative) is the correct fix, not a guessed description.
+      promoContainer
+        .querySelectorAll('img.sf_promo-prod-img:not([alt])')
+        .forEach((img) => img.setAttribute('alt', ''));
     };
 
-    labelPromoQuantityInputs();
-    new MutationObserver(labelPromoQuantityInputs).observe(promoContainer, {
+    patchPromoAccessibility();
+    new MutationObserver(patchPromoAccessibility).observe(promoContainer, {
       childList: true,
       subtree: true,
     });

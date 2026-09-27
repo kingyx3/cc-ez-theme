@@ -76,32 +76,35 @@ class StorefrontConfigurationTests(unittest.TestCase):
             main_product,
         )
 
-    def test_promo_app_quantity_input_is_labeled_without_touching_its_value(
+    def test_promo_app_elements_are_labeled_without_touching_their_content(
         self,
     ) -> None:
-        # The installed promotions app injects '.sf_promo-quantity-input' into
-        # #sf_promo-container via innerHTML from its own /products/*/promotions
-        # response, asynchronously and with no accessible name at all - this
-        # theme does not own or control that markup. Confirmed live: it fails
-        # axe's "label" rule on the product page. The theme can only add the
-        # missing name after the app inserts the element, so this must never
-        # touch the input's value, type, max, or any attribute other than the
-        # label - a MutationObserver-based patch that never intercepts the
-        # app's own event handlers or resubmits/mutates the field itself.
+        # The installed promotions app injects markup into #sf_promo-container
+        # via innerHTML from its own /products/*/promotions response, and this
+        # theme does not own or control that markup. It has shipped without the
+        # basic attributes assistive technology needs more than once: first a
+        # quantity <input> with no accessible name at all (axe's "label" rule),
+        # then - on a later live promo config, same app - a product thumbnail
+        # <img> with no alt (axe's "image-alt" rule). The theme can only patch
+        # each gap after the app inserts the element, so this must never touch
+        # the input's value/type/max or the image's src, and never overwrite an
+        # attribute the app already supplied - a MutationObserver-based patch
+        # that never intercepts the app's own event handlers.
         main_product = (
             THEME_ROOT / "sections" / "main-product.liquid"
         ).read_text(encoding="utf-8")
 
         self.assertIn("getElementById('sf_promo-container')", main_product)
+        self.assertIn("new MutationObserver(", main_product)
+        self.assertIn("childList: true", main_product)
+
         self.assertIn("sf_promo-quantity-input", main_product)
         self.assertIn(
-            ":not([aria-label]):not([aria-labelledby])",
+            "sf_promo-quantity-input:not([aria-label]):not([aria-labelledby])",
             main_product,
             "must never overwrite a name the app already supplied",
         )
         self.assertIn("setAttribute('aria-label'", main_product)
-        self.assertIn("new MutationObserver(", main_product)
-        self.assertIn("childList: true", main_product)
         self.assertIn(
             "{{ 'products.product.quantity' | t | json }}",
             main_product,
@@ -109,11 +112,27 @@ class StorefrontConfigurationTests(unittest.TestCase):
             "safely JSON-encoded for use inside a <script> tag",
         )
 
-        # Never anything beyond adding the label: no write to .value, .max,
-        # .disabled, or removal/replacement of the app's own input.
-        script_start = main_product.index("sf_promo-quantity-input:not(")
-        patch_script = main_product[script_start : script_start + 800]
-        for forbidden in (".value =", ".max =", ".disabled =", ".remove(", "innerHTML ="):
+        self.assertIn(
+            "sf_promo-prod-img:not([alt])",
+            main_product,
+            "must never overwrite an alt the app already supplied",
+        )
+        self.assertIn("setAttribute('alt', '')", main_product)
+
+        # Never anything beyond adding the missing attribute: no write to
+        # .value, .max, .disabled, .src, or removal/replacement of the app's
+        # own elements, across the whole patch function.
+        patch_start = main_product.index("const patchPromoAccessibility")
+        patch_end = main_product.index("})();", patch_start)
+        patch_script = main_product[patch_start:patch_end]
+        for forbidden in (
+            ".value =",
+            ".max =",
+            ".disabled =",
+            ".src =",
+            ".remove(",
+            "innerHTML =",
+        ):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, patch_script)
 
