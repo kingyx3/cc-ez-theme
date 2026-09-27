@@ -76,6 +76,66 @@ class StorefrontConfigurationTests(unittest.TestCase):
             main_product,
         )
 
+    def test_promo_app_elements_are_labeled_without_touching_their_content(
+        self,
+    ) -> None:
+        # The installed promotions app injects markup into #sf_promo-container
+        # via innerHTML from its own /products/*/promotions response, and this
+        # theme does not own or control that markup. It has shipped without the
+        # basic attributes assistive technology needs more than once: first a
+        # quantity <input> with no accessible name at all (axe's "label" rule),
+        # then - on a later live promo config, same app - a product thumbnail
+        # <img> with no alt (axe's "image-alt" rule). The theme can only patch
+        # each gap after the app inserts the element, so this must never touch
+        # the input's value/type/max or the image's src, and never overwrite an
+        # attribute the app already supplied - a MutationObserver-based patch
+        # that never intercepts the app's own event handlers.
+        main_product = (
+            THEME_ROOT / "sections" / "main-product.liquid"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("getElementById('sf_promo-container')", main_product)
+        self.assertIn("new MutationObserver(", main_product)
+        self.assertIn("childList: true", main_product)
+
+        self.assertIn("sf_promo-quantity-input", main_product)
+        self.assertIn(
+            "sf_promo-quantity-input:not([aria-label]):not([aria-labelledby])",
+            main_product,
+            "must never overwrite a name the app already supplied",
+        )
+        self.assertIn("setAttribute('aria-label'", main_product)
+        self.assertIn(
+            "{{ 'products.product.quantity' | t | json }}",
+            main_product,
+            "the label text must be the platform's own translated string, "
+            "safely JSON-encoded for use inside a <script> tag",
+        )
+
+        self.assertIn(
+            "sf_promo-prod-img:not([alt])",
+            main_product,
+            "must never overwrite an alt the app already supplied",
+        )
+        self.assertIn("setAttribute('alt', '')", main_product)
+
+        # Never anything beyond adding the missing attribute: no write to
+        # .value, .max, .disabled, .src, or removal/replacement of the app's
+        # own elements, across the whole patch function.
+        patch_start = main_product.index("const patchPromoAccessibility")
+        patch_end = main_product.index("})();", patch_start)
+        patch_script = main_product[patch_start:patch_end]
+        for forbidden in (
+            ".value =",
+            ".max =",
+            ".disabled =",
+            ".src =",
+            ".remove(",
+            "innerHTML =",
+        ):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, patch_script)
+
         product_form = (
             THEME_ROOT / "assets" / "product-form.js"
         ).read_text(encoding="utf-8")
@@ -721,6 +781,56 @@ class StorefrontConfigurationTests(unittest.TestCase):
             source = path.read_text(encoding="utf-8")
             with self.subTest(path=path.relative_to(THEME_ROOT)):
                 self.assertIsNone(broken_fallback.search(source))
+
+    def test_product_page_accessibility_labels_use_translation_fallbacks(self) -> None:
+        # `accessibility.*` and `general.share.*` are not translated on this
+        # store: a bare `{{ 'accessibility.close' | t }}` rendered the literal
+        # key text as the control's accessible name (confirmed on the live
+        # product page), instead of falling back to readable English the way
+        # every other product-page label already does via
+        # snippets/translation-fallback.liquid. These labels are screen-reader
+        # and title-tooltip only, so the regression is invisible to a sighted
+        # click-through QA pass and only shows up in the rendered markup.
+        main_product = (
+            THEME_ROOT / "sections" / "main-product.liquid"
+        ).read_text(encoding="utf-8")
+        social_sharing = (
+            THEME_ROOT / "snippets" / "social-sharing.liquid"
+        ).read_text(encoding="utf-8")
+
+        expected = {
+            "accessibility.previous_slide": main_product,
+            "accessibility.next_slide": main_product,
+            "accessibility.error": main_product,
+            "general.share.close": social_sharing,
+            "general.share.copy_to_clipboard": social_sharing,
+        }
+        for translation_key, source in expected.items():
+            with self.subTest(translation_key=translation_key):
+                self.assertIn(translation_key, source)
+                self.assertIn(
+                    f"translation_key: '{translation_key}'",
+                    source,
+                    f"{translation_key} must be resolved through translation-fallback",
+                )
+
+        self.assertEqual(
+            main_product.count("translation_key: 'accessibility.close'"),
+            2,
+            "both the image-modal and buy-now-limit-modal close buttons "
+            "must use translation-fallback for accessibility.close",
+        )
+
+        broken_bare_t = re.compile(
+            r"'(accessibility\.[a-z_]+|general\.share\.[a-z_]+)'\s*\|\s*t\b"
+        )
+        for path in (
+            THEME_ROOT / "sections" / "main-product.liquid",
+            THEME_ROOT / "snippets" / "social-sharing.liquid",
+        ):
+            source = path.read_text(encoding="utf-8")
+            with self.subTest(path=path.relative_to(THEME_ROOT)):
+                self.assertIsNone(broken_bare_t.search(source))
 
     def test_liquid_javascript_strings_are_safely_encoded(self) -> None:
         script_pattern = re.compile(
