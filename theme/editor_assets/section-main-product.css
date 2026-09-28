@@ -1092,30 +1092,125 @@ a.product__text {
    product with more than one deal ends up with them stacked one per row,
    each reading as an oversized, sparsely-filled banner inside the modal's
    narrower width. Lay them out two per row instead, and make each card
-   fill (rather than shrink-wrap) its column and drop its own margin/shadow
-   so the pair reads as a slim tile row rather than two full-width banners. */
+   fill (rather than shrink-wrap) its column so uneven content still lines
+   up into a clean row. */
 .promo-modal #sf_promo-container {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
   gap: 1.2rem;
 }
 
 .promo-modal .sf_promo-form {
+  display: flex;
   margin: 0;
   min-width: 0;
 }
 
+/* The app's own card assumes full page width: a ribbon banner absolutely
+   positioned over the top-left corner with a folded-paper triangle tail
+   past its own right edge, ~60px/85px of padding reserved above/below to
+   clear that ribbon and the equally absolutely-positioned submit button,
+   and ellipsis-truncated ribbon text. Halved to a grid column, the ribbon
+   overflows the card outright - its triangle tail lands on whatever sits
+   next to it - and the truncated text cuts the deal's own terms off
+   mid-word. Rebuild it as a plain card: the ribbon becomes a normal-flow
+   banner that wraps in full, and the button sits at the card's own
+   bottom (via margin-top: auto below) so two cards of different content
+   heights still end with their buttons aligned. */
 .promo-modal .promo-container {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
   width: 100%;
+  padding: 0;
   box-shadow: 0 0.2rem 1rem rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+
+.promo-modal .sf_promo-ribbon {
+  position: static;
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  box-shadow: none;
+  border-radius: 0;
+  padding: 0.8rem 1.2rem;
+  line-height: 1.3;
+}
+
+.promo-modal .sf_promo-ribbon::before,
+.promo-modal .sf_promo-ribbon::after {
+  content: none;
 }
 
 .promo-modal .sf_promo-ribbon-text {
   max-width: 100%;
 }
 
-@media screen and (max-width: 480px) {
+.promo-modal .sf_promo-ribbon-text span {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.promo-modal .checkbox-select-wrapper {
+  align-items: flex-start;
+  font-size: 0.9em;
+}
+
+/* The add-on is already pre-checked by the auto-select script above the
+   moment it renders (see main-product.liquid), so the checkbox is no
+   longer something a shopper ever needs to look at or tick - just hide its
+   visual box and reclaim the width for the product name. The underlying
+   <input> stays in the DOM and still gets checked/dispatches its change
+   event exactly as before; only its own visible affordance goes away. */
+.promo-modal .input-check {
+  display: none;
+}
+
+/* The app absolutely positions the struck-through original price under the
+   discounted one, so it never adds to .display-control's own height - a
+   deliberate trick that only works because the app's own layout always has
+   more reserved space below (its absolutely-positioned submit button) for
+   it to overlap into harmlessly. Now that the button sits in normal flow
+   right after this block (see below), that same trick would overlap the
+   original price under the button instead. Put it back in flow so it
+   reserves real space. */
+.promo-modal .sf_promo-product-price-wrapper,
+.promo-modal .sf_promo-product-original-price {
+  position: static;
+}
+
+/* At the narrowest widths this still shares two per row (see the container
+   query below), the price and the qty stepper can't both fit on one line.
+   Left as a plain flex row, the price text itself was the thing giving way,
+   wrapping "S$" onto its own line above the number. Let the stepper drop to
+   its own line instead - the price staying in one piece reads far better
+   than either splitting apart. */
+.promo-modal .display-control {
+  flex-wrap: wrap;
+}
+
+.promo-modal .sf_promo-product-discounted-price,
+.promo-modal .sf_promo-product-original-price {
+  white-space: nowrap;
+}
+
+.promo-modal .sf_promo-form button[type='submit'] {
+  position: static;
+  width: calc(100% - 1.2rem);
+  margin: auto auto 1.6rem;
+}
+
+/* Below this, a deal's own label text ("Collector Booster Box") has no
+   break point narrow enough to wrap inside a ~150px column and spills into
+   the next one, and the qty stepper's "+" gets crowded off the edge. Fall
+   back to one deal per row - still the same rebuilt card, ribbon wrap, and
+   bottom-aligned button as the two-column layout above, just full width -
+   rather than let either column overflow into the other. */
+@media screen and (max-width: 370px) {
   .promo-modal #sf_promo-container {
     grid-template-columns: 1fr;
   }
@@ -1136,6 +1231,20 @@ a.product__text {
   gap: 1.2rem;
   max-width: 100%;
   overflow: visible;
+  margin-top: 1.2rem;
+  padding: 0 1.2rem;
+}
+
+/* Every deal seen live so far offers exactly one product to add, so that
+   fixed 2-column grid above leaves it stuck in the first column with the
+   second sitting empty - half the card's own width wasted, which is what
+   was squeezing "S$" onto its own line above the price instead of sharing
+   it with the qty stepper. Give a single-product deal the full row instead;
+   a deal that actually offers several alternative products to pick from
+   still gets the 2-column wrap above. */
+.promo-modal .sf_promo-main-container-margin:has(> .secondary-prod:only-child),
+.promo-modal .sf_promo-product-grid-container:has(> .secondary-prod:only-child) {
+  grid-template-columns: 1fr;
 }
 
 .promo-modal .secondary-prod,
