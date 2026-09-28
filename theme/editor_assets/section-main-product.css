@@ -1232,7 +1232,10 @@ a.product__text {
   max-width: 100%;
   overflow: visible;
   margin-top: 1.2rem;
-  padding: 0 1.2rem;
+  /* Match the submit button's own 0.6rem side inset (width: calc(100% -
+     1.2rem) below) so the image/text column lines up with the button
+     instead of sitting further in from each edge than it does. */
+  padding: 0 0.6rem;
 }
 
 /* Every deal seen live so far offers exactly one product to add, so that
