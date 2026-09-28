@@ -1173,6 +1173,21 @@ a.product__text {
   position: static;
 }
 
+/* At the narrowest widths this still shares two per row (see the container
+   query below), the price and the qty stepper can't both fit on one line.
+   Left as a plain flex row, the price text itself was the thing giving way,
+   wrapping "S$" onto its own line above the number. Let the stepper drop to
+   its own line instead - the price staying in one piece reads far better
+   than either splitting apart. */
+.promo-modal .display-control {
+  flex-wrap: wrap;
+}
+
+.promo-modal .sf_promo-product-discounted-price,
+.promo-modal .sf_promo-product-original-price {
+  white-space: nowrap;
+}
+
 .promo-modal .sf_promo-form button[type='submit'] {
   position: static;
   width: calc(100% - 1.2rem);
@@ -1208,6 +1223,18 @@ a.product__text {
   overflow: visible;
   margin-top: 1.2rem;
   padding: 0 1.2rem;
+}
+
+/* Every deal seen live so far offers exactly one product to add, so that
+   fixed 2-column grid above leaves it stuck in the first column with the
+   second sitting empty - half the card's own width wasted, which is what
+   was squeezing "S$" onto its own line above the price instead of sharing
+   it with the qty stepper. Give a single-product deal the full row instead;
+   a deal that actually offers several alternative products to pick from
+   still gets the 2-column wrap above. */
+.promo-modal .sf_promo-main-container-margin:has(> .secondary-prod:only-child),
+.promo-modal .sf_promo-product-grid-container:has(> .secondary-prod:only-child) {
+  grid-template-columns: 1fr;
 }
 
 .promo-modal .secondary-prod,
