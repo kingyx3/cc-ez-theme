@@ -1086,6 +1086,41 @@ a.product__text {
   height: 1.6rem;
 }
 
+/* The promotions app appends one padding-heavy .sf_promo-form per active
+   add-on deal straight into #sf_promo-container, each wrapping an
+   inline-block .promo-container sized for a full page-width section. A
+   product with more than one deal ends up with them stacked one per row,
+   each reading as an oversized, sparsely-filled banner inside the modal's
+   narrower width. Lay them out two per row instead, and make each card
+   fill (rather than shrink-wrap) its column and drop its own margin/shadow
+   so the pair reads as a slim tile row rather than two full-width banners. */
+.promo-modal #sf_promo-container {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.2rem;
+}
+
+.promo-modal .sf_promo-form {
+  margin: 0;
+  min-width: 0;
+}
+
+.promo-modal .promo-container {
+  display: block;
+  width: 100%;
+  box-shadow: 0 0.2rem 1rem rgba(0, 0, 0, 0.08);
+}
+
+.promo-modal .sf_promo-ribbon-text {
+  max-width: 100%;
+}
+
+@media screen and (max-width: 480px) {
+  .promo-modal #sf_promo-container {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* The promotions app's own product-picker markup assumes a full page-width
    section: depending on the promotion type it renders as either a single
    non-wrapping flex row with horizontal overflow scroll

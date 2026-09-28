@@ -522,8 +522,10 @@
   // getPromotionList() above), asynchronously and well after this script runs.
   // That markup has repeatedly shipped without the basic attributes assistive
   // technology needs - a quantity <input> with no label at all, then (on a
-  // later promo config, same app) a product thumbnail image with no alt. This
-  // theme does not own that markup and cannot change it at the source, so this
+  // later promo config, same app) a product thumbnail image with no alt -
+  // and its own UX requires an extra manual step (ticking a checkbox) before
+  // its "Add to Cart" button does anything. This theme does not own that
+  // markup or its script and cannot change either at the source, so this
   // patches each known gap once the app inserts it, additively: it never
   // touches an element's value, type, max, src, or any event handler the app
   // itself wires up, and never overwrites an attribute the app already set.
@@ -546,8 +548,33 @@
         .forEach((img) => img.setAttribute('alt', ''));
     };
 
-    patchPromoAccessibility();
-    new MutationObserver(patchPromoAccessibility).observe(promoContainer, {
+    // Each add-on renders with its own unchecked .sf_promo-prod-checkbox,
+    // and the app's own submit handler counts checked checkboxes before
+    // doing anything - left unchecked, clicking "Add to Cart" silently
+    // does nothing at all. Pre-check every add-on as soon as it renders so
+    // a single click on the button adds it, and dispatch the app's own
+    // change event (rather than setting .checked alone) so its selection
+    // state - the is-selected styling, the promo_variant/promo_qty field
+    // names it toggles on to include the item in the submit - stays in
+    // sync exactly as if the shopper had ticked it themselves. Skips
+    // checkboxes the app has already disabled (sold out, or a zero-price
+    // primary product) since those aren't meant to be selectable at all.
+    const autoSelectPromoAddons = () => {
+      promoContainer
+        .querySelectorAll('input.sf_promo-prod-checkbox:not(:checked):not(:disabled)')
+        .forEach((checkbox) => {
+          checkbox.checked = true;
+          checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+    };
+
+    const patchPromoWidget = () => {
+      patchPromoAccessibility();
+      autoSelectPromoAddons();
+    };
+
+    patchPromoWidget();
+    new MutationObserver(patchPromoWidget).observe(promoContainer, {
       childList: true,
       subtree: true,
     });
