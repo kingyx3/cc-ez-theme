@@ -1160,6 +1160,16 @@ a.product__text {
   font-size: 0.9em;
 }
 
+/* The add-on is already pre-checked by the auto-select script above the
+   moment it renders (see main-product.liquid), so the checkbox is no
+   longer something a shopper ever needs to look at or tick - just hide its
+   visual box and reclaim the width for the product name. The underlying
+   <input> stays in the DOM and still gets checked/dispatches its change
+   event exactly as before; only its own visible affordance goes away. */
+.promo-modal .input-check {
+  display: none;
+}
+
 /* The app absolutely positions the struck-through original price under the
    discounted one, so it never adds to .display-control's own height - a
    deliberate trick that only works because the app's own layout always has
