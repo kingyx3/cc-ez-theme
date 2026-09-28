@@ -85,11 +85,15 @@ class StorefrontConfigurationTests(unittest.TestCase):
         # basic attributes assistive technology needs more than once: first a
         # quantity <input> with no accessible name at all (axe's "label" rule),
         # then - on a later live promo config, same app - a product thumbnail
-        # <img> with no alt (axe's "image-alt" rule). The theme can only patch
-        # each gap after the app inserts the element, so this must never touch
-        # the input's value/type/max or the image's src, and never overwrite an
-        # attribute the app already supplied - a MutationObserver-based patch
-        # that never intercepts the app's own event handlers.
+        # <img> with no alt (axe's "image-alt" rule). The same MutationObserver
+        # also pre-checks each add-on's own checkbox (so "Add to Cart" works
+        # without an extra manual tick) and relaxes the app's own two-or-more
+        # collapse-behind-a-gradient threshold to three-or-more, now that two
+        # deals already fit side by side. None of that should ever touch the
+        # input's value/type/max, the image's src, remove an app element from
+        # the DOM, or overwrite an attribute the app already supplied - toggling
+        # a class token (classList.add/remove) or a checkbox's .checked is fine,
+        # and it must never intercept the app's own event handlers.
         main_product = (
             THEME_ROOT / "sections" / "main-product.liquid"
         ).read_text(encoding="utf-8")
@@ -119,9 +123,11 @@ class StorefrontConfigurationTests(unittest.TestCase):
         )
         self.assertIn("setAttribute('alt', '')", main_product)
 
-        # Never anything beyond adding the missing attribute: no write to
-        # .value, .max, .disabled, .src, or removal/replacement of the app's
-        # own elements, across the whole patch function.
+        # Never touches the input's value/max, disables it, rewrites the
+        # image's src, replaces content wholesale, or removes an app element
+        # from the DOM - across the whole patch function. Toggling a class
+        # token (classList.add/remove) is exempted from the removal check
+        # since it never deletes anything the app rendered.
         patch_start = main_product.index("const patchPromoAccessibility")
         patch_end = main_product.index("})();", patch_start)
         patch_script = main_product[patch_start:patch_end]
@@ -130,11 +136,16 @@ class StorefrontConfigurationTests(unittest.TestCase):
             ".max =",
             ".disabled =",
             ".src =",
-            ".remove(",
             "innerHTML =",
         ):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, patch_script)
+
+        self.assertNotRegex(
+            patch_script,
+            r"(?<!classList)\.remove\(",
+            "must never remove an app element from the DOM",
+        )
 
         product_form = (
             THEME_ROOT / "assets" / "product-form.js"

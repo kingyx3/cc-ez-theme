@@ -1092,27 +1092,91 @@ a.product__text {
    product with more than one deal ends up with them stacked one per row,
    each reading as an oversized, sparsely-filled banner inside the modal's
    narrower width. Lay them out two per row instead, and make each card
-   fill (rather than shrink-wrap) its column and drop its own margin/shadow
-   so the pair reads as a slim tile row rather than two full-width banners. */
+   fill (rather than shrink-wrap) its column so uneven content still lines
+   up into a clean row. */
 .promo-modal #sf_promo-container {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
   gap: 1.2rem;
 }
 
 .promo-modal .sf_promo-form {
+  display: flex;
   margin: 0;
   min-width: 0;
 }
 
+/* The app's own card assumes full page width: a ribbon banner absolutely
+   positioned over the top-left corner with a folded-paper triangle tail
+   past its own right edge, ~60px/85px of padding reserved above/below to
+   clear that ribbon and the equally absolutely-positioned submit button,
+   and ellipsis-truncated ribbon text. Halved to a grid column, the ribbon
+   overflows the card outright - its triangle tail lands on whatever sits
+   next to it - and the truncated text cuts the deal's own terms off
+   mid-word. Rebuild it as a plain card: the ribbon becomes a normal-flow
+   banner that wraps in full, and the button sits at the card's own
+   bottom (via margin-top: auto below) so two cards of different content
+   heights still end with their buttons aligned. */
 .promo-modal .promo-container {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
   width: 100%;
+  padding: 0;
   box-shadow: 0 0.2rem 1rem rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+
+.promo-modal .sf_promo-ribbon {
+  position: static;
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  box-shadow: none;
+  border-radius: 0;
+  padding: 0.8rem 1.2rem;
+  line-height: 1.3;
+}
+
+.promo-modal .sf_promo-ribbon::before,
+.promo-modal .sf_promo-ribbon::after {
+  content: none;
 }
 
 .promo-modal .sf_promo-ribbon-text {
   max-width: 100%;
+}
+
+.promo-modal .sf_promo-ribbon-text span {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.promo-modal .checkbox-select-wrapper {
+  align-items: flex-start;
+  font-size: 0.9em;
+}
+
+/* The app absolutely positions the struck-through original price under the
+   discounted one, so it never adds to .display-control's own height - a
+   deliberate trick that only works because the app's own layout always has
+   more reserved space below (its absolutely-positioned submit button) for
+   it to overlap into harmlessly. Now that the button sits in normal flow
+   right after this block (see below), that same trick would overlap the
+   original price under the button instead. Put it back in flow so it
+   reserves real space. */
+.promo-modal .sf_promo-product-price-wrapper,
+.promo-modal .sf_promo-product-original-price {
+  position: static;
+}
+
+.promo-modal .sf_promo-form button[type='submit'] {
+  position: static;
+  width: calc(100% - 2.4rem);
+  margin: auto auto 1.6rem;
 }
 
 @media screen and (max-width: 480px) {
@@ -1136,6 +1200,8 @@ a.product__text {
   gap: 1.2rem;
   max-width: 100%;
   overflow: visible;
+  margin-top: 1.2rem;
+  padding: 0 1.2rem;
 }
 
 .promo-modal .secondary-prod,
