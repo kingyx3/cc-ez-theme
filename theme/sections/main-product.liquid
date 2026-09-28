@@ -568,9 +568,33 @@
         });
     };
 
+    const promotionSection = document.getElementById('promotion-section');
+    const promoViewMoreButton = document.getElementById('view-more-promotion');
+
+    // With deals laid out two per row (see the CSS), the app's own trigger
+    // for collapsing #promotion-section behind a gradient with a "View
+    // More" button - any product with more than one deal - collapses a
+    // row that already shows both deals side by side with nothing hidden.
+    // That's only worth gating once a third deal would spill into a
+    // hidden second row, so recompute it from how many deals actually
+    // rendered rather than trusting whatever the app already decided, and
+    // expand it back out for two or fewer.
+    const relaxPromoCollapseThreshold = () => {
+      if (!promotionSection) return;
+      const dealCount = promoContainer.querySelectorAll(':scope > .sf_promo-form').length;
+      if (dealCount > 2) return;
+
+      promotionSection.classList.remove(
+        'sf_promo-container-height-opacity',
+        'sf_promo-container-white-gradient'
+      );
+      if (promoViewMoreButton) promoViewMoreButton.classList.add('hide');
+    };
+
     const patchPromoWidget = () => {
       patchPromoAccessibility();
       autoSelectPromoAddons();
+      relaxPromoCollapseThreshold();
     };
 
     patchPromoWidget();
