@@ -1175,11 +1175,17 @@ a.product__text {
 
 .promo-modal .sf_promo-form button[type='submit'] {
   position: static;
-  width: calc(100% - 2.4rem);
+  width: calc(100% - 1.2rem);
   margin: auto auto 1.6rem;
 }
 
-@media screen and (max-width: 480px) {
+/* Below this, a deal's own label text ("Collector Booster Box") has no
+   break point narrow enough to wrap inside a ~150px column and spills into
+   the next one, and the qty stepper's "+" gets crowded off the edge. Fall
+   back to one deal per row - still the same rebuilt card, ribbon wrap, and
+   bottom-aligned button as the two-column layout above, just full width -
+   rather than let either column overflow into the other. */
+@media screen and (max-width: 370px) {
   .promo-modal #sf_promo-container {
     grid-template-columns: 1fr;
   }
