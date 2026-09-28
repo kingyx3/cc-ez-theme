@@ -1191,6 +1191,14 @@ a.product__text {
    than either splitting apart. */
 .promo-modal .display-control {
   flex-wrap: wrap;
+  /* This reserved room for the app's own absolutely-positioned submit
+     button underneath, which no longer applies now that the button sits
+     in normal flow below (see .sf_promo-main-container-margin's own
+     margin-bottom instead, which gives every card the same gap whether or
+     not margin-top: auto also ends up adding more to it). Left in place,
+     it read as a bare, un-styled sliver of extra whitespace rather than a
+     deliberate gap. */
+  padding-bottom: 0;
 }
 
 .promo-modal .sf_promo-product-discounted-price,
@@ -1201,7 +1209,7 @@ a.product__text {
 .promo-modal .sf_promo-form button[type='submit'] {
   position: static;
   width: calc(100% - 1.2rem);
-  margin: auto auto 1.6rem;
+  margin: auto auto 0.6rem;
 }
 
 /* Below this, a deal's own label text ("Collector Booster Box") has no
@@ -1232,6 +1240,12 @@ a.product__text {
   max-width: 100%;
   overflow: visible;
   margin-top: 1.2rem;
+  /* Guarantees the same small gap above the button on every card, whether
+     or not margin-top: auto on the button (further down) also ends up
+     adding more to it to keep two uneven cards' buttons bottom-aligned -
+     so the gap is never zero, but a shorter card's button can still sit
+     further down. */
+  margin-bottom: 0.6rem;
   /* Match the submit button's own 0.6rem side inset (width: calc(100% -
      1.2rem) below) so the image/text column lines up with the button
      instead of sitting further in from each edge than it does. */
