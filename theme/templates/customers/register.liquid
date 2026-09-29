@@ -163,11 +163,8 @@
 {{ 'flatpickr.min.css' | asset_url | stylesheet_tag }}
 {{ 'flatpickr.min.js' | asset_url | script_tag }}
 
-{% include 'mobile-number-normalize' %}
 <script>
   document.querySelector('#form-register').addEventListener('submit', (event)=>{
-    var field = document.querySelector('#RegisterForm-EmailOrPhone');
-    field.value = window.ccNormalizeSgMobile(field.value);
     document.querySelector('#form-register .btn').classList.add('btn--loading','loading');
   });
 
