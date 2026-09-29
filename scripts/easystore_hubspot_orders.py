@@ -88,6 +88,11 @@ LIFECYCLE_STAGE_RANKS = {
 
 PHONE_MIN_DIGITS = 7
 PHONE_MAX_DIGITS = 15
+# Calling codes run 1-3 digits and real mobile subscriber numbers are
+# essentially never shorter than 6 digits worldwide, so a value shorter than
+# this after a leading "+"/"00" is too short to be a genuine already-
+# international mobile number. See normalize_mobile() for why this matters.
+PHONE_INTERNATIONAL_MIN_DIGITS = 9
 
 COUNTRY_DIAL_CODES = {
     "AU": "61",
@@ -142,6 +147,17 @@ def normalize_mobile(
     country_code: Any = None,
     fallback_dial_code: str = "65",
 ) -> str | None:
+    """Return a conservative E.164-style number or ``None`` when unusable.
+
+    A leading ``+``/``00`` is only trusted as "already international" when
+    enough digits are left over to plausibly be a real subscriber number
+    (see PHONE_INTERNATIONAL_MIN_DIGITS) -- otherwise a short value such as a
+    Singapore customer's 8-digit local number "96556718" submitted with a
+    stray leading "+" would misread as Kuwait's "+965" calling code plus a
+    5-digit remainder and get filed under the wrong country instead of the
+    customer's known one.
+    """
+
     raw = str(value or "").strip()
     if not raw:
         return None
@@ -154,18 +170,24 @@ def normalize_mobile(
         return None
 
     if raw.startswith("+"):
-        international = digits
+        candidate = digits
     elif raw.startswith("00"):
-        international = digits[2:]
+        candidate = digits[2:]
     else:
+        candidate = None
+
+    if candidate is not None and len(candidate) >= PHONE_INTERNATIONAL_MIN_DIGITS:
+        international = candidate
+    else:
+        local_digits = candidate if candidate is not None else digits
         iso = str(country_code or "").strip().upper()
         dial_code = COUNTRY_DIAL_CODES.get(iso) or _digits(fallback_dial_code)
         if not dial_code:
             return None
-        if digits.startswith(dial_code):
-            international = digits
+        if local_digits.startswith(dial_code):
+            international = local_digits
         else:
-            local = digits[1:] if digits.startswith("0") else digits
+            local = local_digits[1:] if local_digits.startswith("0") else local_digits
             international = dial_code + local
 
     if not (PHONE_MIN_DIGITS <= len(international) <= PHONE_MAX_DIGITS):

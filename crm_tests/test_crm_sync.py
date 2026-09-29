@@ -41,6 +41,30 @@ class MobileNormalizationTests(unittest.TestCase):
     def test_unusable_phone_is_rejected(self) -> None:
         self.assertIsNone(customers.normalize_mobile("123", "SG", "65"))
 
+    def test_singapore_mobile_with_stray_plus_is_not_read_as_kuwait(self) -> None:
+        # A Singapore customer's 8-digit local number "96556718" submitted
+        # with a stray leading "+" happens to read as Kuwait's "+965"
+        # calling code plus a 5-digit remainder. It must still resolve to
+        # the customer's known Singapore number, not a foreign one.
+        for value in ("+96556718", "96556718"):
+            with self.subTest(value=value):
+                self.assertEqual(
+                    customers.normalize_mobile(value, "SG", "65"),
+                    "+6596556718",
+                )
+                self.assertEqual(
+                    orders.normalize_mobile(value, "SG", "65"),
+                    "+6596556718",
+                )
+
+    def test_short_already_international_prefix_without_known_country_is_rejected(
+        self,
+    ) -> None:
+        # With no known country and no fallback, a too-short "+"-prefixed
+        # value cannot be safely reinterpreted as a local number either.
+        self.assertIsNone(customers.normalize_mobile("+96556718", None, ""))
+        self.assertIsNone(orders.normalize_mobile("+96556718", None, ""))
+
     def test_placeholder_phone_is_not_a_recorded_mobile(self) -> None:
         for placeholder in ("0000000", "00000000", "1111111111", "-"):
             with self.subTest(placeholder=placeholder):

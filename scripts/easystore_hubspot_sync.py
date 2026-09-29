@@ -51,6 +51,11 @@ BATCH_SIZE = 100
 EASYSTORE_PAGE_SIZE = 50
 PHONE_MIN_DIGITS = 7
 PHONE_MAX_DIGITS = 15
+# Calling codes run 1-3 digits and real mobile subscriber numbers are
+# essentially never shorter than 6 digits worldwide, so a value shorter than
+# this after a leading "+"/"00" is too short to be a genuine already-
+# international mobile number. See normalize_mobile() for why this matters.
+PHONE_INTERNATIONAL_MIN_DIGITS = 9
 LIFECYCLE_PROPERTY = "lifecyclestage"
 LIFECYCLE_LEAD = "lead"
 
@@ -240,7 +245,12 @@ def normalize_mobile(
     customer's ISO country is known, its calling code is applied. Otherwise the
     workflow's configured fallback calling code is used (Singapore, ``65``, by
     default). Numbers beginning with ``+`` or ``00`` are treated as already
-    international.
+    international, provided there are enough digits left over to plausibly be
+    a real subscriber number (see PHONE_INTERNATIONAL_MIN_DIGITS) -- otherwise
+    a short value such as a Singapore customer's 8-digit local number
+    "96556718" submitted with a stray leading "+" would misread as Kuwait's
+    "+965" calling code plus a 5-digit remainder and get filed under the
+    wrong country instead of the customer's known one.
     """
 
     raw = str(value or "").strip()
@@ -255,10 +265,16 @@ def normalize_mobile(
         return None
 
     if raw.startswith("+"):
-        international = digits
+        candidate = digits
     elif raw.startswith("00"):
-        international = digits[2:]
+        candidate = digits[2:]
     else:
+        candidate = None
+
+    if candidate is not None and len(candidate) >= PHONE_INTERNATIONAL_MIN_DIGITS:
+        international = candidate
+    else:
+        local_digits = candidate if candidate is not None else digits
         iso = str(country_code or "").strip().upper()
         dial_code = COUNTRY_DIAL_CODES.get(iso) or _digits(fallback_dial_code)
         if not dial_code:
@@ -267,10 +283,10 @@ def normalize_mobile(
         # EasyStore often stores international values without the plus sign,
         # e.g. 6011... for a Malaysian customer. Do not prepend the calling code
         # a second time when it is already present.
-        if digits.startswith(dial_code):
-            international = digits
+        if local_digits.startswith(dial_code):
+            international = local_digits
         else:
-            local = digits[1:] if digits.startswith("0") else digits
+            local = local_digits[1:] if local_digits.startswith("0") else local_digits
             international = dial_code + local
 
     if not (PHONE_MIN_DIGITS <= len(international) <= PHONE_MAX_DIGITS):
