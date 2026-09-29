@@ -1,0 +1,25 @@
+{% comment %}
+  Rewrites a bare Singapore mobile number into an explicit "+65" value before
+  a login/register/recover form submits it as `email_or_phone`.
+
+  Without this, a shopper who types the local 8-digit number "96556718" (no
+  leading "+") sends that ambiguous string to EasyStore's own phone parsing,
+  which read it as Kuwait's "+965" calling code plus a 5-digit remainder
+  instead of this store's own Singapore number - sending their OTP to the
+  wrong country. Only a value that looks like a bare local SG mobile (8
+  digits starting with 8 or 9) or an SG number missing its leading "+" is
+  rewritten; anything else - an email address, or a number already carrying
+  an explicit "+" - is left exactly as typed.
+{% endcomment %}
+<script>
+  window.ccNormalizeSgMobile = window.ccNormalizeSgMobile || function (value) {
+    var trimmed = String(value == null ? '' : value).trim();
+    if (!trimmed || trimmed.indexOf('@') !== -1 || trimmed.charAt(0) === '+') {
+      return trimmed;
+    }
+    var digits = trimmed.replace(/[\s-]/g, '');
+    if (/^65\d{8}$/.test(digits)) return '+' + digits;
+    if (/^[89]\d{7}$/.test(digits)) return '+65' + digits;
+    return trimmed;
+  };
+</script>

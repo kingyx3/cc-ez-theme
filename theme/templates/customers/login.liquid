@@ -177,8 +177,16 @@
 
 {% app_snippet 'login/content_bottom' %}
 
+{% include 'mobile-number-normalize' %}
 <script>
+  document.querySelector('form[action="/account/recover"]').addEventListener('submit', () => {
+    var field = document.querySelector('#RecoverEmail');
+    field.value = window.ccNormalizeSgMobile(field.value);
+  });
+
   document.querySelector('#form-login').addEventListener('submit', (event)=>{
+    var field = document.querySelector('#CustomerEmail');
+    field.value = window.ccNormalizeSgMobile(field.value);
     document.querySelector('#form-login .btn').classList.add('btn--loading','loading');
   });
 </script>
