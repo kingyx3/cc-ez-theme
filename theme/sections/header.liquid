@@ -216,6 +216,9 @@
                     {% include 'svg-definitions' with 'icon-account' %}
                   </summary>
                   <ul class="header__submenu header__submenu--account list-menu list-menu--disclosure caption-large motion-reduce" role="list" tabindex="-1">
+                    <li>
+                      <a href="/account" class="header__menu-item list-menu__item link link--text focus-inset caption-large" data-account-dashboard-link>{{ "customer.account.title" | t }}</a>
+                    </li>
                     {% for link in contents.drop-down-after-login.links %}
                       {% assign navigation = 'customer.account.navigation.' | append: link.handle %}
                       {% if link.url != '/account/logout' %}
