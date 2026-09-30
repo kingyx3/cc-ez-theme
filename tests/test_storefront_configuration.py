@@ -974,5 +974,22 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertEqual(preset["colors_solid_button_labels"], "#FFFFFF")
 
 
+    def test_desktop_account_menu_links_to_account_dashboard(self) -> None:
+        header = (THEME_ROOT / "sections" / "header.liquid").read_text(
+            encoding="utf-8"
+        )
+        menu = header[header.index("header__submenu--account") :]
+        menu = menu[: menu.index("</ul>")]
+        # The admin-configured dropdown only offers /account/details and the
+        # other sub-pages, so /account needs its own entry, listed first.
+        self.assertRegex(
+            menu,
+            r'<a href="/account" [^>]*>\{\{ "customer\.account\.title" \| t \}\}</a>',
+        )
+        self.assertLess(
+            menu.index('href="/account"'),
+            menu.index("contents.drop-down-after-login.links"),
+        )
+
 if __name__ == "__main__":
     unittest.main()
