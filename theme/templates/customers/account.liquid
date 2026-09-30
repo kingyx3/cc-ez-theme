@@ -218,6 +218,79 @@
     opacity: 1;
     z-index: 3;
   }
+  /* Referral link field: label + read-only URL with a copy button pinned inside */
+  .referral-link-field {
+    position: relative;
+    display: block;
+    width: 100%;
+    margin-bottom: 16px;
+  }
+  .referral-link-field__input {
+    display: block;
+    width: 100%;
+    height: 4.8rem;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 2rem 5rem 0.4rem 2rem;
+    border: 0;
+    border-radius: 3.5rem;
+    background: transparent;
+    box-shadow: 0 0 0 0.1rem rgba(var(--color-foreground), 1);
+    color: rgb(var(--color-foreground));
+    font-family: inherit;
+    font-size: 1.5rem;
+    line-height: 2.2rem;
+    text-overflow: ellipsis;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  .referral-link-field__input:focus {
+    outline: transparent;
+    box-shadow: 0 0 0 0.2rem rgba(var(--color-foreground), 0.75);
+  }
+  .referral-link-field__label {
+    position: absolute;
+    top: 0.7rem;
+    left: 2rem;
+    margin: 0;
+    font-size: 1.1rem;
+    line-height: 1.4;
+    letter-spacing: 0.04rem;
+    color: rgba(var(--color-foreground), 0.55);
+    pointer-events: none;
+  }
+  /* Doubled selector: must outrank the global ".customer button" pill styles */
+  .referral-link-field .referral-link-field__copy,
+  .referral-link-field .referral-link-field__copy:hover,
+  .referral-link-field .referral-link-field__copy:focus {
+    position: absolute;
+    top: 50%;
+    right: 0.6rem;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 3.6rem;
+    height: 3.6rem;
+    min-width: 0;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    box-shadow: none;
+    color: rgb(var(--color-foreground));
+    cursor: pointer;
+  }
+  .referral-link-field .referral-link-field__copy:hover {
+    background: rgba(var(--color-foreground), 0.08);
+  }
+  .referral-link-field .referral-link-field__copy svg {
+    width: 2rem;
+    height: 2rem;
+    fill: currentColor;
+  }
 </style>
 
 {{ 'component-slider.css' | asset_url | stylesheet_tag }}
@@ -1028,22 +1101,19 @@
           {{ 'customer.account.referral.description' | t }}
         </span>
         
-        <div class="field mt-2" style="margin-bottom: 16px;">
-          <div style="display: flex; gap: 8px;">
-            <input type="text"
-                  class="field__input"
-                  id="ReferralLinkInput"
-                  value="{{ customer.customer_referral.referral_url }}"
-                  readonly
-                  style="padding-right: 40px;"
-            >
-            <label for="ReferralLinkInput">{{ 'customer.account.referral.referral_link' | t }}</label>
-            <button type="button" data-theme-action="share-referral-link" data-share-mode="copy" aria-label="Copy referral link" style="position: absolute; right: 14px; bottom: 0; cursor: pointer; border: 0; background: transparent;" >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20">
-                <path d="M16.58,7.35H4.44A1.69,1.69,0,0,0,2.75,9v8.9a1.69,1.69,0,0,0,1.69,1.68H16.58a1.69,1.69,0,0,0,1.69-1.68V9A1.69,1.69,0,0,0,16.58,7.35Zm.19,10.59a.18.18,0,0,1-.19.18H4.44a.18.18,0,0,1-.19-.18V9a.19.19,0,0,1,.19-.19H16.58a.19.19,0,0,1,.19.19ZM21.25,6.22V15.9a.75.75,0,1,1-1.5,0V6.22a.35.35,0,0,0-.35-.34H6.48a.75.75,0,0,1-.75-.76.74.74,0,0,1,.75-.74H19.4A1.84,1.84,0,0,1,21.25,6.22Z"/>
-              </svg>
-            </button>
-          </div>
+        <div class="referral-link-field mt-2">
+          <input type="text"
+                class="referral-link-field__input"
+                id="ReferralLinkInput"
+                value="{{ customer.customer_referral.referral_url }}"
+                readonly
+          >
+          <label for="ReferralLinkInput" class="referral-link-field__label">{{ 'customer.account.referral.referral_link' | t }}</label>
+          <button type="button" class="referral-link-field__copy" data-theme-action="share-referral-link" data-share-mode="copy" aria-label="Copy referral link">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
+              <path d="M16.58,7.35H4.44A1.69,1.69,0,0,0,2.75,9v8.9a1.69,1.69,0,0,0,1.69,1.68H16.58a1.69,1.69,0,0,0,1.69-1.68V9A1.69,1.69,0,0,0,16.58,7.35Zm.19,10.59a.18.18,0,0,1-.19.18H4.44a.18.18,0,0,1-.19-.18V9a.19.19,0,0,1,.19-.19H16.58a.19.19,0,0,1,.19.19ZM21.25,6.22V15.9a.75.75,0,1,1-1.5,0V6.22a.35.35,0,0,0-.35-.34H6.48a.75.75,0,0,1-.75-.76.74.74,0,0,1,.75-.74H19.4A1.84,1.84,0,0,1,21.25,6.22Z"/>
+            </svg>
+          </button>
         </div>
         <div id="copy-message" class="hidden" style="color: #28a745; font-size: 12px; margin-top: 8px; display: flex; align-items: center; gap: 4px;">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="display: none;" id="success-icon">
