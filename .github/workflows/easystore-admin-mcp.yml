@@ -12,18 +12,10 @@ on:
       - '.github/workflows/easystore-admin-mcp.yml'
   workflow_dispatch:
     inputs:
-      deploy:
-        description: Deploy the Worker and sync its secrets
-        type: boolean
-        default: true
       enable_writes:
         description: Enable registered mutations for the writer connector key
         type: boolean
         default: false
-      live_read_checks:
-        description: Test products, customers and discounts reads without logging records
-        type: boolean
-        default: true
 permissions:
   contents: read
 concurrency:
@@ -47,7 +39,7 @@ jobs:
       - run: npm run check
       - run: npm test
   deploy:
-    if: github.event_name == 'workflow_dispatch' && inputs.deploy && github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -61,7 +53,7 @@ jobs:
       MCP_READ_TOKEN: ${{ secrets.EASYSTORE_ADMIN_MCP_READ_TOKEN }}
       MCP_WRITE_TOKEN: ${{ secrets.EASYSTORE_ADMIN_MCP_WRITE_TOKEN }}
       ENABLE_WRITES: ${{ inputs.enable_writes && 'true' || 'false' }}
-      LIVE_READ_CHECKS: ${{ inputs.live_read_checks && 'true' || 'false' }}
+      LIVE_READ_CHECKS: 'true'
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v6

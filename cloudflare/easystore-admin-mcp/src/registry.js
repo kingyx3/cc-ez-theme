@@ -1,5 +1,5 @@
 import { Validator } from '@cfworker/json-schema';
-import operations from './operations.json' with { type: 'json' };
+import operations from './operations.js';
 
 export class ToolError extends Error {
   constructor(code, message) { super(message); this.code = code; }

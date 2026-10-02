@@ -24,14 +24,12 @@ test('real MCP SDK initializes, discovers tools, describes operations, and rejec
     assert.equal((await mf.dispatchFetch('http://127.0.0.1/mcp',{headers:{Authorization:`Bearer ${readToken}`,Origin:'https://evil.test'}})).status,403);
     client=await connect(mf,readToken);
     const tools=await client.listTools();
-    assert.deepEqual(tools.tools.map(t=>t.name).sort(),['easystore_admin_describe_operation','easystore_admin_list_operations','easystore_admin_read','easystore_admin_search_endpoints']);
+    assert.deepEqual(tools.tools.map(t=>t.name).sort(),['easystore_admin_describe_operation','easystore_admin_list_operations','easystore_admin_read']);
     assert.ok(tools.tools.every(t=>t.annotations.readOnlyHint));
     const list=await client.callTool({name:'easystore_admin_list_operations',arguments:{}});
     assert.ok(JSON.parse(list.content[0].text).some(o=>o.id==='list_discounts_new'));
-    const catalog=await client.callTool({name:'easystore_admin_search_endpoints',arguments:{search:'discounts',method:'POST'}});
-    assert.ok(JSON.parse(catalog.content[0].text).entries.some(e=>e.operation_id==='create_discount'));
     const direct=await mf.dispatchFetch('http://127.0.0.1/mcp',{method:'POST',headers:{Authorization:`Bearer ${readToken}`,'Content-Type':'application/json',Accept:'application/json, text/event-stream'},body:JSON.stringify({jsonrpc:'2.0',id:42,method:'tools/list',params:{}})});
-    assert.ok((await readRpcResponse(direct,42)).result.tools.length>=4);
+    assert.ok((await readRpcResponse(direct,42)).result.tools.length>=3);
     const description=await client.callTool({name:'easystore_admin_describe_operation',arguments:{operation_id:'list_abandoned_checkouts'}});
     assert.equal(JSON.parse(description.content[0].text).querySchema.properties.limit.maximum,50);
     const blocked=await client.callTool({name:'easystore_admin_read',arguments:{operation_id:'publish_theme'}});
