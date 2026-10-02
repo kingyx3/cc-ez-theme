@@ -20,6 +20,8 @@ PRs run checks only. Relevant pushes to `main` deploy after checks pass; manual 
 
 ## Connect Viktor
 
+See [TOOLS.md](TOOLS.md) for the available tools, arguments, example calls and errors.
+
 Use **Integrations → Add custom MCP**, enter the URL, and supply the read connector password in the secure static-key credential field ([Viktor instructions](https://viktor.com/blog/how-to-connect-tools-your-ai-employee-doesnt-support-yet)). Requests use `Authorization: Bearer <connector password>`.
 
 | Tool | Purpose |
