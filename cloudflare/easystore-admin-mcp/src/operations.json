@@ -1,0 +1,40 @@
+[
+  {
+    "id": "list_abandoned_checkouts",
+    "method": "GET",
+    "path": "/admin/v2/store/checkouts",
+    "description": "List abandoned checkouts. One page per call; inspect upstream params.page_count for pagination.",
+    "enabled": true,
+    "source": "scripts/easystore_admin_checkouts.py",
+    "querySchema": {"type":"object","properties":{"page":{"type":"integer","minimum":1},"limit":{"type":"integer","minimum":1,"maximum":50},"start_date":{"type":"string","maxLength":64},"end_date":{"type":"string","maxLength":64},"sort":{"type":"string","enum":["created_at.desc"]}},"additionalProperties":false},
+    "queryDefaults": {"page":1,"limit":50,"start_date":"","end_date":"","sort":"created_at.desc"}
+  },
+  {
+    "id": "list_themes",
+    "method": "GET",
+    "path": "/admin/v2/store/themes",
+    "description": "List store themes.",
+    "enabled": true,
+    "source": "docs/EASYSTORE_API_DEPLOYMENT.md"
+  },
+  {
+    "id": "publish_theme",
+    "method": "PUT",
+    "path": "/admin/v2/store/themes/{theme_id}",
+    "description": "Publish a theme to the live storefront.",
+    "enabled": false,
+    "source": "docs/EASYSTORE_API_DEPLOYMENT.md",
+    "pathSchema": {"type":"object","properties":{"theme_id":{"type":"string","pattern":"^[A-Za-z0-9_-]{1,128}$"}},"required":["theme_id"],"additionalProperties":false},
+    "bodySchema": {"type":"object","properties":{},"additionalProperties":false}
+  },
+  {
+    "id": "update_email_template",
+    "method": "PUT",
+    "path": "/admin/v2/store/settings/templates/{slug}",
+    "description": "Replace an email template, including HTML and plain text.",
+    "enabled": false,
+    "source": ".github/workflows/easystore-email-templates.yml",
+    "pathSchema": {"type":"object","properties":{"slug":{"type":"string","pattern":"^[a-z0-9-]{1,128}$"}},"required":["slug"],"additionalProperties":false},
+    "bodySchema": {"type":"object","properties":{"template":{"type":"object","properties":{"subject":{"type":"string","minLength":1},"cc_recipients":{"type":"string"},"content_html":{"type":"string","minLength":1},"is_enabled":{"type":"boolean"},"template_attributes":{"type":"object"}},"required":["subject","cc_recipients","content_html","is_enabled","template_attributes"],"additionalProperties":false},"plain_template":{"type":"object","properties":{"content":{"type":"string"}},"required":["content"],"additionalProperties":false}},"required":["template","plain_template"],"additionalProperties":false}
+  }
+]

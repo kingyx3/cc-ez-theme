@@ -1,0 +1,3 @@
+EASYSTORE_ADMIN_TOKEN=replace-in-local-dev-vars
+MCP_READ_TOKEN=replace-with-random-at-least-32-character-secret
+MCP_WRITE_TOKEN=replace-with-a-different-random-at-least-32-character-secret

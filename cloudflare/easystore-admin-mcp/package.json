@@ -1,0 +1,32 @@
+{
+  "name": "cc-easystore-admin-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "check": "node scripts/check.js",
+    "dev": "wrangler dev",
+    "build": "wrangler deploy --dry-run --outdir dist",
+    "deploy": "wrangler deploy",
+    "capture": "node scripts/capture-admin.js",
+    "import:har": "node scripts/import-har.js",
+    "pretest": "npm run build",
+    "import:openapi": "node scripts/import-openapi.js"
+  },
+  "dependencies": {
+    "@cfworker/json-schema": "4.1.1",
+    "@modelcontextprotocol/server": "2.0.0",
+    "agents": "0.24.0",
+    "zod": "4.3.6"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "miniflare": "5.20260820.0-alpha",
+    "playwright": "1.61.1",
+    "wrangler": "4.125.0"
+  }
+}

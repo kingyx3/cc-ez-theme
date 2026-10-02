@@ -1,0 +1,29 @@
+name: EasyStore admin MCP checks
+on:
+  pull_request:
+    paths:
+      - 'cloudflare/easystore-admin-mcp/**'
+      - '.github/workflows/easystore-admin-mcp.yml'
+  push:
+    paths:
+      - 'cloudflare/easystore-admin-mcp/**'
+      - '.github/workflows/easystore-admin-mcp.yml'
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: cloudflare/easystore-admin-mcp
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: cloudflare/easystore-admin-mcp/package-lock.json
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
