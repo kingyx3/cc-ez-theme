@@ -1,0 +1,48 @@
+# EasyStore admin MCP
+
+General Cardboard Collective admin access for Viktor: **39 reads and 11 mutations** covering products, customers, orders, inventory, settings and promotions. The Worker runs on Cloudflare; setup and deployment run entirely in GitHub Actions.
+
+## Deploy from GitHub
+
+After merging, open **Settings → Secrets and variables → Actions** and configure:
+
+| Repository secret | Value |
+| --- | --- |
+| `CLOUDFLARE_API_TOKEN` | Token with Workers Scripts edit permission for the intended account |
+| `CLOUDFLARE_ACCOUNT_ID` | Intended account ID |
+| `EASYSTORE_ADMIN_TOKEN` | Existing EasyStore admin token, without `Bearer ` |
+| `EASYSTORE_ADMIN_MCP_READ_TOKEN` | New random password, at least 32 characters |
+| `EASYSTORE_ADMIN_MCP_WRITE_TOKEN` | Different random password, at least 32 characters |
+
+Reuse existing Cloudflare/admin secrets where available. Generate the connector passwords in your password manager. Run **Actions → EasyStore admin MCP → Run workflow** on `main`. Leave **enable_writes** off initially. The workflow verifies code, deploys code and secrets together, checks authenticated MCP plus one product/customer/discount read, and returns the actual `/mcp` URL in the run summary. No commands need to run on your computer.
+
+PRs and main pushes run checks only. Deployment requires a manual run from `main`. A failed hosted check does not undo an already completed deployment.
+
+## Connect Viktor
+
+Use **Integrations → Add custom MCP**, enter the URL, and supply the read connector password in the secure static-key credential field ([Viktor instructions](https://viktor.com/blog/how-to-connect-tools-your-ai-employee-doesnt-support-yet)). Requests use `Authorization: Bearer <connector password>`.
+
+| Tool | Purpose |
+| --- | --- |
+| `easystore_admin_list_operations` | Find enabled operations available to this credential |
+| `easystore_admin_describe_operation` | Inspect method/path, argument schemas and defaults |
+| `easystore_admin_read` | Execute a registered GET/page |
+| `easystore_admin_write` | Execute a registered mutation; requires the writer password and **enable_writes** |
+
+Example: `{"operation_id":"list_products","query":{"page":1,"limit":20}}`.
+
+To enable mutations, rerun the workflow with **enable_writes** selected and use the writer password in Viktor. Configure approval before mutations in Viktor; the Worker does not enforce human approval. Every mutation requires a stable `idempotency_key` of 16–128 letters/digits/underscores/hyphens. Requests are never automatically retried, and EasyStore's deduplication guarantees are unverified. Inspect the resource after a timeout before retrying.
+
+## Update APIs with an AI harness
+
+Edit `src/operations.js` for explicit methods, routes and operation IDs; edit `src/schemas.js` for shared argument schemas. Preserve closed top-level schemas, correct side-effect classification and store routing. Submit a PR; GitHub Actions checks and tests it. Deploy manually after merge. There is no discovery workflow, recorder, importer or runtime catalog tool.
+
+The [reference inventory of 1,019 observed method/path pairs](https://github.com/kingyx3/cc-ez-theme/blob/9eff3928833aecb2e265dff6176caa40ccf5e5b1/cloudflare/easystore-admin-mcp/src/admin-endpoints.json) remains available as a fixed research snapshot. It is not bundled into the Worker. Source evidence and limitations are in [ADMIN_API_EVIDENCE.md](ADMIN_API_EVIDENCE.md). Only the 50 explicit operations are callable; frontend-derived nested schemas are partial and do not prove complete server validation or live compatibility. Multipart/binary APIs need dedicated adapters.
+
+## Operational controls
+
+The upstream is fixed to `https://api.easystore.co`, store `cardboardcollective.easy.co`, pod `1007`. Bearer auth is the default; change `EASYSTORE_ADMIN_AUTH_MODE` in `wrangler.jsonc` to `access-token` only if the credential requires it. `ADMIN_AUTH_REJECTED` indicates expired/revoked credentials or insufficient permissions. Replace secrets in GitHub and rerun deployment to rotate credentials. Disable writes by rerunning with **enable_writes** off; revert code on `main` and redeploy to roll back.
+
+GET/DELETE use query parameters; POST/PUT/PATCH use JSON. Callers cannot supply methods, URLs, headers or store routing. Unknown operations, extra top-level fields and unsafe paths are rejected. Reads are capped at 50 records where a limit is defined; responses at 2 MiB; mutation bodies at 256 KiB; incoming MCP requests at 320 KiB. Upstream requests time out after 20 seconds and redirects are blocked.
+
+Successful reads return business data to the authorized client, with known credentials redacted. Errors and audit logs omit upstream bodies, records and credentials. Shared keys identify roles, not people. Browser origins other than the Worker's own origin are rejected. `/health` is public and non-sensitive. This implementation supports static-key authentication with MCP SDK v2 and legacy clients; OAuth is not implemented.
