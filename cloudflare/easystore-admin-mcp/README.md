@@ -4,9 +4,9 @@ General Cardboard Collective admin access for Viktor: **39 reads and 11 mutation
 
 ## Deploy from GitHub
 
-Before merging, open **Settings → Secrets and variables → Actions** and configure:
+The deployment job uses the existing GitHub **`prod` environment** for `main`. It can read `prod` environment secrets and repository Actions secrets. Keep the existing `EASYSTORE_ADMIN_TOKEN` in `prod`; the Cloudflare and connector secrets can remain at repository level or be configured in `prod`.
 
-| Repository secret | Value |
+| Secret | Value |
 | --- | --- |
 | `CLOUDFLARE_API_TOKEN` | Token with Workers Scripts edit permission for the intended account |
 | `CLOUDFLARE_ACCOUNT_ID` | Intended account ID |
