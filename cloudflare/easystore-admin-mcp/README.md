@@ -4,9 +4,9 @@ General Cardboard Collective admin access for Viktor: **39 reads and 11 mutation
 
 ## Deploy from GitHub
 
-Before merging, open **Settings → Secrets and variables → Actions** and configure:
+The deployment job uses the existing GitHub **`prod` environment** for `main`. It can read `prod` environment secrets and repository Actions secrets. Keep the existing `EASYSTORE_ADMIN_TOKEN` in `prod`; the Cloudflare and connector secrets can remain at repository level or be configured in `prod`.
 
-| Repository secret | Value |
+| Secret | Value |
 | --- | --- |
 | `CLOUDFLARE_API_TOKEN` | Token with Workers Scripts edit permission for the intended account |
 | `CLOUDFLARE_ACCOUNT_ID` | Intended account ID |
@@ -19,6 +19,8 @@ Reuse existing Cloudflare/admin secrets where available. Generate the connector 
 PRs run checks only. Relevant pushes to `main` deploy after checks pass; manual runs from `main` remain available. Automatic deployments disable writes; a manual run can enable writes until the next deployment. A failed hosted check does not undo an already completed deployment.
 
 ## Connect Viktor
+
+See [TOOLS.md](TOOLS.md) for the available tools, arguments, example calls and errors.
 
 Use **Integrations → Add custom MCP**, enter the URL, and supply the read connector password in the secure static-key credential field ([Viktor instructions](https://viktor.com/blog/how-to-connect-tools-your-ai-employee-doesnt-support-yet)). Requests use `Authorization: Bearer <connector password>`.
 
