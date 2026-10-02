@@ -21,9 +21,10 @@ export async function readRpcResponse(response, id) {
 
 export function deploymentConfig(env) {
   for (const key of ['CLOUDFLARE_API_TOKEN','CLOUDFLARE_ACCOUNT_ID','EASYSTORE_ADMIN_TOKEN','MCP_READ_TOKEN','MCP_WRITE_TOKEN']) if (!env[key]) throw new Error(`Missing GitHub secret: ${key}`);
-  if (env.MCP_READ_TOKEN.length < 32 || env.MCP_WRITE_TOKEN.length < 32 || env.MCP_READ_TOKEN === env.MCP_WRITE_TOKEN) throw new Error('Connector keys must be distinct and at least 32 characters.');
-  if (!['true','false'].includes(env.ENABLE_WRITES ?? 'false')) throw new Error('ENABLE_WRITES must be true or false.');
-  return { enableWrites:env.ENABLE_WRITES ?? 'false', secrets:{EASYSTORE_ADMIN_TOKEN:env.EASYSTORE_ADMIN_TOKEN,MCP_READ_TOKEN:env.MCP_READ_TOKEN,MCP_WRITE_TOKEN:env.MCP_WRITE_TOKEN} };
+  for (const [key, secret] of [['MCP_READ_TOKEN','EASYSTORE_ADMIN_MCP_READ_TOKEN'],['MCP_WRITE_TOKEN','EASYSTORE_ADMIN_MCP_WRITE_TOKEN']]) if (env[key].length < 32) throw new Error(`GitHub secret ${secret} must be at least 32 characters.`);
+  if (env.MCP_READ_TOKEN === env.MCP_WRITE_TOKEN) throw new Error('Connector keys must be distinct.');
+  if (!['true','false'].includes(env.ENABLE_WRITES ?? 'true')) throw new Error('ENABLE_WRITES must be true or false.');
+  return { enableWrites:env.ENABLE_WRITES ?? 'true', secrets:{EASYSTORE_ADMIN_TOKEN:env.EASYSTORE_ADMIN_TOKEN,MCP_READ_TOKEN:env.MCP_READ_TOKEN,MCP_WRITE_TOKEN:env.MCP_WRITE_TOKEN} };
 }
 export async function smokeTest(url, env, fetcher = fetch) {
   const base = new URL(url);

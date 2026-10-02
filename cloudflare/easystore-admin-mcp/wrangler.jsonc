@@ -8,7 +8,7 @@
     "EASYSTORE_STORE_DOMAIN": "cardboardcollective.easy.co",
     "EASYSTORE_POD_ID": "1007",
     "EASYSTORE_ADMIN_AUTH_MODE": "bearer",
-    "ENABLE_WRITES": "false"
+    "ENABLE_WRITES": "true"
   },
   "observability": { "enabled": true }
 }

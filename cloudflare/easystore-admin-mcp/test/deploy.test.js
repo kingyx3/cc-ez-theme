@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import { deploymentConfig, smokeTest, readRpcResponse } from '../scripts/deploy.js';
 const env={CLOUDFLARE_API_TOKEN:'test-cf',CLOUDFLARE_ACCOUNT_ID:'test-account',EASYSTORE_ADMIN_TOKEN:'test-admin',MCP_READ_TOKEN:'r'.repeat(40),MCP_WRITE_TOKEN:'w'.repeat(40),ENABLE_WRITES:'false'};
 test('GHA validates credentials and distinct connector keys before deployment',()=>{
+  assert.equal(deploymentConfig({...env,ENABLE_WRITES:undefined}).enableWrites,'true');
   assert.equal(deploymentConfig(env).enableWrites,'false');
+  assert.throws(()=>deploymentConfig({...env,MCP_READ_TOKEN:'short'}),/EASYSTORE_ADMIN_MCP_READ_TOKEN/);
+  assert.throws(()=>deploymentConfig({...env,MCP_WRITE_TOKEN:'short'}),/EASYSTORE_ADMIN_MCP_WRITE_TOKEN/);
   assert.throws(()=>deploymentConfig({...env,CLOUDFLARE_API_TOKEN:''}),/CLOUDFLARE_API_TOKEN/);
   assert.throws(()=>deploymentConfig({...env,MCP_WRITE_TOKEN:env.MCP_READ_TOKEN}),/distinct/);
   assert.throws(()=>deploymentConfig({...env,ENABLE_WRITES:'yes'}),/true or false/);
