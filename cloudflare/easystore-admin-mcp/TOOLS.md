@@ -11,7 +11,7 @@ Connect an MCP client to the deployed Worker URL ending in `/mcp`, using `Author
 | `easystore_admin_read` | Required `operation_id`; optional `path`, `query` objects | Executes a registered GET. Pass IDs in `path` and filters/pagination in `query`, as described by its schema. |
 | `easystore_admin_write` | Required `operation_id`, `idempotency_key`; optional `path`, `query`, `body` objects | Executes a registered mutation. DELETE uses `query`; POST/PUT/PATCH use JSON `body`. |
 
-The read password exposes the first three tools. The writer password also exposes the write tool when the deployment's **enable_writes** setting is on. Listing/describing operations respects the same access rules. Automatic deployments turn writes off; a manual deployment can enable them until the next deployment. Refresh the client's tools after changing this setting.
+The read password exposes the first three tools. The writer password also exposes the write tool when the deployment's **enable_writes** setting is on. Listing/describing operations respects the same access rules. Automatic and manual deployments enable writes by default. A manual run with **enable_writes** unchecked temporarily disables them until the next deployment. Refresh the client's tools after changing this setting.
 
 The registry currently contains 39 reads across products, customers, orders, collections, inventory, locations, promotions, vouchers, memberships, settings and themes. Its 11 mutations create/update products, customers and discounts; enable/disable discounts; and delete discounts/products. The available list and schemas come from `src/operations.js` and `src/schemas.js`.
 

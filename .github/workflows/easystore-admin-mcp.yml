@@ -15,7 +15,7 @@ on:
       enable_writes:
         description: Enable registered mutations for the writer connector key
         type: boolean
-        default: false
+        default: true
 permissions:
   contents: read
 concurrency:
@@ -53,7 +53,7 @@ jobs:
       EASYSTORE_ADMIN_TOKEN: ${{ secrets.EASYSTORE_ADMIN_TOKEN }}
       MCP_READ_TOKEN: ${{ secrets.EASYSTORE_ADMIN_MCP_READ_TOKEN }}
       MCP_WRITE_TOKEN: ${{ secrets.EASYSTORE_ADMIN_MCP_WRITE_TOKEN }}
-      ENABLE_WRITES: ${{ inputs.enable_writes && 'true' || 'false' }}
+      ENABLE_WRITES: ${{ (github.event_name != 'workflow_dispatch' || inputs.enable_writes) && 'true' || 'false' }}
       LIVE_READ_CHECKS: 'true'
     steps:
       - uses: actions/checkout@v7

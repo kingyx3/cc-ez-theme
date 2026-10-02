@@ -16,13 +16,13 @@ The deployment job uses the existing GitHub **`prod` environment** for `main`. I
 
 Reuse existing Cloudflare/admin secrets where available. Generate the connector passwords in your password manager. Merging changes to the Worker or its workflow into `main` automatically verifies and deploys them. For secret updates without code changes, use **Actions → EasyStore admin MCP → Run workflow** on `main`. The workflow verifies code, deploys code and secrets together, checks authenticated MCP plus one product/customer/discount read, and returns the actual `/mcp` URL in the run summary. No commands need to run on your computer.
 
-PRs run checks only. Relevant pushes to `main` deploy after checks pass; manual runs from `main` remain available. Automatic deployments disable writes; a manual run can enable writes until the next deployment. A failed hosted check does not undo an already completed deployment.
+PRs run checks only. Relevant pushes to `main` deploy after checks pass; manual runs from `main` remain available. Writes are enabled by default on automatic and manual deployments. A manual run with **enable_writes** unchecked disables them until the next deployment. A failed hosted check does not undo an already completed deployment.
 
 ## Connect Viktor
 
 See [TOOLS.md](TOOLS.md) for the available tools, arguments, example calls and errors.
 
-Use **Integrations → Add custom MCP**, enter the URL, and supply the read connector password in the secure static-key credential field ([Viktor instructions](https://viktor.com/blog/how-to-connect-tools-your-ai-employee-doesnt-support-yet)). Requests use `Authorization: Bearer <connector password>`.
+Use **Integrations → Add Custom → MCP Server**, enter the URL, and supply the writer connector password for management or the read connector password for read-only access ([Viktor instructions](https://viktor.com/docs/custom-integrations)). Requests use `Authorization: Bearer <connector password>`.
 
 | Tool | Purpose |
 | --- | --- |
@@ -33,7 +33,7 @@ Use **Integrations → Add custom MCP**, enter the URL, and supply the read conn
 
 Example: `{"operation_id":"list_products","query":{"page":1,"limit":20}}`.
 
-To enable mutations, rerun the workflow with **enable_writes** selected and use the writer password in Viktor. Configure approval before mutations in Viktor; the Worker does not enforce human approval. Every mutation requires a stable `idempotency_key` of 16–128 letters/digits/underscores/hyphens. Requests are never automatically retried, and EasyStore's deduplication guarantees are unverified. Inspect the resource after a timeout before retrying.
+To manage promotions and other mutations, use the writer password in Viktor. The read password always provides read-only access. Configure approval before mutations in Viktor; the Worker does not enforce human approval. Every mutation requires a stable `idempotency_key` of 16–128 letters/digits/underscores/hyphens. Requests are never automatically retried, and EasyStore's deduplication guarantees are unverified. Inspect the resource after a timeout before retrying.
 
 ## Update APIs with an AI harness
 
@@ -43,7 +43,7 @@ The [reference inventory of 1,019 observed method/path pairs](https://github.com
 
 ## Operational controls
 
-The upstream is fixed to `https://api.easystore.co`, store `cardboardcollective.easy.co`, pod `1007`. Bearer auth is the default; change `EASYSTORE_ADMIN_AUTH_MODE` in `wrangler.jsonc` to `access-token` only if the credential requires it. `ADMIN_AUTH_REJECTED` indicates expired/revoked credentials or insufficient permissions. Replace secrets in GitHub and rerun deployment to rotate credentials. Disable writes by rerunning with **enable_writes** off; revert the relevant code on `main` to trigger an automatic rollback deployment.
+The upstream is fixed to `https://api.easystore.co`, store `cardboardcollective.easy.co`, pod `1007`. Bearer auth is the default; change `EASYSTORE_ADMIN_AUTH_MODE` in `wrangler.jsonc` to `access-token` only if the credential requires it. `ADMIN_AUTH_REJECTED` indicates expired/revoked credentials or insufficient permissions. Replace secrets in GitHub and rerun deployment to rotate credentials. Temporarily disable writes by rerunning with **enable_writes** off; the next automatic deployment restores the enabled default. Revert the relevant code on `main` to trigger an automatic rollback deployment.
 
 GET/DELETE use query parameters; POST/PUT/PATCH use JSON. Callers cannot supply methods, URLs, headers or store routing. Unknown operations, extra top-level fields and unsafe paths are rejected. Reads are capped at 50 records where a limit is defined; responses at 2 MiB; mutation bodies at 256 KiB; incoming MCP requests at 320 KiB. Upstream requests time out after 20 seconds and redirects are blocked.
 
