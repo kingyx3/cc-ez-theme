@@ -1,15 +1,34 @@
-name: EasyStore admin MCP checks
+name: EasyStore admin MCP
 on:
   pull_request:
+    branches: [main]
     paths:
       - 'cloudflare/easystore-admin-mcp/**'
       - '.github/workflows/easystore-admin-mcp.yml'
   push:
+    branches: [main]
     paths:
       - 'cloudflare/easystore-admin-mcp/**'
       - '.github/workflows/easystore-admin-mcp.yml'
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: Deploy the Worker and sync its secrets
+        type: boolean
+        default: true
+      enable_writes:
+        description: Enable registered mutations for the writer connector key
+        type: boolean
+        default: false
+      live_read_checks:
+        description: Test products, customers and discounts reads without logging records
+        type: boolean
+        default: true
 permissions:
   contents: read
+concurrency:
+  group: easystore-admin-mcp-${{ github.event_name == 'pull_request' && github.event.pull_request.number || 'production' }}
+  cancel-in-progress: false
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -19,7 +38,7 @@ jobs:
         working-directory: cloudflare/easystore-admin-mcp
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: npm
@@ -27,3 +46,27 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm test
+  deploy:
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy && github.ref == 'refs/heads/main'
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: cloudflare/easystore-admin-mcp
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      EASYSTORE_ADMIN_TOKEN: ${{ secrets.EASYSTORE_ADMIN_TOKEN }}
+      MCP_READ_TOKEN: ${{ secrets.EASYSTORE_ADMIN_MCP_READ_TOKEN }}
+      MCP_WRITE_TOKEN: ${{ secrets.EASYSTORE_ADMIN_MCP_WRITE_TOKEN }}
+      ENABLE_WRITES: ${{ inputs.enable_writes && 'true' || 'false' }}
+      LIVE_READ_CHECKS: ${{ inputs.live_read_checks && 'true' || 'false' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - run: npm ci
+      - name: Sync secrets, deploy and check authenticated MCP
+        run: npm run deploy:gha

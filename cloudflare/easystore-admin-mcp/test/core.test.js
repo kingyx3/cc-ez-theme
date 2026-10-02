@@ -2,8 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execute, redact } from '../src/easystore.js';
 import { makeRegistry, resolveOperation, validateRegistry } from '../src/registry.js';
-import { candidateFromRequest, mergeCandidates } from '../scripts/discovery.js';
-import { importHar } from '../scripts/import-har.js';
 
 const env = { EASYSTORE_ADMIN_TOKEN:'secret-admin-value', EASYSTORE_STORE_DOMAIN:'cardboardcollective.easy.co', EASYSTORE_POD_ID:'1007', MCP_READ_TOKEN:'secret-reader-value', ENABLE_WRITES:'true' };
 const writeOp = { id:'update_widget', method:'PUT', path:'/admin/v2/store/widgets/{id}', enabled:true, description:'Update widget', source:'test', pathSchema:{type:'object',properties:{id:{type:'string'}},required:['id'],additionalProperties:false}, bodySchema:{type:'object',properties:{amount:{type:'integer',minimum:0}},required:['amount'],additionalProperties:false} };
@@ -71,33 +69,25 @@ test('response size cap and credential redaction', async () => {
   assert.equal(output.data.rows[0].refresh_token,'[REDACTED]');
   assert.equal(redact('Bearer abc'),'Bearer [REDACTED]');
 });
-test('HAR importer only emits shapes, normalizes IDs, merges captures and disables everything', () => {
-  const har={log:{entries:[1,2].map(id=>({request:{url:`https://api.easystore.co/admin/v2/store/widgets/${id}?page=3&token=secret`,method:'PUT',headers:[{name:'Authorization',value:'secret'}],postData:{mimeType:'application/json',text:JSON.stringify({email:'person@example.com',amount:89})}},response:{status:200,content:{text:'private-response'}}}))}};
-  const candidates=importHar(har);
-  assert.equal(candidates.length,1);
-  const output=JSON.stringify(candidates);
-  for (const privateValue of ['person@example.com','private-response','"89"','token=secret']) assert.ok(!output.includes(privateValue));
-  assert.equal(candidates[0].enabled,false);
-  assert.equal(candidates[0].path,'/admin/v2/store/widgets/{id_1}');
-  assert.equal(candidates[0].bodySchema.properties.amount.type,'integer');
-  assert.equal(candidates[0].querySchema.properties.token,undefined);
-  validateRegistry(candidates);
-  assert.equal(candidateFromRequest({url:'https://evil.test/admin/v2/store/widgets',method:'GET'}),null);
-  assert.equal(mergeCandidates([null,...candidates,...candidates]).length,1);
-});
 
-test('OpenAPI importer resolves local refs, required query fields and valid property names without retaining examples', async () => {
-  const {importOpenApi}=await import('../scripts/import-openapi.js');
-  const document={openapi:'3.0.3',servers:[{url:'https://api.easystore.co/admin/v2/store'}],components:{schemas:{Widget:{type:'object',properties:{description:{type:'string',example:'private example'},amount:{type:'integer',minimum:0}},required:['amount']}}},paths:{'/widgets/{id}':{parameters:[{in:'path',name:'id',required:true,schema:{type:'string'}}],put:{parameters:[{in:'query',name:'kind',required:true,schema:{type:'string'}}],requestBody:{content:{'application/json':{schema:{$ref:'#/components/schemas/Widget'}}}}}}}};
-  const ops=importOpenApi(document);
-  assert.equal(ops.length,1);
-  assert.equal(ops[0].bodySchema.properties.description.type,'string');
-  assert.ok(!JSON.stringify(ops).includes('private example'));
-  const imported=makeRegistry(ops);
-  assert.equal(imported.size,1);
-  const enabled=makeRegistry(ops.map(op=>({...op,enabled:true})));
-  assert.throws(()=>resolveOperation(enabled,{operation_id:ops[0].id,path:{id:'1'},body:{amount:1}},true));
-  assert.equal(resolveOperation(enabled,{operation_id:ops[0].id,path:{id:'1'},query:{kind:'simple'},body:{amount:1}},true).path,'/admin/v2/store/widgets/1');
-  assert.equal(importOpenApi({...document,servers:[{url:'https://evil.test/admin/v2/store'}]}).length,0);
-  assert.throws(()=>importOpenApi({...document,paths:{'/widgets':{get:{parameters:[{$ref:'https://evil.test/schema'}]}}}}),/local/);
+test('source-confirmed admin DELETE parameters go in query, without a JSON body',async()=>{
+  const actual=makeRegistry();
+  await execute(env,actual,{operation_id:'delete_discount',query:{id:42},idempotency_key:'delete_intent_123456'},{write:true,audit:noAudit,fetcher:async(url,init)=>{
+    assert.equal(url.pathname,'/admin/v2/store/discounts');assert.equal(url.searchParams.get('id'),'42');
+    assert.equal(init.method,'DELETE');assert.equal(init.body,undefined);assert.equal(init.headers['Content-Type'],undefined);
+    return Response.json({data:{deleted:true}});
+  }});
+});
+test('promotion create uses a flat editor payload with defaults, explicit targeting and code settings',async()=>{
+  const args={operation_id:'create_discount',idempotency_key:'discount_intent_1234',body:{title:'Customer offer',promotion_applies_to:'order_subtotal',target_type:'line_item',value_type:'fixed_amount',value:89,channel_selection:'website',starts_at:'2026-10-02T08:00:00Z',usage_limit:1,usage_limit_per_customer:1,customer_selection:'prerequisite_customer',prerequisite_customer_ids:[42],discount_codes:[{code:'CUSTOMER49'}]}};
+  await execute(env,makeRegistry(),args,{write:true,audit:noAudit,fetcher:async(url,init)=>{
+    assert.equal(url.pathname,'/admin/v2/store/discounts');const body=JSON.parse(init.body);
+    assert.equal(body.title,'Customer offer');assert.equal(body.id,0);assert.equal(body.discount,undefined);
+    assert.deepEqual(body.prerequisite_customer_ids,[42]);assert.equal(body.redemption_setting,null);
+    return Response.json({data:{discount:{id:101}}});
+  }});
+  await assert.rejects(execute(env,makeRegistry(),{...args,body:{...args.body,value_type:'percentage',value:101}},{write:true,audit:noAudit}),/100/);
+});
+test('product update rejects mismatched path/body resource IDs before an upstream write',()=>{
+  assert.throws(()=>resolveOperation(makeRegistry(),{operation_id:'update_product',path:{product_id:'100'},body:{id:200}},true),/must match/);
 });

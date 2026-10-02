@@ -2,6 +2,4 @@ node_modules/
 .wrangler/
 dist/
 .dev.vars
-captures/
-*.har
-playwright-report/
+easystore-admin-secrets-*/

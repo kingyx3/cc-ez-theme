@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import { createMcpHandler } from 'agents/mcp/server';
 import { z } from 'zod';
+import endpointCatalog from './admin-endpoints.json' with { type: 'json' };
 import { ToolError, makeRegistry, isRead } from './registry.js';
 import { execute, readLimited } from './easystore.js';
 
@@ -34,6 +35,18 @@ export async function authenticate(request, env) {
 }
 export function createServer(env, role) {
   const server = new McpServer({ name: 'cc-easystore-admin', version: '0.1.0' });
+  server.registerTool('easystore_admin_search_endpoints', {
+    description: 'Search the static admin frontend route catalog. Catalog entries are source-confirmed routes, not permission grants or complete server schemas. Use list_operations for executable operations.',
+    inputSchema: { search: z.string().max(128).optional(), method: z.enum(['GET','POST','PUT','PATCH','DELETE']).optional(), offset: z.number().int().min(0).default(0), limit: z.number().int().min(1).max(50).default(25) },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
+  }, async ({search,method,offset,limit}) => {
+    const rows = endpointCatalog.filter(e => (!method || e.method === method) && (!search || `${e.path} ${e.frontend_operations.join(' ')}`.toLowerCase().includes(search.toLowerCase())));
+    return result({total:rows.length,offset,entries:rows.slice(offset,offset+limit).map(e => {
+      const normalize = p => p.replace(/\{[^}]+\}/g,'{id}');
+      const op = [...registry.values()].find(op => op.method === e.method && normalize(op.path) === normalize(e.path));
+      return {...e,operation_id:op?.id ?? null,executable:!!op?.enabled && (isRead(op) || (role === 'write' && env.ENABLE_WRITES === 'true'))};
+    })});
+  });
   server.registerTool('easystore_admin_list_operations', {
     description: 'Search enabled EasyStore admin operations. Calls are limited to this registry.',
     inputSchema: { search: z.string().max(128).optional() },

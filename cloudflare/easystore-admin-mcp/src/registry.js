@@ -28,7 +28,8 @@ export function validateRegistry(items) {
       new Validator(s);
     }
     validate({ ...(op.querySchema ?? emptyObject), required: [] }, op.queryDefaults ?? {}, 'queryDefaults');
-    if (isRead(op) && op.bodySchema) throw new Error('GET cannot have a request body.');
+    if (op.bodyDefaults) validate({ ...op.bodySchema, required: [] }, op.bodyDefaults, 'bodyDefaults');
+    if (['GET','DELETE'].includes(op.method) && op.bodySchema) throw new Error('GET/DELETE cannot have a request body in the admin client.');
     if (!isRead(op) && op.enabled && !op.bodySchema && op.method !== 'DELETE') throw new Error('Enabled writes require a body schema.');
   }
   return items;
@@ -44,7 +45,10 @@ export function resolveOperation(registry, args, write) {
   validate(op.pathSchema ?? emptyObject, args.path ?? {}, 'path');
   const query = { ...op.queryDefaults, ...args.query };
   validate(op.querySchema ?? emptyObject, query, 'query');
-  if (op.bodySchema) validate(op.bodySchema, args.body, 'body');
+  const body = op.bodySchema ? { ...op.bodyDefaults, ...args.body } : args.body;
+  if (op.id === 'update_product' && String(body?.id) !== String(args.path?.product_id)) throw new ToolError('INVALID_ARGUMENTS', 'Product id must match product_id in path.');
+  if (['create_discount','update_discount'].includes(op.id) && body?.value_type === 'percentage' && Number(body.value) > 100) throw new ToolError('INVALID_ARGUMENTS', 'Percentage must not exceed 100.');
+  if (op.bodySchema) validate(op.bodySchema, body, 'body');
   else if (args.body !== undefined) throw new ToolError('INVALID_ARGUMENTS', 'This operation has no body.');
   const path = op.path.replace(/\{([^}]+)\}/g, (_, key) => {
     const value = String(args.path[key]);
@@ -52,5 +56,5 @@ export function resolveOperation(registry, args, write) {
     if (!/^[A-Za-z0-9_-]{1,128}$/.test(value)) throw new ToolError('INVALID_ARGUMENTS', 'Unsafe path parameter.');
     return value;
   });
-  return { op, path, query, body: args.body };
+  return { op, path, query, body };
 }
