@@ -7,6 +7,7 @@ live schema exposes a lossless Active/Inactive mapping: an EasyStore product wit
 no ``published_at`` value is inactive, and a published product is active.
 
 Each variant's ``inventory_quantity`` is synchronized to the HubSpot Product's
+HubSpot Product's ``hs_inventory_quantity`` when writable, else a dedicated
 ``easystore_inventory_quantity`` number property (created on first run).
 """
 
@@ -57,11 +58,13 @@ PRODUCT_FIELDS: tuple[FieldSpec, ...] = (
 
 # Variant-level facts. HubSpot Products are one-per-variant, so stock is read from
 # the EasyStore variant rather than its parent product. HubSpot has no native
-# stock-on-hand property, so this lands in a dedicated number property.
+# stock-on-hand property in every portal, so hs_inventory_quantity is used when
+# the portal exposes it as a writable number and a dedicated property otherwise.
 VARIANT_FIELDS: tuple[FieldSpec, ...] = (
     FieldSpec(
         key="inventory_quantity",
         sources=("inventory_quantity",),
+        native=("hs_inventory_quantity",),
         fallback="easystore_inventory_quantity",
         label="EasyStore Inventory Count",
         description="Units in stock for this variant, as last reported by EasyStore.",

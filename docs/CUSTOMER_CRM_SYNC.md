@@ -730,4 +730,4 @@ A green pull-request validation proves the deterministic mapping and fail-closed
 
 ## Inventory counts
 
-The Products stage writes each EasyStore variant's `inventory_quantity` to the HubSpot Product number property `easystore_inventory_quantity` ("EasyStore Inventory Count"), created automatically on first run (needs the product schema write scope the other custom properties already use). A variant EasyStore reports no count for leaves the property untouched; `0` is written as `0`.
+The Products stage writes each EasyStore variant's `inventory_quantity` to the HubSpot Product number property `hs_inventory_quantity` when the portal exposes it as writable; otherwise to `easystore_inventory_quantity` ("EasyStore Inventory Count"), created automatically on first run (needs the product schema write scope the other custom properties already use). A variant EasyStore reports no count for leaves the property untouched; `0` is written as `0`.
