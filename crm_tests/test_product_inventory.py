@@ -35,6 +35,28 @@ class ProductInventoryTests(unittest.TestCase):
         )
         self.assertNotIn("easystore_inventory_quantity", props)
 
+    def _resolve(self, schema):
+        captured = {}
+
+        def fake_resolve(**kwargs):
+            captured["fields"] = kwargs["fields"]
+            return {}
+
+        from unittest.mock import patch
+
+        with patch.object(products, "resolve_fields", fake_resolve):
+            products.resolve_product_fields("token")
+        return captured["fields"]
+
+    def test_inventory_field_is_resolved_with_catalogue_fields(self):
+        keys = {field.key for field in self._resolve({})}
+        self.assertIn("inventory_quantity", keys)
+
+    def test_inventory_prefers_native_hubspot_property(self):
+        field = products.VARIANT_FIELDS[0]
+        self.assertEqual(field.native, ("hs_inventory_quantity",))
+        self.assertEqual(field.fallback, "easystore_inventory_quantity")
+
 
 if __name__ == "__main__":
     unittest.main()

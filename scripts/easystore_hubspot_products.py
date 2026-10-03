@@ -389,17 +389,18 @@ def resolve_product_fields(
     access_token: str,
     report: dict[str, Any] | None = None,
 ) -> dict[str, str]:
+    wanted = (*PRODUCT_FIELDS, *VARIANT_FIELDS)
     resolved = resolve_fields(
         http_json=_http_json,
         access_token=access_token,
         object_type=PRODUCT_OBJECT_TYPE,
-        fields=PRODUCT_FIELDS,
+        fields=wanted,
         error=SyncError,
         optional=True,
         report=report,
     )
-    if len(resolved) < len(PRODUCT_FIELDS):
-        missing = sorted(field.key for field in PRODUCT_FIELDS if field.key not in resolved)
+    if len(resolved) < len(wanted):
+        missing = sorted(field.key for field in wanted if field.key not in resolved)
         print(
             "WARNING: catalogue fields not synchronized because HubSpot did not "
             "provide a writable property (add crm.schemas.products.read to the "
