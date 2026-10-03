@@ -3,7 +3,7 @@
 Cloudflare cron Worker that dispatches `.github/workflows/sync-easystore-customers-hubspot.yml`
 (EasyStore → HubSpot CRM sync, including variant inventory counts) for `prod` and `dev`.
 
-- Schedule: `0 4,10,16,22 * * *` UTC = 00:00, 06:00, 12:00, 18:00 Singapore.
+- Schedule: `0 * * * *` (hourly, on the hour).
 - Auth: the GitHub repository secret `SYNC_TRIGGER_GITHUB_TOKEN` is pushed to the Worker
   as a secret by `.github/workflows/deploy-cloudflare-sync-trigger-worker.yml`.
   Use a fine-grained PAT scoped to this repository with **Actions: Read and write**.

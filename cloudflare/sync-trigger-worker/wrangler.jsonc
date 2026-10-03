@@ -8,9 +8,9 @@
     "enabled": true,
     "head_sampling_rate": 1
   },
-  // Cloudflare cron is UTC. 04/10/16/22 UTC = 12:00/18:00/00:00/06:00 Singapore.
+  // Hourly, at minute 0 (timezone-independent).
   "triggers": {
-    "crons": ["0 4,10,16,22 * * *"]
+    "crons": ["0 * * * *"]
   },
   "vars": {
     "GITHUB_REPOSITORY": "kingyx3/cc-ez-theme",

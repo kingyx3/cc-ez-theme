@@ -1,10 +1,10 @@
 # EasyStore CRM sync
 
-`.github/workflows/sync-easystore-customers-hubspot.yml` independently synchronizes EasyStore commerce/CRM data into HubSpot at **00:00, 06:00, 12:00 and 18:00 Singapore time**. The schedule is owned by the Cloudflare cron Worker `cloudflare/sync-trigger-worker`, which calls `workflow_dispatch` for `prod` and `dev` using the repository secret `SYNC_TRIGGER_GITHUB_TOKEN` (fine-grained PAT, Actions: read and write); the workflow can also be run manually.
+`.github/workflows/sync-easystore-customers-hubspot.yml` independently synchronizes EasyStore commerce/CRM data into HubSpot **hourly**. The schedule is owned by the Cloudflare cron Worker `cloudflare/sync-trigger-worker`, which calls `workflow_dispatch` for `prod` and `dev` using the repository secret `SYNC_TRIGGER_GITHUB_TOKEN` (fine-grained PAT, Actions: read and write); the workflow can also be run manually.
 
 The production workflow runs in dependency order: **identity preflight → Products → Customers → source attribution → Orders + Line Items → reconciliation → Abandoned checkouts**. Abandoned checkouts run last on purpose: it is the only stage whose EasyStore route is undocumented, so a store that does not serve one cannot cost the run the stages above it. Pull requests run only the credential-free validation job; they never call EasyStore or HubSpot with production credentials.
 
-> The workflow no longer has a GitHub `schedule` trigger; Cloudflare cron fires at the four Singapore clock times (04/10/16/22 UTC) so runs are not subject to GitHub's best-effort scheduling delays. Concurrency prevents two production sync runs from overlapping.
+> The workflow no longer has a GitHub `schedule` trigger; Cloudflare cron fires every hour on the hour so runs are not subject to GitHub's best-effort scheduling delays. Concurrency prevents two runs of the same environment from overlapping; a run still in progress at the next tick queues one follow-up rather than running in parallel.
 
 ## Required repository secrets
 
