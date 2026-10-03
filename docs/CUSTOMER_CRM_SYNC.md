@@ -1,10 +1,10 @@
 # EasyStore CRM sync
 
-`.github/workflows/sync-easystore-customers-hubspot.yml` independently synchronizes EasyStore commerce/CRM data into HubSpot at **00:00, 06:00, 12:00 and 18:00 Singapore time** and can also be run manually with `workflow_dispatch`.
+`.github/workflows/sync-easystore-customers-hubspot.yml` independently synchronizes EasyStore commerce/CRM data into HubSpot **hourly**. The schedule is owned by the Cloudflare cron Worker `cloudflare/sync-trigger-worker`, which calls `workflow_dispatch` for `prod` and `dev` using the repository secret `SYNC_TRIGGER_GITHUB_TOKEN` (fine-grained PAT, Actions: read and write); the workflow can also be run manually.
 
 The production workflow runs in dependency order: **identity preflight → Products → Customers → source attribution → Orders + Line Items → reconciliation → Abandoned checkouts**. Abandoned checkouts run last on purpose: it is the only stage whose EasyStore route is undocumented, so a store that does not serve one cannot cost the run the stages above it. Pull requests run only the credential-free validation job; they never call EasyStore or HubSpot with production credentials.
 
-> GitHub Actions schedules are best-effort rather than a real-time scheduler. The workflow is configured for the four requested Singapore clock times, but GitHub may start scheduled runs late during platform load. Concurrency prevents two production sync runs from overlapping.
+> The workflow no longer has a GitHub `schedule` trigger; Cloudflare cron fires every hour on the hour so runs are not subject to GitHub's best-effort scheduling delays. Concurrency prevents two runs of the same environment from overlapping; a run still in progress at the next tick queues one follow-up rather than running in parallel.
 
 ## Required repository secrets
 
@@ -726,3 +726,8 @@ Before merging/enabling the scheduled sync:
 8. Run the separate Order source-attribution smoke test in `docs/ORDER_SOURCE_ATTRIBUTION.md` before relying on `cc_order_*` revenue reporting.
 
 A green pull-request validation proves the deterministic mapping and fail-closed logic without credentials. A real API smoke test is still required to validate the specific EasyStore/HubSpot account configuration, scopes, existing CRM schema, and live data shape.
+
+
+## Inventory counts
+
+The Products stage writes each EasyStore variant's `inventory_quantity` to the HubSpot Product number property `hs_inventory_quantity` when the portal exposes it as writable; otherwise to `easystore_inventory_quantity` ("EasyStore Inventory Count"), created automatically on first run (needs the product schema write scope the other custom properties already use). A variant EasyStore reports no count for leaves the property untouched; `0` is written as `0`.

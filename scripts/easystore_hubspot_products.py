@@ -5,6 +5,10 @@ Each EasyStore variant becomes one HubSpot Product. Product publication state is
 also synchronized onto HubSpot's native Product Status/active property when the
 live schema exposes a lossless Active/Inactive mapping: an EasyStore product with
 no ``published_at`` value is inactive, and a published product is active.
+
+Each variant's ``inventory_quantity`` is synchronized to the HubSpot Product's
+HubSpot Product's ``hs_inventory_quantity`` when writable, else a dedicated
+``easystore_inventory_quantity`` number property (created on first run).
 """
 
 from __future__ import annotations
@@ -49,6 +53,22 @@ PRODUCT_FIELDS: tuple[FieldSpec, ...] = (
         key="product_type",
         sources=("product_type", "type", "category_name", "category_title"),
         native=("hs_product_type",),
+    ),
+)
+
+# Variant-level facts. HubSpot Products are one-per-variant, so stock is read from
+# the EasyStore variant rather than its parent product. HubSpot has no native
+# stock-on-hand property in every portal, so hs_inventory_quantity is used when
+# the portal exposes it as a writable number and a dedicated property otherwise.
+VARIANT_FIELDS: tuple[FieldSpec, ...] = (
+    FieldSpec(
+        key="inventory_quantity",
+        sources=("inventory_quantity",),
+        native=("hs_inventory_quantity",),
+        fallback="easystore_inventory_quantity",
+        label="EasyStore Inventory Count",
+        description="Units in stock for this variant, as last reported by EasyStore.",
+        kind="number",
     ),
 )
 
@@ -534,6 +554,7 @@ def variant_properties(
 
     if field_properties:
         apply_fields(props, product_field_values(product, store_domain), field_properties)
+        apply_fields(props, field_values(variant, VARIANT_FIELDS), field_properties)
 
     published = easystore_product_published(product)
     if status_mapping is not None and published is not None:
@@ -688,6 +709,7 @@ def sync(
     inactive_variants = 0
     status_unknown_variants = 0
     field_coverage: dict[str, int] = {field.key: 0 for field in PRODUCT_FIELDS}
+    inventory_variants = 0
 
     for key, (product, variant, sku) in easystore_by_sku.items():
         matching = hubspot_by_sku.get(key, set())
@@ -717,6 +739,8 @@ def sync(
         )
         for field_key in product_field_values(product, store_domain):
             field_coverage[field_key] += 1
+        if "inventory_quantity" in field_values(variant, VARIANT_FIELDS):
+            inventory_variants += 1
         target_id = next(iter(matching), None)
         if target_id is None:
             creates.append({"properties": properties})
@@ -747,6 +771,8 @@ def sync(
         "synthetic_skus_for_blank_easystore_skus": synthetic_skus,
         "duplicate_easystore_skus": duplicate_easystore_skus,
         "ambiguous_hubspot_skus": ambiguous_hubspot_skus,
+        "hubspot_inventory_property": product_field_properties.get("inventory_quantity"),
+        "easystore_variants_with_inventory_count": inventory_variants,
         "hubspot_catalogue_field_properties": dict(sorted(product_field_properties.items())),
         "easystore_catalogue_field_coverage": dict(sorted(field_coverage.items())),
         "easystore_product_keys_seen": sorted(product_keys),

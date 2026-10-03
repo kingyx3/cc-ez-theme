@@ -12,9 +12,6 @@ on:
       - "docs/CUSTOMER_CRM_SYNC.md"
       - "docs/EASYSTORE_CHECKOUT_CART_SYNC.md"
       - "docs/SOURCE_ATTRIBUTION.md"
-  schedule:
-    - cron: "0 */6 * * *"
-      timezone: "Asia/Singapore"
   workflow_dispatch:
     inputs:
       deployment_env:
@@ -30,9 +27,10 @@ permissions:
   contents: read
 
 # CRM writes use GitHub Environments to select the store and credentials.
-# Scheduled runs fan out to both prod and dev at the same cadence. Manual runs
-# explicitly select dev/prod (default dev), regardless of the branch/ref used to
-# dispatch the workflow. Environment-scoped vars/secrets avoid PROD_/DEV_ prefixes.
+# The Cloudflare cron Worker (cloudflare/sync-trigger-worker, authenticated with
+# the SYNC_TRIGGER_GITHUB_TOKEN secret) dispatches this workflow once for prod and
+# once for dev every hour. Manual runs explicitly select dev/prod (default
+# dev), regardless of the branch/ref used to dispatch the workflow. Environment-scoped vars/secrets avoid PROD_/DEV_ prefixes.
 
 jobs:
   validate:
@@ -78,10 +76,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Schedules execute from the default branch, so explicitly fan out to
-        # both environment-scoped stores. workflow_dispatch uses the selected
-        # input instead of inferring the environment from the chosen branch.
-        deployment_env: ${{ fromJSON(github.event_name == 'schedule' && '["prod","dev"]' || format('["{0}"]', inputs.deployment_env || 'dev')) }}
+        # workflow_dispatch (the Cloudflare cron Worker or a manual run) uses
+        # the selected input instead of inferring the environment from the ref.
+        deployment_env: ${{ fromJSON(format('["{0}"]', inputs.deployment_env || 'dev')) }}
     runs-on: ubuntu-latest
     environment: ${{ matrix.deployment_env }}
     concurrency:
@@ -258,8 +255,8 @@ jobs:
             echo "### EasyStore → HubSpot CRM sync"
             echo
             echo "- GitHub environment: \`${DEPLOYMENT_ENV}\`"
-            echo "- Schedule: 00:00, 06:00, 12:00, 18:00 Asia/Singapore (both dev and prod)"
-            echo "- Products: one HubSpot Product per EasyStore variant, keyed by SKU; only variants referenced by at least one EasyStore Order are synced"
+            echo "- Trigger: Cloudflare cron Worker cc-sync-trigger hourly (dispatches dev and prod separately)"
+            echo "- Products: one HubSpot Product per EasyStore variant, keyed by SKU; only variants referenced by at least one EasyStore Order are synced; each carries the variant inventory count in easystore_inventory_quantity"
             echo "- Customers: keyed by normalized HubSpot phone; mobilephone is mirror-only; ambiguous primary-phone ownership fails before writes"
             echo "- Source attribution: Cloudflare click ids on contacts resolved against D1; an acquisition is written once and never overwritten"
             echo "- Customer notes: Customer.note + Customer.note2 only; Order notes remain separate"
