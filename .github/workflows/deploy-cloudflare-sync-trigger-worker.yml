@@ -107,7 +107,7 @@ jobs:
             echo
             echo "- Worker: \`cc-sync-trigger\`"
             echo "- Source commit: \`${GITHUB_SHA}\`"
-            echo "- Cron: \`0 4,10,16,22 * * *\` UTC (00:00, 06:00, 12:00, 18:00 Singapore)"
+            echo "- Cron: \`0 * * * *\` (hourly)"
             echo "- Dispatches: \`sync-easystore-customers-hubspot.yml\` for prod and dev"
             echo "- Worker secret \`SYNC_TRIGGER_GITHUB_TOKEN\` refreshed from the repository secret"
           } >> "${GITHUB_STEP_SUMMARY}"
