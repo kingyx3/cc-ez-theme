@@ -1,0 +1,21 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "cc-sync-trigger",
+  "main": "src/index.js",
+  "compatibility_date": "2026-08-26",
+  "workers_dev": false,
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  // Cloudflare cron is UTC. 04/10/16/22 UTC = 12:00/18:00/00:00/06:00 Singapore.
+  "triggers": {
+    "crons": ["0 4,10,16,22 * * *"]
+  },
+  "vars": {
+    "GITHUB_REPOSITORY": "kingyx3/cc-ez-theme",
+    "WORKFLOW_FILE": "sync-easystore-customers-hubspot.yml",
+    "WORKFLOW_REF": "main",
+    "DEPLOYMENT_ENVS": "prod,dev"
+  }
+}

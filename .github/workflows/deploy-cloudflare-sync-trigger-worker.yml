@@ -1,0 +1,113 @@
+name: Deploy Cloudflare sync trigger Worker
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "cloudflare/sync-trigger-worker/**"
+      - ".github/workflows/deploy-cloudflare-sync-trigger-worker.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "cloudflare/sync-trigger-worker/**"
+      - ".github/workflows/deploy-cloudflare-sync-trigger-worker.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-sync-trigger-worker-${{ github.event_name == 'pull_request' && github.event.pull_request.number || 'production' }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate Worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: cloudflare/sync-trigger-worker
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - name: Install Worker dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Validate Worker JavaScript
+        run: npm run check
+
+      - name: Run Worker behaviour tests
+        run: npm test
+
+      - name: Validate Wrangler deployment bundle
+        run: npx wrangler deploy --dry-run
+
+  deploy:
+    name: Deploy Worker and cron trigger
+    if: github.event_name != 'pull_request'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: cloudflare/sync-trigger-worker
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      SYNC_TRIGGER_GITHUB_TOKEN: ${{ secrets.SYNC_TRIGGER_GITHUB_TOKEN }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - name: Check required secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID SYNC_TRIGGER_GITHUB_TOKEN; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::Repository secret ${name} is not configured."
+              exit 1
+            fi
+          done
+
+      - name: Install Worker dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Deploy Worker
+        run: npm run deploy
+
+      # The GitHub token lives only as a Worker secret; it is piped on stdin so
+      # it never appears in a command line or log.
+      - name: Provision SYNC_TRIGGER_GITHUB_TOKEN Worker secret
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "${SYNC_TRIGGER_GITHUB_TOKEN}" | npx wrangler secret put SYNC_TRIGGER_GITHUB_TOKEN
+
+      - name: Write deployment summary
+        if: success()
+        shell: bash
+        run: |
+          {
+            echo "### Cloudflare sync trigger Worker"
+            echo
+            echo "- Worker: \`cc-sync-trigger\`"
+            echo "- Source commit: \`${GITHUB_SHA}\`"
+            echo "- Cron: \`0 4,10,16,22 * * *\` UTC (00:00, 06:00, 12:00, 18:00 Singapore)"
+            echo "- Dispatches: \`sync-easystore-customers-hubspot.yml\` for prod and dev"
+            echo "- Worker secret \`SYNC_TRIGGER_GITHUB_TOKEN\` refreshed from the repository secret"
+          } >> "${GITHUB_STEP_SUMMARY}"
