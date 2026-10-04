@@ -2,7 +2,7 @@
 
 ## 1. Purpose
 
-This repository contains the Cardboard Collective storefront theme for
+This repository contains the CCPL storefront theme for
 EasyStore. The theme is designed around four goals:
 
 1. Put commercially important collections near the top of the homepage.

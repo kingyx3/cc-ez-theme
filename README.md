@@ -1,6 +1,6 @@
-# Cardboard Collective EasyStore Theme
+# CCPL EasyStore Theme
 
-Production storefront theme and supporting automation for Cardboard Collective on EasyStore. The repository contains the EasyStore theme, validation/packaging tooling, browser tests, Cloudflare workers, CRM synchronization tooling, and the operational documentation required to release them safely.
+Production storefront theme and supporting automation for CCPL on EasyStore. The repository contains the EasyStore theme, validation/packaging tooling, browser tests, Cloudflare workers, CRM synchronization tooling, and the operational documentation required to release them safely.
 
 ## Production warning
 
