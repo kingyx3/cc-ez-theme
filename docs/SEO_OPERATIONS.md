@@ -38,7 +38,7 @@ Go to **Settings > General** and set the Store Description to:
 
 Go to **Channels > Online Store > Pages > About Us** and make the first paragraph explicit:
 
-> CCPL is a Singapore-based online collectibles retailer operated by CCPL We specialise in authentic sealed Magic: The Gathering products, including booster boxes, bundles and preorders for upcoming sets. We sell online at cardboard.sg and do not operate a retail storefront.
+> CCPL is a Singapore-based online collectibles retailer operated by CCPL. We specialise in authentic sealed Magic: The Gathering products, including booster boxes, bundles and preorders for upcoming sets. We sell online at cardboard.sg and do not operate a retail storefront.
 
 Because the similarly named Orchard Gateway business is causing real customer/search confusion, add this short clarification near the bottom of the About page or in a small FAQ:
 
