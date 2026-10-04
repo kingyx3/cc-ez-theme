@@ -1,6 +1,6 @@
 # Documentation index
 
-This directory is the maintainer knowledge base for the Cardboard Collective EasyStore theme and the production integrations that live in the same repository.
+This directory is the maintainer knowledge base for the CCPL EasyStore theme and the production integrations that live in the same repository.
 
 ## Start here
 

@@ -1,6 +1,6 @@
 # EasyStore admin MCP
 
-General Cardboard Collective admin access for Viktor: **39 reads and 11 mutations** covering products, customers, orders, inventory, settings and promotions. The Worker runs on Cloudflare; setup and deployment run entirely in GitHub Actions.
+General CCPL admin access for Viktor: **39 reads and 11 mutations** covering products, customers, orders, inventory, settings and promotions. The Worker runs on Cloudflare; setup and deployment run entirely in GitHub Actions.
 
 ## Deploy from GitHub
 

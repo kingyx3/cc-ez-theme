@@ -1,7 +1,7 @@
 # SEO operations runbook
 
 This runbook covers the SEO work that lives outside the EasyStore theme repository.
-The storefront brand is **Cardboard Collective**. It is an **online-only Singapore retailer** and is not a physical shop.
+The storefront brand is **CCPL**. It is an **online-only Singapore retailer** and is not a physical shop.
 
 ## 1. EasyStore: make the brand identity unambiguous
 
@@ -12,17 +12,17 @@ The storefront brand is **Cardboard Collective**. It is an **online-only Singapo
 3. Click the **pencil/edit icon** beside the store details.
 4. Set **Store Name** to exactly:
 
-   `Cardboard Collective`
+   `CCPL`
 
 5. Save.
 
-Do not use `Cardboard Collective | Sealed Magic: The Gathering Singapore` as the Store Name. Keep search keywords in page copy and meta descriptions, not in the business/entity name.
+Do not use `CCPL | Sealed Magic: The Gathering Singapore` as the Store Name. Keep search keywords in page copy and meta descriptions, not in the business/entity name.
 
 ### Store description
 
 Go to **Settings > General** and set the Store Description to:
 
-> Cardboard Collective is a Singapore-based online store for authentic sealed Magic: The Gathering products, booster boxes, bundles and preorders.
+> CCPL is a Singapore-based online store for authentic sealed Magic: The Gathering products, booster boxes, bundles and preorders.
 
 ### Homepage meta description
 
@@ -30,7 +30,7 @@ Go to **Settings > General** and set the Store Description to:
 2. Scroll to **Edit website SEO**.
 3. Set the meta description to:
 
-> Shop authentic sealed Magic: The Gathering products, booster boxes, bundles and preorders online in Singapore at Cardboard Collective.
+> Shop authentic sealed Magic: The Gathering products, booster boxes, bundles and preorders online in Singapore at CCPL.
 
 4. Save.
 
@@ -38,11 +38,11 @@ Go to **Settings > General** and set the Store Description to:
 
 Go to **Channels > Online Store > Pages > About Us** and make the first paragraph explicit:
 
-> Cardboard Collective is a Singapore-based online collectibles retailer operated by Cardboard Collective Pte. Ltd. We specialise in authentic sealed Magic: The Gathering products, including booster boxes, bundles and preorders for upcoming sets. We sell online at cardboard.sg and do not operate a retail storefront.
+> CCPL is a Singapore-based online collectibles retailer operated by CCPL We specialise in authentic sealed Magic: The Gathering products, including booster boxes, bundles and preorders for upcoming sets. We sell online at cardboard.sg and do not operate a retail storefront.
 
 Because the similarly named Orchard Gateway business is causing real customer/search confusion, add this short clarification near the bottom of the About page or in a small FAQ:
 
-> Cardboard Collective is an independent online retailer and is not affiliated with Cardboard Collectible or the Orchard Gateway store.
+> CCPL is an independent online retailer and is not affiliated with Cardboard Collectible or the Orchard Gateway store.
 
 Do not repeat the other business name across the homepage, product pages or site-wide footer.
 
@@ -58,11 +58,11 @@ Collection: `/collections/reality-fracture`
 
 Lead the visible description with:
 
-> Shop Magic: The Gathering Reality Fracture sealed products and preorders online in Singapore from Cardboard Collective. Browse Collector Boosters, Play Boosters, Bundles, Prerelease Kits, Commander products and other sealed releases, with product availability and expected arrival information shown on each listing.
+> Shop Magic: The Gathering Reality Fracture sealed products and preorders online in Singapore from CCPL. Browse Collector Boosters, Play Boosters, Bundles, Prerelease Kits, Commander products and other sealed releases, with product availability and expected arrival information shown on each listing.
 
 Meta description:
 
-> Preorder MTG Reality Fracture sealed products in Singapore at Cardboard Collective, including Collector Boosters, Play Boosters, Bundles and kits.
+> Preorder MTG Reality Fracture sealed products in Singapore at CCPL, including Collector Boosters, Play Boosters, Bundles and kits.
 
 ### The Hobbit
 
@@ -70,11 +70,11 @@ Collection: `/collections/the-hobbit`
 
 Lead the visible description with:
 
-> Shop Magic: The Gathering The Hobbit sealed products online in Singapore from Cardboard Collective. Browse Collector Boosters, Play Boosters, Bundles, Scene Boxes, Prerelease Kits and other sealed The Hobbit releases.
+> Shop Magic: The Gathering The Hobbit sealed products online in Singapore from CCPL. Browse Collector Boosters, Play Boosters, Bundles, Scene Boxes, Prerelease Kits and other sealed The Hobbit releases.
 
 Meta description:
 
-> Shop MTG The Hobbit sealed products in Singapore at Cardboard Collective, including Collector Boosters, Play Boosters, Bundles and Scene Boxes.
+> Shop MTG The Hobbit sealed products in Singapore at CCPL, including Collector Boosters, Play Boosters, Bundles and Scene Boxes.
 
 ### Marvel Super Heroes
 
@@ -82,11 +82,11 @@ Collection: `/collections/marvel-super-heroes`
 
 Lead the visible description with:
 
-> Shop Magic: The Gathering Marvel Super Heroes sealed products online in Singapore from Cardboard Collective. Browse booster boxes, bundles, prerelease products, Scene Boxes and other sealed Marvel Super Heroes releases.
+> Shop Magic: The Gathering Marvel Super Heroes sealed products online in Singapore from CCPL. Browse booster boxes, bundles, prerelease products, Scene Boxes and other sealed Marvel Super Heroes releases.
 
 Meta description:
 
-> Shop MTG Marvel Super Heroes sealed products in Singapore at Cardboard Collective, including booster boxes, bundles, prerelease kits and Scene Boxes.
+> Shop MTG Marvel Super Heroes sealed products in Singapore at CCPL, including booster boxes, bundles, prerelease kits and Scene Boxes.
 
 ### Navigation
 
@@ -110,7 +110,7 @@ For important products in each current set:
 
 Example product meta description:
 
-> Preorder the MTG Reality Fracture Collector Booster Box in Singapore from Cardboard Collective. Authentic sealed English product with local fulfilment.
+> Preorder the MTG Reality Fracture Collector Booster Box in Singapore from CCPL. Authentic sealed English product with local fulfilment.
 
 ## 4. Google Search Console
 
@@ -136,7 +136,7 @@ Then:
    - `https://cardboard.sg/collections/the-hobbit`
    - `https://cardboard.sg/collections/marvel-super-heroes`
 4. In **Performance > Search results**, compare the last 28 days against the previous period and watch queries containing:
-   - `cardboard collective`
+   - `ccpl`
    - `reality fracture`
    - `the hobbit`
    - `marvel super heroes`
@@ -154,7 +154,7 @@ For an online-only store, use online product listings and do not configure local
 4. Return to EasyStore Google Shopping and use **Fetch Now** to send the product feed.
 5. In Merchant Center confirm **Free listings** are enabled under the available marketing methods.
 6. Review **Products / Needs attention** and fix missing GTIN, brand, image, availability, shipping or policy issues.
-7. Confirm the business/display name is exactly **Cardboard Collective**.
+7. Confirm the business/display name is exactly **CCPL**.
 8. Do not enable local inventory/free local listings while the business has no customer-facing retail location.
 
 ## 6. Bing Webmaster Tools
@@ -179,7 +179,7 @@ For now, use Bing URL Inspection / URL Submission after important release-page u
 
 Keep the same entity name on every profile that represents the store:
 
-- Display name: **Cardboard Collective**
+- Display name: **CCPL**
 - Website: `https://cardboard.sg/`
 - Description: Singapore-based online MTG / collectibles retailer
 
@@ -188,7 +188,7 @@ The theme currently declares the official Facebook and Carousell profiles in Org
 ## 8. What not to do
 
 - Do not create a Google Business Profile for a nonexistent customer-facing storefront.
-- Do not associate Cardboard Collective with the Orchard Gateway address.
+- Do not associate CCPL with the Orchard Gateway address.
 - Do not report the unrelated Cardboard Collectible listing as fake solely because the names are similar.
 - Do not keyword-stuff the Store Name or Organization name.
 - Do not change established collection/product URLs just to insert keywords.
