@@ -535,15 +535,27 @@ class StorefrontConfigurationTests(unittest.TestCase):
         header = (THEME_ROOT / "sections" / "header.liquid").read_text(
             encoding="utf-8"
         )
-        browse_snippet = (
-            THEME_ROOT / "snippets" / "navigation-browse.liquid"
-        )
+        browse_snippet = THEME_ROOT / "snippets" / "navigation-browse.liquid"
+        top_links_snippet = THEME_ROOT / "snippets" / "navigation-top-links.liquid"
         self.assertTrue(browse_snippet.exists())
+        self.assertTrue(top_links_snippet.exists())
         browse = browse_snippet.read_text(encoding="utf-8")
+        top_links = top_links_snippet.read_text(encoding="utf-8")
+
         self.assertEqual(header.count("navigation-browse"), 2)
+        self.assertEqual(header.count("navigation-top-links"), 2)
         self.assertEqual(header.count("<span>Browse</span>"), 2)
         self.assertIn('class="header__nav-item--browse"', header)
         self.assertIn('class="menu-drawer__nav-item--browse"', header)
+        self.assertIn(
+            "{% include 'navigation-top-links', navigation_mode: 'mobile' %}",
+            header,
+        )
+        self.assertIn(
+            "{% include 'navigation-top-links', navigation_mode: 'desktop' %}",
+            header,
+        )
+
         self.assertIn("contents.catalog.links", browse)
         self.assertIn("browse_link.links", browse)
         self.assertIn("browse_link.children", browse)
@@ -562,82 +574,45 @@ class StorefrontConfigurationTests(unittest.TestCase):
             )
         )
         self.assertNotIn("{% continue %}", header)
-        self.assertEqual(
-            header.count('href="/collections/10-10-sale"'), 2
+
+        expected_shortcuts = (
+            ("/collections/10-10-sale", "10.10 sale"),
+            ("/collections/star-trek", "Star Trek"),
+            ("/collections/reality-fracture", "Reality Fracture"),
+            ("/collections/the-hobbit", "Hobbit"),
+            ("/collections/secret-lair", "Secret Lair"),
+            ("/collections/pokemon", "Pokemon TCG"),
+            ("/pages/about-us", "About Us"),
         )
-        self.assertEqual(header.count(">10.10 sale</a>"), 2)
+        shortcut_positions = []
+        for href, label in expected_shortcuts:
+            href_markup = f'href="{href}"'
+            self.assertEqual(top_links.count(href_markup), 1)
+            self.assertEqual(top_links.count(f">{label}</a>"), 1)
+            self.assertNotIn(href_markup, header)
+            shortcut_positions.append(top_links.index(href_markup))
+        self.assertEqual(shortcut_positions, sorted(shortcut_positions))
         self.assertNotIn("Crack-a-Pack", header)
+        self.assertNotIn("Crack-a-Pack", top_links)
         self.assertEqual(
-            header.count('href="/collections/reality-fracture"'), 2
-        )
-        self.assertEqual(header.count('href="/collections/star-trek"'), 2)
-        self.assertEqual(header.count('href="/collections/the-hobbit"'), 2)
-        self.assertEqual(header.count('href="/collections/secret-lair"'), 2)
-        self.assertEqual(header.count('href="/collections/pokemon"'), 2)
-        self.assertEqual(
-            header.count('href="/collections/marvel-super-heroes"'), 0
+            top_links.count('href="/collections/marvel-super-heroes"'), 0
         )
         self.assertEqual(
-            header.count('href="/collections/secrets-of-strixhaven"'), 0
+            top_links.count('href="/collections/secrets-of-strixhaven"'), 0
         )
-        self.assertEqual(header.count('href="/pages/about-us"'), 2)
+        self.assertIn("single source of truth", top_links)
+        self.assertIn("navigation_mode == 'mobile'", top_links)
+        self.assertIn("menu-drawer__menu-item", top_links)
+        self.assertIn("header__menu-item", top_links)
+        self.assertIn('class="header__nav-item--about"', top_links)
 
         first_browse = header.index("navigation-browse")
-        first_sale = header.index(
-            'href="/collections/10-10-sale"'
-        )
-        first_star_trek = header.index(
-            'href="/collections/star-trek"', first_sale
-        )
-        first_reality_fracture = header.index(
-            'href="/collections/reality-fracture"', first_star_trek
-        )
-        first_hobbit = header.index(
-            'href="/collections/the-hobbit"', first_reality_fracture
-        )
-        first_secret_lair = header.index(
-            'href="/collections/secret-lair"', first_hobbit
-        )
-        first_pokemon = header.index(
-            'href="/collections/pokemon"', first_secret_lair
-        )
-        first_about = header.index('href="/pages/about-us"', first_pokemon)
-        self.assertLess(first_browse, first_sale)
-        self.assertLess(first_sale, first_star_trek)
-        self.assertLess(first_star_trek, first_reality_fracture)
-        self.assertLess(first_reality_fracture, first_hobbit)
-        self.assertLess(first_hobbit, first_secret_lair)
-        self.assertLess(first_secret_lair, first_pokemon)
-        self.assertLess(first_pokemon, first_about)
-
+        first_shortcuts = header.index("navigation-top-links")
         second_browse = header.index("navigation-browse", first_browse + 1)
-        second_sale = header.index(
-            'href="/collections/10-10-sale"', first_about
-        )
-        second_star_trek = header.index(
-            'href="/collections/star-trek"', second_sale
-        )
-        second_reality_fracture = header.index(
-            'href="/collections/reality-fracture"', second_star_trek
-        )
-        second_hobbit = header.index(
-            'href="/collections/the-hobbit"', second_reality_fracture
-        )
-        second_secret_lair = header.index(
-            'href="/collections/secret-lair"', second_hobbit
-        )
-        second_pokemon = header.index(
-            'href="/collections/pokemon"', second_secret_lair
-        )
-        second_about = header.index('href="/pages/about-us"', second_pokemon)
-        self.assertLess(second_browse, second_sale)
-        self.assertLess(second_sale, second_star_trek)
-        self.assertLess(second_star_trek, second_reality_fracture)
-        self.assertLess(second_reality_fracture, second_hobbit)
-        self.assertLess(second_hobbit, second_secret_lair)
-        self.assertLess(second_secret_lair, second_pokemon)
-        self.assertLess(second_pokemon, second_about)
-        self.assertIn('class="header__nav-item--about"', header)
+        second_shortcuts = header.index("navigation-top-links", first_shortcuts + 1)
+        self.assertLess(first_browse, first_shortcuts)
+        self.assertLess(first_shortcuts, second_browse)
+        self.assertLess(second_browse, second_shortcuts)
         self.assertEqual(self.sections["header"]["settings"]["logo_max_width"], 90)
 
         stylesheet = (THEME_ROOT / "assets" / "conversion-theme.css").read_text(
