@@ -13,7 +13,7 @@ Connect an MCP client to the deployed Worker URL ending in `/mcp`, using `Author
 
 The read password exposes the first three tools. The writer password also exposes the write tool when the deployment's **enable_writes** setting is on. Listing/describing operations respects the same access rules. Automatic and manual deployments enable writes by default. A manual run with **enable_writes** unchecked temporarily disables them until the next deployment. Refresh the client's tools after changing this setting.
 
-The registry currently contains 39 reads across products, customers, orders, collections, inventory, locations, promotions, vouchers, memberships, settings and themes. Its 11 mutations create/update products, customers and discounts; enable/disable discounts; and delete discounts/products. The available list and schemas come from `src/operations.js` and `src/schemas.js`.
+The registry currently contains 39 reads across products, customers, orders, collections, inventory, locations, promotions, vouchers, memberships, settings and themes. Its 12 mutations create/update products, customers and discounts; reorder products; enable/disable discounts; and delete discounts/products. The available list and schemas come from `src/operations.js` and `src/schemas.js`.
 
 ## Example calls
 
@@ -48,6 +48,14 @@ With writer access enabled, inspect `update_customer` first, then update its not
 ```json
 {"name":"easystore_admin_write","arguments":{"operation_id":"update_customer","path":{"customer_id":"123"},"body":{"note":"Follow up next week"},"idempotency_key":"customer_note_intent_001"}}
 ```
+
+To change product display positioning, first read the complete product order from `list_products` using the same position sort used in EasyStore Admin. Build the complete desired top-to-bottom product ID list, then call:
+
+```json
+{"name":"easystore_admin_write","arguments":{"operation_id":"update_product_positions","body":{"product_ids":[17473183,17067738,17447825]},"idempotency_key":"product_position_intent_001"}}
+```
+
+`update_product_positions` sends `PATCH /admin/v2/store/products/positions`. Its `product_ids` array is the full display order, not a partial move instruction or a single product `position` value. Preserve every product ID exactly once and change only the relative ordering you intend.
 
 Configure approval before mutations in Viktor. The Worker authenticates the writer but does not enforce human approval. The `idempotency_key` identifies one intended request: use 16–128 letters, digits, underscores or hyphens, and reuse it only for that same request. EasyStore's deduplication guarantees are unverified; the Worker never retries automatically. After a timeout, inspect the resource before retrying.
 
