@@ -278,6 +278,24 @@
     return true;
   };
 
+  // The Liquid cart index keys lines by handle or SKU, which EasyStore does not
+  // expose on every cart line. The page product's variant ids are, so its count
+  // never falls below what the cart holds by variant (see customer-order-limits.js).
+  const reconcilePageCart = () => {
+    const page = window.customerOrderLimitsV2?.pageProduct || {};
+    const variantCart = window.purchaseCartQuantities || {};
+    const inCart = (Array.isArray(page.variantIds) ? page.variantIds : [])
+      .reduce((total, id) => total + qty(variantCart[String(id).trim()]), 0);
+    if (inCart <= 0) return;
+    [normalize(page.handle), normalize(page.sku)].forEach((key) => {
+      const rule = key ? rules[key] : null;
+      if (!rule || qty(rule.cartQuantity) >= inCart) return;
+      rule.cartQuantity = inCart;
+      rule.remaining = Math.max(0, qty(rule.maximum) - inCart);
+    });
+  };
+  reconcilePageCart();
+
   window.PerOrderLimits = {
     ruleFor,
     productHandle,

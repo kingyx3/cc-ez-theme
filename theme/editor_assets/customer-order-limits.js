@@ -1230,6 +1230,28 @@
     showCartError,
   };
 
+  // The Liquid cart pass matches cart lines on handle or SKU, which EasyStore
+  // does not expose on every cart line, so it can count 0 while the cart holds
+  // the item. Buy Now then measured a full allowance, added another unit and
+  // went straight to checkout over the limit. Cart quantities keyed by variant
+  // id are always rendered, so the page product's count never falls below them.
+  const reconcilePageCart = () => {
+    const variantCart = window.purchaseCartQuantities || {};
+    const inCart = Array.from(pageVariantIds)
+      .reduce((total, id) => total + quantity(variantCart[id], 0), 0);
+    if (inCart <= 0) return;
+
+    const totals = currentCartTotals();
+    let changed = false;
+    [pageProductHandle, pageProductSku].forEach((key) => {
+      if (!key || !hasOwn(rules, key) || totals[key] >= inCart) return;
+      totals[key] = inCart;
+      changed = true;
+    });
+    if (changed) commitCartTotals(totals);
+  };
+
+  reconcilePageCart();
   decorateCartForm(document.getElementById('cart-form'));
   document.dispatchEvent(new CustomEvent('customer-order-limits:ready'));
 
