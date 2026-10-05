@@ -19,6 +19,22 @@ Key client conventions:
 - Bulk discount enable/disable uses JSON `discount_ids`; bulk delete uses query `discount_ids`. These are comma-separated strings.
 - Product update uses PUT `/admin/v2/store/products/{product_id}` with matching body `id`.
 
+## Product positioning observation
+
+EasyStore Admin network traffic observed on **2026-10-05** while manually reordering products used:
+
+```text
+PATCH https://api.easystore.co/admin/v2/store/products/positions
+```
+
+with a JSON body shaped as:
+
+```json
+{"product_ids":[17473183,17067738,17447825]}
+```
+
+The `product_ids` array represents the full display order, top item first. This is distinct from PUT `/admin/v2/store/products/{product_id}`: changing a product's ordinary `position` field through that product endpoint returned HTTP 200 in the observed workflow but did not change its display position.
+
 Existing checkout/theme reads also have repository evidence in `scripts/easystore_admin_checkouts.py` and `docs/EASYSTORE_API_DEPLOYMENT.md`.
 
-Frontend source confirms observed client behavior, not complete server-side schemas, account entitlements, authorization scopes, live compatibility or idempotency guarantees. Some GET routes have side effects and are excluded from read tools. Nested payload schemas are partial; server business validation can still reject requests. Lazy/computed/server-only routes can be absent. No live store mutations were performed for implementation or tests; the deployment workflow checks three reads without logging records.
+Frontend source and observed network traffic confirm client behavior, not complete server-side schemas, account entitlements, authorization scopes, live compatibility or idempotency guarantees. Some GET routes have side effects and are excluded from read tools. Nested payload schemas are partial; server business validation can still reject requests. Lazy/computed/server-only routes can be absent. No live store mutations were performed for implementation or tests; the deployment workflow checks three reads without logging records.
