@@ -165,4 +165,25 @@ export default [
     bodySchema: productUpdate,
     pathSchema: pathSchema("product_id"),
   },
+  {
+    id: "update_product_positions",
+    method: "PATCH",
+    path: "/admin/v2/store/products/positions",
+    description: "Replace the full product display order. product_ids must be the complete desired top-to-bottom order; inspect list_products sorted by position before changing it.",
+    enabled: true,
+    source: "ADMIN_API_EVIDENCE.md",
+    bodySchema: {
+      type: "object",
+      properties: {
+        product_ids: {
+          type: "array",
+          minItems: 1,
+          uniqueItems: true,
+          items: { type: "integer", minimum: 1 },
+        },
+      },
+      required: ["product_ids"],
+      additionalProperties: false,
+    },
+  },
 ];

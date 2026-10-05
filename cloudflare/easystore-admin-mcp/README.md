@@ -1,6 +1,6 @@
 # EasyStore admin MCP
 
-General CCPL admin access for Viktor: **39 reads and 11 mutations** covering products, customers, orders, inventory, settings and promotions. The Worker runs on Cloudflare; setup and deployment run entirely in GitHub Actions.
+General CCPL admin access for Viktor: **39 reads and 12 mutations** covering products, customers, orders, inventory, settings and promotions. The Worker runs on Cloudflare; setup and deployment run entirely in GitHub Actions.
 
 ## Deploy from GitHub
 
@@ -33,13 +33,13 @@ Use **Integrations → Add Custom → MCP Server**, enter the URL, and supply th
 
 Example: `{"operation_id":"list_products","query":{"page":1,"limit":20}}`.
 
-To manage promotions and other mutations, use the writer password in Viktor. The read password always provides read-only access. Configure approval before mutations in Viktor; the Worker does not enforce human approval. Every mutation requires a stable `idempotency_key` of 16–128 letters/digits/underscores/hyphens. Requests are never automatically retried, and EasyStore's deduplication guarantees are unverified. Inspect the resource after a timeout before retrying.
+To manage promotions, product positioning and other mutations, use the writer password in Viktor. Product positioning is exposed as `update_product_positions`, which sends the observed admin `PATCH /admin/v2/store/products/positions` request with the complete desired product ID order. The read password always provides read-only access. Configure approval before mutations in Viktor; the Worker does not enforce human approval. Every mutation requires a stable `idempotency_key` of 16–128 letters/digits/underscores/hyphens. Requests are never automatically retried, and EasyStore's deduplication guarantees are unverified. Inspect the resource after a timeout before retrying.
 
 ## Update APIs with an AI harness
 
 Edit `src/operations.js` for explicit methods, routes and operation IDs; edit `src/schemas.js` for shared argument schemas. Preserve closed top-level schemas, correct side-effect classification and store routing. Submit a PR; GitHub Actions checks and tests it, then automatically deploys the changes after merge. There is no discovery workflow, recorder, importer or runtime catalog tool.
 
-The [reference inventory of 1,019 observed method/path pairs](https://github.com/kingyx3/cc-ez-theme/blob/9eff3928833aecb2e265dff6176caa40ccf5e5b1/cloudflare/easystore-admin-mcp/src/admin-endpoints.json) remains available as a fixed research snapshot. It is not bundled into the Worker. Source evidence and limitations are in [ADMIN_API_EVIDENCE.md](ADMIN_API_EVIDENCE.md). Only the 50 explicit operations are callable; frontend-derived nested schemas are partial and do not prove complete server validation or live compatibility. Multipart/binary APIs need dedicated adapters.
+The [reference inventory of 1,019 observed method/path pairs](https://github.com/kingyx3/cc-ez-theme/blob/9eff3928833aecb2e265dff6176caa40ccf5e5b1/cloudflare/easystore-admin-mcp/src/admin-endpoints.json) remains available as a fixed research snapshot. It is not bundled into the Worker. Source evidence and limitations are in [ADMIN_API_EVIDENCE.md](ADMIN_API_EVIDENCE.md). Only the 51 explicit operations are callable; frontend-derived nested schemas are partial and do not prove complete server validation or live compatibility. Multipart/binary APIs need dedicated adapters.
 
 ## Operational controls
 
