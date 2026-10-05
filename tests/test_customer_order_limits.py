@@ -40,6 +40,7 @@ class CustomerOrderLimitTests(unittest.TestCase):
             ("late-night-crackers-ep4-1", 4),
             ("late-night-crackers-ep4-2", 1),
             ("1010-drop-01-free-play-booster", 1),
+            ("1010-drop-01", 1),
         )
         rows = configured_rows(config)
         self.assertEqual([(handle, maximum) for handle, maximum, _ in rows], list(expected))
@@ -76,7 +77,7 @@ class CustomerOrderLimitTests(unittest.TestCase):
         for handle in unlimited:
             self.assertNotIn(handle, config)
 
-        self.assertEqual(len(rows), 19)
+        self.assertEqual(len(rows), 20)
         self.assertIn("normalized to lowercase", config)
         self.assertIn("Delete the row to leave a product", config)
         self.assertNotIn("split:", config)
