@@ -46,6 +46,25 @@ class BuyNowPurchaseLimitCheckoutTests(unittest.TestCase):
             helper,
         )
 
+    def test_page_product_cart_is_counted_by_variant_id(self) -> None:
+        # The Liquid limit passes count cart lines by handle or SKU, which a cart
+        # line may not expose. Counting 0 let Buy Now add a unit past the limit
+        # and go straight to checkout; e2e/buy-now-cart-limit.spec.js drives it.
+        for relative in ("customer-order-limits.js", "per-order-limits.js"):
+            for folder in ("assets", "editor_assets"):
+                module = self.read(f"{folder}/{relative}")
+                self.assertIn("window.purchaseCartQuantities || {}", module)
+                self.assertIn("reconcilePageCart();", module)
+
+        customer = self.read("assets/customer-order-limits.js")
+        self.assertLess(
+            customer.index("reconcilePageCart();"),
+            customer.index("new CustomEvent('customer-order-limits:ready')"),
+        )
+
+        workflow = (ROOT / ".github/workflows/e2e-theme.yml").read_text(encoding="utf-8")
+        self.assertIn("e2e/buy-now-cart-limit.spec.js", workflow)
+
     def test_helper_loads_before_customer_order_limit_capture_handler(self) -> None:
         currencies = self.read("snippets/currencies.liquid")
         helper_position = currencies.index("buy-now-limit-checkout.js")
