@@ -91,3 +91,20 @@ test('promotion create uses a flat editor payload with defaults, explicit target
 test('product update rejects mismatched path/body resource IDs before an upstream write',()=>{
   assert.throws(()=>resolveOperation(makeRegistry(),{operation_id:'update_product',path:{product_id:'100'},body:{id:200}},true),/must match/);
 });
+test('product positioning uses the admin PATCH endpoint with an ordered unique id list',async()=>{
+  const actual=makeRegistry();
+  let calls=0;
+  const args={operation_id:'update_product_positions',body:{product_ids:[17473183,17067738,17447825]},idempotency_key:'product_position_intent_001'};
+  await execute(env,actual,args,{write:true,audit:noAudit,fetcher:async(url,init)=>{
+    calls++;
+    assert.equal(url.pathname,'/admin/v2/store/products/positions');
+    assert.equal(init.method,'PATCH');
+    assert.deepEqual(JSON.parse(init.body),{product_ids:[17473183,17067738,17447825]});
+    return Response.json({data:{updated:true}});
+  }});
+  assert.equal(calls,1);
+  for (const product_ids of [[],[17473183,17473183],[17473183,'17067738']]) {
+    await assert.rejects(execute(env,actual,{...args,body:{product_ids}},{write:true,audit:noAudit,fetcher:async()=>{calls++;}}),/schema/);
+  }
+  assert.equal(calls,1);
+});
