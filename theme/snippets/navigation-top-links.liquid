@@ -1,0 +1,19 @@
+{% comment %}
+  Fixed top-navigation shortcuts shared by desktop and mobile.
+
+  This file is the single source of truth for shortcut labels, URLs, and order.
+  header.liquid includes it once for each navigation surface and only passes the
+  rendering mode so the appropriate link classes can be applied.
+{% endcomment %}
+{% assign top_nav_shortcut_link_class = 'header__menu-item list-menu__item link link--text focus-inset' %}
+{% if navigation_mode == 'mobile' %}
+  {% assign top_nav_shortcut_link_class = 'menu-drawer__menu-item list-menu__item link link--text focus-inset' %}
+{% endif %}
+<li><a href="/collections/10-10-sale" class="{{ top_nav_shortcut_link_class }}">10.10 sale</a></li>
+<li><a href="/collections/star-trek" class="{{ top_nav_shortcut_link_class }}">Star Trek</a></li>
+<li><a href="/collections/reality-fracture" class="{{ top_nav_shortcut_link_class }}">Reality Fracture</a></li>
+<li><a href="/collections/the-hobbit" class="{{ top_nav_shortcut_link_class }}">Hobbit</a></li>
+<li><a href="/collections/secret-lair" class="{{ top_nav_shortcut_link_class }}">Secret Lair</a></li>
+<li><a href="/collections/pokemon" class="{{ top_nav_shortcut_link_class }}">Pokemon TCG</a></li>
+<li{% if navigation_mode != 'mobile' %} class="header__nav-item--about"{% endif %}><a href="/pages/about-us" class="{{ top_nav_shortcut_link_class }}">About Us</a></li>
+{% assign top_nav_shortcut_link_class = '' %}
