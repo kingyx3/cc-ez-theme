@@ -563,8 +563,10 @@ class StorefrontConfigurationTests(unittest.TestCase):
         )
         self.assertNotIn("{% continue %}", header)
         self.assertEqual(
-            header.count('href="/collections/late-night-crackers"'), 2
+            header.count('href="/collections/10-10-sale"'), 2
         )
+        self.assertEqual(header.count(">10.10 sale</a>"), 2)
+        self.assertNotIn("Crack-a-Pack", header)
         self.assertEqual(
             header.count('href="/collections/reality-fracture"'), 2
         )
@@ -581,11 +583,11 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertEqual(header.count('href="/pages/about-us"'), 2)
 
         first_browse = header.index("navigation-browse")
-        first_crackers = header.index(
-            'href="/collections/late-night-crackers"'
+        first_sale = header.index(
+            'href="/collections/10-10-sale"'
         )
         first_star_trek = header.index(
-            'href="/collections/star-trek"', first_crackers
+            'href="/collections/star-trek"', first_sale
         )
         first_reality_fracture = header.index(
             'href="/collections/reality-fracture"', first_star_trek
@@ -600,8 +602,8 @@ class StorefrontConfigurationTests(unittest.TestCase):
             'href="/collections/pokemon"', first_secret_lair
         )
         first_about = header.index('href="/pages/about-us"', first_pokemon)
-        self.assertLess(first_browse, first_crackers)
-        self.assertLess(first_crackers, first_star_trek)
+        self.assertLess(first_browse, first_sale)
+        self.assertLess(first_sale, first_star_trek)
         self.assertLess(first_star_trek, first_reality_fracture)
         self.assertLess(first_reality_fracture, first_hobbit)
         self.assertLess(first_hobbit, first_secret_lair)
@@ -609,11 +611,11 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertLess(first_pokemon, first_about)
 
         second_browse = header.index("navigation-browse", first_browse + 1)
-        second_crackers = header.index(
-            'href="/collections/late-night-crackers"', first_about
+        second_sale = header.index(
+            'href="/collections/10-10-sale"', first_about
         )
         second_star_trek = header.index(
-            'href="/collections/star-trek"', second_crackers
+            'href="/collections/star-trek"', second_sale
         )
         second_reality_fracture = header.index(
             'href="/collections/reality-fracture"', second_star_trek
@@ -628,8 +630,8 @@ class StorefrontConfigurationTests(unittest.TestCase):
             'href="/collections/pokemon"', second_secret_lair
         )
         second_about = header.index('href="/pages/about-us"', second_pokemon)
-        self.assertLess(second_browse, second_crackers)
-        self.assertLess(second_crackers, second_star_trek)
+        self.assertLess(second_browse, second_sale)
+        self.assertLess(second_sale, second_star_trek)
         self.assertLess(second_star_trek, second_reality_fracture)
         self.assertLess(second_reality_fracture, second_hobbit)
         self.assertLess(second_hobbit, second_secret_lair)
