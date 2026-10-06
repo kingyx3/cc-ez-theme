@@ -1,4 +1,4 @@
-import { pathSchema, readQuery, checkoutQuery, discountCreate, discountUpdate, customerCreate, customerUpdate, productCreate, productUpdate } from "./schemas.js";
+import { pathSchema, readQuery, checkoutQuery, discountCreate, discountUpdate, customerCreate, customerUpdate, productCreateUnpublished, productUpdate } from "./schemas.js";
 
 const frontend = "https://admin.easystore.co/assets/index-WRCYpubE.js";
 const read = (id, path, description, parameter) => ({
@@ -150,16 +150,16 @@ export default [
     id: "create_product",
     method: "POST",
     path: "/admin/v2/store/products",
-    description: "Create a product using the flat admin editor payload. Explicitly choose publication state, tax, shipping, inventory, and variants. Product update id in body must match path product_id.",
+    description: "Create an unpublished product using the flat admin editor payload. is_published must be 0; publishing is not permitted. Explicitly choose tax, shipping, inventory, and variants.",
     enabled: true,
     source: "https://admin.easystore.co/assets/index-C_eQG1LX.js; https://admin.easystore.co/assets/index-WRCYpubE.js",
-    bodySchema: productCreate,
+    bodySchema: productCreateUnpublished,
   },
   {
     id: "update_product",
     method: "PUT",
     path: "/admin/v2/store/products/{product_id}",
-    description: "Update a product using the flat admin editor payload. Explicitly choose publication state, tax, shipping, inventory, and variants. Product update id in body must match path product_id.",
+    description: "Update a product using the flat admin editor payload. Set is_published to 0 to unpublish; a non-zero is_published is accepted only when it matches the product's current state, so unpublished products cannot be published. Explicitly choose tax, shipping, inventory, and variants. Product update id in body must match path product_id.",
     enabled: true,
     source: "https://admin.easystore.co/assets/index-C_eQG1LX.js; https://admin.easystore.co/assets/index-WRCYpubE.js",
     bodySchema: productUpdate,

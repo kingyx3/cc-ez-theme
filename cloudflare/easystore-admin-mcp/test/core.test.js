@@ -108,3 +108,35 @@ test('product positioning uses the admin PATCH endpoint with an ordered unique i
   }
   assert.equal(calls,1);
 });
+test('product create is unpublished-only and cannot set a publication date',async()=>{
+  const body={title:'New card',taxable:false,shipping_required:true,inventory_management:'easystore',is_published:0,variants:[{sku:'SKU-1',price:10,taxable:false,shipping_required:true}]};
+  let calls=0;
+  const fetcher=async(url,init)=>{calls++;assert.equal(init.method,'POST');assert.equal(JSON.parse(init.body).is_published,0);return Response.json({data:{product:{id:1}}});};
+  await execute(env,makeRegistry(),{operation_id:'create_product',body,idempotency_key:'create_product_intent_1'},{write:true,audit:noAudit,fetcher});
+  assert.equal(calls,1);
+  for (const extra of [{is_published:1},{is_published:2},{published_at:'2026-10-06T00:00:00Z'}]) {
+    await assert.rejects(execute(env,makeRegistry(),{operation_id:'create_product',body:{...body,...extra},idempotency_key:'create_product_intent_1'},{write:true,audit:noAudit,fetcher}),/schema/);
+  }
+  assert.equal(calls,1);
+});
+test('product update can unpublish but never publish',async()=>{
+  const body={id:100,title:'Card',taxable:false,shipping_required:true,inventory_management:'easystore',variants:[{sku:'SKU-1',price:10,taxable:false,shipping_required:true}]};
+  const run=(is_published,current)=>{
+    const calls=[];
+    const fetcher=async(url,init)=>{
+      calls.push(init.method);
+      assert.equal(url.pathname,'/admin/v2/store/products/100');
+      if (init.method==='GET') { assert.equal(init.headers['idempotency-key'],undefined); return current instanceof Response?current:Response.json(current); }
+      return Response.json({data:{product:{id:100}}});
+    };
+    return {calls,promise:execute(env,makeRegistry(),{operation_id:'update_product',path:{product_id:'100'},body:{...body,is_published},idempotency_key:'update_product_intent_1'},{write:true,audit:noAudit,fetcher})};
+  };
+  let r=run(0,null); await r.promise; assert.deepEqual(r.calls,['PUT']);
+  r=run(1,{data:{product:{id:100,is_published:1}}}); await r.promise; assert.deepEqual(r.calls,['GET','PUT']);
+  r=run(1,{product:{id:100,published_at:'2026-01-01T00:00:00Z'}}); await r.promise; assert.deepEqual(r.calls,['GET','PUT']);
+  for (const [value,current] of [[1,{data:{product:{id:100,is_published:0}}}],[1,{product:{id:100,published_at:null}}],[2,{data:{product:{id:100,is_published:1}}}],[1,{data:{product:{id:100}}}],[1,new Response('nope',{status:500})]]) {
+    r=run(value,current);
+    await assert.rejects(r.promise,e=>e.code==='PUBLISH_NOT_PERMITTED');
+    assert.deepEqual(r.calls,['GET']);
+  }
+});

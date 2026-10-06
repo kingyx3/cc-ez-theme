@@ -173,4 +173,8 @@ export const discountUpdate = { ...discountCreate, properties: { ...discountCrea
 const { required: customerRequired, ...customerPartial } = customerCreate;
 export const customerUpdate = { ...customerPartial, minProperties: 1 };
 
+// New products are always created unpublished; the worker has no right to publish them.
+const { published_at, published_timestamp, ...productCreateProperties } = productCreate.properties;
+export const productCreateUnpublished = { ...productCreate, properties: { ...productCreateProperties, is_published: { type: "integer", enum: [0] } } };
+
 export const productUpdate = { ...productCreate, required: [...productCreate.required, "id"] };
