@@ -28,6 +28,31 @@ export function redact(value, secrets = []) {
   if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k,v]) => [k, /^(authorization|cookie|set-cookie|password|access_token|refresh_token|admin_token|api_key)$/i.test(k) ? '[REDACTED]' : redact(v, secrets)]));
   return value;
 }
+// Publication state reported by a product read, or null when it cannot be determined.
+export function publicationState(data) {
+  const product = data?.data?.product ?? data?.product ?? data?.data ?? data;
+  if (!product || typeof product !== 'object') return null;
+  if (product.is_published !== undefined && product.is_published !== null) return Number(product.is_published);
+  if ('published_at' in product) return product.published_at ? 1 : 0;
+  return null;
+}
+// The worker may unpublish products but never publish them. A non-zero is_published
+// on update is allowed only when it leaves the product's current state unchanged.
+async function assertNotPublishing(op, path, body, headers, fetcher) {
+  if (op.id !== 'update_product' || body.is_published === 0) return;
+  const { 'idempotency-key': _, ...readHeaders } = headers;
+  let current;
+  try {
+    const response = await fetcher(new URL(path, 'https://api.easystore.co'), { method: 'GET', headers: readHeaders, redirect: 'manual', signal: AbortSignal.timeout(20000) });
+    if (!response.ok) throw new Error();
+    current = publicationState(JSON.parse(await readLimited(response, MAX_RESPONSE)));
+  } catch (error) {
+    if (error instanceof ToolError) throw error;
+    current = null;
+  }
+  if (current === null) throw new ToolError('PUBLISH_NOT_PERMITTED', 'Could not confirm the product is already published. Publishing is not permitted; set is_published to 0 or retry.');
+  if (current !== body.is_published) throw new ToolError('PUBLISH_NOT_PERMITTED', 'Publishing products is not permitted. is_published must be 0 or match the product\'s current state.');
+}
 export async function execute(env, registry, args, { write = false, fetcher = fetch, audit = console.log } = {}) {
   const requestId = crypto.randomUUID();
   const { op, path, query, body } = resolveOperation(registry, args, write);
@@ -55,6 +80,7 @@ export async function execute(env, registry, args, { write = false, fetcher = fe
   }
   const serialized = body === undefined ? undefined : JSON.stringify(body);
   if (serialized && new TextEncoder().encode(serialized).length > 256 * 1024) throw new ToolError('PAYLOAD_TOO_LARGE', 'Request body exceeds 256 KiB.');
+  if (write) await assertNotPublishing(op, path, body, headers, fetcher);
   if (serialized !== undefined) headers['Content-Type'] = 'application/json';
   let status, outcome = 'failed';
   try {

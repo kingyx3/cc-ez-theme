@@ -33,7 +33,7 @@ Use **Integrations → Add Custom → MCP Server**, enter the URL, and supply th
 
 Example: `{"operation_id":"list_products","query":{"page":1,"limit":20}}`.
 
-To manage promotions, product positioning and other mutations, use the writer password in Viktor. Product positioning is exposed as `update_product_positions`, which sends the observed admin `PATCH /admin/v2/store/products/positions` request with the complete desired product ID order. The read password always provides read-only access. Configure approval before mutations in Viktor; the Worker does not enforce human approval. Every mutation requires a stable `idempotency_key` of 16–128 letters/digits/underscores/hyphens. Requests are never automatically retried, and EasyStore's deduplication guarantees are unverified. Inspect the resource after a timeout before retrying.
+To manage promotions, product positioning and other mutations, use the writer password in Viktor. The writer can create unpublished products and unpublish existing ones but cannot publish products; a request that would publish is rejected with `PUBLISH_NOT_PERMITTED`. Product positioning is exposed as `update_product_positions`, which sends the observed admin `PATCH /admin/v2/store/products/positions` request with the complete desired product ID order. The read password always provides read-only access. Configure approval before mutations in Viktor; the Worker does not enforce human approval. Every mutation requires a stable `idempotency_key` of 16–128 letters/digits/underscores/hyphens. Requests are never automatically retried, and EasyStore's deduplication guarantees are unverified. Inspect the resource after a timeout before retrying.
 
 ## Update APIs with an AI harness
 
