@@ -140,3 +140,11 @@ test('product update can unpublish but never publish',async()=>{
     assert.deepEqual(r.calls,['GET']);
   }
 });
+test('TOOLS.md access table lists every enabled operation with the right roles',async()=>{
+  const { readFile } = await import('node:fs/promises');
+  const doc=await readFile(new URL('../TOOLS.md',import.meta.url),'utf8');
+  const rows=new Map([...doc.matchAll(/^\| `([a-z0-9_]+)` \| (GET|POST|PUT|PATCH|DELETE) \| (☑|☐) \| (☑|☐) \|/gm)].map(m=>[m[1],m.slice(2)]));
+  const enabled=[...makeRegistry().values()].filter(op=>op.enabled);
+  assert.equal(rows.size,enabled.length);
+  for (const op of enabled) assert.deepEqual(rows.get(op.id),[op.method,op.method==='GET'?'☑':'☐','☑'],op.id);
+});

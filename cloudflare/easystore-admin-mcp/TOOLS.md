@@ -15,6 +15,85 @@ The read password exposes the first three tools. The writer password also expose
 
 The registry currently contains 39 reads across products, customers, orders, collections, inventory, locations, promotions, vouchers, memberships, settings and themes. Its 12 mutations create unpublished products and update products, customers and discounts; reorder products; enable/disable discounts; and delete discounts/products. The available list and schemas come from `src/operations.js` and `src/schemas.js`.
 
+## Access by role
+
+☑ means the connector password can use it; ☐ means it cannot. Writer access to mutations also requires the deployment's **enable_writes** setting, which is on by default. Mutations go through `easystore_admin_write`; reads go through `easystore_admin_read`.
+
+### Tools
+
+| Tool | Reader | Writer |
+| --- | :---: | :---: |
+| `easystore_admin_list_operations` | ☑ | ☑ |
+| `easystore_admin_describe_operation` | ☑ | ☑ |
+| `easystore_admin_read` | ☑ | ☑ |
+| `easystore_admin_write` | ☐ | ☑ |
+
+### Operations
+
+| Operation | Method | Reader | Writer | Limits |
+| --- | --- | :---: | :---: | --- |
+| `list_abandoned_checkouts` | GET | ☑ | ☑ |  |
+| `list_themes` | GET | ☑ | ☑ |  |
+| `list_products` | GET | ☑ | ☑ |  |
+| `get_product` | GET | ☑ | ☑ |  |
+| `list_customers` | GET | ☑ | ☑ |  |
+| `get_customer` | GET | ☑ | ☑ |  |
+| `list_orders` | GET | ☑ | ☑ |  |
+| `get_order` | GET | ☑ | ☑ |  |
+| `list_collections` | GET | ☑ | ☑ |  |
+| `get_collection` | GET | ☑ | ☑ |  |
+| `list_locations` | GET | ☑ | ☑ |  |
+| `get_location` | GET | ☑ | ☑ |  |
+| `list_stock_adjustments` | GET | ☑ | ☑ |  |
+| `get_stock_adjustment` | GET | ☑ | ☑ |  |
+| `list_purchase_orders` | GET | ☑ | ☑ |  |
+| `get_purchase_order` | GET | ☑ | ☑ |  |
+| `list_inventory_transfers` | GET | ☑ | ☑ |  |
+| `get_inventory_transfer` | GET | ☑ | ☑ |  |
+| `list_discounts` | GET | ☑ | ☑ |  |
+| `get_discount` | GET | ☑ | ☑ |  |
+| `list_discounts_new` | GET | ☑ | ☑ |  |
+| `list_vouchers` | GET | ☑ | ☑ |  |
+| `list_voucher_campaigns` | GET | ☑ | ☑ |  |
+| `list_inventory_levels` | GET | ☑ | ☑ |  |
+| `get_inventory_level` | GET | ☑ | ☑ |  |
+| `get_general_settings` | GET | ☑ | ☑ |  |
+| `list_enabled_channels` | GET | ☑ | ☑ |  |
+| `list_store_users` | GET | ☑ | ☑ |  |
+| `get_store_global` | GET | ☑ | ☑ |  |
+| `list_discount_usages` | GET | ☑ | ☑ |  |
+| `list_discount_setting_logs` | GET | ☑ | ☑ |  |
+| `get_discount_visual_settings` | GET | ☑ | ☑ |  |
+| `list_discount_redemption_logs` | GET | ☑ | ☑ |  |
+| `list_customer_vouchers` | GET | ☑ | ☑ |  |
+| `list_customer_addresses` | GET | ☑ | ☑ |  |
+| `get_customer_membership` | GET | ☑ | ☑ |  |
+| `list_order_fulfillments` | GET | ☑ | ☑ |  |
+| `get_product_variants` | GET | ☑ | ☑ |  |
+| `list_stock_adjustment_items` | GET | ☑ | ☑ |  |
+| `create_discount` | POST | ☐ | ☑ |  |
+| `update_discount` | PUT | ☐ | ☑ |  |
+| `enable_discounts` | PUT | ☐ | ☑ |  |
+| `disable_discounts` | PUT | ☐ | ☑ |  |
+| `delete_discount` | DELETE | ☐ | ☑ |  |
+| `delete_discounts` | DELETE | ☐ | ☑ |  |
+| `delete_products` | DELETE | ☐ | ☑ |  |
+| `create_customer` | POST | ☐ | ☑ |  |
+| `update_customer` | PUT | ☐ | ☑ |  |
+| `create_product` | POST | ☐ | ☑ | Unpublished only (`is_published: 0`) |
+| `update_product` | PUT | ☐ | ☑ | Can unpublish; cannot publish |
+| `update_product_positions` | PATCH | ☐ | ☑ |  |
+
+### Not available to either role
+
+| Action | Reader | Writer |
+| --- | :---: | :---: |
+| Publish a product (new or existing) | ☐ | ☐ |
+| Publish or change themes | ☐ | ☐ |
+| Any route not listed above | ☐ | ☐ |
+
+Publish products in EasyStore Admin. This table must list every enabled operation in `src/operations.js`; the tests fail if it falls out of date.
+
 ## Example calls
 
 These JSON objects are the parameters for MCP `tools/call`; the client handles the JSON-RPC envelope. The IDs and values below are examples.
