@@ -43,6 +43,10 @@ class CustomerOrderLimitTests(unittest.TestCase):
             ("1010-drop-01", 1),
             ("1010-drop-02", 1),
             ("1010-drop-02b", 1),
+            ("1010-drop-03", 1),
+            ("1010-drop-04", 1),
+            ("1010-drop-05", 1),
+            ("1010-drop-06", 1),
         )
         rows = configured_rows(config)
         self.assertEqual([(handle, maximum) for handle, maximum, _ in rows], list(expected))
@@ -79,7 +83,7 @@ class CustomerOrderLimitTests(unittest.TestCase):
         for handle in unlimited:
             self.assertNotIn(handle, config)
 
-        self.assertEqual(len(rows), 22)
+        self.assertEqual(len(rows), 26)
         self.assertIn("normalized to lowercase", config)
         self.assertIn("Delete the row to leave a product", config)
         self.assertNotIn("split:", config)
