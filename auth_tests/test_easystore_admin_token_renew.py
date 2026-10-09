@@ -14,18 +14,37 @@ from scripts import easystore_admin_token_renew as renewal
 NOW = 1_800_000_000
 
 
-def jwt(sid: str = "store-123", exp: int = NOW + 10 * 86400, iat: int = NOW - 100) -> str:
-    payload = base64.urlsafe_b64encode(json.dumps({"sid": sid, "exp": exp, "iat": iat}).encode()).decode().rstrip("=")
+def jwt(sid: str | None = "store-123", exp: int = NOW + 10 * 86400, iat: int = NOW - 100) -> str:
+    fields = {"exp": exp, "iat": iat}
+    if sid is not None:
+        fields["sid"] = sid
+    payload = base64.urlsafe_b64encode(json.dumps(fields).encode()).decode().rstrip("=")
     return f"header.{payload}.signature"
 
 
 class ClaimsTest(unittest.TestCase):
     def test_store_identity_and_expiry_required(self):
         self.assertEqual(renewal.claims(jwt())["sid"], "store-123")
+        self.assertNotIn("sid", renewal.claims(jwt(sid=None)))
         for invalid in ["no.jwt", "a.bad=.z", "a." + base64.urlsafe_b64encode(b'{}').decode() + ".z",
                         jwt(sid=""), jwt(exp="not-an-int"), jwt(exp=True)]:
             with self.subTest(invalid=invalid[:8]), self.assertRaises(renewal.RotationError):
                 renewal.claims(invalid)
+
+    def test_safe_validation_errors_do_not_include_credential(self):
+        with self.assertRaises(renewal.RotationError) as caught:
+            renewal.claims("Bearer secret-value")
+        self.assertIn("three-part", str(caught.exception))
+        self.assertNotIn("secret-value", str(caught.exception))
+
+    def test_hostname_normalization_and_rejects_unsafe_url(self):
+        self.assertEqual(renewal.store_hostname("https://cardboardcollectivedev-2.easy.co/"),
+                         "cardboardcollectivedev-2.easy.co")
+        self.assertEqual(renewal.store_hostname("DEV.easy.co"), "dev.easy.co")
+        for invalid in ("http://dev.easy.co", "https://dev.easy.co/somewhere", "https://dev.easy.co?auth=1",
+                        "https://user:pass@dev.easy.co", "https://dev.easy.co:1234", "https://dev.easy.co#fragment"):
+            with self.subTest(value=invalid), self.assertRaises(renewal.RotationError):
+                renewal.store_hostname(invalid)
 
 
 class RenewTest(unittest.TestCase):
@@ -49,6 +68,27 @@ class RenewTest(unittest.TestCase):
         self.assertEqual(http.call_args_list[0].kwargs["payload"], {"store_code": "dev-code"})
         self.assertEqual(http.call_args_list[1].args, (renewal.VERIFY_URL, "GET", self.new))
         self.assertEqual(http.call_args_list[1].kwargs["headers"]["x-easystore-infra-default-domain"], "dev.easy.co")
+
+
+    def test_user_scoped_admin_token_can_bootstrap_store_token(self):
+        # User-level admin JWTs are valid at login before selecting a store.
+        # They must be exchanged even when the 14-day renewal threshold has not
+        # been reached; after exchange the workflow persists a store-scoped JWT.
+        user_token = jwt(sid=None, exp=NOW + 25 * 86400)
+        with patch.object(renewal, "api_request", side_effect=[{"token": self.new}, {"themes": []}]) as http:
+            updated, changed = renewal.rotate(
+                user_token, "dev-store-code", "https://dev.easy.co/", "2", now=NOW
+            )
+        self.assertTrue(changed)
+        self.assertEqual(updated, self.new)
+        self.assertEqual(http.call_args_list[0].kwargs["payload"], {"store_code": "dev-store-code"})
+        self.assertEqual(http.call_args_list[1].kwargs["headers"]["x-easystore-infra-default-domain"], "dev.easy.co")
+
+    def test_bootstrap_still_rejects_non_store_replacement(self):
+        user = jwt(sid=None)
+        with patch.object(renewal, "api_request", return_value={"token": jwt(sid=None, exp=NOW + 31 * 86400)}):
+            with self.assertRaisesRegex(renewal.RotationError, "store-scoped replacement"):
+                renewal.rotate(user, "dev-code", "dev.easy.co", "2", now=NOW)
 
     def test_forced_renewal(self):
         with patch.object(renewal, "api_request", side_effect=[{"token": self.new}, []]):

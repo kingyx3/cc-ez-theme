@@ -16,7 +16,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 
 AUTH_URL = "https://api.easystore.co/admin/v2/me/stores/auth"
@@ -31,19 +31,38 @@ class RotationError(Exception):
 
 
 def claims(jwt: str) -> dict:
+    # Report only the reason a credential cannot be used, never its contents.
+    parts = jwt.split(".")
+    if len(parts) != 3:
+        raise RotationError("EASYSTORE_ADMIN_TOKEN is not a three-part JWT (do not include 'Bearer '); seed this environment with its EasyStore admin session token.")
     try:
-        parts = jwt.split(".")
-        if len(parts) != 3:
-            raise ValueError()
         payload = parts[1] + "=" * (-len(parts[1]) % 4)
         data = json.loads(base64.urlsafe_b64decode(payload))
-        if not isinstance(data, dict) or not isinstance(data.get("sid"), (str, int)) or not data.get("sid"):
+    except (ValueError, TypeError, UnicodeDecodeError, binascii.Error):
+        raise RotationError("EASYSTORE_ADMIN_TOKEN contains an unreadable JWT payload.") from None
+    if not isinstance(data, dict) or not isinstance(data.get("exp"), int) or isinstance(data["exp"], bool):
+        raise RotationError("EASYSTORE_ADMIN_TOKEN has no valid JWT expiry.")
+    # Account-level admin JWTs have no 'sid'. EasyStore can exchange one for
+    # the selected store's JWT via /me/stores/auth, verified before persistence.
+    if "sid" in data and (not isinstance(data["sid"], (str, int)) or isinstance(data["sid"], bool) or not data["sid"]):
+        raise RotationError("EASYSTORE_ADMIN_TOKEN has an invalid store identifier.")
+    return data
+
+
+def store_hostname(value: str) -> str:
+    # GitHub vars may be hostnames or URLs (e.g. https://dev.easy.co/).
+    # EasyStore's x-easystore-infra-default-domain header requires a hostname.
+    try:
+        parsed = urlsplit(value if "://" in value else "https://" + value)
+        host = parsed.hostname
+        if (parsed.scheme != "https" or not host or parsed.port or parsed.username
+                or parsed.password or parsed.path not in ("", "/") or parsed.query or parsed.fragment):
             raise ValueError()
-        if not isinstance(data.get("exp"), int) or isinstance(data["exp"], bool):
+        if not all(label and label.replace("-", "").isalnum() for label in host.split(".")):
             raise ValueError()
-        return data
-    except (ValueError, KeyError, TypeError, UnicodeDecodeError, binascii.Error):
-        raise RotationError("Invalid store-scoped JWT; reauthenticate manually.") from None
+        return host.lower()
+    except ValueError:
+        raise RotationError("EASYSTORE_STORE_DOMAIN must be an HTTPS store URL or bare hostname.") from None
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -81,7 +100,7 @@ def rotate(token: str, store_code: str, domain: str, pod_id: str, *, force: bool
     old = claims(token)
     if old["exp"] <= now:
         raise RotationError("The admin JWT is already expired; manual reauthentication is required.")
-    if old["exp"] - now > RENEW_BEFORE_SECONDS and not force:
+    if old.get("sid") and old["exp"] - now > RENEW_BEFORE_SECONDS and not force:
         return token, False
 
     result = api_request(AUTH_URL, "POST", token, payload={"store_code": store_code})
@@ -89,7 +108,9 @@ def rotate(token: str, store_code: str, domain: str, pod_id: str, *, force: bool
     if not isinstance(updated, str):
         raise RotationError("EasyStore did not return a replacement JWT.")
     new = claims(updated)
-    if new["sid"] != old["sid"] or updated == token:
+    if not new.get("sid"):
+        raise RotationError("EasyStore did not issue a store-scoped replacement JWT.")
+    if (old.get("sid") and new["sid"] != old["sid"]) or updated == token:
         raise RotationError("Renewal changed store identity or did not replace the token.")
     if new["exp"] <= old["exp"] or new["exp"] - now < MIN_NEW_LIFETIME_SECONDS:
         raise RotationError("Replacement JWT did not extend validity sufficiently.")
@@ -99,7 +120,7 @@ def rotate(token: str, store_code: str, domain: str, pod_id: str, *, force: bool
     api_request(VERIFY_URL, "GET", updated, headers={
         "easystore-pod-id": pod_id,
         "x-easystore-infra-pod-id": pod_id,
-        "x-easystore-infra-default-domain": domain,
+        "x-easystore-infra-default-domain": store_hostname(domain),
     })
     return updated, True
 
