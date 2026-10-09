@@ -114,14 +114,15 @@ parameters so the wrong store cannot silently be selected.
 ## Legacy administrator JWT without a standard expiration claim
 
 A dev dry-run may report that `EASYSTORE_ADMIN_TOKEN` has no valid JWT
-expiry. JWTs that **omit** `exp` may still be accepted by EasyStore.
+expiry. JWTs that **omit** `exp` or use a nonnumeric expiry may still be accepted by EasyStore.
 The renewal script now attempts one authenticated store-token exchange for
 such credentials, regardless of the 14-day threshold. It **does not** assume
 an indefinite lifetime: the replacement must be a different, store-scoped JWT
 with a valid numeric `exp` at least 20 days in the future, and it must pass
 a read-only EasyStore admin API check before any secret updates are allowed.
 
-A malformed `exp` value (rather than an absent claim) is rejected; an
+A missing or malformed input `exp` causes a forced authenticated exchange;
+only output JWTs with valid numeric `exp` values are accepted. An
 invalid/expired upstream credential will fail at the EasyStore exchange.
 The workflow never prints JWT payloads. On continued failures, replace only
 the failing environment's `EASYSTORE_ADMIN_TOKEN` with its own valid EasyStore
