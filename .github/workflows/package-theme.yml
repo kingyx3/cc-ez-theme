@@ -100,10 +100,6 @@ jobs:
           retention-days: 30
 
   deploy:
-    # Non-main pushes only validate and package. In particular, feature-branch
-    # checks must not depend on short-lived EasyStore admin session tokens or
-    # publish a theme as a side effect of review. Matches the release runbook.
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     name: Import and publish packaged theme in EasyStore
     needs: package
     runs-on: ubuntu-latest
