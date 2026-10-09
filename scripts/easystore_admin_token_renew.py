@@ -30,7 +30,7 @@ class RotationError(Exception):
     """Deliberately contains no upstream messages or credentials."""
 
 
-def claims(jwt: str) -> dict:
+def claims(jwt: str, *, require_exp: bool = True) -> dict:
     # Report only the reason a credential cannot be used, never its contents.
     parts = jwt.split(".")
     if len(parts) != 3:
@@ -40,8 +40,16 @@ def claims(jwt: str) -> dict:
         data = json.loads(base64.urlsafe_b64decode(payload))
     except (ValueError, TypeError, UnicodeDecodeError, binascii.Error):
         raise RotationError("EASYSTORE_ADMIN_TOKEN contains an unreadable JWT payload.") from None
-    if not isinstance(data, dict) or not isinstance(data.get("exp"), int) or isinstance(data["exp"], bool):
-        raise RotationError("EASYSTORE_ADMIN_TOKEN has no valid JWT expiry.")
+    if not isinstance(data, dict):
+        raise RotationError("EASYSTORE_ADMIN_TOKEN does not contain JWT claims.")
+    # Some existing administrator credentials may lack a standard exp claim.
+    # Treat these as bootstrap-only credentials: attempt a single authenticated
+    # exchange and require a well-formed, sufficiently long-lived replacement.
+    if "exp" not in data:
+        if require_exp:
+            raise RotationError("EasyStore did not issue a replacement JWT with an expiry.")
+    elif not isinstance(data["exp"], int) or isinstance(data["exp"], bool):
+        raise RotationError("EASYSTORE_ADMIN_TOKEN has a malformed JWT expiry.")
     # Account-level admin JWTs have no 'sid'. EasyStore can exchange one for
     # the selected store's JWT via /me/stores/auth, verified before persistence.
     if "sid" in data and (not isinstance(data["sid"], (str, int)) or isinstance(data["sid"], bool) or not data["sid"]):
@@ -97,10 +105,11 @@ def api_request(url: str, method: str, token: str, *, payload: dict | None = Non
 
 def rotate(token: str, store_code: str, domain: str, pod_id: str, *, force: bool = False, now: int | None = None) -> tuple[str, bool]:
     now = int(time.time()) if now is None else now
-    old = claims(token)
-    if old["exp"] <= now:
+    old = claims(token, require_exp=False)
+    old_expiry = old.get("exp")
+    if old_expiry is not None and old_expiry <= now:
         raise RotationError("The admin JWT is already expired; manual reauthentication is required.")
-    if old.get("sid") and old["exp"] - now > RENEW_BEFORE_SECONDS and not force:
+    if old.get("sid") and old_expiry is not None and old_expiry - now > RENEW_BEFORE_SECONDS and not force:
         return token, False
 
     result = api_request(AUTH_URL, "POST", token, payload={"store_code": store_code})
@@ -112,7 +121,7 @@ def rotate(token: str, store_code: str, domain: str, pod_id: str, *, force: bool
         raise RotationError("EasyStore did not issue a store-scoped replacement JWT.")
     if (old.get("sid") and new["sid"] != old["sid"]) or updated == token:
         raise RotationError("Renewal changed store identity or did not replace the token.")
-    if new["exp"] <= old["exp"] or new["exp"] - now < MIN_NEW_LIFETIME_SECONDS:
+    if (old_expiry is not None and new["exp"] <= old_expiry) or new["exp"] - now < MIN_NEW_LIFETIME_SECONDS:
         raise RotationError("Replacement JWT did not extend validity sufficiently.")
 
     # Server-side verification both authenticates the new JWT and verifies the
