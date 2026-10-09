@@ -6,6 +6,7 @@ import contextlib
 import io
 import json
 import subprocess
+import urllib.error
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -152,6 +153,57 @@ class RenewTest(unittest.TestCase):
         with patch.object(renewal, "api_request", side_effect=renewal.RotationError("upstream unavailable")):
             with self.assertRaises(renewal.RotationError):
                 renewal.rotate(self.old, "code", "host", "1007", now=NOW)
+
+
+
+class HttpDiagnosticsTest(unittest.TestCase):
+    def test_token_exchange_http_401_is_safe_and_precise(self):
+        # Never surface the upstream reason, response body, request URL, or JWT.
+        upstream = urllib.error.HTTPError(
+            renewal.AUTH_URL, 401, "contains-a-secret", {"Authorization": "Bearer secret"}, None
+        )
+        with patch.object(renewal.urllib.request, "build_opener") as opener:
+            opener.return_value.open.side_effect = upstream
+            with self.assertRaises(renewal.RotationError) as caught:
+                renewal.api_request(renewal.AUTH_URL, "POST", "secret", payload={"store_code": "dev"})
+        self.assertEqual(str(caught.exception), "EasyStore token exchange returned HTTP 401.")
+        self.assertNotIn("secret", str(caught.exception))
+        self.assertNotIn("dev", str(caught.exception))
+
+    def test_admin_api_verification_http_403_identifies_stage(self):
+        upstream = urllib.error.HTTPError(renewal.VERIFY_URL, 403, "secret", {}, None)
+        with patch.object(renewal.urllib.request, "build_opener") as opener:
+            opener.return_value.open.side_effect = upstream
+            with self.assertRaisesRegex(renewal.RotationError, "admin API verification returned HTTP 403"):
+                renewal.api_request(renewal.VERIFY_URL, "GET", "secret")
+
+    def test_transport_error_is_safe_and_stage_specific(self):
+        with patch.object(renewal.urllib.request, "build_opener") as opener:
+            opener.return_value.open.side_effect = urllib.error.URLError("https://secret.invalid")
+            with self.assertRaises(renewal.RotationError) as caught:
+                renewal.api_request(renewal.AUTH_URL, "POST", "secret", payload={"store_code": "dev"})
+        self.assertEqual(str(caught.exception), "EasyStore token exchange connection failed.")
+
+    def test_invalid_json_does_not_echo_payload(self):
+        response = MagicMock(status=200)
+        response.__enter__.return_value = response
+        response.__exit__.return_value = None
+        with patch.object(renewal.urllib.request, "build_opener") as opener, patch.object(
+            renewal.json, "load", side_effect=ValueError("response had secret JWT")
+        ):
+            opener.return_value.open.return_value = response
+            with self.assertRaises(renewal.RotationError) as caught:
+                renewal.api_request(renewal.VERIFY_URL, "GET", "secret")
+        self.assertEqual(str(caught.exception), "EasyStore admin API verification returned invalid JSON.")
+
+    def test_non_200_response_reports_status_without_content(self):
+        response = MagicMock(status=429)
+        response.__enter__.return_value = response
+        response.__exit__.return_value = None
+        with patch.object(renewal.urllib.request, "build_opener") as opener:
+            opener.return_value.open.return_value = response
+            with self.assertRaisesRegex(renewal.RotationError, "token exchange returned HTTP 429"):
+                renewal.api_request(renewal.AUTH_URL, "POST", "secret", payload={"store_code": "dev"})
 
 
 class SecretSyncTest(unittest.TestCase):
