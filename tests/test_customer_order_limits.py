@@ -28,6 +28,7 @@ class CustomerOrderLimitTests(unittest.TestCase):
             ("MTG-HOB-PRK-EN-SET4", 3),
             ("MTG-HOB-OBP-EN", 30),
             ("MTG-FRA-SLB-EN", 4),
+            ("reality-fracture-secret-lair-bundle-en", 1),
             ("MTG-FRA-CBB-EN", 2),
             ("CC-BDL-FRIENDS3-EN-SPM", 1),
             ("CC-BDL-FRIENDS3-EN-MSH", 1),
@@ -83,7 +84,14 @@ class CustomerOrderLimitTests(unittest.TestCase):
         for handle in unlimited:
             self.assertNotIn(handle, config)
 
-        self.assertEqual(len(rows), 26)
+        self.assertEqual(len(rows), 27)
+        # The 10.10 duplicate is its own one-per-customer rule. Its refresh
+        # is separate from the original FRA Secret Lair bundle allowance.
+        self.assertIn(
+            ("reality-fracture-secret-lair-bundle-en", 1, "2026-10-09 00:00:00 +0800"),
+            rows,
+        )
+        self.assertIn(("MTG-FRA-SLB-EN", 4, ""), rows)
         self.assertIn("normalized to lowercase", config)
         self.assertIn("Delete the row to leave a product", config)
         self.assertNotIn("split:", config)
