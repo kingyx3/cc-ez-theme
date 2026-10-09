@@ -3,7 +3,10 @@
 The undocumented EasyStore Admin API operation POST
 https://api.easystore.co/admin/v2/me/stores/auth with a store_code in its
 JSON body and a valid **store-scoped** JWT was observed to issue a fresh
-store-scoped JWT expiring approximately 30 days later. A second request using
+store-scoped JWT expiring approximately 30 days later. EasyStore also issues
+**user-scoped admin JWTs** (no `sid`) before a store is selected; the renewal
+script can exchange these once for a store-scoped token as a bootstrap. A
+non-JWT public API access token or a copied `Bearer ` prefix is not supported. A second request using
 that new token also worked with browser cookies omitted. A GitHub-hosted
 runner still needs to be verified by a manual dry run. EasyStore could change
 or revoke this behavior.
@@ -17,7 +20,7 @@ with values belonging only to that environment:
 | --- | --- | --- | --- |
 | EASYSTORE_ADMIN_TOKEN | Environment secret | Dev store-scoped JWT | Prod store-scoped JWT |
 | EASYSTORE_STORE_CODE | Environment variable | Dev store code | Prod store code |
-| EASYSTORE_STORE_DOMAIN | Environment variable | Dev store domain | Prod store domain |
+| EASYSTORE_STORE_DOMAIN | Environment variable | Dev store URL or bare hostname | Prod store URL or bare hostname |
 | EASYSTORE_POD_ID | Environment variable | Dev pod ID | Prod pod ID |
 | EASYSTORE_ROTATION_GH_TOKEN | Environment secret | GitHub environment write credential | GitHub environment write credential |
 | EASYSTORE_MCP_WORKER_NAME | Optional environment variable | Unset unless using a separate dev Worker | Set to cc-easystore-admin-mcp if prod owns this Worker |
@@ -86,3 +89,24 @@ CAPTCHA, or attempt login with a saved account password.
 
 These renewable credentials are effectively long-lived admin credentials.
 Restrict environment access and never paste JWTs into logs, PRs or issues.
+
+## Troubleshooting GitHub Actions
+
+If the job fails with `EASYSTORE_ADMIN_TOKEN is not a three-part JWT`,
+the selected environment contains a non-JWT value (or the word `Bearer`).
+Confirm you copied **only** the administrator session JWT from EasyStore,
+not `EASYSTORE_ACCESS_TOKEN` or `app_token`. Do not paste its value into an
+issue, log, or chat. Update **only the failed environment's**
+`EASYSTORE_ADMIN_TOKEN` secret.
+
+If the JWT is user-scoped, the workflow will bootstrap it to a store token by
+calling `/me/stores/auth` with that environment's `EASYSTORE_STORE_CODE`;
+the result must be store-scoped and pass the admin theme-list check before
+the secret can be updated. An expired JWT still requires a normal EasyStore
+login. A forced `dry_run=true` call exchanges and checks a token but does not
+persist a replacement.
+
+`EASYSTORE_STORE_DOMAIN` may be configured as a bare domain or as a standard
+HTTPS URL ending in `/`. The script normalizes it to the hostname required
+by EasyStore's routing header. It rejects non-HTTPS URLs, paths and query
+parameters so the wrong store cannot silently be selected.
