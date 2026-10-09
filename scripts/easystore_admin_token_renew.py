@@ -85,8 +85,8 @@ def rotate(token: str, store_code: str, domain: str, pod_id: str, *, force: bool
         return token, False
 
     result = api_request(AUTH_URL, "POST", token, payload={"store_code": store_code})
-    updated = result.get("token")
-    if not isinstance(result, dict) or not isinstance(updated, str):
+    updated = result.get("token") if isinstance(result, dict) else None
+    if not isinstance(updated, str):
         raise RotationError("EasyStore did not return a replacement JWT.")
     new = claims(updated)
     if new["sid"] != old["sid"] or updated == token:
