@@ -14,6 +14,8 @@ source = scripts
 omit =
     scripts/easystore_hubspot_*.py
     scripts/easystore_admin_checkouts.py
+    # Rotation has its own isolated auth_tests gate in its dedicated workflow.
+    scripts/easystore_admin_token_renew.py
     scripts/cloudflare_hubspot_attribution.py
     scripts/cloudflare_hubspot_order_attribution.py
 
