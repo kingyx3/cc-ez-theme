@@ -50,8 +50,8 @@ def claims(jwt: str, *, require_exp: bool = True) -> dict:
     # JWT NumericDate permits integer or floating-point seconds. Credentials
     # with absent or non-numeric expiration have *unknown* client-side
     # lifetime and must go through the authenticated EasyStore exchange.
-    valid_exp = (isinstance(exp, (int, float)) and not isinstance(exp, bool)
-                 and math.isfinite(exp))
+    valid_exp = (type(exp) in (int, float) and
+                 (type(exp) is int or math.isfinite(exp)))
     if not valid_exp:
         if require_exp:
             raise RotationError("EasyStore did not issue a replacement JWT with a valid expiry.")
