@@ -29,7 +29,7 @@ class ClaimsTest(unittest.TestCase):
         self.assertEqual(renewal.claims(jwt())["sid"], "store-123")
         self.assertNotIn("sid", renewal.claims(jwt(sid=None)))
         self.assertNotIn("exp", renewal.claims(jwt(exp=None), require_exp=False))
-        with self.assertRaisesRegex(renewal.RotationError, "replacement JWT with an expiry"):
+        with self.assertRaisesRegex(renewal.RotationError, "replacement JWT with a valid expiry"):
             renewal.claims(jwt(exp=None))
         for invalid in ["no.jwt", "a.bad=.z", "a." + base64.urlsafe_b64encode(b'{}').decode() + ".z",
                         jwt(sid=""), jwt(exp="not-an-int"), jwt(exp=True)]:
@@ -104,12 +104,19 @@ class RenewTest(unittest.TestCase):
         with patch.object(renewal, "api_request", side_effect=[{"token": self.new}, {"themes": []}]):
             self.assertEqual(renewal.rotate(legacy, "dev", "dev.easy.co", "2", now=NOW)[0], self.new)
 
-    def test_malformed_exp_is_rejected_before_exchange(self):
-        malformed = jwt(exp="unknown")
-        with patch.object(renewal, "api_request") as http:
-            with self.assertRaisesRegex(renewal.RotationError, "malformed JWT expiry"):
-                renewal.rotate(malformed, "dev", "dev.easy.co", "2", now=NOW)
-            http.assert_not_called()
+    def test_unknown_input_exp_is_exchanged_but_output_must_have_valid_exp(self):
+        for bad_exp in ("unknown", True, float("nan")):
+            with self.subTest(exp=str(bad_exp)), patch.object(
+                renewal, "api_request", side_effect=[{"token": self.new}, {"themes": []}]
+            ) as http:
+                renewed, changed = renewal.rotate(jwt(exp=bad_exp), "dev", "dev.easy.co", "2", now=NOW)
+                self.assertTrue(changed)
+                self.assertEqual(renewed, self.new)
+                self.assertEqual(http.call_count, 2)
+
+    def test_float_numericdate_exp_is_valid(self):
+        self.assertEqual(renewal.claims(jwt(exp=float(NOW + 40 * 86400)))["exp"],
+                         float(NOW + 40 * 86400))
 
     def test_exchange_rejects_new_jwt_without_exp_without_secret_updates(self):
         legacy = jwt(exp=None)
