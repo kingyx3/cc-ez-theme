@@ -39,6 +39,12 @@
 {% include 'customer-order-limit-row', limit_handle: 'MTG-HOB-PRK-EN-SET4', limit_maximum: 3, limit_refresh: '' %}
 {% include 'customer-order-limit-row', limit_handle: 'MTG-HOB-OBP-EN', limit_maximum: 30, limit_refresh: '' %}
 {% include 'customer-order-limit-row', limit_handle: 'MTG-FRA-SLB-EN', limit_maximum: 4, limit_refresh: '' %}
+{% comment %}
+  10.10 sale: the duplicated Reality Fracture Secret Lair listing has its own
+  one-per-customer allowance. Orders from before the campaign do not consume it;
+  the original MTG-FRA-SLB-EN allowance remains unchanged.
+{% endcomment %}
+{% include 'customer-order-limit-row', limit_handle: 'reality-fracture-secret-lair-bundle-en', limit_maximum: 1, limit_refresh: '2026-10-09 00:00:00 +0800' %}
 {% include 'customer-order-limit-row', limit_handle: 'MTG-FRA-CBB-EN', limit_maximum: 2, limit_refresh: '' %}
 {% include 'customer-order-limit-row', limit_handle: 'CC-BDL-FRIENDS3-EN-SPM', limit_maximum: 1, limit_refresh: '' %}
 {% include 'customer-order-limit-row', limit_handle: 'CC-BDL-FRIENDS3-EN-MSH', limit_maximum: 1, limit_refresh: '' %}
