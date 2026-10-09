@@ -586,8 +586,8 @@ class CustomerOrderLimitRenderingTests(unittest.TestCase):
     # --- the shipped configuration ------------------------------------------
 
     def test_the_shipped_configuration_counts_from_its_store_date(self) -> None:
-        # The real config, rendered: every limit counts from 9 Aug 2026 store
-        # time, so an order placed before it no longer consumes an allowance.
+        # The real config, rendered: standard limits count from 9 Aug 2026
+        # store time; campaign rows may override their own refresh window.
         files = {
             name: (SNIPPETS / f"{name}.liquid").read_text(encoding="utf-8")
             for name in (
@@ -624,19 +624,69 @@ class CustomerOrderLimitRenderingTests(unittest.TestCase):
         self.assertEqual(
             sorted(rules), sorted(handle.lower() for handle, _, _ in configured_rows())
         )
+        overrides = {
+            "reality-fracture-secret-lair-bundle-en": (
+                "2026-10-09 00:00:00 +0800", "Oct 09, 2026"
+            ),
+        }
+        default_window = ("2026-08-09 00:00:00 +0800", "Aug 09, 2026")
         for handle, rule in rules.items():
             with self.subTest(handle=handle):
-                self.assertEqual(rule["refreshAt"], "2026-08-09 00:00:00 +0800")
-                self.assertEqual(rule["limitWindowLabel"], "Aug 09, 2026")
+                expected_refresh, expected_label = overrides.get(handle, default_window)
+                self.assertEqual(rule["refreshAt"], expected_refresh)
+                self.assertEqual(rule["limitWindowLabel"], expected_label)
                 self.assertGreater(rule["windowStart"], 0)
                 # Configuration, not copy: no message names the date.
-                self.assertNotIn("Aug 09", rule["message"])
+                self.assertNotIn(expected_label, rule["message"])
                 self.assertNotIn("since", rule["message"])
         # Orders on either side of the date, on limits configured at 2 and 4.
         self.assertEqual(rules["cc-bdl-unexpected-en"]["purchased"], 0)
         self.assertEqual(rules["cc-bdl-unexpected-en"]["remaining"], 2)
         self.assertEqual(rules["mtg-hob-cbb-en-pack"]["purchased"], 1)
         self.assertEqual(rules["mtg-hob-cbb-en-pack"]["remaining"], 3)
+
+    def test_ten_ten_duplicate_counts_its_own_orders_only_from_sale_start(self) -> None:
+        # Purchasing the original SKU never consumes the duplicate's allowance,
+        # and orders for the duplicate before its campaign-specific refresh are
+        # excluded. An order after the sale starts must count.
+        files = {
+            name: (SNIPPETS / f"{name}.liquid").read_text(encoding="utf-8")
+            for name in (
+                "customer-order-limit-window",
+                "customer-order-limit-cancelled",
+                "customer-order-limit-rule",
+                "customer-order-limit-row",
+                "customer-order-limit-config",
+                "customer-order-limits",
+            )
+        }
+        environment = Environment(loader=DictLoader(files))
+        environment.filters["json"] = json.dumps
+        environment.filters["asset_url"] = lambda value: f"/assets/{value}"
+        duplicate = "reality-fracture-secret-lair-bundle-en"
+        orders = [
+            {"created_at": datetime(2026, 9, 28, tzinfo=timezone.utc),
+             "is_cancelled": 0,
+             "line_items": [{"sku": "MTG-FRA-SLB-EN", "quantity": 1}]},
+            {"created_at": datetime(2026, 10, 8, 12, tzinfo=timezone.utc),
+             "is_cancelled": 0,
+             "line_items": [{"product": {"handle": duplicate}, "quantity": 1}]},
+            {"created_at": datetime(2026, 10, 9, 2, tzinfo=timezone.utc),
+             "is_cancelled": 0,
+             "line_items": [{"sku": duplicate, "quantity": 1}]},
+        ]
+        rendered = environment.get_template("customer-order-limits").render(
+            customer={"id": 42, "email": "buyer@example.com", "orders": orders},
+            cart={"items": []},
+            product=None,
+        )
+        rules = self.rules(rendered)
+        self.assertEqual(rules[duplicate]["maximum"], 1)
+        self.assertEqual(rules[duplicate]["purchased"], 1)
+        self.assertEqual(rules[duplicate]["remaining"], 0)
+        self.assertEqual(rules["mtg-fra-slb-en"]["maximum"], 4)
+        self.assertEqual(rules["mtg-fra-slb-en"]["purchased"], 1)
+        self.assertEqual(rules["mtg-fra-slb-en"]["remaining"], 3)
 
     # --- diagnostics --------------------------------------------------------
 
