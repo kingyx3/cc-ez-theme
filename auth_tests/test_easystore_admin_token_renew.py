@@ -28,7 +28,7 @@ class ClaimsTest(unittest.TestCase):
     def test_store_identity_and_expiry_required(self):
         self.assertEqual(renewal.claims(jwt())["sid"], "store-123")
         self.assertNotIn("sid", renewal.claims(jwt(sid=None)))
-        self.assertNotIn("exp", renewal.claims(jwt(exp=None), require_exp=False))
+        self.assertIsNone(renewal.claims(jwt(exp=None), require_exp=False)["exp"])
         with self.assertRaisesRegex(renewal.RotationError, "replacement JWT with a valid expiry"):
             renewal.claims(jwt(exp=None))
         for invalid in ["no.jwt", "a.bad=.z", "a." + base64.urlsafe_b64encode(b'{}').decode() + ".z",
@@ -121,7 +121,7 @@ class RenewTest(unittest.TestCase):
     def test_exchange_rejects_new_jwt_without_exp_without_secret_updates(self):
         legacy = jwt(exp=None)
         with patch.object(renewal, "api_request", return_value={"token": jwt(exp=None)}) as http:
-            with self.assertRaisesRegex(renewal.RotationError, "replacement JWT with an expiry"):
+            with self.assertRaisesRegex(renewal.RotationError, "replacement JWT with a valid expiry"):
                 renewal.rotate(legacy, "dev", "dev.easy.co", "2", now=NOW)
             http.assert_called_once()
 
