@@ -127,3 +127,32 @@ invalid/expired upstream credential will fail at the EasyStore exchange.
 The workflow never prints JWT payloads. On continued failures, replace only
 the failing environment's `EASYSTORE_ADMIN_TOKEN` with its own valid EasyStore
 admin session JWT, then perform a forced dry run before enabling live writes.
+
+## Distinguishing EasyStore upstream failures
+
+On GitHub-hosted runners, the first API call exchanges the environment-scoped
+admin JWT with `POST /admin/v2/me/stores/auth`. The second call verifies the
+replacement JWT using the read-only admin theme listing. Failures now report
+**only** the failing operation and the numeric HTTP status; upstream error
+responses, URLs, tokens and headers are never printed.
+
+- `EasyStore token exchange returned HTTP 401/403`: EasyStore rejected the
+  selected environment's input credential. Make sure
+  `EASYSTORE_ADMIN_TOKEN` is the actual administrator session JWT from the
+  **matching environment's** EasyStore account, not the public API access
+  token, a token from the other store, or a JWT with a `Bearer ` prefix.
+- `EasyStore token exchange returned HTTP 400/404`: Check the matching
+  environment's `EASYSTORE_STORE_CODE` and whether EasyStore still supports
+  the undocumented exchange endpoint. Do not assume changing JWT expiry
+  validation will fix an upstream rejection.
+- `EasyStore admin API verification returned HTTP 401/403`: A replacement
+  token was returned, but EasyStore did not authorize the read-only admin API;
+  confirm this environment's store identity, pod ID and domain. No secret is
+  persisted.
+- `EasyStore token exchange connection failed`: Investigate network/TLS
+  availability or upstream downtime instead of changing credentials.
+- `EasyStore ... returned HTTP 429/5xx`: Wait for upstream recovery or review
+  rate limits; the workflow does not retry blindly.
+
+Rerun a forced **dry-run** in dev first, then prod. The job updates neither
+environment's secret during a dry run.
