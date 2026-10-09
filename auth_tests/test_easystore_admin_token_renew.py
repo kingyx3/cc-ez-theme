@@ -14,8 +14,10 @@ from scripts import easystore_admin_token_renew as renewal
 NOW = 1_800_000_000
 
 
-def jwt(sid: str | None = "store-123", exp: int = NOW + 10 * 86400, iat: int = NOW - 100) -> str:
-    fields = {"exp": exp, "iat": iat}
+def jwt(sid: str | None = "store-123", exp: int | None = NOW + 10 * 86400, iat: int = NOW - 100) -> str:
+    fields = {"iat": iat}
+    if exp is not None:
+        fields["exp"] = exp
     if sid is not None:
         fields["sid"] = sid
     payload = base64.urlsafe_b64encode(json.dumps(fields).encode()).decode().rstrip("=")
@@ -26,6 +28,9 @@ class ClaimsTest(unittest.TestCase):
     def test_store_identity_and_expiry_required(self):
         self.assertEqual(renewal.claims(jwt())["sid"], "store-123")
         self.assertNotIn("sid", renewal.claims(jwt(sid=None)))
+        self.assertIsNone(renewal.claims(jwt(exp=None), require_exp=False)["exp"])
+        with self.assertRaisesRegex(renewal.RotationError, "replacement JWT with a valid expiry"):
+            renewal.claims(jwt(exp=None))
         for invalid in ["no.jwt", "a.bad=.z", "a." + base64.urlsafe_b64encode(b'{}').decode() + ".z",
                         jwt(sid=""), jwt(exp="not-an-int"), jwt(exp=True)]:
             with self.subTest(invalid=invalid[:8]), self.assertRaises(renewal.RotationError):
@@ -83,6 +88,42 @@ class RenewTest(unittest.TestCase):
         self.assertEqual(updated, self.new)
         self.assertEqual(http.call_args_list[0].kwargs["payload"], {"store_code": "dev-store-code"})
         self.assertEqual(http.call_args_list[1].kwargs["headers"]["x-easystore-infra-default-domain"], "dev.easy.co")
+
+    def test_existing_jwt_without_exp_is_exchanged_and_verified(self):
+        # The absence of a client-visible exp must not stop an authenticated
+        # exchange before the EasyStore API can validate this credential.
+        legacy = jwt(sid="store-123", exp=None)
+        with patch.object(renewal, "api_request", side_effect=[{"token": self.new}, {"themes": []}]) as http:
+            renewed, changed = renewal.rotate(legacy, "dev", "https://dev.easy.co/", "2", now=NOW)
+        self.assertTrue(changed)
+        self.assertEqual(renewed, self.new)
+        self.assertEqual(http.call_count, 2)
+
+    def test_user_jwt_without_exp_is_exchanged(self):
+        legacy = jwt(sid=None, exp=None)
+        with patch.object(renewal, "api_request", side_effect=[{"token": self.new}, {"themes": []}]):
+            self.assertEqual(renewal.rotate(legacy, "dev", "dev.easy.co", "2", now=NOW)[0], self.new)
+
+    def test_unknown_input_exp_is_exchanged_but_output_must_have_valid_exp(self):
+        for bad_exp in ("unknown", True, float("nan")):
+            with self.subTest(exp=str(bad_exp)), patch.object(
+                renewal, "api_request", side_effect=[{"token": self.new}, {"themes": []}]
+            ) as http:
+                renewed, changed = renewal.rotate(jwt(exp=bad_exp), "dev", "dev.easy.co", "2", now=NOW)
+                self.assertTrue(changed)
+                self.assertEqual(renewed, self.new)
+                self.assertEqual(http.call_count, 2)
+
+    def test_float_numericdate_exp_is_valid(self):
+        self.assertEqual(renewal.claims(jwt(exp=float(NOW + 40 * 86400)))["exp"],
+                         float(NOW + 40 * 86400))
+
+    def test_exchange_rejects_new_jwt_without_exp_without_secret_updates(self):
+        legacy = jwt(exp=None)
+        with patch.object(renewal, "api_request", return_value={"token": jwt(exp=None)}) as http:
+            with self.assertRaisesRegex(renewal.RotationError, "replacement JWT with a valid expiry"):
+                renewal.rotate(legacy, "dev", "dev.easy.co", "2", now=NOW)
+            http.assert_called_once()
 
     def test_bootstrap_still_rejects_non_store_replacement(self):
         user = jwt(sid=None)
