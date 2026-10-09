@@ -100,6 +100,8 @@ jobs:
           retention-days: 30
 
   deploy:
+    # Feature branches validate and package; only main can publish to EasyStore.
+    if: github.ref == 'refs/heads/main'
     name: Import and publish packaged theme in EasyStore
     needs: package
     runs-on: ubuntu-latest
