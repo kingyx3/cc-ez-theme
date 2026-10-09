@@ -97,16 +97,24 @@ def api_request(url: str, method: str, token: str, *, payload: dict | None = Non
     if body is not None:
         request_headers["Content-Type"] = "application/json"
     request = urllib.request.Request(url, data=body, headers=request_headers, method=method)
+    # Only report the fixed operation name and numeric HTTP status. In
+    # particular, never print HTTPError.reason, bodies, headers or URLs:
+    # upstream diagnostics may contain tokens or confidential store details.
+    stage = "token exchange" if url == AUTH_URL else "admin API verification"
     try:
         with urllib.request.build_opener(NoRedirect()).open(request, timeout=25) as response:
             if response.status != 200:
-                raise RotationError("EasyStore authentication/verification returned an unexpected status.")
+                raise RotationError(f"EasyStore {stage} returned HTTP {response.status}.")
             data = json.load(response)
         if not isinstance(data, (dict, list)):
             raise ValueError()
         return data
-    except (urllib.error.URLError, OSError, ValueError, TimeoutError):
-        raise RotationError("EasyStore authentication/verification failed; check the workflow status and credentials.") from None
+    except urllib.error.HTTPError as error:
+        raise RotationError(f"EasyStore {stage} returned HTTP {error.code}.") from None
+    except (urllib.error.URLError, OSError, TimeoutError):
+        raise RotationError(f"EasyStore {stage} connection failed.") from None
+    except ValueError:
+        raise RotationError(f"EasyStore {stage} returned invalid JSON.") from None
 
 
 def rotate(token: str, store_code: str, domain: str, pod_id: str, *, force: bool = False, now: int | None = None) -> tuple[str, bool]:
