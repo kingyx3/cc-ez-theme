@@ -10,6 +10,7 @@ import argparse
 import base64
 import binascii
 import json
+import math
 import os
 import subprocess
 import sys
@@ -45,11 +46,16 @@ def claims(jwt: str, *, require_exp: bool = True) -> dict:
     # Some existing administrator credentials may lack a standard exp claim.
     # Treat these as bootstrap-only credentials: attempt a single authenticated
     # exchange and require a well-formed, sufficiently long-lived replacement.
-    if "exp" not in data:
+    exp = data.get("exp")
+    # JWT NumericDate permits integer or floating-point seconds. Credentials
+    # with absent or non-numeric expiration have *unknown* client-side
+    # lifetime and must go through the authenticated EasyStore exchange.
+    valid_exp = (isinstance(exp, (int, float)) and not isinstance(exp, bool)
+                 and math.isfinite(exp))
+    if not valid_exp:
         if require_exp:
-            raise RotationError("EasyStore did not issue a replacement JWT with an expiry.")
-    elif not isinstance(data["exp"], int) or isinstance(data["exp"], bool):
-        raise RotationError("EASYSTORE_ADMIN_TOKEN has a malformed JWT expiry.")
+            raise RotationError("EasyStore did not issue a replacement JWT with a valid expiry.")
+        data["exp"] = None
     # Account-level admin JWTs have no 'sid'. EasyStore can exchange one for
     # the selected store's JWT via /me/stores/auth, verified before persistence.
     if "sid" in data and (not isinstance(data["sid"], (str, int)) or isinstance(data["sid"], bool) or not data["sid"]):
