@@ -1,0 +1,86 @@
+name: Renew EasyStore administrator tokens
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/easystore-admin-token-renew.yml"
+      - "scripts/easystore_admin_token_renew.py"
+      - "auth_tests/**"
+      - "docs/EASYSTORE_ADMIN_TOKEN_RENEWAL.md"
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      deployment_env:
+        description: GitHub environment containing the store's admin JWT
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+        default: dev
+      dry_run:
+        description: Verify renewal without changing GitHub or Cloudflare secrets
+        type: boolean
+        required: true
+        default: true
+      force:
+        description: Renew even if more than 14 days remain (for validation)
+        type: boolean
+        required: true
+        default: false
+
+# The default Actions GITHUB_TOKEN intentionally has no permission to update
+# environment secrets. Use an explicitly configured per-environment credential.
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Offline token rotation tests
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - run: python -m unittest discover -s auth_tests -v
+
+  renew:
+    name: Renew ${{ matrix.deployment_env }} EasyStore JWT
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        deployment_env: ${{ github.event_name == 'schedule' && fromJSON('["dev","prod"]') || fromJSON(format('["{0}"]', inputs.deployment_env)) }}
+    environment: ${{ matrix.deployment_env }}
+    concurrency:
+      group: easystore-admin-jwt-renew-${{ matrix.deployment_env }}
+      cancel-in-progress: false
+    env:
+      # Each job reads and writes ONLY its own selected GitHub environment.
+      DEPLOYMENT_ENV: ${{ matrix.deployment_env }}
+      GITHUB_REPOSITORY: ${{ github.repository }}
+      EASYSTORE_ADMIN_TOKEN: ${{ secrets.EASYSTORE_ADMIN_TOKEN }}
+      EASYSTORE_STORE_CODE: ${{ vars.EASYSTORE_STORE_CODE }}
+      EASYSTORE_STORE_DOMAIN: ${{ vars.EASYSTORE_STORE_DOMAIN }}
+      EASYSTORE_POD_ID: ${{ vars.EASYSTORE_POD_ID }}
+      # Fine-grained token / GitHub App token with Environments:write for this repo.
+      GH_TOKEN: ${{ secrets.EASYSTORE_ROTATION_GH_TOKEN }}
+      # Optional Worker mirror; set Worker name only where it should be rotated.
+      EASYSTORE_MCP_WORKER_NAME: ${{ vars.EASYSTORE_MCP_WORKER_NAME }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+      FORCE_RENEWAL: ${{ github.event_name == 'workflow_dispatch' && inputs.force || false }}
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Renew and synchronize selected environment
+        run: python scripts/easystore_admin_token_renew.py --environment "$DEPLOYMENT_ENV"
