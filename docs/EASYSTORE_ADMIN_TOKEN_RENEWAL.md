@@ -207,3 +207,11 @@ If a forced dry run continues to return 401 after this change, check the
 active store in EasyStore, that environment's `EASYSTORE_STORE_CODE`,
 `EASYSTORE_STORE_DOMAIN` and `EASYSTORE_POD_ID`, and the dev environment
 admin session JWT. Don't overwrite the production environment's credentials.
+
+## EasyStore JWTs with no standard expiration field
+
+The [October 10 dev forced dry run](https://github.com/kingyx3/cc-ez-theme/actions/runs/38019582083/job/114117377070) progressed beyond the EasyStore token exchange (no 401) but the **replacement** JWT did not carry a standard numeric `exp` claim. Earlier code rejected it before checking whether the replacement actually had store administration access. We cannot infer an expiration date from an absent JWT claim.
+
+For this specific EasyStore format, the rotation now accepts a replacement with unknown expiry **only** if the previous JWT also lacked a numeric expiry, the replacement differs from the input, `sid` identifies the same store, and a read-only EasyStore admin API request with the replacement succeeds. The repository continues to reject expired/short-lived numeric-expiration JWTs and any attempt to downgrade a JWT with a known expiration into one without one.
+
+For credentials with unknown expiry, the automatic daily workflow must attempt renewal each day rather than incorrectly claiming a 30-day lifetime. There is no promise of uninterrupted renewal from an undocumented endpoint; monitor workflow failures and keep a recovery path for a revoked or expired JWT. A successful **dry run** confirms authentication and admin verification but makes no GitHub/Cloudflare secret changes; the subsequent non-dry run is required to persist the returned token in the selected environment.
