@@ -16,6 +16,7 @@ import re
 import subprocess
 import sys
 import time
+from datetime import datetime
 import urllib.error
 import urllib.request
 from urllib.parse import quote, urlsplit
@@ -32,6 +33,7 @@ STAGES = {AUTH_URL: "token exchange", VERIFY_URL: "admin API verification", SESS
 # value of this exact shape is ever reported; messages and bodies never are.
 ERROR_CODE = re.compile(r"[a-z][a-z0-9_]{0,63}")
 SECRET_NAME = "EASYSTORE_ADMIN_TOKEN"
+ROTATION_INTERVAL_SECONDS = 14 * 86400
 RENEW_BEFORE_SECONDS = 14 * 86400
 MIN_NEW_LIFETIME_SECONDS = 20 * 86400
 
@@ -245,6 +247,52 @@ def sync_github(token: str, deployment_env: str, repo: str, gh_token: str) -> No
         raise RotationError("Could not write the selected GitHub environment secret.") from None
 
 
+def secret_age_seconds(repo: str, deployment_env: str, gh_token: str, now: int) -> int:
+    """Age of this environment's saved admin secret, as reported by GitHub.
+
+    This metadata is updated by both manual reseeding and successful gh secret
+    set calls. It cannot get out of sync with the secret as a separate marker
+    variable could. The endpoint never returns the secret's value.
+    """
+    if not gh_token:
+        raise RotationError("Missing EASYSTORE_ROTATION_GH_TOKEN for secret age check.")
+    try:
+        owner, name = repo.split("/")
+        if not owner or not name or deployment_env not in ("dev", "prod"):
+            raise ValueError()
+        path = (f"repos/{quote(owner, safe='')}/{quote(name, safe='')}/environments/"
+                f"{quote(deployment_env, safe='')}/secrets/{SECRET_NAME}")
+        result = subprocess.run(
+            ["gh", "api", path], text=True,
+            env={**os.environ, "GH_TOKEN": gh_token},
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            timeout=30, check=True,
+        )
+        metadata = json.loads(result.stdout)
+        updated = metadata["updated_at"]
+        if not isinstance(updated, str):
+            raise ValueError()
+        stamp = datetime.fromisoformat(updated.replace("Z", "+00:00"))
+        if stamp.utcoffset() is None:
+            raise ValueError()
+        age = now - int(stamp.timestamp())
+        if age < -300:
+            raise ValueError()
+        return max(0, age)
+    except (ValueError, KeyError, TypeError, OverflowError, OSError, subprocess.SubprocessError):
+        raise RotationError(
+            "Could not read this environment's GitHub admin-secret update timestamp."
+        ) from None
+
+
+def renewal_due(claims_data: dict, age_seconds: int, now: int) -> bool:
+    """Renew after 14 days or sooner when token identity/expiry demands it."""
+    expires_at = claims_data.get("exp")
+    return (age_seconds >= ROTATION_INTERVAL_SECONDS
+            or not claims_data.get("sid")
+            or (expires_at is not None and expires_at - now <= RENEW_BEFORE_SECONDS))
+
+
 def main(argv: list[str] | None = None, environ: dict[str, str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--environment", choices=("dev", "prod"), required=True)
@@ -264,25 +312,59 @@ def main(argv: list[str] | None = None, environ: dict[str, str] | None = None) -
         worker = env.get("EASYSTORE_MCP_WORKER_NAME")
         if not dry_run and (not env.get("GH_TOKEN") or (worker and (not env.get("CLOUDFLARE_ACCOUNT_ID") or not env.get("CLOUDFLARE_API_TOKEN")))):
             raise RotationError("Missing GitHub rotation credential or configured Cloudflare Worker credential.")
-        renewed, changed = rotate(env["EASYSTORE_ADMIN_TOKEN"], env["EASYSTORE_STORE_CODE"],
-                                  env["EASYSTORE_STORE_DOMAIN"], env["EASYSTORE_POD_ID"], force=force)
-        # Resolve diagnostics before any external secret write; a logging-only
-        # operation must never convert a successful update into a false failure.
-        unknown_expiry = changed and claims(renewed, require_exp=False).get("exp") is None
-        if not changed:
-            print(f"{target}: healthy; renewal not yet due.")
-        elif dry_run:
-            print(f"{target}: renewal and read-only API verification passed (dry-run; no secrets updated).")
-            if unknown_expiry:
-                print(f"{target}: EasyStore JWT has no numeric exp claim; token lifetime is unknown.")
+
+        now = int(time.time())
+        token = env["EASYSTORE_ADMIN_TOKEN"]
+        old = claims(token, require_exp=False)
+        routing_headers = {
+            "easystore-pod-id": env["EASYSTORE_POD_ID"],
+            "x-easystore-infra-pod-id": env["EASYSTORE_POD_ID"],
+            "x-easystore-infra-default-domain": store_hostname(env["EASYSTORE_STORE_DOMAIN"]),
+        }
+
+        # Read-only health probe happens every day, even on days when no
+        # renewal is due. A 401/403 attempts early renewal; transport errors
+        # and upstream 5xx/429 are surfaced rather than mutating secrets.
+        credential_healthy = True
+        try:
+            api_request(VERIFY_URL, "GET", token, headers=routing_headers)
+        except RotationError as error:
+            if error.status not in (401, 403):
+                raise
+            credential_healthy = False
+
+        age = None
+        if force or not credential_healthy:
+            due = True
         else:
-            # Worker first so a failed GitHub write leaves the older GitHub
-            # credential due for renewal on the next scheduled retry.
-            sync_cloudflare(renewed, env)
-            sync_github(renewed, target, env["GITHUB_REPOSITORY"], env["GH_TOKEN"])
-            print(f"{target}: renewed and synchronized environment secret" + (" and Worker." if worker else "."))
+            age = secret_age_seconds(env["GITHUB_REPOSITORY"], target, env.get("GH_TOKEN", ""), now)
+            due = renewal_due(old, age, now)
+
+        if not due:
+            print(f"{target}: admin API health check passed; GitHub environment secret updated "
+                  f"{age // 86400} day(s) ago; renewal not due.")
+        else:
+            if not credential_healthy:
+                print(f"{target}: stored token failed admin API health check; attempting early renewal.")
+            renewed, changed = rotate(
+                token, env["EASYSTORE_STORE_CODE"], env["EASYSTORE_STORE_DOMAIN"],
+                env["EASYSTORE_POD_ID"], force=True, now=now,
+            )
+            if not changed:
+                raise RotationError("Renewal was due but no replacement JWT was issued.")
+            # Resolve diagnostics before any external secret write.
+            unknown_expiry = claims(renewed, require_exp=False).get("exp") is None
+            if dry_run:
+                print(f"{target}: renewal and read-only API verification passed (dry-run; no secrets updated).")
+            else:
+                # This environment's secret metadata timestamp is updated by
+                # GitHub when gh secret set succeeds: no separate clock state.
+                sync_cloudflare(renewed, env)
+                sync_github(renewed, target, env["GITHUB_REPOSITORY"], env["GH_TOKEN"])
+                print(f"{target}: renewed and synchronized environment secret.")
             if unknown_expiry:
-                print(f"{target}: token lifetime is unknown; daily renewal will retry without an expiry threshold.")
+                print(f"{target}: token expiry not provided; next planned renewal is "
+                      "14 days after this environment secret's GitHub update.")
         return 0
     except RotationError as exc:
         print(f"::error::{target}: {exc}", file=sys.stderr)
