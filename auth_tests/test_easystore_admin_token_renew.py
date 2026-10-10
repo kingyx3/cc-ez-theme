@@ -130,12 +130,40 @@ class RenewTest(unittest.TestCase):
         self.assertEqual(renewal.claims(jwt(exp=float(NOW + 40 * 86400)))["exp"],
                          float(NOW + 40 * 86400))
 
-    def test_exchange_rejects_new_jwt_without_exp_without_secret_updates(self):
+    def test_no_exp_replacement_requires_successful_admin_api_verification(self):
         legacy = jwt(exp=None)
-        with patch.object(renewal, "api_request", return_value={"token": jwt(exp=None)}) as http:
-            with self.assertRaisesRegex(renewal.RotationError, "replacement JWT with a valid expiry"):
+        fresh = jwt(exp=None, iat=NOW + 10)
+        with patch.object(renewal, "api_request", side_effect=[{"token": fresh}, {"themes": []}]) as http:
+            renewed, changed = renewal.rotate(legacy, "dev", "dev.easy.co", "2", now=NOW)
+        self.assertEqual((renewed, changed), (fresh, True))
+        self.assertEqual(http.call_args_list[1].args, (renewal.VERIFY_URL, "GET", fresh))
+
+    def test_no_exp_replacement_aborts_if_admin_api_rejects_it(self):
+        legacy = jwt(exp=None)
+        fresh = jwt(exp=None, iat=NOW + 10)
+        with patch.object(renewal, "api_request", side_effect=[
+            {"token": fresh}, renewal.RotationError("EasyStore admin API verification returned HTTP 401.")
+        ]) as http:
+            with self.assertRaisesRegex(renewal.RotationError, "verification returned HTTP 401"):
                 renewal.rotate(legacy, "dev", "dev.easy.co", "2", now=NOW)
-            http.assert_called_once()
+        self.assertEqual(http.call_count, 2)
+
+    def test_no_exp_replacement_rejected_if_input_had_exp(self):
+        with patch.object(renewal, "api_request", return_value={"token": jwt(exp=None, iat=NOW + 10)}) as http:
+            with self.assertRaisesRegex(renewal.RotationError, "omitted the expiry"):
+                renewal.rotate(self.old, "dev", "dev.easy.co", "2", now=NOW)
+        http.assert_called_once()
+
+    def test_no_exp_replacement_must_remain_store_scoped_and_changed(self):
+        legacy = jwt(exp=None)
+        for bad_token in [legacy, jwt(sid=None, exp=None, iat=NOW + 10),
+                          jwt(sid="other-store", exp=None, iat=NOW + 10)]:
+            with self.subTest(token=bad_token[:15]), patch.object(
+                renewal, "api_request", return_value={"token": bad_token}
+            ) as http:
+                with self.assertRaises(renewal.RotationError):
+                    renewal.rotate(legacy, "dev", "dev.easy.co", "2", now=NOW)
+                http.assert_called_once()
 
     def test_bootstrap_still_rejects_non_store_replacement(self):
         user = jwt(sid=None)
@@ -327,9 +355,18 @@ class MainTest(unittest.TestCase):
 
     def test_live_writes_cloudflare_first_then_only_dev_gh_secret(self):
         calls = []
-        with patch.object(renewal, "rotate", return_value=("new", True)), patch.object(renewal, "sync_cloudflare", side_effect=lambda *a: calls.append("worker")), patch.object(renewal, "sync_github", side_effect=lambda *a: calls.append(a[1])):
+        with patch.object(renewal, "rotate", return_value=(jwt(exp=None, iat=NOW + 10), True)), patch.object(renewal, "sync_cloudflare", side_effect=lambda *a: calls.append("worker")), patch.object(renewal, "sync_github", side_effect=lambda *a: calls.append(a[1])):
             self.assertEqual(self.execute(), 0)
         self.assertEqual(calls, ["worker", "dev"])
+
+    def test_dry_run_with_unknown_exp_never_updates_secrets(self):
+        replacement = jwt(exp=None, iat=NOW + 10)
+        with patch.object(renewal, "rotate", return_value=(replacement, True)), \
+                patch.object(renewal, "sync_github") as gh, \
+                patch.object(renewal, "sync_cloudflare") as cf:
+            self.assertEqual(self.execute({**self.env, "DRY_RUN": "true"}), 0)
+        gh.assert_not_called()
+        cf.assert_not_called()
 
     def test_never_writes_when_not_due(self):
         with patch.object(renewal, "rotate", return_value=(jwt(), False)), patch.object(renewal, "sync_github") as gh:
@@ -343,7 +380,7 @@ class MainTest(unittest.TestCase):
                 rotate.assert_not_called()
 
     def test_worker_failure_never_writes_github(self):
-        with patch.object(renewal, "rotate", return_value=("new", True)), patch.object(renewal, "sync_cloudflare", side_effect=renewal.RotationError("Worker failed")), patch.object(renewal, "sync_github") as gh:
+        with patch.object(renewal, "rotate", return_value=(jwt(exp=None, iat=NOW + 10), True)), patch.object(renewal, "sync_cloudflare", side_effect=renewal.RotationError("Worker failed")), patch.object(renewal, "sync_github") as gh:
             self.assertEqual(self.execute(), 1)
             gh.assert_not_called()
 
