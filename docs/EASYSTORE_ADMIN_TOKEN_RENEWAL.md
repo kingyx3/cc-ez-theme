@@ -11,6 +11,27 @@ that new token also worked with browser cookies omitted. A GitHub-hosted
 runner still needs to be verified by a manual dry run. EasyStore could change
 or revoke this behavior.
 
+## Getting the right token (seeding or reseeding)
+
+Renewal can only extend a session EasyStore still accepts; it cannot sign in
+(login needs reCAPTCHA and possibly OTP). Seed each environment once, and
+reseed only if the workflow reports the session itself is rejected:
+
+1. Sign in at https://admin.easystore.co with **Keep me signed in** ticked and
+   open the store this environment belongs to (dev or prod).
+2. Open the browser DevTools console on that tab and run
+   `copy(localStorage.getItem("_easystore_session"))`. This copies the admin
+   session JWT, which EasyStore's own admin app sends as `Authorization:
+   Bearer` to `api.easystore.co`. Do **not** use `_easystore_app_token`: that
+   one is for `apps.easystore.co` and the admin API rejects it with HTTP 401.
+3. Paste it into that environment's `EASYSTORE_ADMIN_TOKEN` secret (no
+   `Bearer ` prefix), then close the tab without clicking **Log out**, and do
+   not use "Log out from all other devices". Inferred from the admin app's
+   behavior: logging out ends the session server-side, which would invalidate
+   the copied token.
+4. Dispatch the workflow for that environment with dry_run=true, force=true,
+   then dry_run=false, force=true. From then on the daily run renews it.
+
 ## Configure dev and prod separately
 
 In GitHub Settings → Environments, configure these items **in each environment**,
@@ -127,6 +148,18 @@ invalid/expired upstream credential will fail at the EasyStore exchange.
 The workflow never prints JWT payloads. On continued failures, replace only
 the failing environment's `EASYSTORE_ADMIN_TOKEN` with its own valid EasyStore
 admin session JWT, then perform a forced dry run before enabling live writes.
+
+## When the exchange is rejected (HTTP 401/403)
+
+Failures include EasyStore's machine error code when it has one, for example
+`HTTP 401 (invalid_access_token)`; messages and bodies are never printed.
+On a 401/403 from the exchange, the script makes one read-only
+`GET /admin/v2/me/profile` call with the same token and says which case it is:
+
+- **Session rejected too**: the stored token is revoked, expired, or not the
+  `_easystore_session` value. No code change can fix this; reseed as above.
+- **Session still valid**: only the exchange for this store was refused. Check
+  `EASYSTORE_STORE_CODE` and that the signed-in account can access that store.
 
 ## Distinguishing EasyStore upstream failures
 

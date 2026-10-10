@@ -173,6 +173,31 @@ class RenewTest(unittest.TestCase):
                 renewal.rotate(self.old, "code", "host", "1007", now=NOW)
 
 
+    def test_rejected_exchange_with_dead_session_says_to_reseed(self):
+        rejected = renewal.RotationError("EasyStore token exchange returned HTTP 401 (invalid_access_token).",
+                                         status=401, code="invalid_access_token")
+        dead = renewal.RotationError("EasyStore admin session check returned HTTP 401.", status=401)
+        with patch.object(renewal, "api_request", side_effect=[rejected, dead]) as http:
+            with self.assertRaisesRegex(renewal.RotationError, "_easystore_session") as caught:
+                renewal.rotate(self.old, "dev-code", "dev.easy.co", "2", force=True, now=NOW)
+        self.assertIn("invalid_access_token", str(caught.exception))
+        self.assertEqual(http.call_args_list[1].args, (renewal.SESSION_URL, "GET", self.old))
+        self.assertEqual(len(http.call_args_list), 2)
+
+    def test_rejected_exchange_with_live_session_points_at_store(self):
+        rejected = renewal.RotationError("EasyStore token exchange returned HTTP 403.", status=403)
+        with patch.object(renewal, "api_request", side_effect=[rejected, {"user": {}}]):
+            with self.assertRaisesRegex(renewal.RotationError, "EASYSTORE_STORE_CODE"):
+                renewal.rotate(self.old, "dev-code", "dev.easy.co", "2", force=True, now=NOW)
+
+    def test_other_exchange_failures_skip_session_check(self):
+        unavailable = renewal.RotationError("EasyStore token exchange returned HTTP 503.", status=503)
+        with patch.object(renewal, "api_request", side_effect=[unavailable]) as http:
+            with self.assertRaisesRegex(renewal.RotationError, "^EasyStore token exchange returned HTTP 503.$"):
+                renewal.rotate(self.old, "dev-code", "dev.easy.co", "2", force=True, now=NOW)
+        http.assert_called_once()
+
+
 
 class HttpDiagnosticsTest(unittest.TestCase):
     def test_token_exchange_http_401_is_safe_and_precise(self):
@@ -187,6 +212,23 @@ class HttpDiagnosticsTest(unittest.TestCase):
         self.assertEqual(str(caught.exception), "EasyStore token exchange returned HTTP 401.")
         self.assertNotIn("secret", str(caught.exception))
         self.assertNotIn("dev", str(caught.exception))
+
+    def test_upstream_error_code_is_reported_only_when_well_formed(self):
+        cases = [
+            (b'{"error":{"type":"Unauthorized","message":"secret","code":"invalid_access_token"}}',
+             "EasyStore token exchange returned HTTP 401 (invalid_access_token)."),
+            (b'{"error":{"code":"Bearer eyJsecret.value"}}', "EasyStore token exchange returned HTTP 401."),
+            (b'{"error":{"code":"' + b"a" * 65 + b'"}}', "EasyStore token exchange returned HTTP 401."),
+            (b'not json secret', "EasyStore token exchange returned HTTP 401."),
+        ]
+        for body, expected in cases:
+            upstream = urllib.error.HTTPError(renewal.AUTH_URL, 401, "secret", {}, io.BytesIO(body))
+            with self.subTest(body=body[:20]), patch.object(renewal.urllib.request, "build_opener") as opener:
+                opener.return_value.open.side_effect = upstream
+                with self.assertRaises(renewal.RotationError) as caught:
+                    renewal.api_request(renewal.AUTH_URL, "POST", "secret", payload={"store_code": "dev"})
+                self.assertEqual(str(caught.exception), expected)
+                self.assertEqual(caught.exception.status, 401)
 
     def test_admin_api_verification_http_403_identifies_stage(self):
         upstream = urllib.error.HTTPError(renewal.VERIFY_URL, 403, "secret", {}, None)
