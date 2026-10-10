@@ -170,12 +170,21 @@ def rotate(token: str, store_code: str, domain: str, pod_id: str, *, force: bool
     updated = result.get("token") if isinstance(result, dict) else None
     if not isinstance(updated, str):
         raise RotationError("EasyStore did not return a replacement JWT.")
-    new = claims(updated)
+    # EasyStore's observed store JWT exchange can return a JWT with no
+    # standard exp claim. Its lifetime cannot safely be inferred from the
+    # incoming JWT, so verify actual administrative access before persistence
+    # and renew it on the next daily check rather than guessing an expiry.
+    new = claims(updated, require_exp=False)
     if not new.get("sid"):
         raise RotationError("EasyStore did not issue a store-scoped replacement JWT.")
     if (old.get("sid") and new["sid"] != old["sid"]) or updated == token:
         raise RotationError("Renewal changed store identity or did not replace the token.")
-    if (old_expiry is not None and new["exp"] <= old_expiry) or new["exp"] - now < MIN_NEW_LIFETIME_SECONDS:
+    new_expiry = new.get("exp")
+    if new_expiry is None:
+        if old_expiry is not None:
+            raise RotationError("Replacement JWT omitted the expiry of an expiring predecessor.")
+    elif ((old_expiry is not None and new_expiry <= old_expiry)
+          or new_expiry - now < MIN_NEW_LIFETIME_SECONDS):
         raise RotationError("Replacement JWT did not extend validity sufficiently.")
 
     # Server-side verification both authenticates the new JWT and verifies the
@@ -261,12 +270,16 @@ def main(argv: list[str] | None = None, environ: dict[str, str] | None = None) -
             print(f"{target}: healthy; renewal not yet due.")
         elif dry_run:
             print(f"{target}: renewal and read-only API verification passed (dry-run; no secrets updated).")
+            if claims(renewed, require_exp=False).get("exp") is None:
+                print(f"{target}: EasyStore JWT has no numeric exp claim; token lifetime is unknown.")
         else:
             # Worker first so a failed GitHub write leaves the older GitHub
             # credential due for renewal on the next scheduled retry.
             sync_cloudflare(renewed, env)
             sync_github(renewed, target, env["GITHUB_REPOSITORY"], env["GH_TOKEN"])
             print(f"{target}: renewed and synchronized environment secret" + (" and Worker." if worker else "."))
+            if claims(renewed, require_exp=False).get("exp") is None:
+                print(f"{target}: token lifetime is unknown; daily renewal will retry without an expiry threshold.")
         return 0
     except RotationError as exc:
         print(f"::error::{target}: {exc}", file=sys.stderr)
