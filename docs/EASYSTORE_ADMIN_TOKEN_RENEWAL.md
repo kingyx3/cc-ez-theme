@@ -91,13 +91,18 @@ Cloudflare credentials are missing, the job fails before renewal.
    for prod. Check the named environment secret's updated timestamp in
    GitHub Settings. If the prod Worker is configured, verify an MCP
    read operation afterward.
-5. Automatic daily checks subsequently rotate each environment's
-   token when it has **14 days or less** remaining; otherwise they leave
-   the secrets unchanged.
+5. GitHub Actions runs daily at 03:17 UTC (11:17 Singapore time) for dev
+   and prod independently. Every run checks the stored token against the
+   read-only admin themes API. The secret is renewed when its **GitHub
+   environment secret last-updated timestamp** is 14 days old, or earlier
+   when its JWT is within 14 days of expiry, no longer authenticates,
+   or still represents an account-scoped rather than store-scoped session.
+   A healthy recent token is left unchanged.
 
 The script verifies that the returned JWT is different, has the same
-store identity (sid), extends expiration sufficiently, and works against
-the admin theme-list API before updating secrets. The public EasyStore
+store identity (sid), and works against the admin theme-list API before
+updating secrets. Where both JWTs have numeric expiry claims, it also
+requires sufficient validity extension. The public EasyStore
 access token is never used for this exchange.
 
 Updates to the Cloudflare Worker happen **before** GitHub secret replacement,
@@ -136,14 +141,15 @@ parameters so the wrong store cannot silently be selected.
 
 A dev dry-run may report that `EASYSTORE_ADMIN_TOKEN` has no valid JWT
 expiry. JWTs that **omit** `exp` or use a nonnumeric expiry may still be accepted by EasyStore.
-The renewal script now attempts one authenticated store-token exchange for
-such credentials, regardless of the 14-day threshold. It **does not** assume
-an indefinite lifetime: the replacement must be a different, store-scoped JWT
-with a valid numeric `exp` at least 20 days in the future, and it must pass
-a read-only EasyStore admin API check before any secret updates are allowed.
+The renewal script can exchange these credentials without assuming an
+indefinite lifetime. A replacement lacking `exp` is permitted only when the
+input token also lacks a valid numeric expiry; the replacement must be
+different, preserve the store identity, and successfully authenticate to a
+read-only EasyStore admin API before any secret update.
 
-A missing or malformed input `exp` causes a forced authenticated exchange;
-only output JWTs with valid numeric `exp` values are accepted. An
+A missing or malformed input `exp` cannot establish how many days remain.
+The scheduling decision therefore uses GitHub's environment secret
+`updated_at` timestamp instead of attempting to guess an expiry. An
 invalid/expired upstream credential will fail at the EasyStore exchange.
 The workflow never prints JWT payloads. On continued failures, replace only
 the failing environment's `EASYSTORE_ADMIN_TOKEN` with its own valid EasyStore
@@ -214,4 +220,47 @@ The [October 10 dev forced dry run](https://github.com/kingyx3/cc-ez-theme/actio
 
 For this specific EasyStore format, the rotation now accepts a replacement with unknown expiry **only** if the previous JWT also lacked a numeric expiry, the replacement differs from the input, `sid` identifies the same store, and a read-only EasyStore admin API request with the replacement succeeds. The repository continues to reject expired/short-lived numeric-expiration JWTs and any attempt to downgrade a JWT with a known expiration into one without one.
 
-For credentials with unknown expiry, the automatic daily workflow must attempt renewal each day rather than incorrectly claiming a 30-day lifetime. There is no promise of uninterrupted renewal from an undocumented endpoint; monitor workflow failures and keep a recovery path for a revoked or expired JWT. A successful **dry run** confirms authentication and admin verification but makes no GitHub/Cloudflare secret changes; the subsequent non-dry run is required to persist the returned token in the selected environment.
+For credentials with unknown expiry, the daily workflow performs a
+read-only API health check, but only renews after 14 days since the saved
+GitHub environment secret was updated (or earlier if that health check
+returns HTTP 401/403). There is no promise of uninterrupted renewal from an
+undocumented endpoint; monitor workflow failures and keep a recovery path
+for a revoked or expired JWT. A successful **dry run** confirms authentication and admin verification but makes no GitHub/Cloudflare secret changes; the subsequent non-dry run is required to persist the returned token in the selected environment.
+
+## 14-day renewal cadence and safety checks
+
+The GitHub Actions workflow still runs every day, and each environment is
+handled in a separate job. It performs a read-only EasyStore admin theme
+listing using the stored credential on every run, including days on which
+renewal will be skipped.
+
+Instead of adding a timestamp variable that might drift from the saved
+secret, the renewal script reads GitHub's metadata for that environment's
+`EASYSTORE_ADMIN_TOKEN` using the REST endpoint
+`GET /repos/{owner}/{repo}/environments/{environment}/secrets/EASYSTORE_ADMIN_TOKEN`.
+GitHub returns `updated_at`, **not the secret value**. The existing
+`EASYSTORE_ROTATION_GH_TOKEN` fine-grained PAT with **Environments:
+read/write** permits this read. No new GitHub variables or secret
+permissions are required.
+
+- If the token is healthy and the environment secret was last saved fewer
+  than 14 days ago, no renewal occurs.
+- On or after day 14, the script performs a token exchange and read-only
+  verification of the replacement, then writes only that environment's
+  GitHub secret (and any explicitly configured Cloudflare Worker).
+- Renewal happens earlier if the token is account-scoped, its numeric
+  expiry is 14 days away or less, or EasyStore returns HTTP 401/403 on the
+  daily health check. A revoked/expired credential may not be recoverable
+  by exchange and will trigger an Actions failure requiring manual reseeding.
+- A network error, rate limit or server error on the health check fails
+  the workflow **without rotating**; it must not trigger unnecessary writes.
+- `force=true` bypasses the scheduling interval; `dry_run=true` never
+  writes secrets. A manual reseed resets the GitHub timestamp automatically.
+- If reading secret metadata fails, the workflow fails closed rather than
+  guessing whether renewal is due.
+
+Scheduled workflow failures appear as failed GitHub Actions runs; configure
+GitHub's Actions failure email notifications or other repository-level
+alerting so that a missed renewal can be investigated promptly. The
+reported GitHub timestamp is a **last-save** time, which can include manual
+token replacements; it is not an EasyStore-issued expiry claim.

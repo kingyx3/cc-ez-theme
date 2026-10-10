@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import base64
 import contextlib
+from datetime import datetime, timezone
 import io
 import json
 import subprocess
@@ -339,17 +340,65 @@ class SecretSyncTest(unittest.TestCase):
                 renewal.sync_cloudflare("jwt", {"EASYSTORE_MCP_WORKER_NAME": "worker", "CLOUDFLARE_ACCOUNT_ID": "id", "CLOUDFLARE_API_TOKEN": "key"})
 
 
+class CadenceTest(unittest.TestCase):
+    def test_fresh_secret_with_nonexpiring_claim_skips_until_day_14(self):
+        payload = renewal.claims(jwt(exp=None), require_exp=False)
+        self.assertFalse(renewal.renewal_due(payload, 13 * 86400 + 86399, NOW))
+        self.assertTrue(renewal.renewal_due(payload, 14 * 86400, NOW))
+        self.assertTrue(renewal.renewal_due(payload, 20 * 86400, NOW))
+
+    def test_expiring_token_renews_before_age_threshold(self):
+        recent = 1 * 86400
+        near = renewal.claims(jwt(exp=NOW + 7 * 86400), require_exp=False)
+        far = renewal.claims(jwt(exp=NOW + 29 * 86400), require_exp=False)
+        self.assertTrue(renewal.renewal_due(near, recent, NOW))
+        self.assertFalse(renewal.renewal_due(far, recent, NOW))
+        self.assertTrue(renewal.renewal_due(renewal.claims(jwt(sid=None)), recent, NOW))
+
+    def test_environment_secret_metadata_gives_real_last_update(self):
+        at = datetime.fromtimestamp(NOW - 8 * 86400, tz=timezone.utc).isoformat()
+        response = MagicMock(stdout=json.dumps({"updated_at": at}))
+        with patch.object(renewal.subprocess, "run", return_value=response) as run:
+            age = renewal.secret_age_seconds("kingyx3/cc-ez-theme", "dev", "gh-pat", NOW)
+        self.assertEqual(age, 8 * 86400)
+        self.assertEqual(run.call_args.args[0], [
+            "gh", "api", "repos/kingyx3/cc-ez-theme/environments/dev/secrets/EASYSTORE_ADMIN_TOKEN",
+        ])
+        self.assertEqual(run.call_args.kwargs["env"]["GH_TOKEN"], "gh-pat")
+        self.assertEqual(run.call_args.kwargs["stderr"], subprocess.DEVNULL)
+
+    def test_malformed_metadata_or_gh_error_fails_closed_without_leaking_pat(self):
+        for stdout in ('{"updated_at":"not-a-date"}', '{}', 'not-json',
+                       json.dumps({"updated_at": "2100-01-01T00:00:00Z"})):
+            with self.subTest(stdout=stdout), patch.object(
+                renewal.subprocess, "run", return_value=MagicMock(stdout=stdout)
+            ):
+                with self.assertRaisesRegex(renewal.RotationError, "Could not read"):
+                    renewal.secret_age_seconds("kingyx3/cc-ez-theme", "prod", "private-pat", NOW)
+        with patch.object(renewal.subprocess, "run", side_effect=subprocess.CalledProcessError(
+            1, ["gh", "api"], stderr="private-pat"
+        )):
+            with self.assertRaises(renewal.RotationError) as caught:
+                renewal.secret_age_seconds("kingyx3/cc-ez-theme", "dev", "private-pat", NOW)
+        self.assertNotIn("private-pat", str(caught.exception))
+
+
+
 class MainTest(unittest.TestCase):
     def setUp(self):
         self.env = {"GITHUB_REF": "refs/heads/main", "GITHUB_REPOSITORY": "kingyx3/cc-ez-theme", "DEPLOYMENT_ENV": "dev", "EASYSTORE_STORE_CODE": "dev-code", "EASYSTORE_STORE_DOMAIN": "dev.easy.co", "EASYSTORE_POD_ID": "123", "EASYSTORE_ADMIN_TOKEN": jwt(), "GH_TOKEN": "pat", "DRY_RUN": "false"}
 
-    def execute(self, env=None):
-        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+    def execute(self, env=None, *, age=15 * 86400, health_error=None):
+        # The orchestration always health-checks the existing token before
+        # consulting GitHub environment secret metadata.
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()), \
+                patch.object(renewal, "api_request", side_effect=health_error), \
+                patch.object(renewal, "secret_age_seconds", return_value=age):
             return renewal.main(["--environment", "dev"], self.env if env is None else env)
 
     def test_dry_run_does_not_write_secrets(self):
         with patch.object(renewal, "rotate", return_value=(jwt(), True)), patch.object(renewal, "sync_github") as gh, patch.object(renewal, "sync_cloudflare") as cf:
-            self.assertEqual(self.execute({**self.env, "DRY_RUN": "true", "GH_TOKEN": ""}), 0)
+            self.assertEqual(self.execute({**self.env, "DRY_RUN": "true", "GH_TOKEN": "", "FORCE_RENEWAL": "true"}), 0)
             gh.assert_not_called()
             cf.assert_not_called()
 
@@ -369,8 +418,24 @@ class MainTest(unittest.TestCase):
         cf.assert_not_called()
 
     def test_never_writes_when_not_due(self):
-        with patch.object(renewal, "rotate", return_value=(jwt(), False)), patch.object(renewal, "sync_github") as gh:
-            self.assertEqual(self.execute(), 0)
+        with patch.object(renewal, "rotate") as rotate, patch.object(renewal, "sync_github") as gh:
+            self.assertEqual(self.execute(age=7 * 86400), 0)
+            rotate.assert_not_called()
+            gh.assert_not_called()
+
+    def test_unauthorized_health_probe_renews_early(self):
+        failure = renewal.RotationError("Admin health HTTP 401", status=401)
+        with patch.object(renewal, "rotate", return_value=(jwt(exp=None, iat=NOW + 10), True)) as rotate, \
+                patch.object(renewal, "sync_github") as gh, patch.object(renewal, "sync_cloudflare"):
+            self.assertEqual(self.execute(age=1 * 86400, health_error=failure), 0)
+            self.assertTrue(rotate.call_args.kwargs["force"])
+            gh.assert_called_once()
+
+    def test_transient_health_failure_never_rotates(self):
+        failure = renewal.RotationError("Admin health HTTP 503", status=503)
+        with patch.object(renewal, "rotate") as rotate, patch.object(renewal, "sync_github") as gh:
+            self.assertEqual(self.execute(health_error=failure), 1)
+            rotate.assert_not_called()
             gh.assert_not_called()
 
     def test_fails_closed_for_mismatch_and_non_main(self):
