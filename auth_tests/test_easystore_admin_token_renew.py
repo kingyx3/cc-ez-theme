@@ -72,8 +72,14 @@ class RenewTest(unittest.TestCase):
         self.assertEqual(got, self.new)
         self.assertEqual(http.call_args_list[0].args, (renewal.AUTH_URL, "POST", self.old))
         self.assertEqual(http.call_args_list[0].kwargs["payload"], {"store_code": "dev-code"})
+        expected_headers = {
+            "easystore-pod-id": "111",
+            "x-easystore-infra-pod-id": "111",
+            "x-easystore-infra-default-domain": "dev.easy.co",
+        }
+        self.assertEqual(http.call_args_list[0].kwargs["headers"], expected_headers)
         self.assertEqual(http.call_args_list[1].args, (renewal.VERIFY_URL, "GET", self.new))
-        self.assertEqual(http.call_args_list[1].kwargs["headers"]["x-easystore-infra-default-domain"], "dev.easy.co")
+        self.assertEqual(http.call_args_list[1].kwargs["headers"], expected_headers)
 
 
     def test_user_scoped_admin_token_can_bootstrap_store_token(self):
@@ -88,7 +94,12 @@ class RenewTest(unittest.TestCase):
         self.assertTrue(changed)
         self.assertEqual(updated, self.new)
         self.assertEqual(http.call_args_list[0].kwargs["payload"], {"store_code": "dev-store-code"})
-        self.assertEqual(http.call_args_list[1].kwargs["headers"]["x-easystore-infra-default-domain"], "dev.easy.co")
+        self.assertEqual(http.call_args_list[0].kwargs["headers"], {
+            "easystore-pod-id": "2",
+            "x-easystore-infra-pod-id": "2",
+            "x-easystore-infra-default-domain": "dev.easy.co",
+        })
+        self.assertEqual(http.call_args_list[1].kwargs["headers"], http.call_args_list[0].kwargs["headers"])
 
     def test_existing_jwt_without_exp_is_exchanged_and_verified(self):
         # The absence of a client-visible exp must not stop an authenticated
@@ -131,6 +142,13 @@ class RenewTest(unittest.TestCase):
         with patch.object(renewal, "api_request", return_value={"token": jwt(sid=None, exp=NOW + 31 * 86400)}):
             with self.assertRaisesRegex(renewal.RotationError, "store-scoped replacement"):
                 renewal.rotate(user, "dev-code", "dev.easy.co", "2", now=NOW)
+
+    def test_exchange_never_uses_an_unvalidated_store_url(self):
+        with patch.object(renewal, "api_request") as http:
+            with self.assertRaisesRegex(renewal.RotationError, "EASYSTORE_STORE_DOMAIN"):
+                renewal.rotate(self.old, "dev-code", "https://not-the-store.easy.co/danger",
+                               "111", force=True, now=NOW)
+            http.assert_not_called()
 
     def test_forced_renewal(self):
         with patch.object(renewal, "api_request", side_effect=[{"token": self.new}, []]):

@@ -126,7 +126,17 @@ def rotate(token: str, store_code: str, domain: str, pod_id: str, *, force: bool
     if old.get("sid") and old_expiry is not None and old_expiry - now > RENEW_BEFORE_SECONDS and not force:
         return token, False
 
-    result = api_request(AUTH_URL, "POST", token, payload={"store_code": store_code})
+    # The actual EasyStore admin frontend includes store routing headers on
+    # *all* admin HTTP requests, including /me/stores/auth. Previously this
+    # script omitted them from the exchange (but sent them on verification),
+    # which can route a valid store JWT through the wrong API context.
+    routing_headers = {
+        "easystore-pod-id": pod_id,
+        "x-easystore-infra-pod-id": pod_id,
+        "x-easystore-infra-default-domain": store_hostname(domain),
+    }
+    result = api_request(AUTH_URL, "POST", token,
+                         payload={"store_code": store_code}, headers=routing_headers)
     updated = result.get("token") if isinstance(result, dict) else None
     if not isinstance(updated, str):
         raise RotationError("EasyStore did not return a replacement JWT.")
@@ -140,11 +150,7 @@ def rotate(token: str, store_code: str, domain: str, pod_id: str, *, force: bool
 
     # Server-side verification both authenticates the new JWT and verifies the
     # same store's administrative API works before any secret is overwritten.
-    api_request(VERIFY_URL, "GET", updated, headers={
-        "easystore-pod-id": pod_id,
-        "x-easystore-infra-pod-id": pod_id,
-        "x-easystore-infra-default-domain": store_hostname(domain),
-    })
+    api_request(VERIFY_URL, "GET", updated, headers=routing_headers)
     return updated, True
 
 
