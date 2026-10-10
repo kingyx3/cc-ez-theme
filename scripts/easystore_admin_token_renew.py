@@ -12,6 +12,7 @@ import binascii
 import json
 import math
 import os
+import re
 import subprocess
 import sys
 import time
@@ -22,6 +23,14 @@ from urllib.parse import quote, urlsplit
 
 AUTH_URL = "https://api.easystore.co/admin/v2/me/stores/auth"
 VERIFY_URL = "https://api.easystore.co/admin/v2/store/themes"
+# Read-only; accepts both user- and store-scoped admin sessions. Used only to
+# explain a rejected exchange: is the stored session itself dead, or only the
+# exchange for this store refused?
+SESSION_URL = "https://api.easystore.co/admin/v2/me/profile"
+STAGES = {AUTH_URL: "token exchange", VERIFY_URL: "admin API verification", SESSION_URL: "admin session check"}
+# EasyStore errors carry a machine code such as "invalid_access_token". Only a
+# value of this exact shape is ever reported; messages and bodies never are.
+ERROR_CODE = re.compile(r"[a-z][a-z0-9_]{0,63}")
 SECRET_NAME = "EASYSTORE_ADMIN_TOKEN"
 RENEW_BEFORE_SECONDS = 14 * 86400
 MIN_NEW_LIFETIME_SECONDS = 20 * 86400
@@ -29,6 +38,19 @@ MIN_NEW_LIFETIME_SECONDS = 20 * 86400
 
 class RotationError(Exception):
     """Deliberately contains no upstream messages or credentials."""
+
+    def __init__(self, message: str, *, status: int | None = None, code: str | None = None):
+        super().__init__(message)
+        self.status, self.code = status, code
+
+
+def error_code(error: urllib.error.HTTPError) -> str | None:
+    try:
+        data = json.loads(error.read(4096))
+        code = data["error"]["code"]
+    except Exception:
+        return None
+    return code if isinstance(code, str) and ERROR_CODE.fullmatch(code) else None
 
 
 def claims(jwt: str, *, require_exp: bool = True) -> dict:
@@ -100,7 +122,7 @@ def api_request(url: str, method: str, token: str, *, payload: dict | None = Non
     # Only report the fixed operation name and numeric HTTP status. In
     # particular, never print HTTPError.reason, bodies, headers or URLs:
     # upstream diagnostics may contain tokens or confidential store details.
-    stage = "token exchange" if url == AUTH_URL else "admin API verification"
+    stage = STAGES[url]
     try:
         with urllib.request.build_opener(NoRedirect()).open(request, timeout=25) as response:
             if response.status != 200:
@@ -110,7 +132,10 @@ def api_request(url: str, method: str, token: str, *, payload: dict | None = Non
             raise ValueError()
         return data
     except urllib.error.HTTPError as error:
-        raise RotationError(f"EasyStore {stage} returned HTTP {error.code}.") from None
+        code = error_code(error)
+        detail = f" ({code})" if code else ""
+        raise RotationError(f"EasyStore {stage} returned HTTP {error.code}{detail}.",
+                            status=error.code, code=code) from None
     except (urllib.error.URLError, OSError, TimeoutError):
         raise RotationError(f"EasyStore {stage} connection failed.") from None
     except ValueError:
@@ -135,8 +160,13 @@ def rotate(token: str, store_code: str, domain: str, pod_id: str, *, force: bool
         "x-easystore-infra-pod-id": pod_id,
         "x-easystore-infra-default-domain": store_hostname(domain),
     }
-    result = api_request(AUTH_URL, "POST", token,
-                         payload={"store_code": store_code}, headers=routing_headers)
+    try:
+        result = api_request(AUTH_URL, "POST", token,
+                             payload={"store_code": store_code}, headers=routing_headers)
+    except RotationError as error:
+        if error.status in (401, 403):
+            raise explain_rejected_exchange(token, error, routing_headers) from None
+        raise
     updated = result.get("token") if isinstance(result, dict) else None
     if not isinstance(updated, str):
         raise RotationError("EasyStore did not return a replacement JWT.")
@@ -152,6 +182,23 @@ def rotate(token: str, store_code: str, domain: str, pod_id: str, *, force: bool
     # same store's administrative API works before any secret is overwritten.
     api_request(VERIFY_URL, "GET", updated, headers=routing_headers)
     return updated, True
+
+
+def explain_rejected_exchange(token: str, error: RotationError, headers: dict) -> RotationError:
+    try:
+        api_request(SESSION_URL, "GET", token, headers=headers)
+    except RotationError as check:
+        if check.status not in (401, 403):
+            return error
+        return RotationError(
+            f"{error} EasyStore also rejects EASYSTORE_ADMIN_TOKEN on a read-only session check, so the stored "
+            "session is revoked, expired or not an admin session token. Renewal cannot revive it: sign in to "
+            "EasyStore admin for this store and reseed this environment's secret with the _easystore_session value "
+            "(see docs/EASYSTORE_ADMIN_TOKEN_RENEWAL.md).", status=error.status, code=error.code)
+    return RotationError(
+        f"{error} The stored admin session is still valid, but EasyStore refused to issue a token for this "
+        "store. Check this environment's EASYSTORE_STORE_CODE and that the signed-in account can access that store.",
+        status=error.status, code=error.code)
 
 
 def sync_cloudflare(token: str, env: dict[str, str]) -> None:
