@@ -266,11 +266,14 @@ def main(argv: list[str] | None = None, environ: dict[str, str] | None = None) -
             raise RotationError("Missing GitHub rotation credential or configured Cloudflare Worker credential.")
         renewed, changed = rotate(env["EASYSTORE_ADMIN_TOKEN"], env["EASYSTORE_STORE_CODE"],
                                   env["EASYSTORE_STORE_DOMAIN"], env["EASYSTORE_POD_ID"], force=force)
+        # Resolve diagnostics before any external secret write; a logging-only
+        # operation must never convert a successful update into a false failure.
+        unknown_expiry = changed and claims(renewed, require_exp=False).get("exp") is None
         if not changed:
             print(f"{target}: healthy; renewal not yet due.")
         elif dry_run:
             print(f"{target}: renewal and read-only API verification passed (dry-run; no secrets updated).")
-            if claims(renewed, require_exp=False).get("exp") is None:
+            if unknown_expiry:
                 print(f"{target}: EasyStore JWT has no numeric exp claim; token lifetime is unknown.")
         else:
             # Worker first so a failed GitHub write leaves the older GitHub
@@ -278,7 +281,7 @@ def main(argv: list[str] | None = None, environ: dict[str, str] | None = None) -
             sync_cloudflare(renewed, env)
             sync_github(renewed, target, env["GITHUB_REPOSITORY"], env["GH_TOKEN"])
             print(f"{target}: renewed and synchronized environment secret" + (" and Worker." if worker else "."))
-            if claims(renewed, require_exp=False).get("exp") is None:
+            if unknown_expiry:
                 print(f"{target}: token lifetime is unknown; daily renewal will retry without an expiry threshold.")
         return 0
     except RotationError as exc:
