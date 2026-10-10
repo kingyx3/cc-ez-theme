@@ -355,7 +355,7 @@ class MainTest(unittest.TestCase):
 
     def test_live_writes_cloudflare_first_then_only_dev_gh_secret(self):
         calls = []
-        with patch.object(renewal, "rotate", return_value=("new", True)), patch.object(renewal, "sync_cloudflare", side_effect=lambda *a: calls.append("worker")), patch.object(renewal, "sync_github", side_effect=lambda *a: calls.append(a[1])):
+        with patch.object(renewal, "rotate", return_value=(jwt(exp=None, iat=NOW + 10), True)), patch.object(renewal, "sync_cloudflare", side_effect=lambda *a: calls.append("worker")), patch.object(renewal, "sync_github", side_effect=lambda *a: calls.append(a[1])):
             self.assertEqual(self.execute(), 0)
         self.assertEqual(calls, ["worker", "dev"])
 
@@ -380,7 +380,7 @@ class MainTest(unittest.TestCase):
                 rotate.assert_not_called()
 
     def test_worker_failure_never_writes_github(self):
-        with patch.object(renewal, "rotate", return_value=("new", True)), patch.object(renewal, "sync_cloudflare", side_effect=renewal.RotationError("Worker failed")), patch.object(renewal, "sync_github") as gh:
+        with patch.object(renewal, "rotate", return_value=(jwt(exp=None, iat=NOW + 10), True)), patch.object(renewal, "sync_cloudflare", side_effect=renewal.RotationError("Worker failed")), patch.object(renewal, "sync_github") as gh:
             self.assertEqual(self.execute(), 1)
             gh.assert_not_called()
 
