@@ -156,3 +156,21 @@ responses, URLs, tokens and headers are never printed.
 
 Rerun a forced **dry-run** in dev first, then prod. The job updates neither
 environment's secret during a dry run.
+
+## Token exchange request routing
+
+EasyStore's published administrator JavaScript client includes
+`easystore-pod-id`, `x-easystore-infra-pod-id`, and
+`x-easystore-infra-default-domain` on requests after a store has been
+selected. The rotation workflow must include the **selected GitHub
+environment's** values on the token exchange itself, not only on the
+subsequent read-only token verification request. Otherwise a valid
+store-specific token may be rejected before the route reaches the proper
+store context.
+
+A 401 from the exchange still can mean the stored JWT is expired, revoked,
+invalid for that store, or rejected for a different request-context reason.
+If a forced dry run continues to return 401 after this change, check the
+active store in EasyStore, that environment's `EASYSTORE_STORE_CODE`,
+`EASYSTORE_STORE_DOMAIN` and `EASYSTORE_POD_ID`, and the dev environment
+admin session JWT. Don't overwrite the production environment's credentials.
