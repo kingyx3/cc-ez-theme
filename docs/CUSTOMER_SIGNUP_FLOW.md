@@ -100,4 +100,4 @@ The signup/profile gate must preserve these behaviors:
 - the theme-rendered returning-customer login remains password-first;
 - once EasyStore accepts account setup and the required profile, the customer returns to the product or prior storefront page they were trying to continue from.
 
-The implementation lives in `theme/snippets/login-redirect-boot.liquid`, with regression coverage in `tests/test_profile_completion_gate.py`, `tests/test_first_password_profile_completion.py`, and the login-redirect browser suite.
+The implementation lives in `theme/snippets/login-redirect-boot.liquid`, with regression coverage in `tests/theme/test_profile_completion_gate.py`, `tests/theme/test_first_password_profile_completion.py`, and the login-redirect browser suite.

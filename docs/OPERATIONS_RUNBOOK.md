@@ -8,7 +8,7 @@ The repository contains multiple independently deployable products:
 
 - the EasyStore storefront theme under `theme/`;
 - Cloudflare Workers under `cloudflare/`;
-- EasyStore/HubSpot CRM synchronization tooling under `scripts/` and `crm_tests/`;
+- EasyStore/HubSpot CRM synchronization tooling under `scripts/crm/` and `tests/crm/`;
 - attribution and other scheduled/integration workflows under `.github/workflows/`.
 
 Do not assume a successful check for one product validates another. Use the workflow and test suite for the subsystem you changed.
@@ -20,12 +20,12 @@ For the theme, `main` is the production release branch. When `EASYSTORE_ADMIN_TO
 For theme changes:
 
 ```bash
-python scripts/theme_ci.py check theme
-python -m unittest discover -s tests -v
-python -m coverage run -m unittest discover -s tests -v
+python scripts/theme/theme_ci.py check theme
+python -m unittest discover -s tests/theme -v
+python -m coverage run -m unittest discover -s tests/theme -v
 python -m coverage report
-python scripts/theme_ci.py package theme cc-ez-theme.zip
-python -c "from scripts.theme_ci import validate_archive; print(validate_archive('cc-ez-theme.zip'))"
+python scripts/theme/theme_ci.py package theme cc-ez-theme.zip
+python -c "from scripts.theme.theme_ci import validate_archive; print(validate_archive('cc-ez-theme.zip'))"
 ```
 
 Archive validation must print `[]`.

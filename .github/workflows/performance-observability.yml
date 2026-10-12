@@ -4,8 +4,8 @@ on:
   pull_request:
     paths:
       - "theme/**"
-      - "e2e/performance.spec.js"
-      - "e2e/storefront-helpers.js"
+      - "tests/e2e/performance.spec.js"
+      - "tests/e2e/storefront-helpers.js"
       - "package.json"
       - "package-lock.json"
       - "playwright.config.js"
@@ -15,8 +15,8 @@ on:
       - main
     paths:
       - "theme/**"
-      - "e2e/performance.spec.js"
-      - "e2e/storefront-helpers.js"
+      - "tests/e2e/performance.spec.js"
+      - "tests/e2e/storefront-helpers.js"
       - "package.json"
       - "package-lock.json"
       - "playwright.config.js"

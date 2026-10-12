@@ -159,7 +159,7 @@ cmp -s \
 
 The validator rejects missing counterparts because a storefront/editor mismatch
 can make preview behavior differ from the published theme. The validator only
-compares file *names*; `tests/test_theme_asset_delivery.py` compares the bytes,
+compares file *names*; `tests/theme/test_theme_asset_delivery.py` compares the bytes,
 which is the drift that actually matters - a merchant styling a page in the
 editor that the shopper never sees.
 
@@ -171,7 +171,7 @@ that belongs to the theme rather than to a merchant setting belongs in
 `<script>` blocks are for values Liquid has to render - a colour setting, a
 translated string, a customer's own data - and nothing else.
 
-`tests/test_theme_asset_delivery.py` pins the rules that keep this cheap:
+`tests/theme/test_theme_asset_delivery.py` pins the rules that keep this cheap:
 
 - `sections/header.liquid` renders on every page. Its behaviour lives in
   `assets/header.js` (sticky bar, disclosure menus) and
@@ -486,7 +486,7 @@ Nothing is invented: a product the lookup cannot find is left as the snippet
 rendered it, empty and hidden.
 
 When a card and its product page disagree about a count, paste
-`scripts/inventory-notice-probe.console.js` into the browser console on the page
+`scripts/console/inventory-notice-probe.console.js` into the browser console on the page
 showing the cards. For every product on it, the probe prints what the card
 printed, what that product's own page prints, the quantities EasyStore reports
 for it, and which of the two is at fault: an untracked product, a card that did
@@ -609,7 +609,7 @@ Before opening a pull request:
 - `/account/auth` may be EasyStore's own flow rather than
   `templates/customers/login.liquid`; the one-time-code step there certainly is.
   No theme deploy can change copy on a page the theme does not render. Paste
-  `scripts/account-copy-check.console.js` into the browser console on the page
+  `scripts/console/account-copy-check.console.js` into the browser console on the page
   to tell the two apart: it reports whether the theme's own recovery markup is
   present and which rules the published stylesheet contains, so a change that
   does not appear points either at a stale published build or at the store's
@@ -633,8 +633,8 @@ Before opening a pull request:
   the customer and a second then returns "Customer already exists (phone)".
   Native typing, paste, and browser autofill are left untouched; Android's
   split-autofill limitation remains a platform issue. The read-only
-  `scripts/otp-widget-capture.console.js` and
-  `scripts/otp-handler-probe.console.js` probes may inspect the widget, but
+  `scripts/console/otp-widget-capture.console.js` and
+  `scripts/console/otp-handler-probe.console.js` probes may inspect the widget, but
   neither is packaged and neither mutates it.
 - A store translation can come back empty. A field whose placeholder and
   floating label both read one key then renders with no visible title at all,

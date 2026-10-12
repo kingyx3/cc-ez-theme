@@ -178,7 +178,7 @@ The id is different for every imported theme, so the workflow discovers it after
 After a successful import the deploy job:
 
 1. requests the theme listing at `GET https://api.easystore.co/admin/v2/store/themes`;
-2. runs `scripts/easystore_publish.py resolve` against both the import response and the listing response;
+2. runs `scripts/theme/easystore_publish.py resolve` against both the import response and the listing response;
 3. exposes the resolved id as the `theme` step output, which the publish step uses.
 
 The resolver accepts an id only when it can tie the id back to the identity this run stamped into the package, trying in order:
@@ -196,7 +196,7 @@ The resolver fails the job rather than guessing when two different ids claim the
 Run the same resolution locally against saved responses:
 
 ```bash
-python scripts/easystore_publish.py resolve \
+python scripts/theme/easystore_publish.py resolve \
   --import-response easystore-import.json \
   --themes-response easystore-themes.json \
   --display-name "CC main r451 abc1234" \
@@ -235,9 +235,9 @@ The admin bearer token has likely expired, been revoked, or does not have access
 Check the response body in the failed workflow step. Also run locally:
 
 ```bash
-python scripts/theme_ci.py check theme
-python scripts/theme_ci.py package theme cc-ez-theme.zip
-python -c "from scripts.theme_ci import validate_archive; print(validate_archive('cc-ez-theme.zip'))"
+python scripts/theme/theme_ci.py check theme
+python scripts/theme/theme_ci.py package theme cc-ez-theme.zip
+python -c "from scripts.theme.theme_ci import validate_archive; print(validate_archive('cc-ez-theme.zip'))"
 ```
 
 The archive validation command should print `[]`.

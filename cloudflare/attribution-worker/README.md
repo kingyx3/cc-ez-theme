@@ -85,7 +85,7 @@ The Analytics Engine dataset is named `cc_source_clicks` and is created automati
 - `DB` → D1 database `cc-attribution`
 - `ANALYTICS` → Analytics Engine dataset `cc_source_clicks`
 
-The production D1 database UUID is committed in `wrangler.jsonc`. It is a resource identifier, not a credential. Cloudflare API credentials must never be committed. `scripts/cloudflare_hubspot_attribution.py` holds the same UUID so it can read the database, and `crm_tests/test_cloudflare_attribution.py` pins the two copies together.
+The production D1 database UUID is committed in `wrangler.jsonc`. It is a resource identifier, not a credential. Cloudflare API credentials must never be committed. `scripts/crm/cloudflare_hubspot_attribution.py` holds the same UUID so it can read the database, and `tests/crm/test_cloudflare_attribution.py` pins the two copies together.
 
 `workers_dev` is **off**. A `*.workers.dev` hostname is a second, unrouted way to reach a Worker whose whole job is to mint click rows, so a click can only be recorded through the `cardboard.sg` route.
 

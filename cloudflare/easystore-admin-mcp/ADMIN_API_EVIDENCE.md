@@ -35,6 +35,6 @@ with a JSON body shaped as:
 
 The `product_ids` array represents the full display order, top item first. This is distinct from PUT `/admin/v2/store/products/{product_id}`: changing a product's ordinary `position` field through that product endpoint returned HTTP 200 in the observed workflow but did not change its display position.
 
-Existing checkout/theme reads also have repository evidence in `scripts/easystore_admin_checkouts.py` and `docs/EASYSTORE_API_DEPLOYMENT.md`.
+Existing checkout/theme reads also have repository evidence in `scripts/crm/easystore_admin_checkouts.py` and `docs/EASYSTORE_API_DEPLOYMENT.md`.
 
 Frontend source and observed network traffic confirm client behavior, not complete server-side schemas, account entitlements, authorization scopes, live compatibility or idempotency guarantees. Some GET routes have side effects and are excluded from read tools. Nested payload schemas are partial; server business validation can still reject requests. Lazy/computed/server-only routes can be absent. No live store mutations were performed for implementation or tests; the deployment workflow checks three reads without logging records.

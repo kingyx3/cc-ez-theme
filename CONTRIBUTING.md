@@ -32,22 +32,22 @@ Cloudflare workers use separate package manifests. Run npm commands from the wor
 Run the validator and unit tests:
 
 ```bash
-python scripts/theme_ci.py check theme
-python -m unittest discover -s tests -v
+python scripts/theme/theme_ci.py check theme
+python -m unittest discover -s tests/theme -v
 ```
 
 Run the coverage gate when changing validator/packaging code:
 
 ```bash
-python -m coverage run -m unittest discover -s tests -v
+python -m coverage run -m unittest discover -s tests/theme -v
 python -m coverage report
 ```
 
 Build and validate the package:
 
 ```bash
-python scripts/theme_ci.py package theme cc-ez-theme.zip
-python -c "from scripts.theme_ci import validate_archive; print(validate_archive('cc-ez-theme.zip'))"
+python scripts/theme/theme_ci.py package theme cc-ez-theme.zip
+python -c "from scripts.theme.theme_ci import validate_archive; print(validate_archive('cc-ez-theme.zip'))"
 ```
 
 The archive validation command must print `[]`.

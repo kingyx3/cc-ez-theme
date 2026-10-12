@@ -3,11 +3,11 @@ name: EasyStore browser E2E
 on:
   pull_request:
     # The storefront the suite drives is built from the theme, and the suite
-    # itself lives in e2e/. A CRM sync change cannot alter either, so it is
+    # itself lives in tests/e2e/. A CRM sync change cannot alter either, so it is
     # gated by "Validate CRM sync" instead of five browser matrices.
     paths:
       - "theme/**"
-      - "e2e/**"
+      - "tests/e2e/**"
       - "package.json"
       - "package-lock.json"
       - "playwright.config.js"
@@ -149,7 +149,7 @@ jobs:
           exit 1
 
       - name: Run storefront E2E
-        run: npx playwright test e2e/storefront.spec.js --project="${{ matrix.project }}"
+        run: npx playwright test tests/e2e/storefront.spec.js --project="${{ matrix.project }}"
 
       - name: Upload Playwright report
         if: always()
@@ -216,7 +216,7 @@ jobs:
           exit 1
 
       - name: Run login redirect regression suite
-        run: npx playwright test e2e/login-redirect.spec.js --project=chromium-desktop
+        run: npx playwright test tests/e2e/login-redirect.spec.js --project=chromium-desktop
 
       - name: Upload login redirect failure artifacts
         if: failure()
@@ -274,7 +274,7 @@ jobs:
           exit 1
 
       - name: Run purchase limit after login suite
-        run: npx playwright test e2e/purchase-limit-after-login.spec.js e2e/buy-now-cart-limit.spec.js --project=chromium-desktop
+        run: npx playwright test tests/e2e/purchase-limit-after-login.spec.js tests/e2e/buy-now-cart-limit.spec.js --project=chromium-desktop
 
       - name: Upload purchase limit failure artifacts
         if: failure()
@@ -328,7 +328,7 @@ jobs:
           exit 1
 
       - name: Run Axe accessibility suite
-        run: npx playwright test e2e/accessibility.spec.js --project=chromium-desktop
+        run: npx playwright test tests/e2e/accessibility.spec.js --project=chromium-desktop
 
       - name: Upload Playwright report
         if: always()
