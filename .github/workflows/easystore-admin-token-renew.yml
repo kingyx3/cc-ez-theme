@@ -6,6 +6,8 @@ on:
       - ".github/workflows/easystore-admin-token-renew.yml"
       - "scripts/auth/easystore_admin_token_renew.py"
       - "tests/auth/**"
+      - ".github/scripts/report_easystore_incident.py"
+      - "tests/monitor/**"
       - "docs/EASYSTORE_ADMIN_TOKEN_RENEWAL.md"
   schedule:
     - cron: "17 3 * * *"
@@ -46,12 +48,16 @@ jobs:
         with:
           python-version: "3.13"
       - run: python -m unittest discover -s tests/auth -v
+      - run: python -m unittest discover -s tests/monitor -v
 
   renew:
     name: Renew ${{ matrix.deployment_env }} EasyStore JWT
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
     strategy:
       fail-fast: false
       matrix:
@@ -84,3 +90,10 @@ jobs:
           python-version: "3.13"
       - name: Renew and synchronize selected environment
         run: python scripts/auth/easystore_admin_token_renew.py --environment "$DEPLOYMENT_ENV"
+      - name: Record prod renewal failure or recovery in GitHub Issues
+        if: ${{ (success() || failure()) && matrix.deployment_env == 'prod' && (github.event_name == 'schedule' || !inputs.dry_run) }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EASYSTORE_ALERT_COMPONENT: admin-renewal
+          EASYSTORE_ALERT_STATUS: ${{ job.status }}
+        run: python3 .github/scripts/report_easystore_incident.py
