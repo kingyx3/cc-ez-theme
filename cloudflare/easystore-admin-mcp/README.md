@@ -48,3 +48,19 @@ The upstream is fixed to `https://api.easystore.co`, store `cardboardcollective.
 GET/DELETE use query parameters; POST/PUT/PATCH use JSON. Callers cannot supply methods, URLs, headers or store routing. Unknown operations, extra top-level fields and unsafe paths are rejected. Reads are capped at 50 records where a limit is defined; responses at 2 MiB; mutation bodies at 256 KiB; incoming MCP requests at 320 KiB. Upstream requests time out after 20 seconds and redirects are blocked.
 
 Successful reads return business data to the authorized client, with known credentials redacted. Errors and audit logs omit upstream bodies, records and credentials. Shared keys identify roles, not people. Browser origins other than the Worker's own origin are rejected. `/health` is public and non-sensitive. This implementation supports static-key authentication with MCP SDK v2 and legacy clients; OAuth is not implemented.
+
+## Ongoing production health
+
+The [daily production health workflow](../../.github/workflows/easystore-admin-mcp-health.yml)
+runs at 03:47 UTC (11:47 SGT), after scheduled token renewal. It uses the
+`prod` environment's `EASYSTORE_ADMIN_MCP_READ_TOKEN` to verify the
+deployed MCP's authenticated tool list and product/customer/discount reads,
+without deploying or modifying EasyStore. Use **Run workflow** on `main`
+for an immediate check.
+
+Production health, token-renewal and MCP-deploy failures are reported in
+deduplicated GitHub Issues assigned to the repository owner; successful runs
+close recovered incidents. Enable GitHub assigned-issue notifications.
+The health check targets the existing Cloudflare Worker origin; update
+`scripts/healthcheck.js` if the deployment hostname changes. The deployment
+itself already performs the same read checks on each production deploy.
