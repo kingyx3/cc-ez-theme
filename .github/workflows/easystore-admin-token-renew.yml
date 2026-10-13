@@ -4,8 +4,8 @@ on:
   pull_request:
     paths:
       - ".github/workflows/easystore-admin-token-renew.yml"
-      - "scripts/easystore_admin_token_renew.py"
-      - "auth_tests/**"
+      - "scripts/auth/easystore_admin_token_renew.py"
+      - "tests/auth/**"
       - "docs/EASYSTORE_ADMIN_TOKEN_RENEWAL.md"
   schedule:
     - cron: "17 3 * * *"
@@ -45,7 +45,7 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
-      - run: python -m unittest discover -s auth_tests -v
+      - run: python -m unittest discover -s tests/auth -v
 
   renew:
     name: Renew ${{ matrix.deployment_env }} EasyStore JWT
@@ -83,4 +83,4 @@ jobs:
         with:
           python-version: "3.13"
       - name: Renew and synchronize selected environment
-        run: python scripts/easystore_admin_token_renew.py --environment "$DEPLOYMENT_ENV"
+        run: python scripts/auth/easystore_admin_token_renew.py --environment "$DEPLOYMENT_ENV"

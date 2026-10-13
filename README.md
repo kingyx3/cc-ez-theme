@@ -12,15 +12,24 @@ See [Theme production safety](docs/THEME_PRODUCTION_SAFETY.md) and the [Operatio
 
 ```text
 .
-├── .github/workflows/       CI, packaging, deployment, sync, and observability
+├── .github/workflows/        CI, packaging, deployment, sync, and observability
 ├── cloudflare/               Cloudflare Workers and worker-specific docs/tests
-├── crm_tests/                CRM synchronization tests
 ├── docs/                     Maintainer and operations documentation
-├── e2e/                      Playwright storefront tests
-├── scripts/                  Validation, packaging, publishing, and sync tooling
-├── tests/                    Theme validator/package tests
+├── email-templates/          EasyStore notification email templates
+├── scripts/
+│   ├── theme/                Theme validation, packaging, and publishing tooling
+│   ├── crm/                  EasyStore -> HubSpot CRM and attribution sync jobs
+│   ├── auth/                 EasyStore admin token renewal
+│   └── console/              Read-only browser-console probes for the live store
+├── tests/
+│   ├── theme/                Theme validator/package tests (100% coverage gate)
+│   ├── crm/                  CRM synchronization tests
+│   ├── auth/                 Admin token renewal tests
+│   └── e2e/                  Playwright storefront tests
 └── theme/                    EasyStore runtime source
 ```
+
+Each `scripts/<area>/` folder is tested by the matching `tests/<area>/` folder and gated by its own workflow, so a change to one area does not run or redeploy the others. Cloudflare Workers keep their tests next to their sources in `cloudflare/<worker>/test/`.
 
 Only supported files below `theme/` are copied into the EasyStore upload ZIP. Repository documentation, tests, scripts, workflows, and other development files are excluded from the package.
 
@@ -53,23 +62,23 @@ Worker directories under `cloudflare/` have their own `package.json` files and s
 Run the theme validator and unit suite before opening a pull request:
 
 ```bash
-python scripts/theme_ci.py check theme
-python -m unittest discover -s tests -v
+python scripts/theme/theme_ci.py check theme
+python -m unittest discover -s tests/theme -v
 ```
 
 Run the same coverage gate used for the repository tooling:
 
 ```bash
-python -m coverage run -m unittest discover -s tests -v
+python -m coverage run -m unittest discover -s tests/theme -v
 python -m coverage report
 ```
 
 Build and validate the production upload artifact:
 
 ```bash
-python scripts/theme_ci.py package theme cc-ez-theme.zip
+python scripts/theme/theme_ci.py package theme cc-ez-theme.zip
 python -m zipfile -l cc-ez-theme.zip
-python -c "from scripts.theme_ci import validate_archive; print(validate_archive('cc-ez-theme.zip'))"
+python -c "from scripts.theme.theme_ci import validate_archive; print(validate_archive('cc-ez-theme.zip'))"
 ```
 
 The final command must print `[]`.
@@ -92,7 +101,7 @@ Do not point destructive or state-changing test work at production unless the te
 
 ## Packaging contract
 
-Do not zip the repository or `theme/` manually. Use `scripts/theme_ci.py` or the `cc-ez-theme` GitHub Actions artifact.
+Do not zip the repository or `theme/` manually. Use `scripts/theme/theme_ci.py` or the `cc-ez-theme` GitHub Actions artifact.
 
 The generated ZIP must contain exactly one EasyStore-compatible wrapper:
 

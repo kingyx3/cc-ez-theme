@@ -14,9 +14,9 @@ on:
       - "theme/templates/customers/activate_account.liquid"
       - "theme/templates/customers/reset_password.liquid"
       - "theme/templates/customers/details.liquid"
-      - "tests/test_otp_cell_autofill.py"
-      - "e2e/otp-autofill.spec.js"
-      - "e2e/account-auth-safety.spec.js"
+      - "tests/theme/test_otp_cell_autofill.py"
+      - "tests/e2e/otp-autofill.spec.js"
+      - "tests/e2e/account-auth-safety.spec.js"
       - "package.json"
       - "package-lock.json"
       - "playwright.config.js"
@@ -69,7 +69,7 @@ jobs:
           exit 1
 
       - name: Run account auth safety suites
-        run: npx playwright test e2e/otp-autofill.spec.js e2e/account-auth-safety.spec.js --project=chromium-desktop
+        run: npx playwright test tests/e2e/otp-autofill.spec.js tests/e2e/account-auth-safety.spec.js --project=chromium-desktop
 
       - name: Upload account auth safety failure artifacts
         if: failure()

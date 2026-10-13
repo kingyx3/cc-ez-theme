@@ -6,12 +6,12 @@ on:
       - main
     paths:
       - ".github/workflows/sync-order-source-attribution.yml"
-      - "scripts/cloudflare_hubspot_order_attribution.py"
-      - "crm_tests/test_order_source_attribution.py"
+      - "scripts/crm/cloudflare_hubspot_order_attribution.py"
+      - "tests/crm/test_order_source_attribution.py"
       - "cloudflare/attribution-worker/**"
       - "theme/snippets/attribution-click-id.liquid"
-      - "tests/test_order_touch_capture.py"
-      - "tests/test_source_attribution_capture.py"
+      - "tests/theme/test_order_touch_capture.py"
+      - "tests/theme/test_source_attribution_capture.py"
       - "docs/ORDER_SOURCE_ATTRIBUTION.md"
   # The main CRM workflow starts at 00:00/06:00/12:00/18:00 Singapore time.
   # Run an hour later so HubSpot Orders exist before this snapshot stage starts.
@@ -48,13 +48,13 @@ jobs:
         with:
           python-version: "3.13"
       - name: Compile order attribution
-        run: python -m py_compile scripts/cloudflare_hubspot_order_attribution.py
+        run: python -m py_compile scripts/crm/cloudflare_hubspot_order_attribution.py
       - name: Run order attribution tests
-        run: python -m unittest discover -s crm_tests -p 'test_order_source_attribution.py' -v
+        run: python -m unittest discover -s tests/crm -p 'test_order_source_attribution.py' -v
       - name: Run order touch theme tests
-        run: python -m unittest discover -s tests -p 'test_order_touch_capture.py' -v
+        run: python -m unittest discover -s tests/theme -p 'test_order_touch_capture.py' -v
       - name: Run acquisition regression tests
-        run: python -m unittest discover -s tests -p 'test_source_attribution_capture.py' -v
+        run: python -m unittest discover -s tests/theme -p 'test_source_attribution_capture.py' -v
       - name: Run Worker tests
         working-directory: cloudflare/attribution-worker
         run: npm test
@@ -109,7 +109,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python scripts/cloudflare_hubspot_order_attribution.py | tee order-attribution-summary.json
+          python scripts/crm/cloudflare_hubspot_order_attribution.py | tee order-attribution-summary.json
 
       - name: Publish attribution summary
         if: always()

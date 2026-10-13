@@ -14,7 +14,7 @@ export default [
     path: "/admin/v2/store/checkouts",
     description: "List abandoned checkouts. One page per call; inspect upstream params.page_count for pagination.",
     enabled: true,
-    source: "scripts/easystore_admin_checkouts.py",
+    source: "scripts/crm/easystore_admin_checkouts.py",
     querySchema: checkoutQuery,
     queryDefaults: {"page": 1, "limit": 50, "start_date": "", "end_date": "", "sort": "created_at.desc"},
   },

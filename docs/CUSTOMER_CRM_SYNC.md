@@ -50,11 +50,11 @@ The existing `EASYSTORE_ADMIN_TOKEN` used by theme deployment is intentionally n
 
 The integration is deliberately fail-closed where an automatic choice could merge the wrong identity or catalog record:
 
-- **Customer identity preflight is read-only.** Before any Product, Contact, Order, or Line Item write, `scripts/easystore_hubspot_preflight.py` scans EasyStore customers and the relevant HubSpot Contacts. If more than one EasyStore customer owns the same normalized mobile, or an EasyStore mobile already maps to multiple HubSpot Contacts, the entire run stops before writes.
+- **Customer identity preflight is read-only.** Before any Product, Contact, Order, or Line Item write, `scripts/crm/easystore_hubspot_preflight.py` scans EasyStore customers and the relevant HubSpot Contacts. If more than one EasyStore customer owns the same normalized mobile, or an EasyStore mobile already maps to multiple HubSpot Contacts, the entire run stops before writes.
 - **Product SKU ambiguity stops the Product stage before writes.** Duplicate EasyStore SKUs or multiple HubSpot Products with the same SKU are not guessed through.
 - **Orders validate catalog references before order writes.** Every EasyStore merchandise line must resolve to a HubSpot Product before the order stage starts mutating Orders or Line Items.
 - **HubSpot batch writes reject partial success.** Product and Contact batches send `objectWriteTraceId` values and require a `COMPLETE` response, zero item errors, and one returned result per submitted input. A successful HTTP status alone is not treated as a successful sync.
-- **Stale synchronized order lines are reconciled only after the upsert succeeds.** `scripts/easystore_hubspot_reconcile.py` builds a complete reconciliation plan first, then archives product-backed HubSpot Line Items that no longer exist on their EasyStore order. Standalone/manual HubSpot line items without `hs_product_id` are preserved.
+- **Stale synchronized order lines are reconciled only after the upsert succeeds.** `scripts/crm/easystore_hubspot_reconcile.py` builds a complete reconciliation plan first, then archives product-backed HubSpot Line Items that no longer exist on their EasyStore order. Standalone/manual HubSpot line items without `hs_product_id` are preserved.
 - **Transient remote failures retry.** HTTP 429 and 5xx responses use bounded backoff; persistent API errors fail the run and surface in Actions.
 - **Production runs never overlap.** The workflow concurrency group serializes scheduled/manual production executions.
 - **One broken stage does not cost the others their run.** Preflight is the only stage whose failure stops the rest, because writing against an ambiguous identity would merge two people's records. Every stage after it runs independently and reports its own outcome; the last step then fails the run and names each stage that failed. Before this, a single unreachable upstream endpoint left Products, Contacts, Orders and Carts a day stale — one HTTP 400 from the attribution stage cost the store every stage after it.
@@ -66,27 +66,27 @@ CI is bifurcated between this repository's two independent products. A pull requ
 
 | Change | Workflow gate |
 | --- | --- |
-| `scripts/easystore_hubspot_*.py`, `scripts/cloudflare_hubspot_attribution.py`, `crm_tests/**`, `docs/CUSTOMER_CRM_SYNC.md`, `docs/SOURCE_ATTRIBUTION.md`, the CRM workflow | `Validate CRM sync` |
+| `scripts/crm/easystore_hubspot_*.py`, `scripts/crm/cloudflare_hubspot_attribution.py`, `tests/crm/**`, `docs/CUSTOMER_CRM_SYNC.md`, `docs/SOURCE_ATTRIBUTION.md`, the CRM workflow | `Validate CRM sync` |
 | `cloudflare/attribution-worker/**`, the Worker workflow | `Validate Worker` (pull request), then deploy on `main` |
-| `theme/**`, `tests/**`, `scripts/theme_ci.py`, `scripts/easystore_publish.py`, `requirements-dev.txt`, `.coveragerc`, the packaging workflow | `Package EasyStore theme` (push) |
-| `theme/**`, `e2e/**`, `package.json`, `playwright.config.js`, the E2E workflow | `EasyStore browser E2E` (pull request) |
+| `theme/**`, `tests/theme/**`, `scripts/theme/theme_ci.py`, `scripts/theme/easystore_publish.py`, `requirements-dev.txt`, `.coveragerc`, the packaging workflow | `Package EasyStore theme` (push) |
+| `theme/**`, `tests/e2e/**`, `package.json`, `playwright.config.js`, the E2E workflow | `EasyStore browser E2E` (pull request) |
 
 A change that spans both products triggers both sets of gates, and either workflow can still be started by hand with `workflow_dispatch`.
 
 Changes to the CRM workflow, sync scripts, CRM tests, or this document trigger the `Validate CRM sync` job on pull requests. That job requires no secrets and performs:
 
 1. Python 3.13 bytecode compilation of every CRM sync script, including the shared `easystore_hubspot_schema.py` property resolver and the abandoned-checkout stage.
-2. `crm_tests/`, covering mobile normalization, the no-mobile contact filter, duplicate-identity detection, SKU fallback, product-backed line construction, fail-closed catalog matching, stale-line reconciliation, order field mapping, order commerce-field resolution and provisioning, timestamp and amount normalization, lifecycle-stage transitions, HubSpot partial-batch error handling, and the Cloudflare click join's click-id validation, contact paging, D1 reads and every refusal above.
+2. `tests/crm/`, covering mobile normalization, the no-mobile contact filter, duplicate-identity detection, SKU fallback, product-backed line construction, fail-closed catalog matching, stale-line reconciliation, order field mapping, order commerce-field resolution and provisioning, timestamp and amount normalization, lifecycle-stage transitions, HubSpot partial-batch error handling, and the Cloudflare click join's click-id validation, contact paging, D1 reads and every refusal above.
 
 The credentialed `sync` job is explicitly skipped for `pull_request` events.
 
-This job is the coverage gate for the CRM sync scripts. `.coveragerc` omits `scripts/easystore_hubspot_*.py` from the theme suite's 100% line-and-branch requirement, because `tests/` exercises the theme packaging and validation tooling and never imports the CRM scripts. Adding a CRM script to `scripts/` therefore does not silently lower the theme gate, and the CRM scripts stay gated by compilation plus `crm_tests/` here.
+This job is the coverage gate for the CRM sync scripts. `.coveragerc` measures only `scripts/theme/`, so the CRM scripts under `scripts/crm/` sit outside the theme suite's 100% line-and-branch requirement: `tests/theme/` exercises the theme packaging and validation tooling and never imports the CRM scripts. Adding a CRM script to `scripts/crm/` therefore does not silently lower the theme gate, and the CRM scripts stay gated by compilation plus `tests/crm/` here.
 
 The repository's browser E2E workflow is the PR gate for theme changes; it does not run for a CRM-only pull request, because no CRM change can alter the storefront it drives. Its browser-installing jobs use timeout budgets that leave headroom for Playwright's network-bound browser/dependency installation so the actual regression tests are not cancelled before they execute. Each `playwright install --with-deps` invocation is additionally bounded and retried once: the flag shells out to `apt-get`, and a stalled Ubuntu mirror would otherwise consume the whole job budget and report the check as cancelled instead of failing.
 
 ## Products and variants
 
-`scripts/easystore_hubspot_products.py` synchronizes the EasyStore catalog into HubSpot's native Product library.
+`scripts/crm/easystore_hubspot_products.py` synchronizes the EasyStore catalog into HubSpot's native Product library.
 
 An **EasyStore variant maps to one HubSpot Product record**. An EasyStore parent can have variants with separate SKUs and prices, while a HubSpot Product represents one catalog SKU/unit-price combination. Variant-level records also let each order line reference the exact purchased Product.
 
@@ -127,7 +127,7 @@ The sync intentionally does **not** delete HubSpot Products that disappear from 
 
 The normalized mobile number is the only CRM Contact identity key. Email is synchronized as contact data but is never used to decide which HubSpot record belongs to an EasyStore customer.
 
-`scripts/easystore_hubspot_sync.py` normalizes EasyStore `phone` values to a conservative E.164-style `+<country code><subscriber>` value. It uses the customer's EasyStore ISO `country_code` when available and otherwise falls back to `CUSTOMER_SYNC_DEFAULT_DIAL_CODE`.
+`scripts/crm/easystore_hubspot_sync.py` normalizes EasyStore `phone` values to a conservative E.164-style `+<country code><subscriber>` value. It uses the customer's EasyStore ISO `country_code` when available and otherwise falls back to `CUSTOMER_SYNC_DEFAULT_DIAL_CODE`.
 
 The normalized value is written to both HubSpot `mobilephone` and `phone`. Existing HubSpot Contacts are normalized with the same function before matching, so formatting differences do not create a second Contact.
 
@@ -340,7 +340,7 @@ internal D1 join key.
 
 ### Contact acquisition
 
-`scripts/cloudflare_hubspot_attribution.py` runs after the Customer stage. The
+`scripts/crm/cloudflare_hubspot_attribution.py` runs after the Customer stage. The
 Customer sync supplies two ordinary EasyStore facts on the HubSpot Contact:
 
 - `easystore_customer_id`
@@ -374,7 +374,7 @@ EasyStore/Cloudflare snapshot.
 
 ### Order attribution
 
-`scripts/cloudflare_hubspot_order_attribution.py` runs from the separate
+`scripts/crm/cloudflare_hubspot_order_attribution.py` runs from the separate
 `sync-order-source-attribution.yml` workflow after Orders exist in HubSpot. It
 requires both `clicked_at <= order.created_at` and `bound_at <= order.created_at`,
 so a touch learned after the purchase cannot retroactively claim revenue.
@@ -390,7 +390,7 @@ current production attribution does not read or write them.
 
 ## Orders and product-backed line items
 
-`scripts/easystore_hubspot_orders.py` runs only after Product and Contact synchronization succeeds.
+`scripts/crm/easystore_hubspot_orders.py` runs only after Product and Contact synchronization succeeds.
 
 The commerce model is:
 
@@ -530,7 +530,7 @@ rather than being cleared.
 HubSpot's native schema is not identical between portals: a property can be
 absent, calculated from other records (an order total rolled up from its line
 items, for example), read-only, or defined as an enumeration that would reject
-EasyStore's free-form labels. `scripts/easystore_hubspot_schema.py` is the shared
+EasyStore's free-form labels. `scripts/crm/easystore_hubspot_schema.py` is the shared
 resolver used by the Product, Contact and Order stages. Before any write, it
 reads `GET /crm/v3/properties/<object>` and resolves each declared field:
 
@@ -600,7 +600,7 @@ The buyer is resolved with the same normalized-mobile rule as Customer synchroni
 
 ## Abandoned checkouts
 
-`scripts/easystore_hubspot_carts.py` synchronizes EasyStore abandoned checkouts
+`scripts/crm/easystore_hubspot_carts.py` synchronizes EasyStore abandoned checkouts
 into HubSpot's native **Cart** object, keyed by `hs_external_cart_id` holding the
 EasyStore checkout ID. An abandoned checkout is CRM-worthy in its own right: it
 names a contactable person, the value they were about to spend, and the link that

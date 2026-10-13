@@ -1,23 +1,19 @@
 [run]
 branch = True
-source = scripts
-
-# The EasyStore -> HubSpot CRM sync scripts and the Cloudflare attribution joins
-# are not part of the theme package and are not exercised by tests/. They have
-# their own gates: the CRM validation workflow and the focused order-attribution
-# workflow compile/test them on every relevant change. Measuring them here would
-# only lower the theme suite's 100% requirement.
+# The theme suite (tests/theme) measures only the theme tooling it gates:
+# validation/packaging (theme_ci.py) and publishing (easystore_publish.py).
 #
-# tests/test_source_attribution_capture.py reads the contact join script as text
-# rather than importing it, precisely so the theme suite keeps its gate while
-# still pinning the names the theme and the join have to agree on.
-omit =
-    scripts/easystore_hubspot_*.py
-    scripts/easystore_admin_checkouts.py
-    # Rotation has its own isolated auth_tests gate in its dedicated workflow.
-    scripts/easystore_admin_token_renew.py
-    scripts/cloudflare_hubspot_attribution.py
-    scripts/cloudflare_hubspot_order_attribution.py
+# The EasyStore -> HubSpot CRM sync scripts (scripts/crm) and the admin token
+# rotation (scripts/auth) are not part of the theme package and are not
+# exercised by tests/theme. They have their own gates: the CRM validation
+# workflow, the focused order-attribution workflow and the token renewal
+# workflow compile/test them on every relevant change. Measuring them here
+# would only lower the theme suite's 100% requirement.
+#
+# tests/theme/test_source_attribution_capture.py reads the contact join script
+# as text rather than importing it, precisely so the theme suite keeps its gate
+# while still pinning the names the theme and the join have to agree on.
+source = scripts/theme
 
 [report]
 fail_under = 100

@@ -107,7 +107,7 @@ window.customerOrderLimitsV2.diagnostics.cancelledOrdersSeen  // orders left out
 window.customerOrderLimitsV2.diagnostics.orderStatuses        // the raw fields each order exposed
 ```
 
-`orderStatuses` prefixes each sampled order with `counted` or `skipped` and then lists every field above as the store rendered it. A cancelled order that reads `counted` names the field this theme is not yet reading — add it to the snippet, and both passes pick it up. `scripts/limit-check.console.js` prints both values.
+`orderStatuses` prefixes each sampled order with `counted` or `skipped` and then lists every field above as the store rendered it. A cancelled order that reads `counted` names the field this theme is not yet reading — add it to the snippet, and both passes pick it up. `scripts/console/limit-check.console.js` prints both values.
 
 ## When a page cannot see order history
 
@@ -234,7 +234,7 @@ Because the default is recorded during the sign-in rather than decided on arriva
 
 **The landing page must not be seen on the way past.** The module is deferred, so it runs at `DOMContentLoaded` — a paint too late, and the order history was visible for a moment before the product appeared. `snippets/login-redirect-boot.liquid` is included in the layout's `<head>`, immediately after the character set and before anything the platform injects, so a shopper coming back is sent on before the body is parsed. It is inline because an external script early enough to beat the paint would block parsing on every page of the store to serve one.
 
-Running that early costs it the body: the markup check below cannot run there. So it acts on one page only — an `/account` page that is **not** one of EasyStore's sign-in steps, which is where the platform lands a customer whose sign-in has finished. Every other page is left to the deferred module, which has the markup in front of it. The two share an entry, a half-hour window, and the same refusals; `tests/test_login_redirect_completion.py` pins the copies together, and `e2e/login-redirect.spec.js` runs the snippet's own script the way the layout runs it.
+Running that early costs it the body: the markup check below cannot run there. So it acts on one page only — an `/account` page that is **not** one of EasyStore's sign-in steps, which is where the platform lands a customer whose sign-in has finished. Every other page is left to the deferred module, which has the markup in front of it. The two share an entry, a half-hour window, and the same refusals; `tests/theme/test_login_redirect_completion.py` pins the copies together, and `tests/e2e/login-redirect.spec.js` runs the snippet's own script the way the layout runs it.
 
 The module loads from `layout/theme.liquid` on every page, because the platform picks the landing page and it need not be an account page.
 
@@ -254,7 +254,7 @@ The rest of the safeguards:
 
 The platform's login form is deliberately untouched: no field is added to it and no value is written into it. Theme scripts writing into EasyStore's account forms is what broke signup with "Customer already exists (phone)", and landing on the right page one paint later is not worth repeating that.
 
-`e2e/login-redirect.spec.js` runs the module through the real page loads — login page, account landing, product — against pages it serves itself, so it needs no storefront and no store account. `tests/test_login_redirect_completion.py` covers the wiring: both asset trees, the layout include, and the parameter name shared with `customer-order-limits.js` and `cart.js`.
+`tests/e2e/login-redirect.spec.js` runs the module through the real page loads — login page, account landing, product — against pages it serves itself, so it needs no storefront and no store account. `tests/theme/test_login_redirect_completion.py` covers the wiring: both asset trees, the layout include, and the parameter name shared with `customer-order-limits.js` and `cart.js`.
 
 ## The attempt that signing in interrupted
 
@@ -276,7 +276,7 @@ What the answer is careful about:
 
 Nothing is bought automatically on the way back. The shopper returns to the page they were on, with the quantity they chose, is told if the purchase cannot go through, and presses the button themselves otherwise.
 
-`e2e/purchase-limit-after-login.spec.js` drives the real module through the real page loads for each surface — product page, listing, cart, and the account page in between — against pages it serves itself, including the account order page the history loader reads. `tests/test_purchase_intent_after_login.py` covers what behaviour cannot see: that every redirecting surface names its attempt, and that the answer stays confined to a shopper whose allowance can be measured.
+`tests/e2e/purchase-limit-after-login.spec.js` drives the real module through the real page loads for each surface — product page, listing, cart, and the account page in between — against pages it serves itself, including the account order page the history loader reads. `tests/theme/test_purchase_intent_after_login.py` covers what behaviour cannot see: that every redirecting surface names its attempt, and that the answer stays confined to a shopper whose allowance can be measured.
 
 ## How sign-in state is decided
 
@@ -298,7 +298,7 @@ The first deployed version compared uppercase configured handles with lowercase 
 
 The feature logs nothing, so an empty console is normal and not a symptom. Its state lives on `window.customerOrderLimitsV2` and `window.CustomerOrderLimits`.
 
-Paste `scripts/limit-check.console.js` into the browser console on a product page that has a configured limit, signed in as a customer who has bought that product before. It prints sign-in state, what history the page could read, the numbers for that product, whether the account payload is reachable, and one of these verdicts:
+Paste `scripts/console/limit-check.console.js` into the browser console on a product page that has a configured limit, signed in as a customer who has bought that product before. It prints sign-in state, what history the page could read, the numbers for that product, whether the account payload is reachable, and one of these verdicts:
 
 | Verdict | Meaning |
 | --- | --- |

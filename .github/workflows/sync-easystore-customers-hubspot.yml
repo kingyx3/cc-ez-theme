@@ -6,9 +6,9 @@ on:
       - main
     paths:
       - ".github/workflows/sync-easystore-customers-hubspot.yml"
-      - "scripts/easystore_hubspot_*.py"
-      - "scripts/cloudflare_hubspot_attribution.py"
-      - "crm_tests/**"
+      - "scripts/crm/easystore_hubspot_*.py"
+      - "scripts/crm/cloudflare_hubspot_attribution.py"
+      - "tests/crm/**"
       - "docs/CUSTOMER_CRM_SYNC.md"
       - "docs/EASYSTORE_CHECKOUT_CART_SYNC.md"
       - "docs/SOURCE_ATTRIBUTION.md"
@@ -49,25 +49,25 @@ jobs:
 
       - name: Compile CRM sync scripts
         run: |
-          python -m py_compile scripts/easystore_hubspot_schema.py
-          python -m py_compile scripts/easystore_hubspot_products.py
-          python -m py_compile scripts/easystore_hubspot_ordered_products.py
-          python -m py_compile scripts/easystore_hubspot_sync.py
-          python -m py_compile scripts/easystore_hubspot_customer_sync.py
-          python -m py_compile scripts/easystore_hubspot_contact_identity.py
-          python -m py_compile scripts/easystore_hubspot_orders.py
-          python -m py_compile scripts/easystore_hubspot_order_sync.py
-          python -m py_compile scripts/easystore_hubspot_carts.py
-          python -m py_compile scripts/easystore_hubspot_commerce.py
-          python -m py_compile scripts/easystore_admin_checkouts.py
-          python -m py_compile scripts/easystore_hubspot_checkouts.py
-          python -m py_compile scripts/easystore_hubspot_checkout_sync.py
-          python -m py_compile scripts/easystore_hubspot_preflight.py
-          python -m py_compile scripts/easystore_hubspot_reconcile.py
-          python -m py_compile scripts/cloudflare_hubspot_attribution.py
+          python -m py_compile scripts/crm/easystore_hubspot_schema.py
+          python -m py_compile scripts/crm/easystore_hubspot_products.py
+          python -m py_compile scripts/crm/easystore_hubspot_ordered_products.py
+          python -m py_compile scripts/crm/easystore_hubspot_sync.py
+          python -m py_compile scripts/crm/easystore_hubspot_customer_sync.py
+          python -m py_compile scripts/crm/easystore_hubspot_contact_identity.py
+          python -m py_compile scripts/crm/easystore_hubspot_orders.py
+          python -m py_compile scripts/crm/easystore_hubspot_order_sync.py
+          python -m py_compile scripts/crm/easystore_hubspot_carts.py
+          python -m py_compile scripts/crm/easystore_hubspot_commerce.py
+          python -m py_compile scripts/crm/easystore_admin_checkouts.py
+          python -m py_compile scripts/crm/easystore_hubspot_checkouts.py
+          python -m py_compile scripts/crm/easystore_hubspot_checkout_sync.py
+          python -m py_compile scripts/crm/easystore_hubspot_preflight.py
+          python -m py_compile scripts/crm/easystore_hubspot_reconcile.py
+          python -m py_compile scripts/crm/cloudflare_hubspot_attribution.py
 
       - name: Run CRM sync unit tests
-        run: python -m unittest discover -s crm_tests -v
+        run: python -m unittest discover -s tests/crm -v
 
   sync:
     name: Upsert EasyStore CRM data (${{ matrix.deployment_env }})
@@ -148,7 +148,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python scripts/easystore_hubspot_preflight.py | tee preflight-summary.json
+          python scripts/crm/easystore_hubspot_preflight.py | tee preflight-summary.json
 
       - name: Pull ordered EasyStore products and upsert HubSpot products
         id: products
@@ -159,7 +159,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python scripts/easystore_hubspot_ordered_products.py | tee product-sync-summary.json
+          python scripts/crm/easystore_hubspot_ordered_products.py | tee product-sync-summary.json
 
       - name: Pull EasyStore customers and upsert HubSpot contacts
         id: customers
@@ -170,7 +170,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python scripts/easystore_hubspot_customer_sync.py | tee customer-sync-summary.json
+          python scripts/crm/easystore_hubspot_customer_sync.py | tee customer-sync-summary.json
 
       # Runs straight after Customers so a click id that arrived on a contact in
       # this run is joined in the same run. It needs no EasyStore access at all:
@@ -193,7 +193,7 @@ jobs:
             echo "::notice::Cloudflare credentials are not configured in ${DEPLOYMENT_ENV}; source attribution was skipped."
             exit 0
           fi
-          python scripts/cloudflare_hubspot_attribution.py | tee attribution-summary.json
+          python scripts/crm/cloudflare_hubspot_attribution.py | tee attribution-summary.json
 
       - name: Pull EasyStore orders and upsert HubSpot orders and line items
         id: orders
@@ -204,7 +204,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python scripts/easystore_hubspot_order_sync.py | tee order-sync-summary.json
+          python scripts/crm/easystore_hubspot_order_sync.py | tee order-sync-summary.json
 
       - name: Reconcile removed EasyStore order lines
         id: reconcile
@@ -215,7 +215,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python scripts/easystore_hubspot_reconcile.py | tee reconcile-summary.json
+          python scripts/crm/easystore_hubspot_reconcile.py | tee reconcile-summary.json
 
       # EasyStore's admin checkout collection is the preferred Cart source. It
       # is the abandoned checkout list itself - 15 records against the public
@@ -237,7 +237,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python scripts/easystore_hubspot_checkout_sync.py | tee cart-sync-summary.json
+          python scripts/crm/easystore_hubspot_checkout_sync.py | tee cart-sync-summary.json
 
       - name: Publish run summary
         if: always()

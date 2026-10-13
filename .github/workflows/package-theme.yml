@@ -9,9 +9,9 @@ on:
     # or republish the storefront theme.
     paths:
       - "theme/**"
-      - "tests/**"
-      - "scripts/theme_ci.py"
-      - "scripts/easystore_publish.py"
+      - "tests/theme/**"
+      - "scripts/theme/theme_ci.py"
+      - "scripts/theme/easystore_publish.py"
       - "requirements-dev.txt"
       - ".coveragerc"
       - ".github/workflows/package-theme.yml"
@@ -44,11 +44,11 @@ jobs:
         run: python -m pip install --requirement requirements-dev.txt
 
       - name: Validate the real theme
-        run: python scripts/theme_ci.py check theme
+        run: python scripts/theme/theme_ci.py check theme
 
       - name: Run tests with 100% line and branch coverage
         run: |
-          python -m coverage run -m unittest discover -s tests -v
+          python -m coverage run -m unittest discover -s tests/theme -v
           python -m coverage report
 
   package:
@@ -70,12 +70,12 @@ jobs:
         run: |
           set -euo pipefail
 
-          python scripts/theme_ci.py package theme cc-ez-theme.zip
+          python scripts/theme/theme_ci.py package theme cc-ez-theme.zip
           test -s cc-ez-theme.zip
 
           mkdir easystore-artifact
           python -m zipfile -e cc-ez-theme.zip easystore-artifact
-          python scripts/theme_ci.py check easystore-artifact/cc-ez-theme
+          python scripts/theme/theme_ci.py check easystore-artifact/cc-ez-theme
 
           {
             echo "### EasyStore theme package"
@@ -231,8 +231,8 @@ jobs:
               )
           PY
 
-          python scripts/theme_ci.py check deploy-theme
-          python scripts/theme_ci.py package deploy-theme "${PACKAGE_FILENAME}"
+          python scripts/theme/theme_ci.py check deploy-theme
+          python scripts/theme/theme_ci.py package deploy-theme "${PACKAGE_FILENAME}"
           test -s "${PACKAGE_FILENAME}"
 
       - name: Import theme into EasyStore
@@ -326,7 +326,7 @@ jobs:
             rm -f easystore-themes.json
           fi
 
-          python scripts/easystore_publish.py resolve \
+          python scripts/theme/easystore_publish.py resolve \
             --import-response easystore-import.json \
             --themes-response easystore-themes.json \
             --display-name "${THEME_DISPLAY_NAME}" \
@@ -400,7 +400,7 @@ jobs:
             echo "State EasyStore reports for the theme after publishing:"
             echo
             echo '```text'
-            python scripts/easystore_publish.py describe \
+            python scripts/theme/easystore_publish.py describe \
               --themes-response easystore-themes-after-publish.json \
               --theme-id "${THEME_ID}"
             echo '```'

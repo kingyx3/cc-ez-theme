@@ -87,7 +87,7 @@ this integration no longer reads or writes them.
 
 ## Contact acquisition model
 
-`scripts/cloudflare_hubspot_attribution.py` runs after the Customer sync.
+`scripts/crm/cloudflare_hubspot_attribution.py` runs after the Customer sync.
 
 The Customer sync supplies two ordinary EasyStore facts on the HubSpot Contact:
 
@@ -348,8 +348,8 @@ LIMIT 20;
 | Worker click creation/touch endpoint | `cloudflare/attribution-worker/src/index.js` |
 | D1 schema | `cloudflare/attribution-worker/migrations/` |
 | Storefront touch binding | `theme/snippets/attribution-click-id.liquid` |
-| Customer sync / legacy field filter | `scripts/easystore_hubspot_customer_sync.py` |
-| Contact acquisition + native ad IDs | `scripts/cloudflare_hubspot_attribution.py` |
-| Order attribution | `scripts/cloudflare_hubspot_order_attribution.py` |
-| Contact attribution tests | `crm_tests/test_cloudflare_attribution.py` |
-| Order attribution tests | `crm_tests/test_order_source_attribution.py` |
+| Customer sync / legacy field filter | `scripts/crm/easystore_hubspot_customer_sync.py` |
+| Contact acquisition + native ad IDs | `scripts/crm/cloudflare_hubspot_attribution.py` |
+| Order attribution | `scripts/crm/cloudflare_hubspot_order_attribution.py` |
+| Contact attribution tests | `tests/crm/test_cloudflare_attribution.py` |
+| Order attribution tests | `tests/crm/test_order_source_attribution.py` |
