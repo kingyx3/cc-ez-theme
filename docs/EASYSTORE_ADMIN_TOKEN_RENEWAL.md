@@ -264,3 +264,34 @@ GitHub's Actions failure email notifications or other repository-level
 alerting so that a missed renewal can be investigated promptly. The
 reported GitHub timestamp is a **last-save** time, which can include manual
 token replacements; it is not an EasyStore-issued expiry claim.
+
+## Daily checks, freshness and incident alerts
+
+Every scheduled or manually dispatched renewal job performs a lightweight
+read-only EasyStore admin theme-list request **before** checking token age.
+A token saved fewer than 14 days ago is reused while healthy; renewal occurs
+when its environment secret is at least 14 days old, a numeric JWT expiry is
+within 14 days, its store scope is missing, or EasyStore rejects the read with
+401/403. Renewal is verified before the `prod` secret and configured Worker
+binding are updated. A revoked session that EasyStore will not exchange still
+requires a new `_easystore_session` seed; this is not bypassed by frequent retries.
+
+A separate [production MCP health workflow](../.github/workflows/easystore-admin-mcp-health.yml)
+runs at 03:47 UTC (11:47 SGT) and can be manually dispatched. It calls the
+live hosted Worker with the production MCP read key, validates `tools/list`,
+and performs one read each of products, customers and discounts. It **does not**
+deploy or modify credentials. The fixed Worker endpoint is
+`cc-easystore-admin-mcp.cardboardsg.workers.dev`; change the checked-in
+origin if the Cloudflare account/subdomain changes.
+
+Production renewal, hosted MCP health and MCP deployment failures create
+separate GitHub Issues assigned to the repository owner. Continued failures
+comment on the same open issue; successful reruns close it. This provides an
+actionable record and GitHub assignment notifications without another external
+webhook. Ensure GitHub Issues and personal assigned-issue notifications are
+enabled. No customer data or credentials are posted in incident bodies.
+
+The checks validate tokens on **every run**, but renewal is intentionally not
+performed on every healthy run: the API exchange is undocumented and rotating
+needlessly increases risk. Pull requests run offline tests only, without
+production credentials or writes.

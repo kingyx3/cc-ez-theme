@@ -1,0 +1,68 @@
+name: EasyStore production MCP health
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/easystore-admin-mcp-health.yml'
+      - '.github/scripts/report_easystore_incident.py'
+      - 'cloudflare/easystore-admin-mcp/scripts/healthcheck.js'
+      - 'cloudflare/easystore-admin-mcp/test/healthcheck.test.js'
+      - 'tests/monitor/**'
+  schedule:
+    # After the 03:17 UTC daily token renewal; no deployments or token writes.
+    - cron: '47 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: easystore-admin-mcp-production
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: cloudflare/easystore-admin-mcp/package-lock.json
+      - run: npm ci
+        working-directory: cloudflare/easystore-admin-mcp
+      - run: node --test test/deploy.test.js test/healthcheck.test.js
+        working-directory: cloudflare/easystore-admin-mcp
+      - run: python3 -m unittest discover -s tests/monitor -v
+
+  monitor:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: prod
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: cloudflare/easystore-admin-mcp/package-lock.json
+      - run: npm ci
+        working-directory: cloudflare/easystore-admin-mcp
+      - name: Check hosted MCP authentication and live EasyStore reads
+        working-directory: cloudflare/easystore-admin-mcp
+        env:
+          MCP_READ_TOKEN: ${{ secrets.EASYSTORE_ADMIN_MCP_READ_TOKEN }}
+        run: node scripts/healthcheck.js
+      - name: Record failure or recovery in GitHub Issues
+        if: ${{ success() || failure() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EASYSTORE_ALERT_COMPONENT: mcp-health
+          EASYSTORE_ALERT_STATUS: ${{ job.status }}
+        run: python3 .github/scripts/report_easystore_incident.py
