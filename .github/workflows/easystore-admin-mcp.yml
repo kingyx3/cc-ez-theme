@@ -44,6 +44,9 @@ jobs:
     environment: prod
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
     defaults:
       run:
         working-directory: cloudflare/easystore-admin-mcp
@@ -63,3 +66,11 @@ jobs:
       - run: npm ci
       - name: Sync secrets, deploy and check authenticated MCP
         run: npm run deploy:gha
+      - name: Record deployment failure or recovery in GitHub Issues
+        if: ${{ success() || failure() }}
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EASYSTORE_ALERT_COMPONENT: mcp-deploy
+          EASYSTORE_ALERT_STATUS: ${{ job.status }}
+        run: python3 .github/scripts/report_easystore_incident.py
