@@ -27,6 +27,18 @@ class StorefrontConfigurationTests(unittest.TestCase):
             self.editor_settings_path.read_text(encoding="utf-8"),
         )
 
+    def test_header_announcement_promotes_star_trek_preorders(self) -> None:
+        header_settings = self.sections["header"]["settings"]
+        self.assertTrue(header_settings["message"])
+        self.assertEqual(
+            header_settings["message_text"],
+            "Pre-orders for Star Trek are now open!",
+        )
+        self.assertEqual(
+            header_settings["message_link"],
+            "https://cardboard.sg/collections/star-trek",
+        )
+
     def test_product_page_does_not_advertise_worldwide_shipping(self) -> None:
         product_section = self.sections["main-product"]
         rendered_text = [
@@ -576,7 +588,6 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertNotIn("{% continue %}", header)
 
         expected_shortcuts = (
-            ("/collections/10-10-sale", "10.10 sale"),
             ("/collections/star-trek", "Star Trek"),
             ("/collections/reality-fracture", "Reality Fracture"),
             ("/collections/the-hobbit", "Hobbit"),
@@ -592,6 +603,7 @@ class StorefrontConfigurationTests(unittest.TestCase):
             self.assertNotIn(href_markup, header)
             shortcut_positions.append(top_links.index(href_markup))
         self.assertEqual(shortcut_positions, sorted(shortcut_positions))
+        self.assertNotIn('href="/collections/10-10-sale"', top_links)
         self.assertNotIn("Crack-a-Pack", header)
         self.assertNotIn("Crack-a-Pack", top_links)
         self.assertEqual(
