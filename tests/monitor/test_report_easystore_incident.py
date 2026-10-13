@@ -1,9 +1,16 @@
 """Offline tests for issue-based GitHub Actions incident notifications."""
+import importlib.util
 import json
+from pathlib import Path
 import unittest
 from unittest.mock import patch
 
-from scripts.monitor import report_easystore_incident as incident
+spec = importlib.util.spec_from_file_location(
+    "report_easystore_incident",
+    Path(__file__).resolve().parents[2] / ".github/scripts/report_easystore_incident.py",
+)
+incident = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(incident)
 
 
 class AlertTest(unittest.TestCase):
