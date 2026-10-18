@@ -26,6 +26,7 @@ This feature limits a signed-in customer to a configured number of units for an 
 | `late-night-crackers-ep3` | 2 |
 | `late-night-crackers-ep4-1` | 4 |
 | `late-night-crackers-ep4-2` | 1 |
+| `mtg-fin-cmd-en-set4` | 1 |
 
 Rows supplied with a blank promo maximum are intentionally not configured and remain unlimited. This includes the remaining `MTG-MSH-*`, `MTG-SOS-*`, and `MTG-SPM-*` handles not listed above, plus `CC-BDL-HAPPYHAMPER-EN` and `CC-BDL-HAPPYHAMPER-EN-PBB`.
 
