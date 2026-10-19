@@ -187,24 +187,33 @@
         </div>
 
         <div class="footer__copyright caption">
-          {% if contents.terms-policy.links %}
-            <div>
-            {% assign count = 0 %}
-            {% for link in contents.terms-policy.links %}
-              {% assign policy_title = link.title | downcase %}
-              {% assign policy_url = link.url %}
-              {% if link.handle == 'terms-of-service' or policy_title contains 'terms of service' %}
-                {% assign policy_url = 'https://cardboard.sg/pages/terms-of-service' %}
-              {% endif %}
-              {% if count == 0 %}
-                <a href="{{ policy_url }}">{{ link.title | escape }}</a>
-              {% else %}
-                | <a href="{{ policy_url }}">{{ link.title | escape }}</a>
-              {% endif %}
-              {% assign count = count | plus: 1 %}
-            {% endfor %}
-            </div>
-         {% endif %}
+          <div>
+          {% assign count = 0 %}
+          {% assign has_contact_link = false %}
+          {% assign has_shipping_link = false %}
+          {% for link in contents.terms-policy.links %}
+            {% assign policy_title = link.title | downcase %}
+            {% assign policy_url = link.url %}
+            {% if link.handle == 'terms-of-service' or policy_title contains 'terms of service' %}
+              {% assign policy_url = 'https://cardboard.sg/pages/terms-of-service' %}
+            {% endif %}
+            {% if policy_url contains '/pages/contact-us' %}
+              {% assign has_contact_link = true %}
+            {% endif %}
+            {% if policy_url contains '/pages/shipping-policy' %}
+              {% assign has_shipping_link = true %}
+            {% endif %}
+            {% if count > 0 %} | {% endif %}<a href="{{ policy_url }}">{{ link.title | escape }}</a>
+            {% assign count = count | plus: 1 %}
+          {% endfor %}
+          {% unless has_shipping_link %}
+            {% if count > 0 %} | {% endif %}<a href="https://cardboard.sg/pages/shipping-policy">Shipping policy</a>
+            {% assign count = count | plus: 1 %}
+          {% endunless %}
+          {% unless has_contact_link %}
+            {% if count > 0 %} | {% endif %}<a href="https://cardboard.sg/pages/contact-us">Contact us</a>
+          {% endunless %}
+          </div>
         </div>
         
       </div>
