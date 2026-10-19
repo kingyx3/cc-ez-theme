@@ -537,6 +537,10 @@ class StorefrontConfigurationTests(unittest.TestCase):
             '<a href="https://cardboard.sg/pages/payment">Payment</a>',
             footer_liquid,
         )
+        self.assertIn(
+            "{% assign policy_url = link.url | replace: '/legal/', '/pages/' %}",
+            footer_liquid,
+        )
         self.assertNotIn("{% if contents.terms-policy.links %}", footer_liquid)
         self.assertNotIn("{% when 'quick_link' %}", footer_liquid)
         self.assertNotIn("{% when 'payment_accept' %}", footer_liquid)
