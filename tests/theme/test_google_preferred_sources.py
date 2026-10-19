@@ -31,5 +31,5 @@ def test_preferred_sources_cta_is_recognizably_google_branded() -> None:
     assert "https://www.gstatic.com/images/branding/product/2x/googleg_48dp.png" in content
     assert "Add us as preferred source" in content
     assert "Preferred Source on Google" not in content
-    assert 'aria-label="Add Cardboard Collective as a preferred source on Google"' in content
+    assert 'aria-label="Add us as preferred source on Google"' in content
     assert 'class="google-preferred-source__icon"' in content
