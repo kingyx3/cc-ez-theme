@@ -191,6 +191,7 @@
           {% assign count = 0 %}
           {% assign has_contact_link = false %}
           {% assign has_shipping_link = false %}
+          {% assign has_payment_link = false %}
           {% for link in contents.terms-policy.links %}
             {% assign policy_title = link.title | downcase %}
             {% assign policy_url = link.url %}
@@ -203,11 +204,18 @@
             {% if policy_url contains '/pages/shipping-policy' %}
               {% assign has_shipping_link = true %}
             {% endif %}
+            {% if policy_url contains '/pages/payment' %}
+              {% assign has_payment_link = true %}
+            {% endif %}
             {% if count > 0 %} | {% endif %}<a href="{{ policy_url }}">{{ link.title | escape }}</a>
             {% assign count = count | plus: 1 %}
           {% endfor %}
           {% unless has_shipping_link %}
             {% if count > 0 %} | {% endif %}<a href="https://cardboard.sg/pages/shipping-policy">Shipping policy</a>
+            {% assign count = count | plus: 1 %}
+          {% endunless %}
+          {% unless has_payment_link %}
+            {% if count > 0 %} | {% endif %}<a href="https://cardboard.sg/pages/payment">Payment</a>
             {% assign count = count | plus: 1 %}
           {% endunless %}
           {% unless has_contact_link %}
