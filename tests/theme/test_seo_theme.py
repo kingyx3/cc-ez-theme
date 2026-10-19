@@ -38,7 +38,7 @@ class SeoThemeTests(unittest.TestCase):
         self.assertNotIn('"streetAddress"', organization)
         self.assertIn('"hasMerchantReturnPolicy"', organization)
         self.assertIn(
-            '"merchantReturnLink": "https://cardboard.sg/legal/refund-policy"',
+            '"merchantReturnLink": "https://cardboard.sg/pages/refund-policy"',
             organization,
         )
 
