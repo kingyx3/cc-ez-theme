@@ -1,6 +1,6 @@
 # EasyStore admin MCP
 
-General CCPL admin access for Viktor: **39 reads and 12 mutations** covering products, customers, orders, inventory, settings and promotions. The Worker runs on Cloudflare; setup and deployment run entirely in GitHub Actions.
+General CCPL admin access for Viktor: **41 reads and 14 mutations** covering products, customers, orders, inventory, online store pages, settings and promotions. The Worker runs on Cloudflare; setup and deployment run entirely in GitHub Actions.
 
 ## Deploy from GitHub
 
@@ -39,7 +39,7 @@ To manage promotions, product positioning and other mutations, use the writer pa
 
 Edit `src/operations.js` for explicit methods, routes and operation IDs; edit `src/schemas.js` for shared argument schemas. Preserve closed top-level schemas, correct side-effect classification and store routing. Submit a PR; GitHub Actions checks and tests it, then automatically deploys the changes after merge. There is no discovery workflow, recorder, importer or runtime catalog tool.
 
-The [reference inventory of 1,019 observed method/path pairs](https://github.com/kingyx3/cc-ez-theme/blob/9eff3928833aecb2e265dff6176caa40ccf5e5b1/cloudflare/easystore-admin-mcp/src/admin-endpoints.json) remains available as a fixed research snapshot. It is not bundled into the Worker. Source evidence and limitations are in [ADMIN_API_EVIDENCE.md](ADMIN_API_EVIDENCE.md). Only the 51 explicit operations are callable; frontend-derived nested schemas are partial and do not prove complete server validation or live compatibility. Multipart/binary APIs need dedicated adapters.
+The [reference inventory of 1,019 observed method/path pairs](https://github.com/kingyx3/cc-ez-theme/blob/9eff3928833aecb2e265dff6176caa40ccf5e5b1/cloudflare/easystore-admin-mcp/src/admin-endpoints.json) remains available as a fixed research snapshot. It is not bundled into the Worker. Source evidence and limitations are in [ADMIN_API_EVIDENCE.md](ADMIN_API_EVIDENCE.md). Only the 55 explicit operations are callable; frontend-derived nested schemas are partial and do not prove complete server validation or live compatibility. Multipart/binary APIs need dedicated adapters.
 
 ## Operational controls
 

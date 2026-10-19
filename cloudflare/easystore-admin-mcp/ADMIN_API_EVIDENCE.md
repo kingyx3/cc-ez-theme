@@ -35,6 +35,10 @@ with a JSON body shaped as:
 
 The `product_ids` array represents the full display order, top item first. This is distinct from PUT `/admin/v2/store/products/{product_id}`: changing a product's ordinary `position` field through that product endpoint returned HTTP 200 in the observed workflow but did not change its display position.
 
+## Online store pages
+
+Public admin frontend sources inspected on **2026-10-19** ([main client](https://admin.easystore.co/assets/index-B7_9miUl.js), [new page editor](https://admin.easystore.co/assets/new-Bzg9ED2L.js), [edit page editor](https://admin.easystore.co/assets/index-BLIo0Nmo.js)) show `content.listPages` GET, `createPage` POST and `deletePages` DELETE on `/admin/v2/store/pages`, and `getPage` GET / `updatePage` PUT on `/admin/v2/store/pages/{id}`. The editor posts the flat page object (`name`, `handle`, `body_html`, `description`, `is_published`, `navigation_handles`, optional `product_ids`). Create sends `is_published` as 0/1/2; update sends it as a boolean. `navigation_handles` is the comma-joined list of menus the page is linked from. The public `/api/3.0/pages.json` route uses a separate app token whose scopes are configured in EasyStore Apps, and is not used by this Worker.
+
 Existing checkout/theme reads also have repository evidence in `scripts/crm/easystore_admin_checkouts.py` and `docs/EASYSTORE_API_DEPLOYMENT.md`.
 
 Frontend source and observed network traffic confirm client behavior, not complete server-side schemas, account entitlements, authorization scopes, live compatibility or idempotency guarantees. Some GET routes have side effects and are excluded from read tools. Nested payload schemas are partial; server business validation can still reject requests. Lazy/computed/server-only routes can be absent. No live store mutations were performed for implementation or tests; the deployment workflow checks three reads without logging records.

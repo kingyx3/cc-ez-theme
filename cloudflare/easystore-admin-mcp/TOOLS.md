@@ -13,7 +13,7 @@ Connect an MCP client to the deployed Worker URL ending in `/mcp`, using `Author
 
 The read password exposes the first three tools. The writer password also exposes the write tool when the deployment's **enable_writes** setting is on. Listing/describing operations respects the same access rules. Automatic and manual deployments enable writes by default. A manual run with **enable_writes** unchecked temporarily disables them until the next deployment. Refresh the client's tools after changing this setting.
 
-The registry currently contains 39 reads across products, customers, orders, collections, inventory, locations, promotions, vouchers, memberships, settings and themes. Its 12 mutations create unpublished products and update products, customers and discounts; reorder products; enable/disable discounts; and delete discounts/products. The available list and schemas come from `src/operations.js` and `src/schemas.js`.
+The registry currently contains 41 reads across products, customers, orders, collections, inventory, locations, promotions, vouchers, memberships, online store pages, settings and themes. Its 14 mutations create unpublished products and pages and update products, pages, customers and discounts; reorder products; enable/disable discounts; and delete discounts/products. The available list and schemas come from `src/operations.js` and `src/schemas.js`.
 
 ## Access by role
 
@@ -70,6 +70,8 @@ The registry currently contains 39 reads across products, customers, orders, col
 | `get_customer_membership` | GET | ☑ | ☑ |  |
 | `list_order_fulfillments` | GET | ☑ | ☑ |  |
 | `get_product_variants` | GET | ☑ | ☑ |  |
+| `list_pages` | GET | ☑ | ☑ |  |
+| `get_page` | GET | ☑ | ☑ |  |
 | `list_stock_adjustment_items` | GET | ☑ | ☑ |  |
 | `create_discount` | POST | ☐ | ☑ |  |
 | `update_discount` | PUT | ☐ | ☑ |  |
@@ -83,16 +85,19 @@ The registry currently contains 39 reads across products, customers, orders, col
 | `create_product` | POST | ☐ | ☑ | Unpublished only (`is_published: 0`) |
 | `update_product` | PUT | ☐ | ☑ | Can unpublish; cannot publish |
 | `update_product_positions` | PATCH | ☐ | ☑ |  |
+| `create_page` | POST | ☐ | ☑ | Unpublished only (`is_published: 0`) |
+| `update_page` | PUT | ☐ | ☑ | Can unpublish; cannot publish |
 
 ### Not available to either role
 
 | Action | Reader | Writer |
 | --- | :---: | :---: |
 | Publish a product (new or existing) | ☐ | ☐ |
+| Publish a page (new or existing) | ☐ | ☐ |
 | Publish or change themes | ☐ | ☐ |
 | Any route not listed above | ☐ | ☐ |
 
-Publish products in EasyStore Admin. This table must list every enabled operation in `src/operations.js`; the tests fail if it falls out of date.
+Publish products and pages in EasyStore Admin. This table must list every enabled operation in `src/operations.js`; the tests fail if it falls out of date.
 
 ## Example calls
 
@@ -136,6 +141,12 @@ To change product display positioning, first read the complete product order fro
 
 Products can be unpublished but not published. `create_product` only accepts `is_published: 0`. `update_product` accepts `is_published: 0` to unpublish; any other value is checked against a fresh read of the product and rejected with `PUBLISH_NOT_PERMITTED` unless the product is already in that state. Publish products in EasyStore Admin.
 
+Online store pages follow the same rule. `create_page` sends `POST /admin/v2/store/pages` and only accepts `is_published: 0`; `update_page` sends `PUT /admin/v2/store/pages/{page_id}` and can unpublish but not publish. `navigation_handles` is a comma-separated list of menus to link the page from (for example `footer`); the default empty string adds no menu link. Check `list_pages` for an existing handle before creating, and update existing pages instead of creating duplicates. Publish pages in EasyStore Admin.
+
+```json
+{"name":"easystore_admin_write","arguments":{"operation_id":"create_page","body":{"name":"Contact Us","handle":"contact-us","body_html":"<p>…</p>","is_published":0,"navigation_handles":"footer"},"idempotency_key":"create_page_contact_us_001"}}
+```
+
 `update_product_positions` sends `PATCH /admin/v2/store/products/positions`. Its `product_ids` array is the full display order, not a partial move instruction or a single product `position` value. Preserve every product ID exactly once and change only the relative ordering you intend.
 
 Configure approval before mutations in Viktor. The Worker authenticates the writer but does not enforce human approval. The `idempotency_key` identifies one intended request: use 16–128 letters, digits, underscores or hyphens, and reuse it only for that same request. EasyStore's deduplication guarantees are unverified; the Worker never retries automatically. After a timeout, inspect the resource before retrying.
@@ -154,6 +165,6 @@ A tool failure sets `isError: true` and returns an `error` code and `message`:
 | `ADMIN_AUTH_REJECTED` | EasyStore rejected the admin token or its permissions |
 | `UPSTREAM_UNCERTAIN` | Request failed/timed out; a mutation may have succeeded |
 | `PAYLOAD_TOO_LARGE` | Use a smaller page or request |
-| `PUBLISH_NOT_PERMITTED` | The request would publish a product; the worker can only create unpublished products and unpublish existing ones |
+| `PUBLISH_NOT_PERMITTED` | The request would publish a product or page; the worker can only create unpublished products and pages and unpublish existing ones |
 
 An HTTP 401 from `/mcp` means the connector password is missing or invalid. For deployment, secret rotation and other limits, see [README.md](README.md).
