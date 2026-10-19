@@ -140,6 +140,40 @@ test('product update can unpublish but never publish',async()=>{
     assert.deepEqual(r.calls,['GET']);
   }
 });
+test('page create is unpublished-only and posts the admin editor payload',async()=>{
+  const body={name:'Contact Us',handle:'contact-us',body_html:'<p>Hi</p>',is_published:0,navigation_handles:'footer'};
+  let calls=0;
+  const fetcher=async(url,init)=>{calls++;assert.equal(url.pathname,'/admin/v2/store/pages');assert.equal(init.method,'POST');assert.deepEqual(JSON.parse(init.body),{description:'',...body});return Response.json({data:{page:{id:1}}});};
+  await execute(env,makeRegistry(),{operation_id:'create_page',body,idempotency_key:'create_page_intent_001'},{write:true,audit:noAudit,fetcher});
+  assert.equal(calls,1);
+  for (const extra of [{is_published:1},{is_published:true},{published_at:'2026-10-06T00:00:00Z'},{handle:'../x'}]) {
+    await assert.rejects(execute(env,makeRegistry(),{operation_id:'create_page',body:{...body,...extra},idempotency_key:'create_page_intent_001'},{write:true,audit:noAudit,fetcher}),/schema/);
+  }
+  assert.equal(calls,1);
+});
+test('page update can unpublish but never publish',async()=>{
+  const body={name:'Refund Policy',handle:'refund-policy',body_html:'<p>x</p>'};
+  const run=(is_published,current,extra={})=>{
+    const calls=[];
+    const fetcher=async(url,init)=>{
+      calls.push(init.method);
+      assert.equal(url.pathname,'/admin/v2/store/pages/7');
+      if (init.method==='GET') { assert.equal(init.headers['idempotency-key'],undefined); return current instanceof Response?current:Response.json(current); }
+      return Response.json({data:{page:{id:7}}});
+    };
+    return {calls,promise:execute(env,makeRegistry(),{operation_id:'update_page',path:{page_id:'7'},body:{...body,...extra,is_published},idempotency_key:'update_page_intent_0001'},{write:true,audit:noAudit,fetcher})};
+  };
+  let r=run(0,null); await r.promise; assert.deepEqual(r.calls,['PUT']);
+  r=run(false,null); await r.promise; assert.deepEqual(r.calls,['PUT']);
+  r=run(true,{data:{page:{id:7,is_published:1}}}); await r.promise; assert.deepEqual(r.calls,['GET','PUT']);
+  r=run(1,{data:{page:{id:7,is_published:true}}}); await r.promise; assert.deepEqual(r.calls,['GET','PUT']);
+  for (const [value,current] of [[1,{data:{page:{id:7,is_published:0}}}],[true,{data:{page:{id:7,is_published:false}}}],[1,{data:{page:{id:7}}}],[1,new Response('nope',{status:500})]]) {
+    r=run(value,current);
+    await assert.rejects(r.promise,e=>e.code==='PUBLISH_NOT_PERMITTED');
+    assert.deepEqual(r.calls,['GET']);
+  }
+  await assert.rejects(run(0,null,{id:8}).promise,e=>e.code==='INVALID_ARGUMENTS');
+});
 test('TOOLS.md access table lists every enabled operation with the right roles',async()=>{
   const { readFile } = await import('node:fs/promises');
   const doc=await readFile(new URL('../TOOLS.md',import.meta.url),'utf8');

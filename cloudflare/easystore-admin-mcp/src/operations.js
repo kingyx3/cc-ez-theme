@@ -1,4 +1,4 @@
-import { pathSchema, readQuery, checkoutQuery, discountCreate, discountUpdate, customerCreate, customerUpdate, productCreateUnpublished, productUpdate } from "./schemas.js";
+import { pathSchema, readQuery, checkoutQuery, discountCreate, discountUpdate, customerCreate, customerUpdate, productCreateUnpublished, productUpdate, pageCreateUnpublished, pageUpdate } from "./schemas.js";
 
 const frontend = "https://admin.easystore.co/assets/index-WRCYpubE.js";
 const read = (id, path, description, parameter) => ({
@@ -62,6 +62,8 @@ export default [
   read("get_customer_membership", "/customers/{customer_id}/membership", "Get customer membership.", "customer_id"),
   read("list_order_fulfillments", "/orders/{order_id}/fulfillments", "List order fulfillments.", "order_id"),
   read("get_product_variants", "/products/{product_id}/variants", "Get product variants.", "product_id"),
+  read("list_pages", "/pages", "List online store pages. One page per call."),
+  read("get_page", "/pages/{page_id}", "Retrieve one online store page.", "page_id"),
   read("list_stock_adjustment_items", "/stock_adjustments/{adjustment_id}/items", "List stock adjustment items.", "adjustment_id"),
   {
     id: "create_discount",
@@ -185,5 +187,25 @@ export default [
       required: ["product_ids"],
       additionalProperties: false,
     },
+  },
+  {
+    id: "create_page",
+    method: "POST",
+    path: "/admin/v2/store/pages",
+    description: "Create an unpublished online store page (e.g. a policy or contact page). is_published must be 0; publishing is not permitted. navigation_handles is a comma-separated list of menus to link the page from, such as footer; leave it empty to add no menu link.",
+    enabled: true,
+    source: "https://admin.easystore.co/assets/new-Bzg9ED2L.js; https://admin.easystore.co/assets/index-B7_9miUl.js",
+    bodySchema: pageCreateUnpublished,
+    bodyDefaults: {"description": "", "navigation_handles": ""},
+  },
+  {
+    id: "update_page",
+    method: "PUT",
+    path: "/admin/v2/store/pages/{page_id}",
+    description: "Update an online store page. Inspect get_page first. Set is_published to 0 to unpublish; a published value is accepted only when the page is already published, so unpublished pages cannot be published.",
+    enabled: true,
+    source: "https://admin.easystore.co/assets/index-BLIo0Nmo.js; https://admin.easystore.co/assets/index-B7_9miUl.js",
+    bodySchema: pageUpdate,
+    pathSchema: pathSchema("page_id"),
   },
 ];

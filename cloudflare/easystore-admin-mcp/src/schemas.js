@@ -178,3 +178,33 @@ const { published_at, published_timestamp, ...productCreateProperties } = produc
 export const productCreateUnpublished = { ...productCreate, properties: { ...productCreateProperties, is_published: { type: "integer", enum: [0] } } };
 
 export const productUpdate = { ...productCreate, required: [...productCreate.required, "id"] };
+
+// Online store pages (admin content editor). Body shapes follow the page editor's create/update payloads.
+const pageProperties = {
+  name: {"type": "string", "minLength": 1, "maxLength": 255},
+  handle: {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,254}$"},
+  body_html: {"type": "string"},
+  description: {"type": "string", "maxLength": 250},
+  navigation_handles: {"type": "string", "pattern": "^([A-Za-z0-9_-]+(,[A-Za-z0-9_-]+)*)?$", "maxLength": 1024},
+  product_ids: {"type": "array", "maxItems": 20, "uniqueItems": true, "items": {"type": "integer", "minimum": 1}},
+};
+
+// New pages are always created unpublished; the worker has no right to publish them.
+export const pageCreateUnpublished = {
+  type: "object",
+  properties: { ...pageProperties, is_published: {"type": "integer", "enum": [0]} },
+  required: ["name", "handle", "body_html", "is_published"],
+  additionalProperties: false,
+};
+
+export const pageUpdate = {
+  type: "object",
+  properties: {
+    ...pageProperties,
+    id: {"type": "integer", "minimum": 1},
+    update_navigation_name: {"type": "boolean"},
+    is_published: {"anyOf": [{"type": "integer", "enum": [0, 1, 2]}, {"type": "boolean"}]},
+  },
+  required: ["is_published"],
+  additionalProperties: false,
+};

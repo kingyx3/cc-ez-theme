@@ -47,6 +47,7 @@ export function resolveOperation(registry, args, write) {
   validate(op.querySchema ?? emptyObject, query, 'query');
   const body = op.bodySchema ? { ...op.bodyDefaults, ...args.body } : args.body;
   if (op.id === 'update_product' && String(body?.id) !== String(args.path?.product_id)) throw new ToolError('INVALID_ARGUMENTS', 'Product id must match product_id in path.');
+  if (op.id === 'update_page' && body?.id !== undefined && String(body.id) !== String(args.path?.page_id)) throw new ToolError('INVALID_ARGUMENTS', 'Page id must match page_id in path.');
   if (['create_discount','update_discount'].includes(op.id) && body?.value_type === 'percentage' && Number(body.value) > 100) throw new ToolError('INVALID_ARGUMENTS', 'Percentage must not exceed 100.');
   if (op.bodySchema) validate(op.bodySchema, body, 'body');
   else if (args.body !== undefined) throw new ToolError('INVALID_ARGUMENTS', 'This operation has no body.');
