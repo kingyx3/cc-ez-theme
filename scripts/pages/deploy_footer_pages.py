@@ -203,7 +203,13 @@ def read_targets(admin: Admin) -> dict[str, dict]:
         if page.get("handle", handle) != handle:
             raise RuntimeError(f"Handle mismatch on {handle}")
         if not is_published(page, listing[handle]):
-            raise RuntimeError(f"{handle} is not currently published; refusing to change its state")
+            raise RuntimeError(
+                f"{handle} is not currently published by current parser; refusing to change its state. "
+                f"detail.is_published={page.get('is_published')!r}, "
+                f"listing.is_published={listing[handle].get('is_published')!r}, "
+                f"detail.published_at_present={'published_at' in page}, "
+                f"listing.published_at_present={'published_at' in listing[handle]}"
+            )
         if not page.get("body_html") or not visible_text(page["body_html"]):
             raise RuntimeError(f"Missing existing content in {handle}; refusing overwrite")
         target[handle] = page
