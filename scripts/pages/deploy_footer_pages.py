@@ -133,7 +133,12 @@ class Admin:
         token = os.getenv("EASYSTORE_ADMIN_TOKEN", "").strip()
         if not token:
             raise RuntimeError("Missing EASYSTORE_ADMIN_TOKEN GitHub Actions secret")
-        if os.getenv("EASYSTORE_STORE_DOMAIN", EXPECTED_DOMAIN) != EXPECTED_DOMAIN:
+        configured_domain = os.getenv("EASYSTORE_STORE_DOMAIN", EXPECTED_DOMAIN).strip()
+        if "://" in configured_domain:
+            configured_domain = urllib.parse.urlsplit(configured_domain).hostname or ""
+        else:
+            configured_domain = configured_domain.rstrip("/")
+        if configured_domain != EXPECTED_DOMAIN:
             raise RuntimeError("Store domain mismatch; refusing to edit another store")
         pod = os.getenv("EASYSTORE_POD_ID", "1007")
         if not pod.isdecimal():
