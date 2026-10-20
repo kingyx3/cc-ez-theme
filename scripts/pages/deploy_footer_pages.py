@@ -261,7 +261,18 @@ def apply(admin: Admin, target_html: dict[str, str], path: Path) -> None:
         key = "footer_pages_" + digest(f"{handle}:{item['after_sha256']}")[:24]
         admin.request("PUT", f"{API}/{item['id']}", body, key=key)
         actual = admin.read_page(item["id"])
-        if not is_published(actual) or visible_text(actual["body_html"]) != visible_text(target_html[handle]):
+        expected_text = visible_text(target_html[handle])
+        actual_text = visible_text(actual["body_html"])
+        published = is_published(actual)
+        if not published or actual_text != expected_text:
+            first_diff = next((i for i, (x, y) in enumerate(zip(expected_text, actual_text)) if x != y), min(len(expected_text), len(actual_text)))
+            print(
+                f"READBACK {handle}: published={published}, expected_chars={len(expected_text)}, "
+                f"actual_chars={len(actual_text)}, mismatch_at={first_diff}, "
+                f"expected_excerpt={expected_text[first_diff:first_diff+90]!r}, "
+                f"actual_excerpt={actual_text[first_diff:first_diff+90]!r}",
+                file=sys.stderr,
+            )
             raise RuntimeError(f"Read-back failed for {handle}; investigate before retry")
         print(f"DEPLOYED {handle}: verified")
 
