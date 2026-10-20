@@ -1,0 +1,71 @@
+name: Deploy EasyStore footer pages
+
+on:
+  pull_request:
+    paths:
+      - "policies/**"
+      - "scripts/pages/**"
+      - "tests/pages/**"
+      - ".github/workflows/deploy-footer-pages.yml"
+  push:
+    branches: [main]
+    paths:
+      - "policies/**"
+      - "scripts/pages/**"
+      - "tests/pages/**"
+      - ".github/workflows/deploy-footer-pages.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: footer-pages-production
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate six footer page sources
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install renderer
+        run: python -m pip install markdown==3.9
+      - name: Validate content and consistency
+        run: |
+          python scripts/pages/deploy_footer_pages.py validate
+          python -m unittest discover -s tests/pages -v
+
+  deploy:
+    name: Backup and deploy via EasyStore Admin API
+    needs: validate
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    env:
+      EASYSTORE_ADMIN_TOKEN: ${{ secrets.EASYSTORE_ADMIN_TOKEN }}
+      EASYSTORE_POD_ID: ${{ vars.EASYSTORE_POD_ID || '1007' }}
+      EASYSTORE_STORE_DOMAIN: ${{ vars.EASYSTORE_STORE_DOMAIN || 'cardboardcollective.easy.co' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python -m pip install markdown==3.9
+      - name: Require configured Admin API credential
+        run: |
+          if [ -z "$EASYSTORE_ADMIN_TOKEN" ]; then
+            echo "::error::Missing EASYSTORE_ADMIN_TOKEN"; exit 1
+          fi
+      - name: Preflight all six published pages and save backup
+        run: python scripts/pages/deploy_footer_pages.py plan --snapshot footer-pages-backup.json
+      - name: Preserve full original page HTML before mutation
+        uses: actions/upload-artifact@v4
+        with:
+          name: footer-pages-backup-${{ github.sha }}
+          path: footer-pages-backup.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Apply page HTML and verify published readback
+        run: python scripts/pages/deploy_footer_pages.py apply --snapshot footer-pages-backup.json
