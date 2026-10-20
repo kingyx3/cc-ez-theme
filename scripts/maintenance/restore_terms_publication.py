@@ -5,6 +5,7 @@ Only permitted change is changing is_published from 0 to 1 for exact existing
 terms-of-service page; preserve the current page content and metadata.
 """
 import argparse
+from datetime import datetime, timezone
 import hashlib
 import json
 import os
@@ -108,7 +109,16 @@ def main():
         raise RuntimeError("Page changed since backup; refusing restore")
     if published not in (0, False):
         raise RuntimeError(f"Page publication state changed; got {published!r}")
-    body = {"id":page_id,"body_html":html,"is_published":1}
+    # Match the EasyStore admin page editor: a publish request must include
+    # published_at AND its Unix timestamp, not only is_published.
+    now = datetime.now(timezone.utc)
+    body = {
+        "id":page_id,
+        "body_html":html,
+        "is_published":True,
+        "published_at":now.isoformat(timespec="milliseconds").replace("+00:00","Z"),
+        "published_timestamp":str(int(now.timestamp())),
+    }
     for prop in ("name","handle","description","navigation_handles"):
         if isinstance(page.get(prop),str):
             body[prop] = page[prop]
