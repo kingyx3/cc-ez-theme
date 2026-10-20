@@ -1,0 +1,41 @@
+name: Restore Terms page publication
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/maintenance/restore_terms_publication.py"
+      - ".github/workflows/restore-terms-publication.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: footer-pages-production
+  cancel-in-progress: false
+
+jobs:
+  recovery:
+    name: Restore accidentally unpublished Terms page
+    runs-on: ubuntu-latest
+    environment: prod
+    env:
+      EASYSTORE_ADMIN_TOKEN: ${{ secrets.EASYSTORE_ADMIN_TOKEN }}
+      EASYSTORE_POD_ID: ${{ vars.EASYSTORE_POD_ID || '1007' }}
+      EASYSTORE_STORE_DOMAIN: ${{ vars.EASYSTORE_STORE_DOMAIN || 'cardboardcollective.easy.co' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Backup exact existing Terms page
+        run: python scripts/maintenance/restore_terms_publication.py backup --snapshot terms-publication-recovery.json
+      - name: Preserve backup before mutation
+        uses: actions/upload-artifact@v4
+        with:
+          name: terms-publication-recovery-${{ github.sha }}
+          path: terms-publication-recovery.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Restore publication and confirm body unchanged
+        run: python scripts/maintenance/restore_terms_publication.py restore --snapshot terms-publication-recovery.json
