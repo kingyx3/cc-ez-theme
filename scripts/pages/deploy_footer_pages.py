@@ -7,6 +7,7 @@ Never creates pages, changes menus or publishes an unpublished page.
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
 import hashlib
 from html.parser import HTMLParser
 import json
@@ -259,8 +260,27 @@ def apply(admin: Admin, target_html: dict[str, str], path: Path) -> None:
         if item["before_sha256"] == item["after_sha256"]:
             print(f"SKIP {handle}: unchanged")
             continue
-        # Preserve metadata; only change body HTML. Keep the published flag true.
-        body = {"id": item["id"], "body_html": target_html[handle], "is_published": True}
+        # The EasyStore page editor sends the published date plus a Unix-string
+        # published_timestamp whenever visibility is set to Published. Without
+        # that timestamp an accepted PUT silently UNPUBLISHES the page.
+        published_at = page.get("published_at")
+        if published_at:
+            try:
+                publication_date = datetime.fromisoformat(str(published_at).replace("Z", "+00:00"))
+                if publication_date.tzinfo is None:
+                    raise ValueError("No timezone")
+            except ValueError as error:
+                raise RuntimeError(f"Could not preserve published_at for {handle}: {error}") from error
+        else:
+            publication_date = datetime.now(timezone.utc)
+            published_at = publication_date.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+        body = {
+            "id": item["id"],
+            "body_html": target_html[handle],
+            "is_published": True,
+            "published_at": published_at,
+            "published_timestamp": str(int(publication_date.timestamp())),
+        }
         for prop in ("name", "handle", "description", "navigation_handles"):
             if isinstance(page.get(prop), str):
                 body[prop] = page[prop]
