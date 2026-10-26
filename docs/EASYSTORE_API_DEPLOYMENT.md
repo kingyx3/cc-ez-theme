@@ -213,7 +213,7 @@ Content-Type: application/json
 
 It sends the same authorization and EasyStore infrastructure headers as the import, with a fresh `idempotency-key`. A non-2xx response fails the job and prints the response body.
 
-After the publish request the job re-reads the theme listing (up to five attempts, five seconds apart, since the listing can lag) and records the state EasyStore reports for that theme, such as `role` and `published_at`, in the job summary. The job fails unless that state says the theme is live (`role: main`, or `published: true` when no role is reported). A 2xx publish status only proves EasyStore accepted the request.
+After the publish request the job re-reads the theme listing (up to five attempts, five seconds apart, since the listing can lag) and records the state EasyStore reports for that theme in the job summary and the run log. The listing has no `role` or `published` field; it reports `is_enabled`, which is 1 for the one theme the storefront serves and 0 for every other. The job fails unless the imported theme has `is_enabled: 1` and is not deleted. A 2xx publish status only proves EasyStore accepted the request. The log also prints, for every run, the publish response and the tally of `is_enabled` across all themes before and after the publish request.
 
 ## Troubleshooting
 
@@ -241,7 +241,7 @@ The archive validation command should print `[]`.
 
 ### Publish was not verified
 
-The publish request returned 2xx but the verification step failed, so EasyStore does not report the imported theme as live. Read "EasyStore theme state after publishing" in the job summary for the `role` and `published` values EasyStore returned, and check **Channels → Online Store → Themes** in the store the environment points at.
+The publish request returned 2xx but the verification step failed, so EasyStore does not report the imported theme as live. Read "EasyStore theme state after publishing" in the job summary and the run log ("BEFORE" and "AFTER the publish request") for the `is_enabled` values EasyStore returned, and check **Channels → Online Store → Themes** in the store the environment points at.
 
 ### The theme id could not be resolved
 

@@ -21,6 +21,8 @@ ID_KEYS = ("id", "theme_id")
 NAME_KEYS = ("name", "theme", "theme_name", "title")
 VERSION_KEYS = ("version", "theme_version")
 DETAIL_KEYS = NAME_KEYS + (
+    "is_enabled",
+    "is_deleted",
     "role",
     "status",
     "published",
@@ -33,9 +35,6 @@ DETAIL_KEYS = NAME_KEYS + (
 # path-safe identifiers are accepted here.
 SAFE_ID = re.compile(r"[A-Za-z0-9_-]+")
 SCALAR_TYPES = (str, int, float, bool)
-# EasyStore reports the theme a storefront is serving as role "main"; every
-# other theme is "unpublished".
-LIVE_ROLE = "main"
 DIAGNOSTIC_LIMIT = 10
 # Fields that could say which theme a storefront serves. They are shown even
 # when null, because summarize_theme drops null values and a missing state is
@@ -253,11 +252,13 @@ def inspect_document(document: Any, theme_id: Any = None) -> list[str]:
 
 
 def is_live(summary: dict[str, Any]) -> bool:
-    """Whether the fields EasyStore reports say the storefront serves the theme."""
-    role = summary.get("role")
-    if role is not None:
-        return role == LIVE_ROLE
-    return summary.get("published") is True
+    """Whether the fields EasyStore reports say the storefront serves the theme.
+
+    EasyStore's theme listing has no role or published field. It reports
+    ``is_enabled``: 1 for the one theme the storefront serves and 0 for every
+    other, and a publish request moves the 1 to the theme it names.
+    """
+    return summary.get("is_enabled") == 1 and not summary.get("is_deleted")
 
 
 def load_document(path: Path | str | None) -> Any:

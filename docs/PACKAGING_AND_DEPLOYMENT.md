@@ -178,7 +178,7 @@ See [EasyStore API deployment](EASYSTORE_API_DEPLOYMENT.md) for the credential, 
 
 Every workflow run automatically imports the theme after packaging and then publishes it. A run on `main` changes the live storefront; a run on any other branch changes the dev storefront.
 
-A green deploy means the theme is live. After the publish request the job lists the store's themes (retrying for up to about 25 seconds) and fails unless EasyStore reports the imported theme as the live one (`role: main`). EasyStore accepting the publish request with a 2xx is not enough on its own.
+A green deploy means the theme is live. After the publish request the job lists the store's themes (retrying for up to about 25 seconds) and fails unless EasyStore reports the imported theme as the live one (`is_enabled: 1`; the publish request moves that flag from the previous theme to the imported one). EasyStore accepting the publish request with a 2xx is not enough on its own.
 
 The publish step never uses a stored theme id. After the import it reads the EasyStore theme listing and matches the branch/run/SHA identity this run stamped into the theme, so the `PUT` that publishes always targets the theme that was just imported. If nothing matches, or two themes claim the same identity, the job fails without publishing.
 

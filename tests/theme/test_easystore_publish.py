@@ -251,17 +251,20 @@ class InspectDocumentTests(unittest.TestCase):
 
 
 class IsLiveTests(unittest.TestCase):
-    def test_the_main_role_is_live(self) -> None:
-        self.assertTrue(easystore_publish.is_live({"role": "main"}))
-        self.assertTrue(easystore_publish.is_live({"role": "main", "published": False}))
+    def test_the_enabled_theme_is_live(self) -> None:
+        self.assertTrue(easystore_publish.is_live({"is_enabled": 1}))
+        self.assertTrue(easystore_publish.is_live({"is_enabled": True, "is_deleted": 0}))
 
-    def test_any_other_role_is_not_live(self) -> None:
-        self.assertFalse(easystore_publish.is_live({"role": "unpublished"}))
-        self.assertFalse(easystore_publish.is_live({"role": "unpublished", "published": True}))
+    def test_a_theme_that_is_not_enabled_is_not_live(self) -> None:
+        self.assertFalse(easystore_publish.is_live({"is_enabled": 0}))
+        self.assertFalse(easystore_publish.is_live({"is_enabled": None}))
 
-    def test_without_a_role_the_published_flag_decides(self) -> None:
-        self.assertTrue(easystore_publish.is_live({"published": True}))
-        self.assertFalse(easystore_publish.is_live({"published": False}))
+    def test_a_deleted_theme_is_not_live(self) -> None:
+        self.assertFalse(easystore_publish.is_live({"is_enabled": 1, "is_deleted": 1}))
+
+    def test_a_listing_without_the_flag_is_never_assumed_live(self) -> None:
+        # Fields this API does not have must not count as proof either way.
+        self.assertFalse(easystore_publish.is_live({"role": "main", "published": True}))
         self.assertFalse(easystore_publish.is_live({"name": "Theme"}))
         self.assertFalse(easystore_publish.is_live({}))
 
@@ -426,29 +429,29 @@ class CommandLineTests(unittest.TestCase):
 
     def test_verify_passes_when_the_theme_is_live(self) -> None:
         exit_code, output = self.run_verify(
-            {"themes": [{"id": 1870671, "name": DISPLAY_NAME, "role": "main"}]}
+            {"themes": [{"id": 1870671, "name": DISPLAY_NAME, "is_enabled": 1}]}
         )
 
         self.assertEqual(exit_code, 0)
-        self.assertIn("role: main", output)
+        self.assertIn("is_enabled: 1", output)
         self.assertIn("Verified: theme 1870671 is live", output)
 
     def test_verify_fails_when_the_theme_is_not_live(self) -> None:
         exit_code, output = self.run_verify(
             {
                 "themes": [
-                    {"id": 1, "name": "Old", "role": "main"},
-                    {"id": 1870671, "name": DISPLAY_NAME, "role": "unpublished"},
+                    {"id": 1, "name": "Old", "is_enabled": 1},
+                    {"id": 1870671, "name": DISPLAY_NAME, "is_enabled": 0},
                 ]
             }
         )
 
         self.assertEqual(exit_code, 1)
-        self.assertIn("role: unpublished", output)
+        self.assertIn("is_enabled: 0", output)
         self.assertIn("ERROR: Theme 1870671 is not live", output)
 
     def test_verify_fails_when_the_theme_is_missing_from_the_listing(self) -> None:
-        exit_code, output = self.run_verify({"themes": [{"id": 1, "role": "main"}]})
+        exit_code, output = self.run_verify({"themes": [{"id": 1, "is_enabled": 1}]})
 
         self.assertEqual(exit_code, 1)
         self.assertIn("did not report theme 1870671", output)
