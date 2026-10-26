@@ -36,6 +36,8 @@ function summarize(samples) {
     'transferBytes',
     'jsTransferBytes',
     'cssTransferBytes',
+    'imageRequestCount',
+    'imageTransferBytes',
   ];
 
   const medians = {};
@@ -131,12 +133,39 @@ async function readPageMetrics(page, response, wallMs) {
   }, { status: response?.status() ?? null, measuredWallMs: wallMs });
 }
 
+// Image bytes come from Playwright rather than Resource Timing: images are served
+// from a CDN origin, and transferSize reads 0 for cross-origin entries that do
+// not send Timing-Allow-Origin.
+function trackImages(page) {
+  const sizes = [];
+  const onFinished = request => {
+    if (request.resourceType() !== 'image') return;
+    sizes.push(
+      request.sizes()
+        .then(size => size.responseBodySize + size.responseHeadersSize)
+        .catch(() => 0)
+    );
+  };
+  page.on('requestfinished', onFinished);
+
+  return async () => {
+    page.off('requestfinished', onFinished);
+    const bytes = await Promise.all(sizes);
+    return {
+      imageRequestCount: bytes.length,
+      imageTransferBytes: bytes.reduce((sum, value) => sum + value, 0),
+    };
+  };
+}
+
 async function measureNavigation(page, target) {
+  const stopTrackingImages = trackImages(page);
   const start = Date.now();
   const response = await page.goto(target, { waitUntil: 'load', timeout: 30_000 });
   const wallMs = Date.now() - start;
   if (SETTLE_MS) await page.waitForTimeout(SETTLE_MS);
-  return readPageMetrics(page, response, wallMs);
+  const metrics = await readPageMetrics(page, response, wallMs);
+  return { ...metrics, ...(await stopTrackingImages()) };
 }
 
 async function coldSample(browser, target) {
@@ -233,8 +262,8 @@ function markdownSummary(report) {
     '',
     '> These are observational CI measurements, not pass/fail budgets. Compare medians across runs to spot trends; hosted-runner and network variance are expected.',
     '',
-    '| Scenario | Cache | Success | TTFB | DCL | Load | LCP | CLS | Long tasks | Requests | Transfer | JS | CSS |',
-    '| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
+    '| Scenario | Cache | Success | TTFB | DCL | Load | LCP | CLS | Long tasks | Requests | Transfer | JS | CSS | Images |',
+    '| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
   ];
 
   for (const scenario of report.scenarios) {
@@ -248,7 +277,8 @@ function markdownSummary(report) {
         `${formatNumber(metrics.cls)} | ${formatMs(metrics.longTaskTotalMs)} | ` +
         `${Number.isFinite(metrics.requestCount) ? Math.round(metrics.requestCount) : '—'} | ` +
         `${formatKiB(metrics.transferBytes)} | ${formatKiB(metrics.jsTransferBytes)} | ` +
-        `${formatKiB(metrics.cssTransferBytes)} |`
+        `${formatKiB(metrics.cssTransferBytes)} | ` +
+        `${formatKiB(metrics.imageTransferBytes)} (${Number.isFinite(metrics.imageRequestCount) ? Math.round(metrics.imageRequestCount) : '—'}) |`
       );
     }
   }
@@ -260,6 +290,7 @@ function markdownSummary(report) {
     '- LCP: when the largest visible content paints.',
     '- Long tasks: main-thread JavaScript work over 50 ms.',
     '- Transfer/JS/CSS: payload growth or reduction between revisions.',
+    '- Images: bytes fetched for images (request count in brackets), the number lazy-loading and responsive sources are meant to shrink.',
     '- Cold vs warm: impact of browser caching on repeat navigation.',
     ''
   );

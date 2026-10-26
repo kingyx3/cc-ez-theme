@@ -189,6 +189,19 @@ translated string, a customer's own data - and nothing else.
 - A product grid marks its first row `card_image_eager` so the largest
   contentful paint is not a lazily loaded image. `product-card.liquid` lowers
   the flag again on the way out, because `include` shares one scope.
+- A product card's hover image is shipped as a 1px placeholder with its real
+  source in `data-hover-src` / `data-hover-srcset`.
+  `assets/product-card-hover-image.js` swaps it in on the first desktop hover.
+  `loading="lazy"` alone still downloads it with its card, which doubled a
+  grid's image bytes (phones included, where it is never shown).
+- Any image slot that can hold a merchant upload asks for a size with
+  `img_url` and a `srcset`; never print `article.image.src` or a setting's raw
+  URL into a large slot. `image-banner`, `slider` and `video` have an
+  `eager_image` setting for the section at the top of a page, which swaps
+  `loading="lazy"` for `eager` + `fetchpriority="high"` so the LCP image is not
+  deferred. Leave it off for every other section. A slider slide with a
+  separate mobile image stays lazy: both images render, CSS hides one, and an
+  eager image is fetched even when hidden.
 - No stylesheet is sent twice. Before adding rules to a page-specific
   stylesheet, check whether `base.css` or the template's other stylesheets
   already carry them.

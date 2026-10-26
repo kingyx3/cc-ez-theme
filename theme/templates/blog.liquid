@@ -17,7 +17,15 @@
                     {% if article.image and article.image.src %}
                         <div class="article-card__image-wrapper">
                             <div class="article-card__image media media--landscape">
-                                <img src="{{ article.image.src }}" alt="{{ article.title | escape }}" class="motion-reduce" width="1200" height="800" loading="lazy">
+                                <img
+                                    srcset="{{ article.image.src | img_url: '550x' }} 550w, {{ article.image.src | img_url: '710x' }} 710w, {{ article.image.src | img_url: '1420x' }} 1420w"
+                                    src="{{ article.image.src | img_url: '710x' }}"
+                                    sizes="(min-width: 750px) 50vw, 100vw"
+                                    alt="{{ article.title | escape }}"
+                                    class="motion-reduce"
+                                    width="1200"
+                                    height="800"
+                                    loading="lazy">
                             </div>
                         </div>
                     {% endif %}

@@ -26,7 +26,15 @@
       {% if article.image.src %}
       <div class="article-template__hero-container">
         <div class="article-template__hero-adapt article-template__hero-media media" itemprop="image">
-          <img src="{{ article.image.src }}" alt="{{ article.title | escape}}" width="1500" height="600" fetchpriority="high">
+          <img
+            srcset="{{ article.image.src | img_url: '750x' }} 750w, {{ article.image.src | img_url: '1100x' }} 1100w, {{ article.image.src | img_url: '1500x' }} 1500w"
+            src="{{ article.image.src | img_url: '1500x' }}"
+            sizes="100vw"
+            alt="{{ article.title | escape}}"
+            width="1500"
+            height="600"
+            loading="eager"
+            fetchpriority="high">
         </div>
       </div>
       {% endif %}

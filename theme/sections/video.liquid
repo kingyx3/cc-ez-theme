@@ -19,7 +19,7 @@
           alt="{{ section.settings.heading | escape }}"
           width="1920"
           height="1080"
-          loading="lazy"
+          {% if section.settings.eager_image %}loading="eager" fetchpriority="high"{% else %}loading="lazy"{% endif %}
         >
         <span class="deferred-media__poster-button motion-reduce">
           {% include 'svg-definitions' with 'icon-play' %}
@@ -36,6 +36,12 @@
   "tag": "section",
   "class": "spaced-section spaced-section--full-width",
   "settings": [
+    {
+      "type": "checkbox",
+      "id": "eager_image",
+      "default": false,
+      "label": { "en_US": "Load this image first (use for the top section of the page)", "zh_TW": "優先載入此圖片（用於頁面頂部區塊）", "zh_CN": "优先加载此图片（用于页面顶部区块）", "ms_MY": "Muatkan imej ini dahulu (untuk bahagian atas halaman)" }
+    },
     {
       "type": "text",
       "id": "heading",
