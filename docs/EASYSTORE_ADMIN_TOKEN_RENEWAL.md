@@ -94,8 +94,8 @@ Cloudflare credentials are missing, the job fails before renewal.
 5. GitHub Actions runs daily at 03:17 UTC (11:17 Singapore time) for dev
    and prod independently. Every run checks the stored token against the
    read-only admin themes API. The secret is renewed when its **GitHub
-   environment secret last-updated timestamp** is 14 days old, or earlier
-   when its JWT is within 14 days of expiry, no longer authenticates,
+   environment secret last-updated timestamp** is 7 days old, or earlier
+   when its JWT is within 7 days of expiry, no longer authenticates,
    or still represents an account-scoped rather than store-scoped session.
    A healthy recent token is left unchanged.
 
@@ -221,13 +221,20 @@ The [October 10 dev forced dry run](https://github.com/kingyx3/cc-ez-theme/actio
 For this specific EasyStore format, the rotation now accepts a replacement with unknown expiry **only** if the previous JWT also lacked a numeric expiry, the replacement differs from the input, `sid` identifies the same store, and a read-only EasyStore admin API request with the replacement succeeds. The repository continues to reject expired/short-lived numeric-expiration JWTs and any attempt to downgrade a JWT with a known expiration into one without one.
 
 For credentials with unknown expiry, the daily workflow performs a
-read-only API health check, but only renews after 14 days since the saved
+read-only API health check, but only renews after 7 days since the saved
 GitHub environment secret was updated (or earlier if that health check
 returns HTTP 401/403). There is no promise of uninterrupted renewal from an
 undocumented endpoint; monitor workflow failures and keep a recovery path
 for a revoked or expired JWT. A successful **dry run** confirms authentication and admin verification but makes no GitHub/Cloudflare secret changes; the subsequent non-dry run is required to persist the returned token in the selected environment.
 
-## 14-day renewal cadence and safety checks
+## 7-day renewal cadence and safety checks
+
+The interval was 14 days until a dev session stopped authenticating about two
+weeks after it was last saved - around the time its renewal came due. Whether
+EasyStore's real session lifetime is shorter than the ~30 days observed at
+exchange time is unconfirmed, so the interval leaves a week of margin. It
+cannot help if EasyStore ends the session server-side (for example a logout
+from the admin app); that still needs a reseed.
 
 The GitHub Actions workflow still runs every day, and each environment is
 handled in a separate job. It performs a read-only EasyStore admin theme
@@ -244,12 +251,12 @@ read/write** permits this read. No new GitHub variables or secret
 permissions are required.
 
 - If the token is healthy and the environment secret was last saved fewer
-  than 14 days ago, no renewal occurs.
-- On or after day 14, the script performs a token exchange and read-only
+  than 7 days ago, no renewal occurs.
+- On or after day 7, the script performs a token exchange and read-only
   verification of the replacement, then writes only that environment's
   GitHub secret (and any explicitly configured Cloudflare Worker).
 - Renewal happens earlier if the token is account-scoped, its numeric
-  expiry is 14 days away or less, or EasyStore returns HTTP 401/403 on the
+  expiry is 7 days away or less, or EasyStore returns HTTP 401/403 on the
   daily health check. A revoked/expired credential may not be recoverable
   by exchange and will trigger an Actions failure requiring manual reseeding.
 - A network error, rate limit or server error on the health check fails
@@ -269,9 +276,9 @@ token replacements; it is not an EasyStore-issued expiry claim.
 
 Every scheduled or manually dispatched renewal job performs a lightweight
 read-only EasyStore admin theme-list request **before** checking token age.
-A token saved fewer than 14 days ago is reused while healthy; renewal occurs
-when its environment secret is at least 14 days old, a numeric JWT expiry is
-within 14 days, its store scope is missing, or EasyStore rejects the read with
+A token saved fewer than 7 days ago is reused while healthy; renewal occurs
+when its environment secret is at least 7 days old, a numeric JWT expiry is
+within 7 days, its store scope is missing, or EasyStore rejects the read with
 401/403. Renewal is verified before the `prod` secret and configured Worker
 binding are updated. A revoked session that EasyStore will not exchange still
 requires a new `_easystore_session` seed; this is not bypassed by frequent retries.
@@ -284,8 +291,11 @@ deploy or modify credentials. The fixed Worker endpoint is
 `cc-easystore-admin-mcp.cardboardsg.workers.dev`; change the checked-in
 origin if the Cloudflare account/subdomain changes.
 
-Production renewal, hosted MCP health and MCP deployment failures create
-separate GitHub Issues assigned to the repository owner. Continued failures
+Production and development renewal, hosted MCP health and MCP deployment
+failures create separate GitHub Issues assigned to the repository owner (a dev
+renewal failure opens "development admin token renewal failed", apart from the
+production one). A dev failure otherwise stays silent until a branch deploy
+hits the 401. Continued failures
 comment on the same open issue; successful reruns close it. This provides an
 actionable record and GitHub assignment notifications without another external
 webhook. Ensure GitHub Issues and personal assigned-issue notifications are

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Open one actionable GitHub issue per failed production monitor; close on recovery.
+"""Open one actionable GitHub issue per failed monitor; close on recovery.
 
 Uses Actions' short-lived GITHUB_TOKEN (Issues: write). Never handles EasyStore
 credentials or logs GitHub API response bodies.
@@ -11,6 +11,7 @@ import sys
 
 COMPONENTS = {
     "admin-renewal": "production admin token renewal",
+    "admin-renewal-dev": "development admin token renewal",
     "mcp-health": "production MCP health check",
     "mcp-deploy": "production MCP deployment",
 }
@@ -29,7 +30,7 @@ def reconcile(component, status, repo, owner, run_url):
                           "--limit", "500", "--json", "number,title"))
     issue = next((entry for entry in issues if entry.get("title") == title), None)
     if status == "failure":
-        body = ("The production monitor failed. Check the run and investigate the credential, "
+        body = ("The monitor failed. Check the run and investigate the credential, "
                 "store routing, or hosted MCP response. Do not post credentials in this issue.\n\n"
                 f"Failed run: {run_url}\n")
         if issue:

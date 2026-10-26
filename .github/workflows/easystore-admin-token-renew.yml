@@ -27,7 +27,7 @@ on:
         required: true
         default: true
       force:
-        description: Renew even if more than 14 days remain (for validation)
+        description: Renew even if more than 7 days remain (for validation)
         type: boolean
         required: true
         default: false
@@ -90,10 +90,11 @@ jobs:
           python-version: "3.13"
       - name: Renew and synchronize selected environment
         run: python scripts/auth/easystore_admin_token_renew.py --environment "$DEPLOYMENT_ENV"
-      - name: Record prod renewal failure or recovery in GitHub Issues
-        if: ${{ (success() || failure()) && matrix.deployment_env == 'prod' && (github.event_name == 'schedule' || !inputs.dry_run) }}
+      - name: Record renewal failure or recovery in GitHub Issues
+        if: ${{ (success() || failure()) && (github.event_name == 'schedule' || !inputs.dry_run) }}
         env:
           GH_TOKEN: ${{ github.token }}
-          EASYSTORE_ALERT_COMPONENT: admin-renewal
+          # Prod keeps its original component so its open incident keeps its title.
+          EASYSTORE_ALERT_COMPONENT: ${{ matrix.deployment_env == 'prod' && 'admin-renewal' || 'admin-renewal-dev' }}
           EASYSTORE_ALERT_STATUS: ${{ job.status }}
         run: python3 .github/scripts/report_easystore_incident.py
