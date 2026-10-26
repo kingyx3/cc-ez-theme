@@ -16,7 +16,7 @@ from scripts.auth import easystore_admin_token_renew as renewal
 NOW = 1_800_000_000
 
 
-def jwt(sid: str | None = "store-123", exp: int | None = NOW + 10 * 86400, iat: int = NOW - 100) -> str:
+def jwt(sid: str | None = "store-123", exp: int | None = NOW + 5 * 86400, iat: int = NOW - 100) -> str:
     fields = {"iat": iat}
     if exp is not None:
         fields["exp"] = exp
@@ -85,7 +85,7 @@ class RenewTest(unittest.TestCase):
 
     def test_user_scoped_admin_token_can_bootstrap_store_token(self):
         # User-level admin JWTs are valid at login before selecting a store.
-        # They must be exchanged even when the 14-day renewal threshold has not
+        # They must be exchanged even when the 7-day renewal threshold has not
         # been reached; after exchange the workflow persists a store-scoped JWT.
         user_token = jwt(sid=None, exp=NOW + 25 * 86400)
         with patch.object(renewal, "api_request", side_effect=[{"token": self.new}, {"themes": []}]) as http:
@@ -341,11 +341,11 @@ class SecretSyncTest(unittest.TestCase):
 
 
 class CadenceTest(unittest.TestCase):
-    def test_fresh_secret_with_nonexpiring_claim_skips_until_day_14(self):
+    def test_fresh_secret_with_nonexpiring_claim_skips_until_day_7(self):
         payload = renewal.claims(jwt(exp=None), require_exp=False)
-        self.assertFalse(renewal.renewal_due(payload, 13 * 86400 + 86399, NOW))
+        self.assertFalse(renewal.renewal_due(payload, 6 * 86400 + 86399, NOW))
+        self.assertTrue(renewal.renewal_due(payload, 7 * 86400, NOW))
         self.assertTrue(renewal.renewal_due(payload, 14 * 86400, NOW))
-        self.assertTrue(renewal.renewal_due(payload, 20 * 86400, NOW))
 
     def test_expiring_token_renews_before_age_threshold(self):
         recent = 1 * 86400
@@ -353,6 +353,9 @@ class CadenceTest(unittest.TestCase):
         far = renewal.claims(jwt(exp=NOW + 29 * 86400), require_exp=False)
         self.assertTrue(renewal.renewal_due(near, recent, NOW))
         self.assertFalse(renewal.renewal_due(far, recent, NOW))
+        # One day outside the window is left alone.
+        outside = renewal.claims(jwt(exp=NOW + 8 * 86400), require_exp=False)
+        self.assertFalse(renewal.renewal_due(outside, recent, NOW))
         self.assertTrue(renewal.renewal_due(renewal.claims(jwt(sid=None)), recent, NOW))
 
     def test_environment_secret_metadata_gives_real_last_update(self):
@@ -419,7 +422,7 @@ class MainTest(unittest.TestCase):
 
     def test_never_writes_when_not_due(self):
         with patch.object(renewal, "rotate") as rotate, patch.object(renewal, "sync_github") as gh:
-            self.assertEqual(self.execute(age=7 * 86400), 0)
+            self.assertEqual(self.execute(age=6 * 86400), 0)
             rotate.assert_not_called()
             gh.assert_not_called()
 
