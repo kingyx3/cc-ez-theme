@@ -430,6 +430,16 @@ jobs:
             sleep 5
           done
 
+          # Print to the log as well as the summary, so the raw answers can be
+          # read from the run log without opening the summary page.
+          publish_shape="$(python scripts/theme/easystore_publish.py inspect --file easystore-publish.json)"
+          theme_shape="$(python scripts/theme/easystore_publish.py inspect \
+            --file easystore-themes-after-publish.json --theme-id "${THEME_ID}")"
+          echo "EasyStore publish response:"
+          echo "${publish_shape}"
+          echo
+          echo "${theme_shape}"
+
           {
             echo "### EasyStore theme state after publishing"
             echo
@@ -445,10 +455,9 @@ jobs:
             echo
             echo '```text'
             echo "publish response:"
-            python scripts/theme/easystore_publish.py inspect --file easystore-publish.json
+            echo "${publish_shape}"
             echo
-            python scripts/theme/easystore_publish.py inspect \
-              --file easystore-themes-after-publish.json --theme-id "${THEME_ID}"
+            echo "${theme_shape}"
             echo '```'
             echo
             if [[ "${verified}" == "true" ]]; then
