@@ -1,6 +1,6 @@
 # EasyStore API Deployment
 
-The `Package EasyStore theme` GitHub Actions workflow automatically imports a theme into EasyStore and then publishes it, after validation and packaging complete successfully on `main`. Pushes to any other branch stop after the ZIP is built.
+The `Package EasyStore theme` GitHub Actions workflow automatically imports a theme into EasyStore and then publishes it, after validation and packaging complete successfully. This happens on every branch: `main` deploys to the live (`prod`) store and any other branch deploys to the `dev` store.
 
 Both calls use the same EasyStore admin endpoints observed in the browser UI:
 
@@ -17,13 +17,11 @@ For every push branch, and for a manual workflow dispatch, the workflow runs the
 
 1. `test` validates the real `theme/` source and enforces the existing test coverage requirement;
 2. `package` creates and validates the normal downloadable `cc-ez-theme` artifact;
-3. `deploy` runs only after `package` succeeds, and only when the run's ref is `refs/heads/main`, and imports a deployment-specific ZIP into EasyStore, resolves the imported theme's id, and publishes that theme.
-
-On every other branch the workflow ends at step 2. The ZIP artifact is still produced for download and manual upload, but nothing is sent to EasyStore. A manual `workflow_dispatch` follows the same rule: it imports and publishes only when dispatched against `main`.
+3. `deploy` runs after `package` succeeds. It imports a deployment-specific ZIP into EasyStore, resolves the imported theme's id, publishes that theme, and then checks EasyStore's own report of which theme is live. The GitHub environment is chosen from the ref: `prod` for `refs/heads/main`, `dev` for every other branch. A manual `workflow_dispatch` follows the same rule.
 
 The deploy job does not replace the normal package artifact. The artifact remains available as a manual fallback.
 
-If `EASYSTORE_ADMIN_TOKEN` is not configured, validation and packaging still succeed. The deploy job prints a warning and skips the EasyStore requests. Once the secret is configured, subsequent successful `main` runs import and publish automatically.
+If `EASYSTORE_ADMIN_TOKEN`, `EASYSTORE_POD_ID` or `EASYSTORE_STORE_DOMAIN` is not configured in the selected GitHub environment, validation and packaging still succeed but the deploy job fails with an error rather than silently skipping the EasyStore requests. Once they are configured, re-run the failed jobs.
 
 The chained path has been verified against EasyStore with a successful HTTP 200 import from the PR branch.
 
