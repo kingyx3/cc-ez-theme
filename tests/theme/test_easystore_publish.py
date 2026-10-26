@@ -198,6 +198,22 @@ class SummarizeThemeTests(unittest.TestCase):
         self.assertEqual(easystore_publish.summarize_theme(None, "bad/id"), {})
 
 
+class IsLiveTests(unittest.TestCase):
+    def test_the_main_role_is_live(self) -> None:
+        self.assertTrue(easystore_publish.is_live({"role": "main"}))
+        self.assertTrue(easystore_publish.is_live({"role": "main", "published": False}))
+
+    def test_any_other_role_is_not_live(self) -> None:
+        self.assertFalse(easystore_publish.is_live({"role": "unpublished"}))
+        self.assertFalse(easystore_publish.is_live({"role": "unpublished", "published": True}))
+
+    def test_without_a_role_the_published_flag_decides(self) -> None:
+        self.assertTrue(easystore_publish.is_live({"published": True}))
+        self.assertFalse(easystore_publish.is_live({"published": False}))
+        self.assertFalse(easystore_publish.is_live({"name": "Theme"}))
+        self.assertFalse(easystore_publish.is_live({}))
+
+
 class LoadDocumentTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary_directory = tempfile.TemporaryDirectory()
@@ -340,6 +356,58 @@ class CommandLineTests(unittest.TestCase):
 
         self.assertEqual(exit_code, 0)
         self.assertIn("1870671", stdout.getvalue())
+
+    def run_verify(self, listing) -> tuple[int, str]:
+        themes_response = self.write("themes.json", listing)
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            exit_code = easystore_publish.main(
+                [
+                    "verify",
+                    "--themes-response",
+                    str(themes_response),
+                    "--theme-id",
+                    "1870671",
+                ]
+            )
+        return exit_code, stdout.getvalue()
+
+    def test_verify_passes_when_the_theme_is_live(self) -> None:
+        exit_code, output = self.run_verify(
+            {"themes": [{"id": 1870671, "name": DISPLAY_NAME, "role": "main"}]}
+        )
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("role: main", output)
+        self.assertIn("Verified: theme 1870671 is live", output)
+
+    def test_verify_fails_when_the_theme_is_not_live(self) -> None:
+        exit_code, output = self.run_verify(
+            {
+                "themes": [
+                    {"id": 1, "name": "Old", "role": "main"},
+                    {"id": 1870671, "name": DISPLAY_NAME, "role": "unpublished"},
+                ]
+            }
+        )
+
+        self.assertEqual(exit_code, 1)
+        self.assertIn("role: unpublished", output)
+        self.assertIn("ERROR: Theme 1870671 is not live", output)
+
+    def test_verify_fails_when_the_theme_is_missing_from_the_listing(self) -> None:
+        exit_code, output = self.run_verify({"themes": [{"id": 1, "role": "main"}]})
+
+        self.assertEqual(exit_code, 1)
+        self.assertIn("did not report theme 1870671", output)
+
+    def test_verify_fails_without_a_listing(self) -> None:
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            exit_code = easystore_publish.main(["verify", "--theme-id", "1870671"])
+
+        self.assertEqual(exit_code, 1)
+        self.assertIn("did not report theme", stdout.getvalue())
 
     def test_describe_is_never_fatal(self) -> None:
         stdout = io.StringIO()

@@ -33,6 +33,9 @@ DETAIL_KEYS = NAME_KEYS + (
 # path-safe identifiers are accepted here.
 SAFE_ID = re.compile(r"[A-Za-z0-9_-]+")
 SCALAR_TYPES = (str, int, float, bool)
+# EasyStore reports the theme a storefront is serving as role "main"; every
+# other theme is "unpublished".
+LIVE_ROLE = "main"
 DIAGNOSTIC_LIMIT = 10
 
 
@@ -165,6 +168,14 @@ def summarize_theme(document: Any, theme_id: Any) -> dict[str, Any]:
     return summary
 
 
+def is_live(summary: dict[str, Any]) -> bool:
+    """Whether the fields EasyStore reports say the storefront serves the theme."""
+    role = summary.get("role")
+    if role is not None:
+        return role == LIVE_ROLE
+    return summary.get("published") is True
+
+
 def load_document(path: Path | str | None) -> Any:
     """Return the parsed JSON at ``path``, or ``None`` when it is unusable."""
     if path is None:
@@ -219,6 +230,25 @@ def _run_describe(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_verify(args: argparse.Namespace) -> int:
+    """Fail unless EasyStore reports the theme as the one the storefront serves.
+
+    A successful publish request only proves EasyStore accepted it, so the
+    deploy would stay green while the storefront kept serving the old theme.
+    """
+    summary = summarize_theme(load_document(args.themes_response), args.theme_id)
+    if not summary:
+        print(f"ERROR: EasyStore did not report theme {args.theme_id} in its listing.")
+        return 1
+    for key, value in summary.items():
+        print(f"{key}: {value}")
+    if not is_live(summary):
+        print(f"ERROR: Theme {args.theme_id} is not live on the storefront.")
+        return 1
+    print(f"Verified: theme {args.theme_id} is live on the storefront.")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -238,9 +268,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     describe_parser.add_argument("--themes-response", type=_optional_path)
     describe_parser.add_argument("--theme-id", required=True)
 
+    verify_parser = subparsers.add_parser(
+        "verify", help="fail unless EasyStore reports the theme as live"
+    )
+    verify_parser.add_argument("--themes-response", type=_optional_path)
+    verify_parser.add_argument("--theme-id", required=True)
+
     args = parser.parse_args(argv)
     if args.command == "resolve":
         return _run_resolve(args)
+    if args.command == "verify":
+        return _run_verify(args)
     return _run_describe(args)
 
 

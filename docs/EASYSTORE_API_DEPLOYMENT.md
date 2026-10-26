@@ -9,7 +9,7 @@ POST https://api.easystore.co/admin/v2/store/themes/assets/import
 PUT  https://api.easystore.co/admin/v2/store/themes/<theme id>
 ```
 
-Publishing puts the imported theme live on the storefront. A successful `main` run therefore changes what customers see. Set the `EASYSTORE_PUBLISH` repository variable to `false` to keep every import an unpublished preview candidate instead.
+Publishing puts the imported theme live on the storefront. A run on `main` uses the `prod` GitHub environment and changes what customers see; a run on any other branch uses the `dev` environment and changes the dev storefront only. After publishing, the job asks EasyStore which theme is live and fails if it is not the imported one.
 
 ## Workflow order
 
@@ -40,7 +40,7 @@ Only the staging copy is changed. The workflow updates `theme`, `theme_name` whe
 
 The upload ZIP filename also carries the same Git identity while preserving the required internal `cc-ez-theme/` archive root.
 
-Because the deploy job is gated to `main`, the automatic import always produces the `main` identity below. The branch and release naming rules are retained so the same identity scheme still applies if the gate is ever widened, and so the naming is unambiguous when a non-`main` package artifact is uploaded manually.
+The deploy job runs on every branch, so each run stamps the identity for its own branch (the `main` identity below for `main`, the branch identity for anything else). The same naming makes a manually uploaded package artifact unambiguous.
 
 ### Normal branch
 
@@ -135,17 +135,16 @@ The next successful `Package EasyStore theme` run will automatically attempt the
 
 ## Optional repository variables
 
-The workflow defaults to the values observed for this store:
+The workflow has no built-in defaults for the store it deploys to. It reads these from the GitHub environment the run selected (`prod` for `main`, `dev` otherwise) and fails if any is missing:
 
 ```text
-EASYSTORE_POD_ID=1007
-EASYSTORE_STORE_DOMAIN=cardboardcollective.easy.co
-EASYSTORE_PUBLISH=true
+EASYSTORE_POD_ID=<the store's pod id>
+EASYSTORE_STORE_DOMAIN=<the store's EasyStore domain>
 ```
 
-To override them, create repository Actions variables with those names under **Settings → Secrets and variables → Actions → Variables**.
+Set them as environment variables under **Settings → Environments → prod / dev → Environment variables**, so the dev and prod stores stay separate.
 
-Setting `EASYSTORE_PUBLISH` to `false` keeps the import and stops before the publish request. The deploy job then records a warning and the imported theme stays an unpublished preview candidate. Any other value, including the default of leaving the variable unset, publishes.
+There is no switch to import without publishing: the workflow always publishes. The `EASYSTORE_PUBLISH` variable that earlier versions read is no longer used.
 
 The API URLs are intentionally fixed in the workflow so a secret or variable cannot silently redirect the upload to another host.
 
@@ -216,15 +215,15 @@ Content-Type: application/json
 
 It sends the same authorization and EasyStore infrastructure headers as the import, with a fresh `idempotency-key`. A non-2xx response fails the job and prints the response body.
 
-After a successful publish the job re-reads the theme listing and records the state EasyStore reports for that theme, such as `role` and `published_at`, in the job summary. That readback is informational: it never fails the job, since the publish status code is the authoritative result.
+After the publish request the job re-reads the theme listing (up to five attempts, five seconds apart, since the listing can lag) and records the state EasyStore reports for that theme, such as `role` and `published_at`, in the job summary. The job fails unless that state says the theme is live (`role: main`, or `published: true` when no role is reported). A 2xx publish status only proves EasyStore accepted the request.
 
 ## Troubleshooting
 
-### Import was skipped
+### Import did not run
 
-First check the branch. The deploy job only runs on `main`, so a run on any other branch shows the job as skipped and ends after the packaging step. This is expected; download the `cc-ez-theme` artifact and upload it manually if a preview is needed.
+The deploy job runs on every branch (`prod` environment for `main`, `dev` for the rest), but only when theme sources or their tooling changed - see the `paths` filter in the workflow. A push that only touches other files packages nothing and deploys nothing.
 
-On a `main` run, check the deploy job for the warning that `EASYSTORE_ADMIN_TOKEN` is not configured. Add the repository secret and rerun the workflow or push another commit.
+If the deploy job ran and failed on the credential check, `EASYSTORE_ADMIN_TOKEN`, `EASYSTORE_POD_ID` or `EASYSTORE_STORE_DOMAIN` is missing from the selected GitHub environment. Add it under **Settings → Environments**, then re-run the failed jobs.
 
 ### 401 or 403
 
@@ -242,9 +241,9 @@ python -c "from scripts.theme.theme_ci import validate_archive; print(validate_a
 
 The archive validation command should print `[]`.
 
-### Publish was skipped
+### Publish was not verified
 
-Check whether the `EASYSTORE_PUBLISH` repository variable is set to `false`. The deploy job records a warning and a job summary note when it is. Remove the variable, or set it to `true`, to publish again.
+The publish request returned 2xx but the verification step failed, so EasyStore does not report the imported theme as live. Read "EasyStore theme state after publishing" in the job summary for the `role` and `published` values EasyStore returned, and check **Channels → Online Store → Themes** in the store the environment points at.
 
 ### The theme id could not be resolved
 

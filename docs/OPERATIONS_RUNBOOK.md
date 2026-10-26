@@ -79,11 +79,8 @@ If any item is unknown, do not treat the release as ready.
 2. Watch the `Package EasyStore theme` workflow on the merge commit.
 3. Confirm `test` succeeds.
 4. Confirm `package` succeeds and produces the expected artifact.
-5. On `main`, confirm the deploy job either:
-   - imports and publishes the intended candidate; or
-   - intentionally imports without publishing because `EASYSTORE_PUBLISH=false`; or
-   - records that deployment was skipped because credentials are intentionally unavailable.
-6. When publishing is expected, verify the job summary resolves the imported theme by the run/branch/commit identity and reports a successful publish/readback.
+5. On `main`, confirm the deploy job imports and publishes the intended candidate.
+6. Verify the job summary resolves the imported theme by the run/branch/commit identity and ends with "Verified: EasyStore reports this theme as live". A missing credential fails the job; it no longer skips the deploy.
 7. Smoke-test the live storefront after publish: homepage, collection, product, search, cart, account/navigation, mobile navigation, add-to-cart, cart update, and checkout handoff.
 
 A workflow failure after merge is a production release failure. Investigate the failing stage before retrying or layering unrelated fixes on top.
@@ -145,7 +142,7 @@ Repository and platform secrets are operational dependencies. When changing them
 - verify the consuming workflow with a non-destructive run when possible;
 - rotate immediately after suspected exposure.
 
-Theme deployment behavior specifically depends on `EASYSTORE_ADMIN_TOKEN` and `EASYSTORE_PUBLISH`. Detailed token and theme-resolution behavior is documented in `EASYSTORE_API_DEPLOYMENT.md`.
+Theme deployment behavior specifically depends on `EASYSTORE_ADMIN_TOKEN`, `EASYSTORE_POD_ID` and `EASYSTORE_STORE_DOMAIN` in the selected GitHub environment. Detailed token and theme-resolution behavior is documented in `EASYSTORE_API_DEPLOYMENT.md`.
 
 ## 9. Manual packaging/deployment fallback
 

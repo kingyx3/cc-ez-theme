@@ -146,7 +146,10 @@ jobs:
 
           echo "configured=${configured}" >> "${GITHUB_OUTPUT}"
           if [[ "${configured}" != "true" ]]; then
-            echo "::warning::Package succeeded but automatic EasyStore import is skipped."
+            # A green run has to mean the theme was deployed. Skipping the
+            # import and passing hid a deploy that never happened.
+            echo "::error::EasyStore deployment is not configured in this GitHub environment, so nothing was imported or published."
+            exit 1
           fi
 
       - name: Derive deployment identity
@@ -374,17 +377,6 @@ jobs:
             exit 1
           fi
 
-          curl --silent --show-error \
-            --request GET "${EASYSTORE_THEMES_API_URL}" \
-            --header "Accept: application/json" \
-            --header "Authorization: Bearer ${EASYSTORE_ADMIN_TOKEN}" \
-            --header "easystore-pod-id: ${EASYSTORE_POD_ID}" \
-            --header "easystore-source: admin" \
-            --header "x-easystore-infra-default-domain: ${EASYSTORE_STORE_DOMAIN}" \
-            --header "x-easystore-infra-pod-id: ${EASYSTORE_POD_ID}" \
-            --header "x-easystore-infra-source: admin" \
-            --output easystore-themes-after-publish.json || true
-
           {
             echo "### EasyStore automatic theme publish"
             echo
@@ -396,8 +388,52 @@ jobs:
             echo "- Publish endpoint: \`PUT ${EASYSTORE_THEMES_API_URL}/${THEME_ID}\`"
             echo "- HTTP status: \`${http_code}\`"
             echo "- Store domain: \`${EASYSTORE_STORE_DOMAIN}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      # EasyStore answering the publish request with 200 only means it accepted
+      # the request. Ask it which theme the storefront is serving, and fail the
+      # run if that is not the theme this run imported.
+      - name: Verify the theme is live in EasyStore
+        if: steps.credential.outputs.configured == 'true'
+        env:
+          EASYSTORE_ADMIN_TOKEN: ${{ secrets.EASYSTORE_ADMIN_TOKEN }}
+          THEME_ID: ${{ steps.theme.outputs.theme_id }}
+          THEME_DISPLAY_NAME: ${{ steps.identity.outputs.display_name }}
+        shell: bash
+        run: |
+          set -uo pipefail
+
+          verified=false
+          for attempt in 1 2 3 4 5; do
+            http_code="$(
+              curl --silent --show-error \
+                --request GET "${EASYSTORE_THEMES_API_URL}" \
+                --header "Accept: application/json" \
+                --header "Authorization: Bearer ${EASYSTORE_ADMIN_TOKEN}" \
+                --header "easystore-pod-id: ${EASYSTORE_POD_ID}" \
+                --header "easystore-source: admin" \
+                --header "x-easystore-infra-default-domain: ${EASYSTORE_STORE_DOMAIN}" \
+                --header "x-easystore-infra-pod-id: ${EASYSTORE_POD_ID}" \
+                --header "x-easystore-infra-source: admin" \
+                --output easystore-themes-after-publish.json \
+                --write-out "%{http_code}"
+            )" || http_code="000"
+
+            echo "Attempt ${attempt}: EasyStore theme listing HTTP status: ${http_code}"
+            if [[ "${http_code}" =~ ^2[0-9][0-9]$ ]] && python scripts/theme/easystore_publish.py verify \
+                --themes-response easystore-themes-after-publish.json \
+                --theme-id "${THEME_ID}"; then
+              verified=true
+              break
+            fi
+            # The listing can briefly lag the publish request.
+            sleep 5
+          done
+
+          {
+            echo "### EasyStore theme state after publishing"
             echo
-            echo "State EasyStore reports for the theme after publishing:"
+            echo "State EasyStore reports for \`${THEME_DISPLAY_NAME}\` (id \`${THEME_ID}\`):"
             echo
             echo '```text'
             python scripts/theme/easystore_publish.py describe \
@@ -405,5 +441,14 @@ jobs:
               --theme-id "${THEME_ID}"
             echo '```'
             echo
-            echo "This theme is now live on the configured storefront."
+            if [[ "${verified}" == "true" ]]; then
+              echo "Verified: EasyStore reports this theme as live on the configured storefront."
+            else
+              echo "NOT verified: EasyStore does not report this theme as live."
+            fi
           } >> "${GITHUB_STEP_SUMMARY}"
+
+          if [[ "${verified}" != "true" ]]; then
+            echo "::error::EasyStore accepted the publish request but does not report theme ${THEME_ID} as live."
+            exit 1
+          fi
