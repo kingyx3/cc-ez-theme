@@ -33,8 +33,11 @@ STAGES = {AUTH_URL: "token exchange", VERIFY_URL: "admin API verification", SESS
 # value of this exact shape is ever reported; messages and bodies never are.
 ERROR_CODE = re.compile(r"[a-z][a-z0-9_]{0,63}")
 SECRET_NAME = "EASYSTORE_ADMIN_TOKEN"
-ROTATION_INTERVAL_SECONDS = 14 * 86400
-RENEW_BEFORE_SECONDS = 14 * 86400
+# A saved session was seen to stop working about two weeks after it was last
+# saved, around the time the 14-day renewal came due. Renewing weekly leaves a
+# week of margin; the exchange can only extend a session EasyStore still accepts.
+ROTATION_INTERVAL_SECONDS = 7 * 86400
+RENEW_BEFORE_SECONDS = 7 * 86400
 MIN_NEW_LIFETIME_SECONDS = 20 * 86400
 
 
@@ -286,7 +289,7 @@ def secret_age_seconds(repo: str, deployment_env: str, gh_token: str, now: int) 
 
 
 def renewal_due(claims_data: dict, age_seconds: int, now: int) -> bool:
-    """Renew after 14 days or sooner when token identity/expiry demands it."""
+    """Renew after 7 days or sooner when token identity/expiry demands it."""
     expires_at = claims_data.get("exp")
     return (age_seconds >= ROTATION_INTERVAL_SECONDS
             or not claims_data.get("sid")
@@ -364,7 +367,7 @@ def main(argv: list[str] | None = None, environ: dict[str, str] | None = None) -
                 print(f"{target}: renewed and synchronized environment secret.")
             if unknown_expiry:
                 print(f"{target}: token expiry not provided; next planned renewal is "
-                      "14 days after this environment secret's GitHub update.")
+                      "7 days after this environment secret's GitHub update.")
         return 0
     except RotationError as exc:
         print(f"::error::{target}: {exc}", file=sys.stderr)

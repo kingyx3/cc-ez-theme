@@ -43,6 +43,22 @@ class AlertTest(unittest.TestCase):
             incident.reconcile("admin-renewal", "success", *self.kwargs[2:])
         gh.assert_called_once()
 
+    def test_dev_renewal_failure_has_its_own_incident_apart_from_prod(self):
+        prod = [{"number": 42, "title": "[EasyStore] production admin token renewal failed"}]
+        with patch.object(incident, "gh", side_effect=[json.dumps(prod), "https://github.com/example"]) as gh:
+            incident.reconcile("admin-renewal-dev", "failure", *self.kwargs[2:])
+        self.assertEqual(gh.call_args.args[:3], ("issue", "create", "--repo"))
+        self.assertIn("[EasyStore] development admin token renewal failed", gh.call_args.args)
+
+    def test_dev_recovery_closes_only_the_dev_incident(self):
+        both = [
+            {"number": 42, "title": "[EasyStore] production admin token renewal failed"},
+            {"number": 43, "title": "[EasyStore] development admin token renewal failed"},
+        ]
+        with patch.object(incident, "gh", side_effect=[json.dumps(both), "", ""]) as gh:
+            incident.reconcile("admin-renewal-dev", "success", *self.kwargs[2:])
+        self.assertEqual(gh.call_args.args[:3], ("issue", "close", "43"))
+
     def test_rejects_unknown_sources_and_statuses(self):
         with patch.object(incident, "gh") as gh:
             with self.assertRaises(ValueError):
