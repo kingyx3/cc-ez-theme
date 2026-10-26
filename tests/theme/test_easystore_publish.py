@@ -201,11 +201,12 @@ class SummarizeThemeTests(unittest.TestCase):
 class InspectDocumentTests(unittest.TestCase):
     LISTING = {
         "themes": [
-            {"id": 1, "name": "Old", "role": "main", "published_at": "2026-08-16"},
+            {"id": 1, "name": "Old", "role": "main", "is_enabled": 0},
             {
                 "id": 2,
                 "name": "New",
                 "role": None,
+                "is_enabled": 1,
                 "settings": {"colors": 1, "fonts": 2},
                 "tags": ["a", "b"],
                 "note": "x" * 200,
@@ -221,22 +222,32 @@ class InspectDocumentTests(unittest.TestCase):
         self.assertIn("  settings: {colors, fonts}", lines)
         self.assertIn("  tags: [2 items]", lines)
         self.assertTrue(any(line.startswith("  note: '" + "x" * 10) and line.endswith("...") for line in lines))
-        self.assertIn("state fields of every theme in the listing:", lines)
-        self.assertIn("  id=1 name='Old' role='main' published_at='2026-08-16'", lines)
-        self.assertIn("  id=2 name='New' role=None", lines)
+        self.assertIn("2 themes in the listing; values of each state field:", lines)
+        self.assertIn("  role: 'main' x1, None x1", lines)
+        self.assertIn("  is_enabled: 0 x1, 1 x1", lines)
+        self.assertIn("  ids with is_enabled=1 (first 10): ['2']", lines)
+        self.assertFalse(any(line.startswith("  status:") for line in lines))
 
     def test_says_when_the_theme_is_missing(self) -> None:
         lines = easystore_publish.inspect_document(self.LISTING, 9)
 
         self.assertEqual(lines[0], "theme 9 is not in the listing")
-        self.assertIn("  id=1 name='Old' role='main' published_at='2026-08-16'", lines)
+        self.assertIn("  is_enabled: 0 x1, 1 x1", lines)
 
-    def test_without_a_theme_id_lists_the_top_level(self) -> None:
+    def test_without_a_theme_id_lists_the_top_level_with_one_level_of_values(self) -> None:
         self.assertEqual(
-            easystore_publish.inspect_document({"id": 5, "theme": {"a": 1}, "ok": True}),
-            ["id: 5", "theme: {a}", "ok: True"],
+            easystore_publish.inspect_document(
+                {"id": 5, "data": {"status": "ok", "params": {"a": 1}}, "ok": True}
+            ),
+            ["id: 5", "data: {status='ok', params={a}}", "ok: True"],
         )
         self.assertEqual(easystore_publish.inspect_document([1, 2]), ["[2 items]"])
+
+    def test_a_long_nested_value_is_cut_off(self) -> None:
+        shown = easystore_publish._shape({"key": {f"k{i}": i for i in range(100)}}, 1)
+
+        self.assertEqual(len(shown), easystore_publish.SHAPE_LIMIT)
+        self.assertTrue(shown.endswith("..."))
 
 
 class IsLiveTests(unittest.TestCase):

@@ -433,11 +433,17 @@ jobs:
           # Print to the log as well as the summary, so the raw answers can be
           # read from the run log without opening the summary page.
           publish_shape="$(python scripts/theme/easystore_publish.py inspect --file easystore-publish.json)"
+          before_shape="$(python scripts/theme/easystore_publish.py inspect \
+            --file easystore-themes.json --theme-id "${THEME_ID}")"
           theme_shape="$(python scripts/theme/easystore_publish.py inspect \
             --file easystore-themes-after-publish.json --theme-id "${THEME_ID}")"
           echo "EasyStore publish response:"
           echo "${publish_shape}"
           echo
+          echo "BEFORE the publish request:"
+          echo "${before_shape}"
+          echo
+          echo "AFTER the publish request:"
           echo "${theme_shape}"
 
           {
@@ -457,6 +463,10 @@ jobs:
             echo "publish response:"
             echo "${publish_shape}"
             echo
+            echo "BEFORE the publish request:"
+            echo "${before_shape}"
+            echo
+            echo "AFTER the publish request:"
             echo "${theme_shape}"
             echo '```'
             echo

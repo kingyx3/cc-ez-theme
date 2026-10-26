@@ -39,9 +39,20 @@ LIVE_ROLE = "main"
 DIAGNOSTIC_LIMIT = 10
 # Fields that could say which theme a storefront serves. They are shown even
 # when null, because summarize_theme drops null values and a missing state is
-# itself the answer the roster is there to give.
-STATE_KEYS = ("role", "status", "published", "is_published", "published_at")
+# itself the answer the tally is there to give. EasyStore's listing reports
+# is_enabled / is_edited / is_deleted rather than a role.
+STATE_KEYS = (
+    "role",
+    "status",
+    "published",
+    "is_published",
+    "is_enabled",
+    "is_edited",
+    "is_deleted",
+)
 VALUE_LIMIT = 80
+SHAPE_LIMIT = 200
+ID_LIST_LIMIT = 10
 
 
 def normalize_id(value: Any) -> str | None:
@@ -173,27 +184,56 @@ def summarize_theme(document: Any, theme_id: Any) -> dict[str, Any]:
     return summary
 
 
-def _shape(value: Any) -> str:
-    """Render one JSON value without dumping nested content."""
+def _shape(value: Any, depth: int = 0) -> str:
+    """Render one JSON value, showing nested values only ``depth`` levels down."""
     if isinstance(value, dict):
-        return "{" + ", ".join(sorted(str(key) for key in value)) + "}"
-    if isinstance(value, list):
-        return f"[{len(value)} items]"
-    text = repr(value)
-    return text if len(text) <= VALUE_LIMIT else text[: VALUE_LIMIT - 3] + "..."
+        if depth:
+            inner = ", ".join(
+                f"{key}={_shape(item, depth - 1)}" for key, item in value.items()
+            )
+        else:
+            inner = ", ".join(sorted(str(key) for key in value))
+        text = "{" + inner + "}"
+    elif isinstance(value, list):
+        text = f"[{len(value)} items]"
+    else:
+        text = repr(value)
+        return text if len(text) <= VALUE_LIMIT else text[: VALUE_LIMIT - 3] + "..."
+    return text if len(text) <= SHAPE_LIMIT else text[: SHAPE_LIMIT - 3] + "..."
+
+
+def _tally(document: Any) -> list[str]:
+    """Count the values of each state field across every theme in ``document``."""
+    entries = list(iter_candidates(document))
+    lines = [f"{len(entries)} themes in the listing; values of each state field:"]
+    for key in STATE_KEYS:
+        counts: dict[str, int] = {}
+        for entry in entries:
+            if key in entry:
+                shown = _shape(entry[key])
+                counts[shown] = counts.get(shown, 0) + 1
+        if counts:
+            lines.append(
+                f"  {key}: " + ", ".join(f"{shown} x{n}" for shown, n in sorted(counts.items()))
+            )
+    enabled = [_entry_id(entry) for entry in entries if entry.get("is_enabled") == 1]
+    lines.append(
+        f"  ids with is_enabled=1 (first {ID_LIST_LIMIT}): {enabled[:ID_LIST_LIMIT]}"
+    )
+    return lines
 
 
 def inspect_document(document: Any, theme_id: Any = None) -> list[str]:
     """Show everything ``document`` reports, for working out what a response means.
 
-    With a ``theme_id`` this lists every field of that theme (nested content as
-    its keys only) and then each theme's state fields. Without one it lists the
-    top level of the document.
+    With a ``theme_id`` this lists every field of that theme and then tallies the
+    state fields of every theme. Without one it lists the top level of the
+    document, one level of nested values deep.
     """
     lines: list[str] = []
     if theme_id is None:
         if isinstance(document, dict):
-            lines.extend(f"{key}: {_shape(value)}" for key, value in document.items())
+            lines.extend(f"{key}: {_shape(value, 1)}" for key, value in document.items())
         else:
             lines.append(_shape(document))
         return lines
@@ -208,12 +248,7 @@ def inspect_document(document: Any, theme_id: Any = None) -> list[str]:
     else:
         lines.append(f"fields of theme {identifier}:")
         lines.extend(f"  {key}: {_shape(value)}" for key, value in entry.items())
-    lines.append("state fields of every theme in the listing:")
-    for item in iter_candidates(document):
-        shown = ("id", "name") + STATE_KEYS
-        lines.append(
-            "  " + " ".join(f"{key}={_shape(item[key])}" for key in shown if key in item)
-        )
+    lines.extend(_tally(document))
     return lines
 
 
