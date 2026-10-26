@@ -198,6 +198,47 @@ class SummarizeThemeTests(unittest.TestCase):
         self.assertEqual(easystore_publish.summarize_theme(None, "bad/id"), {})
 
 
+class InspectDocumentTests(unittest.TestCase):
+    LISTING = {
+        "themes": [
+            {"id": 1, "name": "Old", "role": "main", "published_at": "2026-08-16"},
+            {
+                "id": 2,
+                "name": "New",
+                "role": None,
+                "settings": {"colors": 1, "fonts": 2},
+                "tags": ["a", "b"],
+                "note": "x" * 200,
+            },
+        ]
+    }
+
+    def test_lists_every_field_of_the_theme_and_the_state_of_all_themes(self) -> None:
+        lines = easystore_publish.inspect_document(self.LISTING, 2)
+
+        self.assertEqual(lines[0], "fields of theme 2:")
+        self.assertIn("  role: None", lines)
+        self.assertIn("  settings: {colors, fonts}", lines)
+        self.assertIn("  tags: [2 items]", lines)
+        self.assertTrue(any(line.startswith("  note: '" + "x" * 10) and line.endswith("...") for line in lines))
+        self.assertIn("state fields of every theme in the listing:", lines)
+        self.assertIn("  id=1 name='Old' role='main' published_at='2026-08-16'", lines)
+        self.assertIn("  id=2 name='New' role=None", lines)
+
+    def test_says_when_the_theme_is_missing(self) -> None:
+        lines = easystore_publish.inspect_document(self.LISTING, 9)
+
+        self.assertEqual(lines[0], "theme 9 is not in the listing")
+        self.assertIn("  id=1 name='Old' role='main' published_at='2026-08-16'", lines)
+
+    def test_without_a_theme_id_lists_the_top_level(self) -> None:
+        self.assertEqual(
+            easystore_publish.inspect_document({"id": 5, "theme": {"a": 1}, "ok": True}),
+            ["id: 5", "theme: {a}", "ok: True"],
+        )
+        self.assertEqual(easystore_publish.inspect_document([1, 2]), ["[2 items]"])
+
+
 class IsLiveTests(unittest.TestCase):
     def test_the_main_role_is_live(self) -> None:
         self.assertTrue(easystore_publish.is_live({"role": "main"}))
@@ -408,6 +449,22 @@ class CommandLineTests(unittest.TestCase):
 
         self.assertEqual(exit_code, 1)
         self.assertIn("did not report theme", stdout.getvalue())
+
+    def test_inspect_prints_a_response_and_is_never_fatal(self) -> None:
+        listing = self.write("themes.json", {"themes": [{"id": 7, "name": "T", "role": None}]})
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            exit_code = easystore_publish.main(
+                ["inspect", "--file", str(listing), "--theme-id", "7"]
+            )
+        self.assertEqual(exit_code, 0)
+        self.assertIn("fields of theme 7:", stdout.getvalue())
+
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            exit_code = easystore_publish.main(["inspect", "--file", ""])
+        self.assertEqual(exit_code, 0)
+        self.assertIn("No readable JSON document", stdout.getvalue())
 
     def test_describe_is_never_fatal(self) -> None:
         stdout = io.StringIO()

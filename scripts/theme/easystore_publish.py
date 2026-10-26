@@ -37,6 +37,11 @@ SCALAR_TYPES = (str, int, float, bool)
 # other theme is "unpublished".
 LIVE_ROLE = "main"
 DIAGNOSTIC_LIMIT = 10
+# Fields that could say which theme a storefront serves. They are shown even
+# when null, because summarize_theme drops null values and a missing state is
+# itself the answer the roster is there to give.
+STATE_KEYS = ("role", "status", "published", "is_published", "published_at")
+VALUE_LIMIT = 80
 
 
 def normalize_id(value: Any) -> str | None:
@@ -168,6 +173,50 @@ def summarize_theme(document: Any, theme_id: Any) -> dict[str, Any]:
     return summary
 
 
+def _shape(value: Any) -> str:
+    """Render one JSON value without dumping nested content."""
+    if isinstance(value, dict):
+        return "{" + ", ".join(sorted(str(key) for key in value)) + "}"
+    if isinstance(value, list):
+        return f"[{len(value)} items]"
+    text = repr(value)
+    return text if len(text) <= VALUE_LIMIT else text[: VALUE_LIMIT - 3] + "..."
+
+
+def inspect_document(document: Any, theme_id: Any = None) -> list[str]:
+    """Show everything ``document`` reports, for working out what a response means.
+
+    With a ``theme_id`` this lists every field of that theme (nested content as
+    its keys only) and then each theme's state fields. Without one it lists the
+    top level of the document.
+    """
+    lines: list[str] = []
+    if theme_id is None:
+        if isinstance(document, dict):
+            lines.extend(f"{key}: {_shape(value)}" for key, value in document.items())
+        else:
+            lines.append(_shape(document))
+        return lines
+
+    identifier = normalize_id(theme_id)
+    entry = next(
+        (item for item in iter_candidates(document) if _entry_id(item) == identifier),
+        None,
+    )
+    if entry is None:
+        lines.append(f"theme {identifier} is not in the listing")
+    else:
+        lines.append(f"fields of theme {identifier}:")
+        lines.extend(f"  {key}: {_shape(value)}" for key, value in entry.items())
+    lines.append("state fields of every theme in the listing:")
+    for item in iter_candidates(document):
+        shown = ("id", "name") + STATE_KEYS
+        lines.append(
+            "  " + " ".join(f"{key}={_shape(item[key])}" for key in shown if key in item)
+        )
+    return lines
+
+
 def is_live(summary: dict[str, Any]) -> bool:
     """Whether the fields EasyStore reports say the storefront serves the theme."""
     role = summary.get("role")
@@ -230,6 +279,16 @@ def _run_describe(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_inspect(args: argparse.Namespace) -> int:
+    document = load_document(args.file)
+    if document is None:
+        print("No readable JSON document to inspect.")
+        return 0
+    for line in inspect_document(document, args.theme_id):
+        print(line)
+    return 0
+
+
 def _run_verify(args: argparse.Namespace) -> int:
     """Fail unless EasyStore reports the theme as the one the storefront serves.
 
@@ -274,9 +333,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     verify_parser.add_argument("--themes-response", type=_optional_path)
     verify_parser.add_argument("--theme-id", required=True)
 
+    inspect_parser = subparsers.add_parser(
+        "inspect", help="print everything a response reports, for diagnosis"
+    )
+    inspect_parser.add_argument("--file", type=_optional_path)
+    inspect_parser.add_argument("--theme-id")
+
     args = parser.parse_args(argv)
     if args.command == "resolve":
         return _run_resolve(args)
+    if args.command == "inspect":
+        return _run_inspect(args)
     if args.command == "verify":
         return _run_verify(args)
     return _run_describe(args)

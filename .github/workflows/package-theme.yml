@@ -441,6 +441,16 @@ jobs:
               --theme-id "${THEME_ID}"
             echo '```'
             echo
+            echo "Everything EasyStore reported (field names and short values only):"
+            echo
+            echo '```text'
+            echo "publish response:"
+            python scripts/theme/easystore_publish.py inspect --file easystore-publish.json
+            echo
+            python scripts/theme/easystore_publish.py inspect \
+              --file easystore-themes-after-publish.json --theme-id "${THEME_ID}"
+            echo '```'
+            echo
             if [[ "${verified}" == "true" ]]; then
               echo "Verified: EasyStore reports this theme as live on the configured storefront."
             else
