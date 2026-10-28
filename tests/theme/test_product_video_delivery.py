@@ -4,6 +4,8 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
+from liquid import Template
+
 
 THEME = Path(__file__).resolve().parents[2] / "theme"
 
@@ -35,6 +37,48 @@ class ProductVideoDeliveryTests(unittest.TestCase):
             source,
         )
         self.assertNotIn('embed/{{ featured_product.featured_image.id }}', source)
+
+
+    def test_featured_video_priority_behaves_for_both_gallery_modes(self) -> None:
+        """Test the actual Liquid branch, including the selected-variant case."""
+        source = (THEME / "sections" / "featured-product.liquid").read_text(
+            encoding="utf-8"
+        )
+        guard = (
+            '{% if has_selected_featured_media or forloop.index > 1 %}'
+            'loading="lazy"{% else %}loading="eager"{% endif %}'
+        )
+        self.assertIn(guard, source)
+        for has_selected, index, expected in (
+            (True, 1, 'loading="lazy"'),
+            (True, 2, 'loading="lazy"'),
+            (False, 1, 'loading="eager"'),
+            (False, 2, 'loading="lazy"'),
+        ):
+            with self.subTest(has_selected=has_selected, slide=index):
+                rendered = Template(guard).render(
+                    has_selected_featured_media=has_selected,
+                    forloop={"index": index},
+                )
+                self.assertEqual(rendered, expected)
+
+    def test_selected_variant_video_uses_selected_media_not_main_image(self) -> None:
+        source = (THEME / "sections" / "featured-product.liquid").read_text(
+            encoding="utf-8"
+        )
+        selected_id = (
+            "featured_product.selected_or_first_available_variant.featured_image.id"
+        )
+        self.assertIn('embed/{{ ' + selected_id + ' }}', source)
+        rendered = Template('embed/{{ ' + selected_id + ' }}').render(
+            featured_product={
+                "featured_image": {"id": "wrong-main-image"},
+                "selected_or_first_available_variant": {
+                    "featured_image": {"id": "selected-variant-video"}
+                },
+            }
+        )
+        self.assertEqual(rendered, "embed/selected-variant-video")
 
 
 if __name__ == "__main__":
