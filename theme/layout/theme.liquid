@@ -70,7 +70,14 @@
   <script src="{{ 'search-history.js' | asset_url }}" defer="defer"></script>
   <script src="{{ 'product-card-hover-image.js' | asset_url }}" defer="defer"></script>
   <script src="{{ 'account-recovery-copy.js' | asset_url }}" defer="defer"></script>
-  <script src="{{ 'account-details-validation.js' | asset_url }}" defer="defer"></script>
+  {% comment %}
+    Profile validation only runs in the customer templates (the details form is
+    rendered there). Avoid requesting this account-only module on the public
+    homepage, collection, product and cart pages.
+  {% endcomment %}
+  {% if template contains 'customers' %}
+    <script src="{{ 'account-details-validation.js' | asset_url }}" defer="defer"></script>
+  {% endif %}
   <script src="{{ 'account-otp-copy.js' | asset_url }}" defer="defer"></script>
   <script src="{{ 'account-login-redirect.js' | asset_url }}" defer="defer"></script>
 
