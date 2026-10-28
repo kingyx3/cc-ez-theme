@@ -156,9 +156,9 @@ Its jobs are chained in this order:
 
 1. `test` validates the real theme and enforces coverage;
 2. `package` builds the normal downloadable `cc-ez-theme` artifact;
-3. `deploy` starts only after `package` succeeds, only when the run is on `main`, and imports a deployment candidate into EasyStore and publishes it when `EASYSTORE_ADMIN_TOKEN` is configured.
+3. `deploy` starts after `package` succeeds, imports a deployment candidate into EasyStore, publishes it, and then checks that EasyStore reports it as the live theme.
 
-On any branch other than `main`, the workflow stops after `package`. The `cc-ez-theme` artifact is still built and uploaded, and `deploy` is skipped, so no EasyStore import or publish happens from feature or release branches.
+`deploy` runs on every branch and selects its GitHub environment from the branch: `main` uses `prod` (the live storefront) and every other branch uses `dev` (the dev storefront). Pushing a feature branch therefore replaces the live theme on the **dev** store. Only theme sources and the tooling that gates them trigger it (see the `paths` filter in the workflow).
 
 The normal package job:
 
@@ -176,17 +176,18 @@ See [EasyStore API deployment](EASYSTORE_API_DEPLOYMENT.md) for the credential, 
 
 ## 9. Automatic import, publish, and manual fallback
 
-When `EASYSTORE_ADMIN_TOKEN` exists, every successful workflow run on `main` automatically imports the theme after packaging and then publishes it, so a successful `main` run changes the live storefront. Runs on other branches stop at the ZIP.
+Every workflow run automatically imports the theme after packaging and then publishes it. A run on `main` changes the live storefront; a run on any other branch changes the dev storefront.
+
+A green deploy means the theme is live. After the publish request the job lists the store's themes (retrying for up to about 25 seconds) and fails unless EasyStore reports the imported theme as the live one (`is_enabled: 1`; the publish request moves that flag from the previous theme to the imported one). EasyStore accepting the publish request with a 2xx is not enough on its own.
 
 The publish step never uses a stored theme id. After the import it reads the EasyStore theme listing and matches the branch/run/SHA identity this run stamped into the theme, so the `PUT` that publishes always targets the theme that was just imported. If nothing matches, or two themes claim the same identity, the job fails without publishing.
 
-To import without publishing, set the `EASYSTORE_PUBLISH` repository variable to `false`. The imported theme then stays an unpublished preview candidate and is reviewed in EasyStore:
+To check what a run deployed, in the store's admin:
 
 1. Open **Channels → Online Store → Themes**.
-2. Find the imported theme using the branch/run/SHA identity shown in the GitHub job summary.
+2. Find the theme named with the branch/run/SHA identity shown in the GitHub job summary; it should be the live (current) theme.
 3. Open **Edit source** and confirm files were imported.
 4. Preview homepage, collection, product, search, cart, account, and mobile navigation behavior.
-5. Publish only after preview acceptance.
 
 If automatic import is unavailable, use the package artifact as a fallback:
 
@@ -196,7 +197,7 @@ If automatic import is unavailable, use the package artifact as a fallback:
 4. In EasyStore, choose **More actions → Upload theme**.
 5. Upload the downloaded artifact ZIP.
 
-If `EASYSTORE_ADMIN_TOKEN` is missing, packaging still succeeds and the deploy job records a warning instead of attempting an unauthenticated request. Nothing is imported or published.
+If `EASYSTORE_ADMIN_TOKEN`, `EASYSTORE_POD_ID` or `EASYSTORE_STORE_DOMAIN` is missing from the selected GitHub environment, packaging still succeeds but the deploy job **fails** with an error instead of attempting an unauthenticated request. Nothing is imported or published, and the run is not green.
 
 ## 10. Release acceptance checklist
 
@@ -204,8 +205,8 @@ If `EASYSTORE_ADMIN_TOKEN` is missing, packaging still succeeds and the deploy j
 - [ ] The package job succeeded.
 - [ ] The artifact has one `cc-ez-theme/` root.
 - [ ] There is no nested ZIP.
-- [ ] For a `main` run, the deploy job imported the expected branch/run/SHA candidate, or manual fallback was used intentionally. For a non-`main` run, the deploy job was skipped and the artifact was used for manual upload if a preview was needed.
-- [ ] For a publishing `main` run, the job summary shows the resolved theme id, the identity it was matched by, and a 2xx publish status, and the readback reports the theme as live.
+- [ ] The deploy job imported the expected branch/run/SHA candidate (to `prod` for `main`, to `dev` for any other branch), or manual fallback was used intentionally.
+- [ ] The job summary shows the resolved theme id, the identity it was matched by, and a 2xx publish status, and ends with "Verified: EasyStore reports this theme as live".
 - [ ] EasyStore Edit source shows populated runtime directories.
 - [ ] The theme renders, whether checked as the published storefront or as an unpublished preview.
 - [ ] Best Sellers, The Hobbit, Marvel, and Strixhaven each show two rows of three products on desktop.
@@ -223,13 +224,13 @@ If `EASYSTORE_ADMIN_TOKEN` is missing, packaging still succeeds and the deploy j
 
 ## 11. Troubleshooting
 
-### Automatic import was skipped
+### Deploy failed because EasyStore is not configured
 
-The `EASYSTORE_ADMIN_TOKEN` repository secret is not configured. Add it under **Settings → Secrets and variables → Actions**. The next successful workflow run will attempt the import.
+`EASYSTORE_ADMIN_TOKEN` (secret) or `EASYSTORE_POD_ID` / `EASYSTORE_STORE_DOMAIN` (variables) is missing from the GitHub environment the run selected: `prod` for `main`, `dev` for other branches. Add it under **Settings → Environments**, then re-run the failed jobs.
 
-### Automatic publish was skipped
+### Publish was not verified
 
-Either `EASYSTORE_PUBLISH` is set to `false`, or the resolve step could not identify the imported theme and failed the job before publishing. See [EasyStore API deployment](EASYSTORE_API_DEPLOYMENT.md) for both cases.
+EasyStore accepted the publish request but its theme listing does not report the imported theme as live. The job summary shows the state EasyStore reported. If the theme resolve step could not identify the imported theme, the job fails before publishing. See [EasyStore API deployment](EASYSTORE_API_DEPLOYMENT.md).
 
 ### Automatic import returns 401 or 403
 

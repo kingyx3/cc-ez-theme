@@ -87,14 +87,23 @@
             height="800"
             {% if product_card_image_eager %}loading="eager"{% else %}loading="lazy"{% endif %}{% if product_card_image_high_priority %} fetchpriority="high"{% endif %}>
           {% if show_secondary_image and product.secondary_image.src != "" and product.secondary_image.src != null %}
+            {% comment %}
+              The hover image is only ever shown by a desktop pointer, yet
+              loading="lazy" still fetches it as soon as its card nears the
+              viewport, doubling a grid's image bytes. It starts as a 1px
+              placeholder and product-card-hover-image.js swaps the real
+              source in on the first hover.
+            {% endcomment %}
             <img
-              srcset="{{ product.secondary_image.src | img_url: '240x' }} 240w, {{ product.secondary_image.src | img_url: '360x' }} 360w, {{ product.secondary_image.src | img_url: '550x' }} 550w, {{ product.secondary_image.src | img_url: '750x' }} 750w"
-              src="{{ product.secondary_image.src | img_url: settings.product_img_res }}"
+              src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=="
+              data-hover-srcset="{{ product.secondary_image.src | img_url: '240x' }} 240w, {{ product.secondary_image.src | img_url: '360x' }} 360w, {{ product.secondary_image.src | img_url: '550x' }} 550w, {{ product.secondary_image.src | img_url: '750x' }} 750w"
+              data-hover-src="{{ product.secondary_image.src | img_url: settings.product_img_res }}"
               sizes="(max-width: 749px) 50vw, (max-width: 989px) 33vw, 25vw"
               alt="{{ product.secondary_image.alt | _default: product.title | escape }}"
               width="800"
               height="800"
-              loading="lazy">
+              loading="lazy"
+              decoding="async">
           {% endif %}
         </div>
         {% if on_sale %}

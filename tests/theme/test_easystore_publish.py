@@ -198,6 +198,77 @@ class SummarizeThemeTests(unittest.TestCase):
         self.assertEqual(easystore_publish.summarize_theme(None, "bad/id"), {})
 
 
+class InspectDocumentTests(unittest.TestCase):
+    LISTING = {
+        "themes": [
+            {"id": 1, "name": "Old", "role": "main", "is_enabled": 0},
+            {
+                "id": 2,
+                "name": "New",
+                "role": None,
+                "is_enabled": 1,
+                "settings": {"colors": 1, "fonts": 2},
+                "tags": ["a", "b"],
+                "note": "x" * 200,
+            },
+        ]
+    }
+
+    def test_lists_every_field_of_the_theme_and_the_state_of_all_themes(self) -> None:
+        lines = easystore_publish.inspect_document(self.LISTING, 2)
+
+        self.assertEqual(lines[0], "fields of theme 2:")
+        self.assertIn("  role: None", lines)
+        self.assertIn("  settings: {colors, fonts}", lines)
+        self.assertIn("  tags: [2 items]", lines)
+        self.assertTrue(any(line.startswith("  note: '" + "x" * 10) and line.endswith("...") for line in lines))
+        self.assertIn("2 themes in the listing; values of each state field:", lines)
+        self.assertIn("  role: 'main' x1, None x1", lines)
+        self.assertIn("  is_enabled: 0 x1, 1 x1", lines)
+        self.assertIn("  ids with is_enabled=1 (first 10): ['2']", lines)
+        self.assertFalse(any(line.startswith("  status:") for line in lines))
+
+    def test_says_when_the_theme_is_missing(self) -> None:
+        lines = easystore_publish.inspect_document(self.LISTING, 9)
+
+        self.assertEqual(lines[0], "theme 9 is not in the listing")
+        self.assertIn("  is_enabled: 0 x1, 1 x1", lines)
+
+    def test_without_a_theme_id_lists_the_top_level_with_one_level_of_values(self) -> None:
+        self.assertEqual(
+            easystore_publish.inspect_document(
+                {"id": 5, "data": {"status": "ok", "params": {"a": 1}}, "ok": True}
+            ),
+            ["id: 5", "data: {status='ok', params={a}}", "ok: True"],
+        )
+        self.assertEqual(easystore_publish.inspect_document([1, 2]), ["[2 items]"])
+
+    def test_a_long_nested_value_is_cut_off(self) -> None:
+        shown = easystore_publish._shape({"key": {f"k{i}": i for i in range(100)}}, 1)
+
+        self.assertEqual(len(shown), easystore_publish.SHAPE_LIMIT)
+        self.assertTrue(shown.endswith("..."))
+
+
+class IsLiveTests(unittest.TestCase):
+    def test_the_enabled_theme_is_live(self) -> None:
+        self.assertTrue(easystore_publish.is_live({"is_enabled": 1}))
+        self.assertTrue(easystore_publish.is_live({"is_enabled": True, "is_deleted": 0}))
+
+    def test_a_theme_that_is_not_enabled_is_not_live(self) -> None:
+        self.assertFalse(easystore_publish.is_live({"is_enabled": 0}))
+        self.assertFalse(easystore_publish.is_live({"is_enabled": None}))
+
+    def test_a_deleted_theme_is_not_live(self) -> None:
+        self.assertFalse(easystore_publish.is_live({"is_enabled": 1, "is_deleted": 1}))
+
+    def test_a_listing_without_the_flag_is_never_assumed_live(self) -> None:
+        # Fields this API does not have must not count as proof either way.
+        self.assertFalse(easystore_publish.is_live({"role": "main", "published": True}))
+        self.assertFalse(easystore_publish.is_live({"name": "Theme"}))
+        self.assertFalse(easystore_publish.is_live({}))
+
+
 class LoadDocumentTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary_directory = tempfile.TemporaryDirectory()
@@ -340,6 +411,74 @@ class CommandLineTests(unittest.TestCase):
 
         self.assertEqual(exit_code, 0)
         self.assertIn("1870671", stdout.getvalue())
+
+    def run_verify(self, listing) -> tuple[int, str]:
+        themes_response = self.write("themes.json", listing)
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            exit_code = easystore_publish.main(
+                [
+                    "verify",
+                    "--themes-response",
+                    str(themes_response),
+                    "--theme-id",
+                    "1870671",
+                ]
+            )
+        return exit_code, stdout.getvalue()
+
+    def test_verify_passes_when_the_theme_is_live(self) -> None:
+        exit_code, output = self.run_verify(
+            {"themes": [{"id": 1870671, "name": DISPLAY_NAME, "is_enabled": 1}]}
+        )
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("is_enabled: 1", output)
+        self.assertIn("Verified: theme 1870671 is live", output)
+
+    def test_verify_fails_when_the_theme_is_not_live(self) -> None:
+        exit_code, output = self.run_verify(
+            {
+                "themes": [
+                    {"id": 1, "name": "Old", "is_enabled": 1},
+                    {"id": 1870671, "name": DISPLAY_NAME, "is_enabled": 0},
+                ]
+            }
+        )
+
+        self.assertEqual(exit_code, 1)
+        self.assertIn("is_enabled: 0", output)
+        self.assertIn("ERROR: Theme 1870671 is not live", output)
+
+    def test_verify_fails_when_the_theme_is_missing_from_the_listing(self) -> None:
+        exit_code, output = self.run_verify({"themes": [{"id": 1, "is_enabled": 1}]})
+
+        self.assertEqual(exit_code, 1)
+        self.assertIn("did not report theme 1870671", output)
+
+    def test_verify_fails_without_a_listing(self) -> None:
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            exit_code = easystore_publish.main(["verify", "--theme-id", "1870671"])
+
+        self.assertEqual(exit_code, 1)
+        self.assertIn("did not report theme", stdout.getvalue())
+
+    def test_inspect_prints_a_response_and_is_never_fatal(self) -> None:
+        listing = self.write("themes.json", {"themes": [{"id": 7, "name": "T", "role": None}]})
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            exit_code = easystore_publish.main(
+                ["inspect", "--file", str(listing), "--theme-id", "7"]
+            )
+        self.assertEqual(exit_code, 0)
+        self.assertIn("fields of theme 7:", stdout.getvalue())
+
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            exit_code = easystore_publish.main(["inspect", "--file", ""])
+        self.assertEqual(exit_code, 0)
+        self.assertIn("No readable JSON document", stdout.getvalue())
 
     def test_describe_is_never_fatal(self) -> None:
         stdout = io.StringIO()

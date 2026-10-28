@@ -29,14 +29,14 @@
   {% if section.settings.image != "" %}
     <div class="banner__media media{% if section.settings.image == "" and section.settings.image_2 == "" %} placeholder{% endif %}{% if section.settings.image_2 != "" %} banner__media-half{% endif %}">
       <img
-        srcset="{{ section.settings.image | img_url: '375x' }} 375w,{{ section.settings.image | img_url: '750x' }} 750w,{{ section.settings.image | img_url: '1500x' }} 1500w"
+        srcset="{{ section.settings.image | img_url: '375x' }} 375w,{{ section.settings.image | img_url: '750x' }} 750w,{{ section.settings.image | img_url: '1100x' }} 1100w,{{ section.settings.image | img_url: '1500x' }} 1500w"
         sizes="{% if section.settings.image_2 != "" %}(min-width: 750px) 50vw, 100vw{% elsif section.settings.image_2 != "" %}50vw{% else %}100vw{% endif %}"
         src="{{ section.settings.image | img_url: '1500x' }}"
         alt="{{ section.settings.image.alt | escape }}"
         width="1500"
         height="600"
         {% if section.settings.image_2 != "" %}class="banner__media-image-half"{% endif %}
-        loading="lazy"
+        {% if section.settings.eager_image %}loading="eager" fetchpriority="high"{% else %}loading="lazy"{% endif %}
       >
     </div>
   {% elsif section.settings.image_2 == ""  %}
@@ -47,14 +47,14 @@
   {% if section.settings.image_2 != "" %}
     <div class="banner__media media{% if section.settings.image != "" %} banner__media-half{% endif %}">
       <img
-        srcset="{{ section.settings.image_2 | img_url: '375x' }} 375w,{{ section.settings.image_2 | img_url: '750x' }} 750w,{{ section.settings.image_2 | img_url: '1500x' }} 1500w"
+        srcset="{{ section.settings.image_2 | img_url: '375x' }} 375w,{{ section.settings.image_2 | img_url: '750x' }} 750w,{{ section.settings.image_2 | img_url: '1100x' }} 1100w,{{ section.settings.image_2 | img_url: '1500x' }} 1500w"
         sizes="{% if section.settings.image != "" %}(min-width: 750px) 50vw, 100vw{% elsif section.settings.image != "" %}50vw{% else %}100vw{% endif %}"
         src="{{ section.settings.image_2 | img_url: '1500x' }}"
         alt="{{ section.settings.image_2.alt | escape }}"
         width="1500"
         height="600"
         {% if section.settings.image != "" %}class="banner__media-image-half"{% endif %}
-        loading="lazy"
+        {% if section.settings.eager_image %}loading="eager" fetchpriority="high"{% else %}loading="lazy"{% endif %}
       >
     </div>
   {% endif %}
@@ -96,6 +96,12 @@
       "type": "image",
       "id": "image_2",
       "label": { "en_US": "Background 2", "zh_TW": "背景 2", "zh_CN": "背景 2", "ms_MY": "latar belakang 2" }
+    },
+    {
+      "type": "checkbox",
+      "id": "eager_image",
+      "default": false,
+      "label": { "en_US": "Load this image first (use for the top section of the page)", "zh_TW": "優先載入此圖片（用於頁面頂部區塊）", "zh_CN": "优先加载此图片（用于页面顶部区块）", "ms_MY": "Muatkan imej ini dahulu (untuk bahagian atas halaman)" }
     },
     {
       "type": "select",

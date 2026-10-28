@@ -293,6 +293,83 @@ class ProductGridImageDeliveryTests(unittest.TestCase):
         self.assertIn("{% if section.settings.prioritize_initial_images and forloop.first %}", featured)
 
 
+class HoverImagesAreFetchedOnHoverTests(unittest.TestCase):
+    """The second card image is shown by a desktop pointer only.
+
+    `loading="lazy"` still fetches it once its card nears the viewport, which
+    doubled a grid's image bytes - phones included, where it is never shown.
+    """
+
+    def test_the_card_ships_a_placeholder_and_the_real_source_as_data(self) -> None:
+        card = read("snippets/product-card.liquid")
+        secondary = card.split("{% if show_secondary_image", maxsplit=1)[1].split(
+            "{% endif %}", maxsplit=1
+        )[0]
+
+        self.assertIn('src="data:image/gif;base64,', secondary)
+        self.assertIn("data-hover-src=", secondary)
+        self.assertIn("data-hover-srcset=", secondary)
+        # Real sources belong in data attributes; a live srcset would be fetched.
+        self.assertNotIn(" srcset=", secondary)
+        self.assertNotIn(' src="{{', secondary)
+
+    def test_a_deferred_asset_swaps_the_source_in_on_hover(self) -> None:
+        layout = read("layout/theme.liquid")
+        script = read("assets/product-card-hover-image.js")
+
+        self.assertIn(
+            "<script src=\"{{ 'product-card-hover-image.js' | asset_url }}\" defer=\"defer\"></script>",
+            layout,
+        )
+        self.assertIn("pointerover", script)
+        # The hover effect only exists from 990px (component-card.css).
+        self.assertIn("(min-width: 990px)", script)
+        self.assertIn("min-width: 990px", read("assets/component-card.css"))
+
+
+class LargeImagesAreResizedTests(unittest.TestCase):
+    """Uploads are often many megapixels; every large slot asks for a size."""
+
+    def test_blog_and_article_images_are_resized(self) -> None:
+        for template in ("templates/blog.liquid", "templates/article.liquid"):
+            source = read(template)
+            with self.subTest(template=template):
+                self.assertNotIn('src="{{ article.image.src }}"', source)
+                self.assertIn("article.image.src | img_url:", source)
+                self.assertIn("srcset=", source)
+                self.assertIn("sizes=", source)
+
+    def test_the_article_hero_is_fetched_first(self) -> None:
+        article = read("templates/article.liquid")
+
+        self.assertIn('loading="eager"', article)
+        self.assertIn('fetchpriority="high"', article)
+
+    def test_hero_sections_can_opt_in_to_loading_first(self) -> None:
+        for section in ("image-banner", "slider", "video"):
+            source = read(f"sections/{section}.liquid")
+            with self.subTest(section=section):
+                self.assertIn('"id": "eager_image"', source)
+                self.assertIn('"default": false', source)
+                self.assertIn("section.settings.eager_image", source)
+                self.assertIn('loading="eager" fetchpriority="high"', source)
+                self.assertIn('loading="lazy"', source)
+
+    def test_only_the_first_slide_can_be_loaded_first(self) -> None:
+        slider = read("sections/slider.liquid")
+
+        self.assertEqual(
+            slider.count("section.settings.eager_image and forloop.first"), 1
+        )
+        # A hidden eager image is still fetched, so a slide with separate
+        # desktop and mobile images stays lazy.
+        self.assertIn("slide.img_mobile_url == blank", slider)
+        self.assertIn(
+            'class="slide-mobile-img" width="550" height="550" loading="lazy"', slider
+        )
+        self.assertNotIn("img_url: '1500'", slider)
+
+
 class NoStylesheetIsSentTwiceTests(unittest.TestCase):
     def test_article_css_holds_only_what_the_article_page_owns(self) -> None:
         template = read("templates/article.liquid")

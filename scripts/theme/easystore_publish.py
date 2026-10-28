@@ -21,6 +21,8 @@ ID_KEYS = ("id", "theme_id")
 NAME_KEYS = ("name", "theme", "theme_name", "title")
 VERSION_KEYS = ("version", "theme_version")
 DETAIL_KEYS = NAME_KEYS + (
+    "is_enabled",
+    "is_deleted",
     "role",
     "status",
     "published",
@@ -34,6 +36,22 @@ DETAIL_KEYS = NAME_KEYS + (
 SAFE_ID = re.compile(r"[A-Za-z0-9_-]+")
 SCALAR_TYPES = (str, int, float, bool)
 DIAGNOSTIC_LIMIT = 10
+# Fields that could say which theme a storefront serves. They are shown even
+# when null, because summarize_theme drops null values and a missing state is
+# itself the answer the tally is there to give. EasyStore's listing reports
+# is_enabled / is_edited / is_deleted rather than a role.
+STATE_KEYS = (
+    "role",
+    "status",
+    "published",
+    "is_published",
+    "is_enabled",
+    "is_edited",
+    "is_deleted",
+)
+VALUE_LIMIT = 80
+SHAPE_LIMIT = 200
+ID_LIST_LIMIT = 10
 
 
 def normalize_id(value: Any) -> str | None:
@@ -165,6 +183,84 @@ def summarize_theme(document: Any, theme_id: Any) -> dict[str, Any]:
     return summary
 
 
+def _shape(value: Any, depth: int = 0) -> str:
+    """Render one JSON value, showing nested values only ``depth`` levels down."""
+    if isinstance(value, dict):
+        if depth:
+            inner = ", ".join(
+                f"{key}={_shape(item, depth - 1)}" for key, item in value.items()
+            )
+        else:
+            inner = ", ".join(sorted(str(key) for key in value))
+        text = "{" + inner + "}"
+    elif isinstance(value, list):
+        text = f"[{len(value)} items]"
+    else:
+        text = repr(value)
+        return text if len(text) <= VALUE_LIMIT else text[: VALUE_LIMIT - 3] + "..."
+    return text if len(text) <= SHAPE_LIMIT else text[: SHAPE_LIMIT - 3] + "..."
+
+
+def _tally(document: Any) -> list[str]:
+    """Count the values of each state field across every theme in ``document``."""
+    entries = list(iter_candidates(document))
+    lines = [f"{len(entries)} themes in the listing; values of each state field:"]
+    for key in STATE_KEYS:
+        counts: dict[str, int] = {}
+        for entry in entries:
+            if key in entry:
+                shown = _shape(entry[key])
+                counts[shown] = counts.get(shown, 0) + 1
+        if counts:
+            lines.append(
+                f"  {key}: " + ", ".join(f"{shown} x{n}" for shown, n in sorted(counts.items()))
+            )
+    enabled = [_entry_id(entry) for entry in entries if entry.get("is_enabled") == 1]
+    lines.append(
+        f"  ids with is_enabled=1 (first {ID_LIST_LIMIT}): {enabled[:ID_LIST_LIMIT]}"
+    )
+    return lines
+
+
+def inspect_document(document: Any, theme_id: Any = None) -> list[str]:
+    """Show everything ``document`` reports, for working out what a response means.
+
+    With a ``theme_id`` this lists every field of that theme and then tallies the
+    state fields of every theme. Without one it lists the top level of the
+    document, one level of nested values deep.
+    """
+    lines: list[str] = []
+    if theme_id is None:
+        if isinstance(document, dict):
+            lines.extend(f"{key}: {_shape(value, 1)}" for key, value in document.items())
+        else:
+            lines.append(_shape(document))
+        return lines
+
+    identifier = normalize_id(theme_id)
+    entry = next(
+        (item for item in iter_candidates(document) if _entry_id(item) == identifier),
+        None,
+    )
+    if entry is None:
+        lines.append(f"theme {identifier} is not in the listing")
+    else:
+        lines.append(f"fields of theme {identifier}:")
+        lines.extend(f"  {key}: {_shape(value)}" for key, value in entry.items())
+    lines.extend(_tally(document))
+    return lines
+
+
+def is_live(summary: dict[str, Any]) -> bool:
+    """Whether the fields EasyStore reports say the storefront serves the theme.
+
+    EasyStore's theme listing has no role or published field. It reports
+    ``is_enabled``: 1 for the one theme the storefront serves and 0 for every
+    other, and a publish request moves the 1 to the theme it names.
+    """
+    return summary.get("is_enabled") == 1 and not summary.get("is_deleted")
+
+
 def load_document(path: Path | str | None) -> Any:
     """Return the parsed JSON at ``path``, or ``None`` when it is unusable."""
     if path is None:
@@ -219,6 +315,35 @@ def _run_describe(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_inspect(args: argparse.Namespace) -> int:
+    document = load_document(args.file)
+    if document is None:
+        print("No readable JSON document to inspect.")
+        return 0
+    for line in inspect_document(document, args.theme_id):
+        print(line)
+    return 0
+
+
+def _run_verify(args: argparse.Namespace) -> int:
+    """Fail unless EasyStore reports the theme as the one the storefront serves.
+
+    A successful publish request only proves EasyStore accepted it, so the
+    deploy would stay green while the storefront kept serving the old theme.
+    """
+    summary = summarize_theme(load_document(args.themes_response), args.theme_id)
+    if not summary:
+        print(f"ERROR: EasyStore did not report theme {args.theme_id} in its listing.")
+        return 1
+    for key, value in summary.items():
+        print(f"{key}: {value}")
+    if not is_live(summary):
+        print(f"ERROR: Theme {args.theme_id} is not live on the storefront.")
+        return 1
+    print(f"Verified: theme {args.theme_id} is live on the storefront.")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -238,9 +363,25 @@ def main(argv: Sequence[str] | None = None) -> int:
     describe_parser.add_argument("--themes-response", type=_optional_path)
     describe_parser.add_argument("--theme-id", required=True)
 
+    verify_parser = subparsers.add_parser(
+        "verify", help="fail unless EasyStore reports the theme as live"
+    )
+    verify_parser.add_argument("--themes-response", type=_optional_path)
+    verify_parser.add_argument("--theme-id", required=True)
+
+    inspect_parser = subparsers.add_parser(
+        "inspect", help="print everything a response reports, for diagnosis"
+    )
+    inspect_parser.add_argument("--file", type=_optional_path)
+    inspect_parser.add_argument("--theme-id")
+
     args = parser.parse_args(argv)
     if args.command == "resolve":
         return _run_resolve(args)
+    if args.command == "inspect":
+        return _run_inspect(args)
+    if args.command == "verify":
+        return _run_verify(args)
     return _run_describe(args)
 
 
