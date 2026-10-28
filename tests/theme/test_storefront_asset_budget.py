@@ -53,6 +53,9 @@ class StorefrontAssetBudgetTests(unittest.TestCase):
             THEME.parent / "tests" / "e2e" / "performance.spec.js"
         ).read_text(encoding="utf-8")
         self.assertIn("project: [chromium-desktop, mobile-chrome]", workflow)
+        self.assertIn("- name: Validate recorded observations", workflow)
+        self.assertIn("Insufficient successful performance samples", workflow)
+        self.assertNotIn("continue-on-error: true", workflow)
         self.assertIn('playwright test tests/e2e/performance.spec.js --project=', workflow)
         self.assertIn('browserProject: testInfo.project.name', script)
 
