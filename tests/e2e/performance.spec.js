@@ -256,6 +256,7 @@ function markdownSummary(report) {
     '# Storefront performance observations',
     '',
     `Target: \`${report.baseURL}\`  `,
+    `Browser project: \`${report.browserProject}\`  `,
     `Recorded: ${report.recordedAt}  `,
     `Commit: \`${report.git.sha || 'local'}\`  `,
     `Samples: ${report.sampleCount} cold + ${report.sampleCount} warm per scenario`,
@@ -299,7 +300,7 @@ function markdownSummary(report) {
 }
 
 test.describe('storefront performance observations', () => {
-  test('records non-blocking cold and warm navigation metrics', async ({ browser, baseURL, browserName }) => {
+  test('records non-blocking cold and warm navigation metrics', async ({ browser, baseURL, browserName }, testInfo) => {
     test.skip(browserName !== 'chromium', 'Performance observations are normalized on Chromium.');
     test.setTimeout(240_000);
 
@@ -335,6 +336,7 @@ test.describe('storefront performance observations', () => {
       schemaVersion: 1,
       recordedAt: new Date().toISOString(),
       baseURL: normalizedBaseURL,
+      browserProject: testInfo.project.name,
       sampleCount: SAMPLE_COUNT,
       settleMs: SETTLE_MS,
       git: {
