@@ -26,10 +26,15 @@ class ProductVideoDeliveryTests(unittest.TestCase):
         self.assertIn("{% assign has_selected_featured_media = false %}", source)
         self.assertIn("{% assign has_selected_featured_media = true %}", source)
         self.assertIn(
-            '{% if has_selected_featured_media or forloop.index > 1 %}loading="lazy"{% endif %} allowfullscreen',
+            '{% if has_selected_featured_media or forloop.index > 1 %}loading="lazy"{% else %}loading="eager"{% endif %} allowfullscreen',
             source,
         )
-        self.assertIn('src="https://www.youtube.com/embed/{{ featured_product.featured_image.id }}"', source)
+        self.assertIn('src="https://www.youtube.com/embed/{{ featured_product.selected_or_first_available_variant.featured_image.id }}"', source)
+        self.assertIn(
+            '{% if has_selected_featured_media or forloop.index > 1 %}loading="lazy"{% else %}loading="eager"{% endif %}>',
+            source,
+        )
+        self.assertNotIn('embed/{{ featured_product.featured_image.id }}', source)
 
 
 if __name__ == "__main__":
