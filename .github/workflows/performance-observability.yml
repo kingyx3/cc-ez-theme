@@ -53,9 +53,13 @@ env:
 
 jobs:
   observe:
-    name: Observe / chromium-desktop
+    name: Observe / ${{ matrix.project }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [chromium-desktop, mobile-chrome]
 
     steps:
       - name: Check out repository
@@ -92,7 +96,7 @@ jobs:
       - name: Record storefront performance observations
         id: performance
         continue-on-error: true
-        run: npm run test:e2e:performance
+        run: npx playwright test tests/e2e/performance.spec.js --project="${{ matrix.project }}" --workers=1 --retries=0
 
       - name: Add observations to job summary
         if: always()
@@ -110,7 +114,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: storefront-performance-${{ github.run_id }}-${{ github.run_attempt }}
+          name: storefront-performance-${{ matrix.project }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: performance-results/
           if-no-files-found: warn
           retention-days: 90
