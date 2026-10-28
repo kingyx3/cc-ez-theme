@@ -73,11 +73,12 @@
   <script src="{{ 'account-otp-copy.js' | asset_url }}" defer="defer"></script>
   <script src="{{ 'account-login-redirect.js' | asset_url }}" defer="defer"></script>
   {% comment %}
-    Profile validation only runs in the customer templates (the details form is
-    rendered there). Keep the global login-redirect helper above the first
-    customer-only guard: login and OTP redirects also occur on platform pages.
+    Profile validation only runs on the account-details template, not on
+    every customer page (login, orders and register never render #details_form).
+    Keep the global login-redirect helper before the first customer-only guard:
+    login and OTP redirects can also occur on platform-rendered pages.
   {% endcomment %}
-  {% if template contains 'customers' %}
+  {% if template contains 'customers' and template contains 'details' %}
     <script src="{{ 'account-details-validation.js' | asset_url }}" defer="defer"></script>
   {% endif %}
 
