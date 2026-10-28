@@ -43,7 +43,9 @@
           <div class="image-modal-wrapper">
             <slider-component class="slider-mobile-gutter slider--desktop slider-component">
               <ul id="main-image-wrapper-{{ section.__key }}" class="featured-product-section product__media-list grid grid--peek list-unstyled slider slider--mobile" role="list">
+                {% assign has_selected_featured_media = false %}
                 {% if section.settings.show_selected_variant_image and featured_product.selected_or_first_available_variant.featured_image != null %}
+                  {% assign has_selected_featured_media = true %}
                     <li id="image-item-{{ section.__key }}-{{ featured_product.selected_or_first_available_variant.featured_image.id }}" class="main-image product__media-item grid__item slider__slide d-flex flex-align-center" data-image-id="{{ featured_product.selected_or_first_available_variant.featured_image.id }}">
                       {% if featured_product.selected_or_first_available_variant.featured_image.type == "Youtube" %}
                         <iframe title="{{ featured_product.title | escape }} video" width="90%" height="320" src="https://www.youtube.com/embed/{{ featured_product.featured_image.id }}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
@@ -66,7 +68,7 @@
                   {% if section.settings.show_selected_variant_image and image.id != featured_product.selected_or_first_available_variant.featured_image.id or section.settings.show_selected_variant_image == false %}
                     <li id="image-item-{{ section.__key }}-{{image.id}}" class="main-image product__media-item grid__item slider__slide d-flex flex-align-center" data-image-id="{{ image.id }}">
                       {% if image.type == "Youtube" %}
-                        <iframe title="{{ featured_product.title | escape }} video" width="90%" height="320" src="https://www.youtube.com/embed/{{ image.id }}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                        <iframe title="{{ featured_product.title | escape }} video" width="90%" height="320" src="https://www.youtube.com/embed/{{ image.id }}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" {% if has_selected_featured_media or forloop.index > 1 %}loading="lazy"{% endif %} allowfullscreen></iframe>
                       {% else %}
                         <button type="button" class="product-media-open js-image-modal-toggle" aria-label="Enlarge {{ image.alt | _default: featured_product.title | escape }}">
                           <img
