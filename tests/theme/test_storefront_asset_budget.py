@@ -4,6 +4,8 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
+from liquid import Template
+
 
 THEME = Path(__file__).resolve().parents[2] / "theme"
 
@@ -53,6 +55,48 @@ class StorefrontAssetBudgetTests(unittest.TestCase):
         self.assertIn("project: [chromium-desktop, mobile-chrome]", workflow)
         self.assertIn('playwright test tests/e2e/performance.spec.js --project=', workflow)
         self.assertIn('browserProject: testInfo.project.name', script)
+
+    def test_listing_cart_toggle_renders_for_all_easystore_setting_types(self) -> None:
+        """Exercise the Liquid condition, not only the presence of its source text."""
+        card = read("snippets/product-card.liquid")
+        start = card.index("{% assign show_listing_add_to_cart = true %}")
+        end = card.index("{% endif %}", start) + len("{% endif %}")
+        guard = card[start:end]
+        source = guard + "{% if show_listing_add_to_cart %}ENABLED{% else %}DISABLED{% endif %}"
+        for value, expected in (
+            (False, "DISABLED"),
+            (0, "DISABLED"),
+            ("0", "DISABLED"),
+            (True, "ENABLED"),
+            (1, "ENABLED"),
+            ("1", "ENABLED"),
+        ):
+            with self.subTest(value=value):
+                self.assertEqual(
+                    Template(source).render(settings={"show_add_to_cart_button": value}).strip(),
+                    expected,
+                )
+
+    def test_account_validation_renders_only_for_details_template(self) -> None:
+        layout = read("layout/theme.liquid")
+        guard = "{% if template contains 'customers' and template contains 'details' %}"
+        start = layout.index(guard)
+        end = layout.index("{% endif %}", start) + len("{% endif %}")
+        source = layout[start:end].replace(
+            '<script src="{{ \'account-details-validation.js\' | asset_url }}" defer="defer"></script>',
+            "VALIDATION_LOADED",
+        )
+        for template, expected in (
+            ("customers/details", True),
+            ("customers/login", False),
+            ("customers/orders", False),
+            ("customers/register", False),
+            ("product", False),
+            ("collection", False),
+        ):
+            with self.subTest(template=template):
+                rendered = Template(source).render(template=template)
+                self.assertEqual("VALIDATION_LOADED" in rendered, expected)
 
     def test_global_login_redirect_precedes_customer_only_guard(self) -> None:
         layout = read("layout/theme.liquid")
