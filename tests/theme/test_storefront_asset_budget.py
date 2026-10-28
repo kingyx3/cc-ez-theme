@@ -37,7 +37,7 @@ class StorefrontAssetBudgetTests(unittest.TestCase):
     def test_account_details_validation_is_not_loaded_on_public_templates(self) -> None:
         layout = read("layout/theme.liquid")
         script = "account-details-validation.js"
-        guard = "{% if template contains 'customers' %}"
+        guard = "{% if template contains 'customers' and template contains 'details' %}"
         self.assertEqual(layout.count(script), 1)
         self.assertIn(guard, layout)
         self.assertLess(layout.index(guard), layout.index(script))
@@ -58,7 +58,7 @@ class StorefrontAssetBudgetTests(unittest.TestCase):
         layout = read("layout/theme.liquid")
         self.assertLess(
             layout.index("account-login-redirect.js"),
-            layout.index("{% if template contains 'customers' %}"),
+            layout.index("{% if template contains 'customers' and template contains 'details' %}"),
         )
 
     def test_grid_images_decode_without_blocking_the_main_thread(self) -> None:
