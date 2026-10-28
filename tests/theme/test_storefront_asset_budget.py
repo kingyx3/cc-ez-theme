@@ -43,6 +43,24 @@ class StorefrontAssetBudgetTests(unittest.TestCase):
         self.assertLess(layout.index(guard), layout.index(script))
         self.assertIn("{% endif %}", layout[layout.index(script):layout.index(script) + 150])
 
+    def test_performance_workflow_observes_desktop_and_mobile(self) -> None:
+        workflow = (
+            THEME.parent / ".github" / "workflows" / "performance-observability.yml"
+        ).read_text(encoding="utf-8")
+        script = (
+            THEME.parent / "tests" / "e2e" / "performance.spec.js"
+        ).read_text(encoding="utf-8")
+        self.assertIn("project: [chromium-desktop, mobile-chrome]", workflow)
+        self.assertIn('playwright test tests/e2e/performance.spec.js --project=', workflow)
+        self.assertIn('browserProject: testInfo.project.name', script)
+
+    def test_global_login_redirect_precedes_customer_only_guard(self) -> None:
+        layout = read("layout/theme.liquid")
+        self.assertLess(
+            layout.index("account-login-redirect.js"),
+            layout.index("{% if template contains 'customers' %}"),
+        )
+
     def test_grid_images_decode_without_blocking_the_main_thread(self) -> None:
         card = read("snippets/product-card.liquid")
         main = card.split('srcset="{{ product.featured_image.src', 1)[1].split(">", 1)[0]
