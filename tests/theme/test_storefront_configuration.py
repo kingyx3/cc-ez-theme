@@ -605,7 +605,7 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertNotIn("{% continue %}", header)
 
         expected_shortcuts = (
-            ("/collections/star-trek", "Star Trek"),
+            ("/collections/star-trek", "Star Trek Preorders"),
             ("/collections/reality-fracture", "Reality Fracture"),
             ("/collections/the-hobbit", "Hobbit"),
             ("/collections/secret-lair", "Secret Lair"),
