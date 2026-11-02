@@ -32,6 +32,18 @@ Rows supplied with a blank promo maximum are intentionally not configured and re
 
 Every limit counts from **9 Aug 2026 00:00 store time (GMT+8)**, set once as `customer_order_limit_refresh_all`. Orders placed before that date do not consume an allowance, so a customer who bought a limited product earlier may buy it again up to its maximum. No row overrides the shared date; setting `limit_refresh` on a row counts that one limit from a different date. See [Renewing an allowance](#renewing-an-allowance).
 
+## Optional membership-tier overrides
+
+Each product row can specify **one optional EasyStore membership tier ID** and a higher maximum. For example:
+
+```liquid
+{% include 'customer-order-limit-row', limit_handle: '1010-drop-06', limit_maximum: 1, limit_tier_id: 'REPLACE_WITH_EASYSTORE_TIER_ID', limit_tier_maximum: 3, limit_refresh: '' %}
+```
+
+Replace the placeholder with a real `customer.membership.membership_tier.id` from EasyStore. This example is **not activated** in production: existing product maxima remain unchanged until a merchant supplies a real tier ID in a row. The override only applies to authenticated customers whose tier ID matches; everyone else retains `limit_maximum`. Invalid or lower override maxima are ignored. Only one tier override per product row is supported. For multiple tiers, extend the rule format deliberately rather than adding unverified tier names.
+
+This changes the existing Liquid rule's `maximum`, so the existing cart/history JavaScript receives the resolved limit without additional purchase-path interception. Theme-only limits are bypassable and cannot supersede EasyStore native inventory or checkout rules. Verify the membership ID is exposed on a product page in the unpublished theme, then test guest, matching tier, other tier, cart, past orders, quick add, Buy Now and checkout before enabling.
+
 ## Adding or updating a limit
 
 One limit is one row in `theme/snippets/customer-order-limit-config.liquid`, and that row is the whole change:
