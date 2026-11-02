@@ -1,34 +1,23 @@
-# Customer purchase limits rollback
+# Customer purchase limits: current state and historical rollback
 
-The custom across-order customer purchase-limit feature introduced in PR #56 has been removed from the theme.
+## Current implementation (main)
 
-## Why it was removed
+The active storefront uses `theme/snippets/customer-order-limits.liquid`, `customer-order-limit-config.liquid`, `customer-order-limit-row.liquid`, and `theme/assets/customer-order-limits.js`. The module is included conditionally from `theme/snippets/currencies.liquid` on purchase-capable pages. Limits are configured per product handle/SKU and can account for previous orders and cart quantities when the history loader succeeds.
 
-The feature changed global storefront behavior by loading on every page and intercepting product and cart flows. Later attempts to narrow the integration still required changes across shared product-form, listing, cart, and checkout code. The live EasyStore theme continued to fail even when static validation, tests, and packaging succeeded.
+Refer to [CUSTOMER_ORDER_LIMITS.md](CUSTOMER_ORDER_LIMITS.md) for operational configuration and diagnostics. **The actual configuration file, not the examples in documentation, is the source of truth for current handles and maxima.**
 
-The production-safe decision is to restore the exact pre-PR #56 storefront behavior rather than continue layering compatibility fixes onto shared commerce paths.
+## Historical rollback
 
-## Current behavior
+PR #56's earlier `customer-purchase-limits.js` / `customer-purchase-limits.liquid` implementation was rolled back after live EasyStore failures. Those **old filenames** are absent; that rollback does **not** mean the newer `customer-order-limits.js` implementation is absent. Earlier wording on this page incorrectly described the current storefront as entirely native.
 
-- The theme no longer loads `customer-purchase-limits.js`.
-- The theme no longer includes `customer-purchase-limits.liquid`.
-- Product forms, quick add, cart updates, removals, promotions, and checkout use their existing EasyStore-native behavior.
-- Existing inventory, store, promotion, and contextual purchase-limit feedback remain unchanged.
-- The EasyStore upload archive still requires the single `cc-ez-theme/` wrapper directory. Packaging was not the cause of this incident and must not be flattened.
+Do not revive the removed global interception implementation or assume static tests prove live EasyStore compatibility.
 
-## Reintroduction requirements
+## Enforcement boundary and release requirements
 
-Do not reintroduce cross-order customer limits as a theme-level JavaScript feature.
+The active implementation is a **theme-level safeguard**, not authoritative checkout authorization. Browser modifications, disabled JavaScript, direct APIs, concurrent tabs and other sales channels can bypass it. Hard limits require EasyStore server-side support or a backend checkout validator.
 
-A future implementation must meet all of these requirements before theme work begins:
+Any extension should preserve native purchase flows, be optional per product, keep the ability to disable rules by configuration, and undergo automated tests plus real unpublished-theme testing with installed apps, logged-in/guest shoppers, previous orders, cart, Buy Now, quick add, and mobile. Preserve the required `cc-ez-theme/` wrapper in deployment archives.
 
-1. Enforcement is provided by an EasyStore server-side feature or a backend/app checkout validator.
-2. Direct API requests and non-theme sales channels cannot bypass the limit.
-3. The storefront integration is display-only or consumes an official server response; it must not replace EasyStore APIs, custom-element prototypes, or native callback payloads.
-4. The feature can be disabled without loading assets or changing any product/cart behavior.
-5. A real unpublished EasyStore theme is tested with installed apps, realistic accounts, prior orders, rejected requests, multiple variants, desktop, and mobile.
-6. The generated GitHub artifact is uploaded without extracting or recompressing and retains the required `cc-ez-theme/` wrapper.
+## Related documentation
 
-## Rollback verification
-
-The regression suite verifies that all PR #56 runtime files and identifiers are absent, that `currencies.liquid` uses the pre-PR #56 loading path, and that shared commerce files no longer contain the custom across-order integration.
+- [CUSTOMER_ORDER_LIMITS.md](CUSTOMER_ORDER_LIMITS.md) — current rule behavior, refresh windows, history loading, testing and operational guidance.
