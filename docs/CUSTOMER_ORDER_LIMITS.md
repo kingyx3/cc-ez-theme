@@ -32,6 +32,18 @@ Rows supplied with a blank promo maximum are intentionally not configured and re
 
 Every limit counts from **9 Aug 2026 00:00 store time (GMT+8)**, set once as `customer_order_limit_refresh_all`. Orders placed before that date do not consume an allowance, so a customer who bought a limited product earlier may buy it again up to its maximum. No row overrides the shared date; setting `limit_refresh` on a row counts that one limit from a different date. See [Renewing an allowance](#renewing-an-allowance).
 
+## Per-order membership-tier overrides
+
+The independent per-order rules in `theme/snippets/per-order-limit-config.liquid` also support one optional tier override per product:
+
+```liquid
+{% include 'per-order-limit-row', order_limit_handle: 'MTG-HOB-CBB-EN', order_limit_maximum: 1, order_limit_tier_id: 'REPLACE_WITH_EASYSTORE_TIER_ID', order_limit_tier_maximum: 2 %}
+```
+
+The example is illustrative and **not enabled**. The tier ID must match `customer.membership.membership_tier.id`. Unmatched tiers and guests keep the default per-order ceiling. Overrides can only increase a positive configured maximum. The per-order and per-customer overrides are configured separately and both apply when a product has both rules; the stricter remaining allowance wins. Existing EasyStore inventory and checkout restrictions still apply.
+
+Before rollout, test a matching member, unmatched member and guest on an unpublished EasyStore theme, including cart edits, Buy Now, quick add, prior purchases, and checkout. Theme-only limits can be bypassed by direct requests.
+
 ## Optional membership-tier overrides
 
 Each product row can specify **one optional EasyStore membership tier ID** and a higher maximum. For example:
