@@ -1101,6 +1101,26 @@ a.product__text {
   gap: 1.2rem;
 }
 
+/* The app collapses #promotion-section to max-height: 800px behind a
+   white gradient and a "View More" button whenever a product has more than
+   one add-on deal. Inside this modal that clip is redundant (the modal's
+   own content already scrolls) and actively hides deals: on phones each
+   card is tall enough that only about two fit in 800px, so a product with
+   three or more deals showed just the first two with no way to reach the
+   rest. Always show every deal and let the modal scroll instead. */
+.promo-modal .sf_promo-container-height-opacity {
+  max-height: none;
+  overflow: visible;
+}
+
+.promo-modal .sf_promo-container-white-gradient::after {
+  content: none;
+}
+
+.promo-modal #view-more-promotion {
+  display: none;
+}
+
 .promo-modal .sf_promo-form {
   display: flex;
   margin: 0;
