@@ -1,8 +1,19 @@
-{% unless product_card_cart_controls_assets_loaded %}
-  {{ 'component-product-card-cart-controls.css' | asset_url | stylesheet_tag }}
-  <script src="{{ 'product-card-cart-feedback.js' | asset_url }}" defer="defer"></script>
-  {% assign product_card_cart_controls_assets_loaded = true %}
-{% endunless %}
+{% comment %}
+  Keep listing-only cart assets off read-only grids. The global setting also
+  controls the button markup below, so no feedback enhancer or its CSS is
+  needed when the merchant hides listing add-to-cart controls.
+{% endcomment %}
+{% assign show_listing_add_to_cart = true %}
+{% if settings.show_add_to_cart_button == false or settings.show_add_to_cart_button == 0 or settings.show_add_to_cart_button == '0' %}
+  {% assign show_listing_add_to_cart = false %}
+{% endif %}
+{% if show_listing_add_to_cart %}
+  {% unless product_card_cart_controls_assets_loaded %}
+    {{ 'component-product-card-cart-controls.css' | asset_url | stylesheet_tag }}
+    <script src="{{ 'product-card-cart-feedback.js' | asset_url }}" defer="defer"></script>
+    {% assign product_card_cart_controls_assets_loaded = true %}
+  {% endunless %}
+{% endif %}
 
 {% assign on_sale = false %}
 {% assign sale_text = 'products.product.sale' | t %}
@@ -51,11 +62,6 @@
   {% assign product_card_image_high_priority = true %}
 {% endif %}
 
-{% assign show_listing_add_to_cart = true %}
-{% if settings.show_add_to_cart_button == false or settings.show_add_to_cart_button == 0 or settings.show_add_to_cart_button == '0' %}
-  {% assign show_listing_add_to_cart = false %}
-{% endif %}
-
 <div class="product-card-wrapper card-wrapper">
   {% if show_listing_add_to_cart %}
     <add-to-cart-button>
@@ -85,6 +91,7 @@
             alt="{{ product_card_alt | escape }}"
             width="800"
             height="800"
+            decoding="async"
             {% if product_card_image_eager %}loading="eager"{% else %}loading="lazy"{% endif %}{% if product_card_image_high_priority %} fetchpriority="high"{% endif %}>
           {% if show_secondary_image and product.secondary_image.src != "" and product.secondary_image.src != null %}
             {% comment %}

@@ -53,9 +53,13 @@ env:
 
 jobs:
   observe:
-    name: Observe / chromium-desktop
+    name: Observe / ${{ matrix.project }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [chromium-desktop, mobile-chrome]
 
     steps:
       - name: Check out repository
@@ -91,8 +95,45 @@ jobs:
 
       - name: Record storefront performance observations
         id: performance
-        continue-on-error: true
-        run: npm run test:e2e:performance
+        run: npx playwright test tests/e2e/performance.spec.js --project="${{ matrix.project }}" --workers=1 --retries=0
+
+      - name: Validate recorded observations
+        if: always()
+        shell: bash
+        run: |
+          # A green observation job must mean the browser actually recorded
+          # useful data; Playwright passing/skipping without a report is not enough.
+          if [[ "${{ steps.performance.outcome }}" != "success" ]]; then
+            echo "::error::Performance browser measurement failed."
+            exit 1
+          fi
+          node <<'NODE'
+          const fs = require('node:fs');
+          const file = 'performance-results/metrics.json';
+          if (!fs.existsSync(file)) {
+            console.error('::error::No performance metrics artifact was produced.');
+            process.exit(1);
+          }
+          const report = JSON.parse(fs.readFileSync(file, 'utf8'));
+          const minimum = Math.max(1, Math.ceil((report.sampleCount || 0) / 2));
+          if (!report.scenarios?.length || !report.browserProject) {
+            console.error('::error::Missing browser identity or route observations.');
+            process.exit(1);
+          }
+          const incomplete = report.scenarios.filter(scenario =>
+            (scenario.cold?.summary?.successfulSamples || 0) < minimum ||
+            (scenario.warm?.summary?.successfulSamples || 0) < minimum ||
+            !Number.isFinite(scenario.cold?.summary?.medians?.lcpMs)
+          );
+          if (incomplete.length) {
+            console.error('::error::Insufficient successful performance samples: ' +
+              incomplete.map(scenario => scenario.name).join(', '));
+            process.exit(1);
+          }
+          console.log('Validated observations for ' + report.browserProject +
+            ': ' + report.scenarios.length + ' routes, at least ' + minimum +
+            ' successful cold and warm samples each.');
+          NODE
 
       - name: Add observations to job summary
         if: always()
@@ -110,7 +151,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: storefront-performance-${{ github.run_id }}-${{ github.run_attempt }}
+          name: storefront-performance-${{ matrix.project }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: performance-results/
           if-no-files-found: warn
           retention-days: 90

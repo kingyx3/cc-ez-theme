@@ -30,7 +30,7 @@
               {% for image in product.images %}
                 <li id="image-item-{{image.id}}" class="main-image product__media-item grid__item slider__slide d-flex flex-align-center" data-image-id="{{ image.id }}">
                   {% if image.type == "Youtube" %}
-                    <iframe class="product-media-video" title="{{ product.title | escape }} video" width="560" height="315" src="https://www.youtube.com/embed/{{ image.id }}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                    <iframe class="product-media-video" title="{{ product.title | escape }} video" width="560" height="315" src="https://www.youtube.com/embed/{{ image.id }}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" {% if forloop.first %}loading="eager"{% else %}loading="lazy"{% endif %} allowfullscreen></iframe>
                   {% else %}
                     {% assign product_image_alt = image.alt | _default: product.title %}
                     <button type="button" class="product-media-open js-image-modal-toggle" aria-label="Enlarge {{ product_image_alt | escape }}">
