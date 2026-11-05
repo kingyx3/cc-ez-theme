@@ -5,7 +5,7 @@
   may have either limit, both limits, or neither. Changing or removing a row here
   never changes the per-customer allowance or its refresh window.
 
-  Each row takes two values:
+  Each row takes two required values and two optional membership override values:
 
     order_limit_handle   Exact EasyStore product handle (or SKU where the
                          storefront exposes that identifier), normalized to
@@ -13,7 +13,7 @@
     order_limit_maximum  units of that product allowed in one order/cart. 0 or a
                          missing row leaves the product unlimited per order.
 
-  A single row is the whole configuration change. To add another independently
+    order_limit_tier_id       Optional EasyStore membership tier ID.\n    order_limit_tier_maximum  Higher per-order maximum for matching members.\n\n  A single row is the whole configuration change. To add another independently
   managed order limit, add another row; no numbered slot, JavaScript list, or
   second file needs to be updated:
 
