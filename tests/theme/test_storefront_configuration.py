@@ -27,12 +27,12 @@ class StorefrontConfigurationTests(unittest.TestCase):
             self.editor_settings_path.read_text(encoding="utf-8"),
         )
 
-    def test_header_announcement_promotes_star_trek_preorders(self) -> None:
+    def test_header_announcement_promotes_star_trek(self) -> None:
         header_settings = self.sections["header"]["settings"]
         self.assertTrue(header_settings["message"])
         self.assertEqual(
             header_settings["message_text"],
-            "Pre-orders for Star Trek are now open!",
+            "Star Trek is here — shop now!",
         )
         self.assertEqual(
             header_settings["message_link"],
@@ -605,7 +605,7 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertNotIn("{% continue %}", header)
 
         expected_shortcuts = (
-            ("/collections/star-trek", "Star Trek Preorders"),
+            ("/collections/star-trek", "Star Trek"),
             ("/collections/reality-fracture", "Reality Fracture"),
             ("/collections/the-hobbit", "Hobbit"),
             ("/collections/secret-lair", "Secret Lair"),
