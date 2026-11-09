@@ -215,7 +215,7 @@ If `EASYSTORE_ADMIN_TOKEN`, `EASYSTORE_POD_ID` or `EASYSTORE_STORE_DOMAIN` is mi
 - [ ] Product titles use available card width on desktop and mobile.
 - [ ] Announcement hover/focus contrast is readable.
 - [ ] Search history and the mobile drawer work with keyboard and pointer input.
-- [ ] Desktop and mobile navigation show a Browse collection dropdown before Crack-a-Pack, Hobbit, Marvel, Strixhaven, and About Us.
+- [ ] Desktop and mobile navigation show a Browse collection dropdown before Star Trek, Reality Fracture, Hobbit, Secret Lair, Pokemon TCG, Accessories, and About Us.
 - [ ] Hovering or focusing a parent collection in the desktop Browse menu reveals its child collection flyout.
 - [ ] The footer shows Follow us and Contact Us, with no payment or quick-link blocks.
 - [ ] The Terms of Service footer link opens `https://cardboard.sg/pages/terms-of-service`.
