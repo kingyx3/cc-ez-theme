@@ -610,6 +610,7 @@ class StorefrontConfigurationTests(unittest.TestCase):
             ("/collections/the-hobbit", "Hobbit"),
             ("/collections/secret-lair", "Secret Lair"),
             ("/collections/pokemon", "Pokemon TCG"),
+            ("/collections/accessories", "Accessories"),
             ("/pages/about-us", "About Us"),
         )
         shortcut_positions = []

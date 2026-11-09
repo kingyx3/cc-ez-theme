@@ -331,22 +331,25 @@ background.
 
 ### Navigation data
 
-The desktop header and mobile drawer expose a Browse dropdown followed by six
-top-level destinations in a fixed order:
+The desktop header and mobile drawer expose a Browse dropdown followed by seven
+top-level destinations in a fixed order. They are defined once in
+`snippets/navigation-top-links.liquid`, which `header.liquid` includes for both
+the desktop and mobile menus:
 
 1. Browse (EasyStore product collection hierarchy)
-2. Crack-a-Pack (`/collections/late-night-crackers`)
-3. [Pre-order] Reality Fracture (`/collections/reality-fracture`)
+2. Star Trek (`/collections/star-trek`)
+3. Reality Fracture (`/collections/reality-fracture`)
 4. Hobbit (`/collections/the-hobbit`)
-5. Marvel (`/collections/marvel-super-heroes`)
-6. Strixhaven (`/collections/secrets-of-strixhaven`)
-7. About Us (`/pages/about-us`)
+5. Secret Lair (`/collections/secret-lair`)
+6. Pokemon TCG (`/collections/pokemon`)
+7. Accessories (`/collections/accessories`)
+8. About Us (`/pages/about-us`)
 
 About Us is pushed to the right edge of the desktop navigation area. The
 Browse reads `contents.catalog.links` and renders up to three collection levels
 from EasyStore's product catalog hierarchy. On desktop, hovering or focusing a
 parent collection opens its child collection flyout; mobile retains nested
-drill-down navigation. The five fixed collection shortcuts remain direct
+drill-down navigation. The six fixed collection shortcuts remain direct
 EasyStore links.
 
 The theme controls:
