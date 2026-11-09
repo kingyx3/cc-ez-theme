@@ -27,16 +27,16 @@ class StorefrontConfigurationTests(unittest.TestCase):
             self.editor_settings_path.read_text(encoding="utf-8"),
         )
 
-    def test_header_announcement_promotes_star_trek(self) -> None:
+    def test_header_announcement_promotes_11_11_sale(self) -> None:
         header_settings = self.sections["header"]["settings"]
         self.assertTrue(header_settings["message"])
         self.assertEqual(
             header_settings["message_text"],
-            "Star Trek is here — shop now!",
+            "11.11 Sale: 11% store credit on every order",
         )
         self.assertEqual(
             header_settings["message_link"],
-            "https://cardboard.sg/collections/star-trek",
+            "https://cardboard.sg/products/11-11-sale",
         )
 
     def test_product_page_does_not_advertise_worldwide_shipping(self) -> None:
