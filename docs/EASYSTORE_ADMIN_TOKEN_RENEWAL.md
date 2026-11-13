@@ -44,13 +44,16 @@ with values belonging only to that environment:
 | EASYSTORE_STORE_DOMAIN | Environment variable | Dev store URL or bare hostname | Prod store URL or bare hostname |
 | EASYSTORE_POD_ID | Environment variable | Dev pod ID | Prod pod ID |
 | EASYSTORE_ROTATION_GH_TOKEN | Environment secret | GitHub environment write credential | GitHub environment write credential |
-| EASYSTORE_MCP_WORKER_NAME | Optional environment variable | Unset unless using a separate dev Worker | Set to cc-easystore-admin-mcp if prod owns this Worker |
+| EASYSTORE_MCP_WORKER_NAME | Optional environment variable | Unset unless using a separate dev Worker | Defaults to cc-easystore-admin-mcp when unset; set only to override |
 | CLOUDFLARE_API_TOKEN | Environment secret, when Worker configured | Dev Worker token | Prod Worker token |
 | CLOUDFLARE_ACCOUNT_ID | Environment secret, when Worker configured | Dev account ID | Prod account ID |
 
 The current Admin MCP Worker is prod-specific. **Do not point dev at the
 prod Worker.** The Worker receives an updated EASYSTORE_ADMIN_TOKEN binding
 through Cloudflare's single-secret API without redeploying code.
+On days when no renewal is due, a non-dry run still re-pushes the healthy
+stored token to the configured Worker, so a Worker that missed a rotation
+recovers on the next daily run.
 
 The workflow uses environment: matrix.deployment_env and independent
 concurrency groups. Scheduled runs start one isolated job for dev and one
