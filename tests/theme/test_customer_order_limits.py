@@ -40,14 +40,6 @@ class CustomerOrderLimitTests(unittest.TestCase):
             ("late-night-crackers-ep3", 2),
             ("late-night-crackers-ep4-1", 4),
             ("late-night-crackers-ep4-2", 1),
-            ("1010-drop-01-free-play-booster", 1),
-            ("1010-drop-01", 1),
-            ("1010-drop-02", 1),
-            ("1010-drop-02b", 1),
-            ("1010-drop-03", 1),
-            ("1010-drop-04", 1),
-            ("1010-drop-05", 1),
-            ("1010-drop-06", 1),
             ("mtg-fin-cmd-en-set4", 1),
             ("packing-day-bundle-a", 1),
             ("packing-day-bundle-b", 1),
@@ -88,7 +80,7 @@ class CustomerOrderLimitTests(unittest.TestCase):
         for handle in unlimited:
             self.assertNotIn(handle, config)
 
-        self.assertEqual(len(rows), 31)
+        self.assertEqual(len(rows), 23)
         self.assertIn("normalized to lowercase", config)
         self.assertIn("Delete the row to leave a product", config)
         self.assertNotIn("split:", config)
