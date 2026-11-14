@@ -76,8 +76,9 @@ jobs:
       EASYSTORE_POD_ID: ${{ vars.EASYSTORE_POD_ID }}
       # Fine-grained token / GitHub App token with Environments:write for this repo.
       GH_TOKEN: ${{ secrets.EASYSTORE_ROTATION_GH_TOKEN }}
-      # Optional Worker mirror; set Worker name only where it should be rotated.
-      EASYSTORE_MCP_WORKER_NAME: ${{ vars.EASYSTORE_MCP_WORKER_NAME }}
+      # Worker mirror. prod owns the Admin MCP Worker, so it is synced by
+      # default; an environment variable overrides the name (dev stays unset).
+      EASYSTORE_MCP_WORKER_NAME: ${{ vars.EASYSTORE_MCP_WORKER_NAME || (matrix.deployment_env == 'prod' && 'cc-easystore-admin-mcp' || '') }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}

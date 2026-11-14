@@ -346,6 +346,12 @@ def main(argv: list[str] | None = None, environ: dict[str, str] | None = None) -
         if not due:
             print(f"{target}: admin API health check passed; GitHub environment secret updated "
                   f"{age // 86400} day(s) ago; renewal not due.")
+            if not dry_run and env.get("EASYSTORE_MCP_WORKER_NAME"):
+                # Re-push the healthy stored token every day so a Worker that
+                # missed an earlier renewal (or was reseeded by hand) heals
+                # without waiting for the next rotation. Idempotent.
+                sync_cloudflare(token, env)
+                print(f"{target}: Worker secret re-synchronized with current admin token.")
         else:
             if not credential_healthy:
                 print(f"{target}: stored token failed admin API health check; attempting early renewal.")
