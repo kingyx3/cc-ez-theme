@@ -426,6 +426,22 @@ class MainTest(unittest.TestCase):
             rotate.assert_not_called()
             gh.assert_not_called()
 
+    def test_not_due_resyncs_current_token_to_configured_worker(self):
+        worker_env = {**self.env, "EASYSTORE_MCP_WORKER_NAME": "worker", "CLOUDFLARE_ACCOUNT_ID": "acct", "CLOUDFLARE_API_TOKEN": "cf"}
+        with patch.object(renewal, "rotate") as rotate, patch.object(renewal, "sync_github") as gh, \
+                patch.object(renewal, "sync_cloudflare") as cf:
+            self.assertEqual(self.execute(worker_env, age=2 * 86400), 0)
+            rotate.assert_not_called()
+            gh.assert_not_called()
+            cf.assert_called_once_with(worker_env["EASYSTORE_ADMIN_TOKEN"], worker_env)
+
+    def test_not_due_skips_worker_without_name_or_on_dry_run(self):
+        worker_env = {**self.env, "EASYSTORE_MCP_WORKER_NAME": "worker", "CLOUDFLARE_ACCOUNT_ID": "acct", "CLOUDFLARE_API_TOKEN": "cf"}
+        for env in (self.env, {**worker_env, "DRY_RUN": "true"}):
+            with self.subTest(env=env.get("DRY_RUN")), patch.object(renewal, "sync_cloudflare") as cf:
+                self.assertEqual(self.execute(env, age=2 * 86400), 0)
+                cf.assert_not_called()
+
     def test_unauthorized_health_probe_renews_early(self):
         failure = renewal.RotationError("Admin health HTTP 401", status=401)
         with patch.object(renewal, "rotate", return_value=(jwt(exp=None, iat=NOW + 10), True)) as rotate, \
