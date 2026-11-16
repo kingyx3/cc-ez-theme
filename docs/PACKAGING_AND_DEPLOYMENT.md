@@ -209,13 +209,14 @@ If `EASYSTORE_ADMIN_TOKEN`, `EASYSTORE_POD_ID` or `EASYSTORE_STORE_DOMAIN` is mi
 - [ ] The job summary shows the resolved theme id, the identity it was matched by, and a 2xx publish status, and ends with "Verified: EasyStore reports this theme as live".
 - [ ] EasyStore Edit source shows populated runtime directories.
 - [ ] The theme renders, whether checked as the published storefront or as an unpublished preview.
-- [ ] Best Sellers, The Hobbit, Marvel, and Strixhaven each show two rows of three products on desktop.
+- [ ] Best Sellers shows two rows of three products on desktop; Nauctis, Star Trek, Reality Fracture, The Hobbit, and Strixhaven each show one row of three.
+- [ ] The announcement bar reads "Nauctis preorders open now!" and links to `/collections/nauctis-the-sunken-realm`.
 - [ ] The Marvel Super Heroes campaign banner is absent from the homepage.
 - [ ] Homepage product cards do not show the orange quick-add button.
 - [ ] Product titles use available card width on desktop and mobile.
 - [ ] Announcement hover/focus contrast is readable.
 - [ ] Search history and the mobile drawer work with keyboard and pointer input.
-- [ ] Desktop and mobile navigation show a Browse collection dropdown before Star Trek, Reality Fracture, Hobbit, Secret Lair, Pokemon TCG, Accessories, and About Us.
+- [ ] Desktop and mobile navigation show a Browse collection dropdown before Nauctis, Star Trek, Reality Fracture, Secret Lair, Pokemon TCG, Accessories, and About Us.
 - [ ] Hovering or focusing a parent collection in the desktop Browse menu reveals its child collection flyout.
 - [ ] The footer shows Follow us and Contact Us, with no payment or quick-link blocks.
 - [ ] The Terms of Service footer link opens `https://cardboard.sg/pages/terms-of-service`.

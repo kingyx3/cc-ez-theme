@@ -27,16 +27,16 @@ class StorefrontConfigurationTests(unittest.TestCase):
             self.editor_settings_path.read_text(encoding="utf-8"),
         )
 
-    def test_header_announcement_promotes_11_11_sale(self) -> None:
+    def test_header_announcement_promotes_nauctis_preorders(self) -> None:
         header_settings = self.sections["header"]["settings"]
         self.assertTrue(header_settings["message"])
         self.assertEqual(
             header_settings["message_text"],
-            "11.11 Sale: 11% store credit on every order",
+            "Nauctis preorders open now!",
         )
         self.assertEqual(
             header_settings["message_link"],
-            "https://cardboard.sg/products/11-11-sale",
+            "https://cardboard.sg/collections/nauctis-the-sunken-realm",
         )
 
     def test_product_page_does_not_advertise_worldwide_shipping(self) -> None:
@@ -404,6 +404,11 @@ class StorefrontConfigurationTests(unittest.TestCase):
     def test_homepage_collections_use_configured_product_counts(self) -> None:
         expected = {
             "1667498127486": ("Best Sellers", "feature-on-homepage", 6),
+            "1795392000000": (
+                "Nauctis: The Sunken Realm",
+                "nauctis-the-sunken-realm",
+                3,
+            ),
             "1787270400000": (
                 "Star Trek Collection",
                 "star-trek",
@@ -465,6 +470,7 @@ class StorefrontConfigurationTests(unittest.TestCase):
             homepage["content_for_index"],
             [
                 "1667498127486",
+                "1795392000000",
                 "1787270400000",
                 "1787270400001",
                 "1684403242688",
@@ -605,9 +611,9 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertNotIn("{% continue %}", header)
 
         expected_shortcuts = (
+            ("/collections/nauctis-the-sunken-realm", "Nauctis"),
             ("/collections/star-trek", "Star Trek"),
             ("/collections/reality-fracture", "Reality Fracture"),
-            ("/collections/the-hobbit", "Hobbit"),
             ("/collections/secret-lair", "Secret Lair"),
             ("/collections/pokemon", "Pokemon TCG"),
             ("/collections/accessories", "Accessories"),
@@ -630,6 +636,7 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertEqual(
             top_links.count('href="/collections/secrets-of-strixhaven"'), 0
         )
+        self.assertEqual(top_links.count('href="/collections/the-hobbit"'), 0)
         self.assertIn("single source of truth", top_links)
         self.assertIn("navigation_mode == 'mobile'", top_links)
         self.assertIn("menu-drawer__menu-item", top_links)
