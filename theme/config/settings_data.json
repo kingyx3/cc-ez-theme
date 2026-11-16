@@ -53,8 +53,8 @@
             "main_linklist": "main-menu",
             "message": true,
             "home_page_only": false,
-            "message_text": "11.11 Sale: 11% store credit on every order",
-            "message_link": "https://cardboard.sg/products/11-11-sale",
+            "message_text": "Nauctis preorders open now!",
+            "message_link": "https://cardboard.sg/collections/nauctis-the-sunken-realm",
             "color_bg": "#131722",
             "announcement_text_color": "#FFFFFF",
             "color_text": "#000000",
@@ -174,9 +174,29 @@
           },
           "type": "featured-collection"
         },
+        "1795392000000": {
+          "settings": {
+            "eyebrow": "PRE-ORDERS OPEN",
+            "title": "Nauctis: The Sunken Realm",
+            "subtitle": "Dive into the latest products from Nauctis: The Sunken Realm.",
+            "accent_color": "#006D8F",
+            "collection__id": "nauctis-the-sunken-realm",
+            "products_per_row": 3,
+            "products_to_show": 3,
+            "show_view_all": true,
+            "image_ratio": "square",
+            "show_secondary_image": true,
+            "swipe_on_mobile": true,
+            "prioritize_initial_images": false,
+            "center_title": true,
+            "show_product_info": true,
+            "product_bg_color": "rgba(245, 245, 245, 1)"
+          },
+          "type": "featured-collection"
+        },
         "1787270400000": {
           "settings": {
-            "eyebrow": "PRE-ORDER NOW OPEN",
+            "eyebrow": "NOW IN STOCK",
             "title": "Star Trek Collection",
             "subtitle": "Explore the latest products from Star Trek.",
             "accent_color": "#8C5A00",
@@ -277,6 +297,7 @@
       },
       "content_for_index": [
         "1667498127486",
+        "1795392000000",
         "1787270400000",
         "1787270400001",
         "1684403242688",

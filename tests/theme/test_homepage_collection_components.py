@@ -46,7 +46,7 @@ class HomepageCollectionComponentTests(unittest.TestCase):
                         best_sellers["settings"][setting_name],
                     )
 
-    def test_star_trek_and_reality_fracture_use_canonical_presentation(self) -> None:
+    def test_campaign_collections_use_canonical_presentation(self) -> None:
         canonical = self.sections["1684403242688"]["settings"]
         presentation_settings = (
             "products_per_row",
@@ -61,7 +61,7 @@ class HomepageCollectionComponentTests(unittest.TestCase):
             "product_bg_color",
         )
 
-        for section_id in ("1787270400000", "1787270400001"):
+        for section_id in ("1795392000000", "1787270400000", "1787270400001"):
             section = self.sections[section_id]
             with self.subTest(section=section["settings"]["title"]):
                 self.assertEqual(section["type"], "featured-collection")
@@ -87,6 +87,7 @@ class HomepageCollectionComponentTests(unittest.TestCase):
     def test_homepage_collections_keep_themed_accent_colors(self) -> None:
         expected_accents = {
             "Best Sellers": "#C44120",
+            "Nauctis: The Sunken Realm": "#006D8F",
             "Star Trek Collection": "#8C5A00",
             "Reality Fracture": "#00897B",
             "The Hobbit Collection": "#3559D9",

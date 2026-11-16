@@ -216,10 +216,14 @@ Homepage order is controlled by `content_for_index` in:
 The default order is:
 
 1. Best Sellers
-2. [Pre-order] Reality Fracture
-3. The Hobbit Collection
-4. Marvel Collection
-5. Secrets of Strixhaven
+2. [Pre-order] Nauctis: The Sunken Realm
+3. Star Trek Collection
+4. Reality Fracture
+5. The Hobbit Collection
+6. Secrets of Strixhaven
+
+The Marvel Collection section stays defined in settings data but is not in
+`content_for_index`, so it does not render on the homepage.
 
 ### Best Sellers
 
@@ -229,12 +233,29 @@ The default order is:
 - Default display: 6 products, 3 per desktop row
 - Homepage quick add: disabled
 
-### [Pre-order] Reality Fracture
+### [Pre-order] Nauctis: The Sunken Realm
 
 - Section type: `featured-collection`
-- Default title: `[Pre-order] Reality Fracture`
+- Default title: `Nauctis: The Sunken Realm`
+- Default eyebrow: `PRE-ORDERS OPEN`
+- Default collection: `nauctis-the-sunken-realm`
+- Default display: 3 products, 3 per desktop row
+- Homepage quick add: disabled
+
+### Star Trek Collection
+
+- Section type: `featured-collection`
+- Default title: `Star Trek Collection`
+- Default collection: `star-trek`
+- Default display: 3 products, 3 per desktop row
+- Homepage quick add: disabled
+
+### Reality Fracture
+
+- Section type: `featured-collection`
+- Default title: `Reality Fracture`
 - Default collection: `reality-fracture`
-- Default display: 6 products, 3 per desktop row
+- Default display: 3 products, 3 per desktop row
 - Homepage quick add: disabled
 
 ### The Hobbit Collection
@@ -242,7 +263,7 @@ The default order is:
 - Section type: `featured-collection`
 - Default title: `The Hobbit Collection`
 - Default collection: `the-hobbit`
-- Default display: 6 products, 3 per desktop row
+- Default display: 3 products, 3 per desktop row
 - Homepage quick add: disabled
 
 ### Marvel Collection
@@ -250,7 +271,7 @@ The default order is:
 - Section type: `featured-collection`
 - Default title: `Marvel Collection`
 - Default collection: `marvel-super-heroes`
-- Default display: 6 products, 3 per desktop row
+- Default display: 3 products, 3 per desktop row
 - Homepage quick add: disabled
 
 ### Secrets of Strixhaven
@@ -258,7 +279,7 @@ The default order is:
 - Section type: `featured-collection`
 - Default title: `Secrets of Strixhaven`
 - Default collection: `secrets-of-strixhaven`
-- Default display: 6 products, 3 per desktop row
+- Default display: 3 products, 3 per desktop row
 - Homepage quick add: disabled
 
 ### Editing the homepage in EasyStore
@@ -337,9 +358,9 @@ top-level destinations in a fixed order. They are defined once in
 the desktop and mobile menus:
 
 1. Browse (EasyStore product collection hierarchy)
-2. Star Trek (`/collections/star-trek`)
-3. Reality Fracture (`/collections/reality-fracture`)
-4. Hobbit (`/collections/the-hobbit`)
+2. Nauctis (`/collections/nauctis-the-sunken-realm`)
+3. Star Trek (`/collections/star-trek`)
+4. Reality Fracture (`/collections/reality-fracture`)
 5. Secret Lair (`/collections/secret-lair`)
 6. Pokemon TCG (`/collections/pokemon`)
 7. Accessories (`/collections/accessories`)
@@ -584,8 +605,8 @@ communicates interaction.
 
 1. Update `content_for_index` in both settings-data files.
 2. Confirm every referenced section key exists.
-3. Preserve the documented Best Sellers, Hobbit, Marvel, and Strixhaven order
-   unless the merchandising strategy explicitly changes.
+3. Keep Best Sellers first (it is the only image-prioritized section) and keep
+   the documented order above in sync.
 
 ### Change a collection assignment
 
