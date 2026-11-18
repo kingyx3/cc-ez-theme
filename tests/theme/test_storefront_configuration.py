@@ -32,7 +32,7 @@ class StorefrontConfigurationTests(unittest.TestCase):
         self.assertTrue(header_settings["message"])
         self.assertEqual(
             header_settings["message_text"],
-            "Nauctis preorders open now!",
+            "Get 5% store credit on Nauctis pre-orders · Ends 30 Nov",
         )
         self.assertEqual(
             header_settings["message_link"],
