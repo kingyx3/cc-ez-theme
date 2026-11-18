@@ -210,7 +210,7 @@ If `EASYSTORE_ADMIN_TOKEN`, `EASYSTORE_POD_ID` or `EASYSTORE_STORE_DOMAIN` is mi
 - [ ] EasyStore Edit source shows populated runtime directories.
 - [ ] The theme renders, whether checked as the published storefront or as an unpublished preview.
 - [ ] Best Sellers shows two rows of three products on desktop; Nauctis, Star Trek, Reality Fracture, The Hobbit, and Strixhaven each show one row of three.
-- [ ] The announcement bar reads "Nauctis preorders open now!" and links to `/collections/nauctis-the-sunken-realm`.
+- [ ] The announcement bar reads "Get 5% store credit on Nauctis pre-orders · Ends 30 Nov" and links to `/collections/nauctis-the-sunken-realm`.
 - [ ] The Marvel Super Heroes campaign banner is absent from the homepage.
 - [ ] Homepage product cards do not show the orange quick-add button.
 - [ ] Product titles use available card width on desktop and mobile.
