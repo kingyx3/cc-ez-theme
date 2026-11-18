@@ -25,6 +25,16 @@
 {% endcomment %}
 {% assign customer_order_limit_row_handle = limit_handle | default: '' | append: '' | strip | downcase %}
 {% assign customer_order_limit_row_maximum = limit_maximum | default: 0 | plus: 0 %}
+{% comment %}
+  Optional membership-tier override keyed by EasyStore tier ID.
+  Unmatched tiers and guests retain the product's default maximum.
+{% endcomment %}
+{% assign customer_order_limit_tier_id = customer.membership.membership_tier.id | default: '' | append: '' | strip %}
+{% assign customer_order_limit_override_tier_id = limit_tier_id | default: '' | append: '' | strip %}
+{% assign customer_order_limit_override_maximum = limit_tier_maximum | default: 0 | plus: 0 %}
+{% if customer_order_limit_customer_authenticated and customer_order_limit_tier_id != '' and customer_order_limit_override_tier_id != '' and customer_order_limit_tier_id == customer_order_limit_override_tier_id and customer_order_limit_override_maximum > customer_order_limit_row_maximum %}
+  {% assign customer_order_limit_row_maximum = customer_order_limit_override_maximum %}
+{% endif %}
 {% if customer_order_limit_row_handle != '' and customer_order_limit_row_maximum > 0 %}
   {% comment %}
     Orders placed before the refresh window no longer count, so the allowance
@@ -103,3 +113,5 @@
 {% assign limit_handle = '' %}
 {% assign limit_maximum = 0 %}
 {% assign limit_refresh = '' %}
+{% assign limit_tier_id = '' %}
+{% assign limit_tier_maximum = 0 %}

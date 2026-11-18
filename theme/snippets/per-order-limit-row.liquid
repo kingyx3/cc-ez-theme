@@ -14,6 +14,17 @@
 {% endcomment %}
 {% assign per_order_limit_row_handle = order_limit_handle | default: '' | append: '' | strip | downcase %}
 {% assign per_order_limit_row_maximum = order_limit_maximum | default: 0 | plus: 0 %}
+{% comment %}
+  Optional tier ID override, independent from the per-customer maximum.
+  Use a stable EasyStore membership tier ID; guests and unmatched tiers keep
+  the standard limit. Only a higher positive override is accepted.
+{% endcomment %}
+{% assign per_order_limit_tier_id = customer.membership.membership_tier.id | default: '' | append: '' | strip %}
+{% assign per_order_limit_override_tier_id = order_limit_tier_id | default: '' | append: '' | strip %}
+{% assign per_order_limit_override_maximum = order_limit_tier_maximum | default: 0 | plus: 0 %}
+{% if customer and per_order_limit_tier_id != '' and per_order_limit_override_tier_id != '' and per_order_limit_tier_id == per_order_limit_override_tier_id and per_order_limit_override_maximum > per_order_limit_row_maximum %}
+  {% assign per_order_limit_row_maximum = per_order_limit_override_maximum %}
+{% endif %}
 {% if per_order_limit_row_handle != '' and per_order_limit_row_maximum > 0 %}
   <script>
     window.perOrderLimitsV1.rules[{{ per_order_limit_row_handle | json }}] = {
@@ -24,3 +35,5 @@
 {% endif %}
 {% assign order_limit_handle = '' %}
 {% assign order_limit_maximum = 0 %}
+{% assign order_limit_tier_id = '' %}
+{% assign order_limit_tier_maximum = 0 %}
