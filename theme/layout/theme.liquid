@@ -20,8 +20,15 @@
   {% endcomment %}
   {% include 'attribution-click-id' %}
 
+  {% comment %}
+    The image CDN answers a bare URL with WebP whatever the file was uploaded
+    as, and Google Search does not accept WebP favicons. Any query string makes
+    it return the original file, so the favicon is linked with one.
+  {% endcomment %}
   {% if settings.favicon_img %}
-  <link rel="icon" href="{{ settings.favicon_img }}" />
+  {% assign favicon_url = settings.favicon_img %}
+  {% unless favicon_url contains '?' %}{% assign favicon_url = favicon_url | append: '?format=png' %}{% endunless %}
+  <link rel="icon" href="{{ favicon_url }}" />
   {% endif %}
 
   <!-- Title and description ================================================== -->

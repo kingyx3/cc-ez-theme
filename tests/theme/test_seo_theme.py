@@ -44,6 +44,27 @@ class SeoThemeTests(unittest.TestCase):
             organization,
         )
 
+    def test_favicon_is_linked_in_a_format_google_accepts(self) -> None:
+        # The image CDN serves a bare URL as WebP, which Google Search does not
+        # accept for favicons; any query string returns the uploaded PNG.
+        layout = (THEME_ROOT / "layout" / "theme.liquid").read_text(encoding="utf-8")
+
+        self.assertIn(
+            "{% assign favicon_url = favicon_url | append: '?format=png' %}", layout
+        )
+        self.assertIn('<link rel="icon" href="{{ favicon_url }}" />', layout)
+        self.assertNotIn('href="{{ settings.favicon_img }}"', layout)
+
+        for config in ("config", "editor_config"):
+            with self.subTest(config=config):
+                settings = (THEME_ROOT / config / "settings_data.json").read_text(
+                    encoding="utf-8"
+                )
+                self.assertIn(
+                    '"favicon_img": "https://cdn.store-assets.com/s/1441746/f/18151836.png"',
+                    settings,
+                )
+
     def test_product_and_collection_templates_render_breadcrumbs(self) -> None:
         for template_name in ("product.liquid", "collection.liquid"):
             template = (THEME_ROOT / "templates" / template_name).read_text(
