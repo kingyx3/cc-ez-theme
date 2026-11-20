@@ -27,7 +27,9 @@ class SeoThemeTests(unittest.TestCase):
         self.assertIn('"@type": "WebSite"', website)
         self.assertIn('"@id": "https://cardboard.sg/#website"', website)
         self.assertIn('"name": {{ shop.name | json }}', website)
-        self.assertIn('"alternateName": ["cardboard.sg"]', website)
+        self.assertIn(
+            '"alternateName": ["Cardboard Collective", "cardboard.sg"]', website
+        )
         self.assertIn('"@id": "https://cardboard.sg/#organization"', website)
 
         self.assertIn('"@type": "OnlineStore"', organization)
