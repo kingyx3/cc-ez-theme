@@ -1,12 +1,33 @@
 from __future__ import annotations
 
+import json
+import os
 import re
 import unittest
 from pathlib import Path
 
+try:  # pragma: no cover - exercised by the absence of the dependency
+    from liquid import DictLoader, Environment
+except ImportError:  # pragma: no cover
+    DictLoader = None
+    Environment = None
+
 
 ROOT = Path(__file__).resolve().parents[2]
 THEME = ROOT / "theme"
+SNIPPETS = THEME / "snippets"
+# Skipping is for a developer who has not installed requirements-dev yet; in CI
+# the engine is pinned, so a missing one is a broken build.
+REQUIRE_ENGINE = bool(os.environ.get("CI"))
+
+# The Star Trek exclusive add-ons are separate listings from the products they
+# duplicate, each with its own per-order limit. Rows key on the product handle
+# because that is what every add-to-cart, Buy Now and checkout check looks up.
+TRK_BUNDLE_ADDON = "mtg-star-trek-beam-me-up-bundle-exclusive-add-on"
+TRK_COMBO_ADDON = "mtg-star-trek-play-booster-box-plus-beam-me-up-bundle-combo-exclusive-add-on"
+# The originals carry no per-order limit, and adding the add-ons must not give
+# them one.
+TRK_ORIGINALS = ("mtg-trk-bmb-en", "cc-bdl-trk-beammeupandplay-en")
 
 
 class PerOrderLimitTests(unittest.TestCase):
@@ -91,6 +112,95 @@ class PerOrderLimitTests(unittest.TestCase):
         self.assertNotIn("loadHistory", storefront)
         self.assertNotIn("HISTORY_URL", storefront)
         self.assertNotIn("redirectToLogin", storefront)
+
+    def test_star_trek_add_ons_are_limited_per_order_by_handle(self) -> None:
+        config = self.read("snippets/per-order-limit-config.liquid")
+
+        for handle, maximum in ((TRK_BUNDLE_ADDON, 4), (TRK_COMBO_ADDON, 6)):
+            with self.subTest(handle=handle):
+                self.assertIn(
+                    "{% include 'per-order-limit-row', order_limit_handle: "
+                    f"'{handle}', order_limit_maximum: {maximum} %}}",
+                    config,
+                )
+        for handle in TRK_ORIGINALS:
+            with self.subTest(handle=handle):
+                self.assertNotIn(f"'{handle}'", config.lower())
+
+        # tests/e2e/per-order-limit-config.spec.js runs these rows through the
+        # real validator; it only guards anything if CI runs it.
+        workflow = (ROOT / ".github/workflows/e2e-theme.yml").read_text(encoding="utf-8")
+        self.assertIn("tests/e2e/per-order-limit-config.spec.js", workflow)
+
+
+@unittest.skipIf(
+    Environment is None and not REQUIRE_ENGINE,
+    "python-liquid is not installed; run pip install -r requirements-dev.txt",
+)
+class PerOrderLimitRenderingTests(unittest.TestCase):
+    """Renders the shipped per-order config and reads the rules it publishes.
+
+    python-liquid is not EasyStore's renderer, so this proves the rows and the
+    cart pass, not the platform.
+    """
+
+    def setUp(self) -> None:
+        if Environment is None:
+            self.fail("python-liquid is required in CI to render the limit snippets.")
+
+    def render(self, cart_items: list) -> tuple[dict, dict]:
+        files = {
+            name: (SNIPPETS / f"{name}.liquid").read_text(encoding="utf-8")
+            for name in ("per-order-limits", "per-order-limit-row", "per-order-limit-config")
+        }
+        environment = Environment(loader=DictLoader(files))
+        environment.filters["json"] = json.dumps
+        environment.filters["asset_url"] = lambda value: f"/assets/{value}"
+        output = environment.get_template("per-order-limits").render(cart={"items": cart_items})
+
+        maximums = {
+            json.loads(match.group(1)): int(match.group(2))
+            for match in re.finditer(
+                r"window\.perOrderLimitsV1\.rules\[(\".*?\")\] = \{\s*maximum: (\d+),", output
+            )
+        }
+        cart: dict = {}
+        for match in re.finditer(
+            r"window\.perOrderLimitsV1\.cart\[(\".*?\")\] = \(.*?\) \+ (\d+);", output
+        ):
+            key = json.loads(match.group(1))
+            cart[key] = cart.get(key, 0) + int(match.group(2))
+        return maximums, cart
+
+    def test_star_trek_add_ons_publish_independent_limits(self) -> None:
+        maximums, cart = self.render([
+            {"product": {"handle": TRK_BUNDLE_ADDON}, "sku": "MTG-TRK-BMB-EN-ADDON", "quantity": 4},
+            {"product": {"handle": TRK_COMBO_ADDON}, "sku": "CC-BDL-TRK-BEAMMEUPANDPLAY-EN-ADDON", "quantity": 6},
+            {"product": {"handle": "mtg-trk-bmb-en"}, "sku": "MTG-TRK-BMB-EN", "quantity": 9},
+        ])
+
+        self.assertEqual(maximums[TRK_BUNDLE_ADDON], 4)
+        self.assertEqual(maximums[TRK_COMBO_ADDON], 6)
+        # Each add-on's cart count is its own lines only.
+        self.assertEqual(cart[TRK_BUNDLE_ADDON], 4)
+        self.assertEqual(cart[TRK_COMBO_ADDON], 6)
+        for handle in TRK_ORIGINALS:
+            with self.subTest(handle=handle):
+                self.assertNotIn(handle, maximums)
+
+    def test_every_configured_row_publishes_one_rule(self) -> None:
+        maximums, _ = self.render([])
+        config = (SNIPPETS / "per-order-limit-config.liquid").read_text(encoding="utf-8")
+        configured = re.findall(
+            r"^\{% include 'per-order-limit-row', order_limit_handle: '([^']+)', "
+            r"order_limit_maximum: (\d+) %\}$",
+            config,
+            re.M,
+        )
+
+        self.assertEqual(
+            maximums, {handle.lower(): int(maximum) for handle, maximum in configured}
+        )
 
 
 if __name__ == "__main__":

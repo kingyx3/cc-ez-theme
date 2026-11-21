@@ -274,7 +274,7 @@ jobs:
           exit 1
 
       - name: Run purchase limit after login suite
-        run: npx playwright test tests/e2e/purchase-limit-after-login.spec.js tests/e2e/buy-now-cart-limit.spec.js --project=chromium-desktop
+        run: npx playwright test tests/e2e/purchase-limit-after-login.spec.js tests/e2e/buy-now-cart-limit.spec.js tests/e2e/per-order-limit-config.spec.js --project=chromium-desktop
 
       - name: Upload purchase limit failure artifacts
         if: failure()
