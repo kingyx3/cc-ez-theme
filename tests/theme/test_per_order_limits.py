@@ -23,8 +23,8 @@ REQUIRE_ENGINE = bool(os.environ.get("CI"))
 # The Star Trek exclusive add-ons are separate listings from the products they
 # duplicate, each with its own per-order limit. Rows key on the product handle
 # because that is what every add-to-cart, Buy Now and checkout check looks up.
-TRK_BUNDLE_ADDON = "mtg-star-trek-beam-me-up-bundle-exclusive-add-on"
-TRK_COMBO_ADDON = "mtg-star-trek-play-booster-box-plus-beam-me-up-bundle-combo-exclusive-add-on"
+TRK_BUNDLE_ADDON = "exclusive-add-on-mtg-star-trek-beam-me-up-bundle"
+TRK_COMBO_ADDON = "exclusive-add-on-mtg-star-trek-play-booster-box-plus-beam-me-up-bundle-combo"
 # The originals carry no per-order limit, and adding the add-ons must not give
 # them one.
 TRK_ORIGINALS = ("mtg-trk-bmb-en", "cc-bdl-trk-beammeupandplay-en")
