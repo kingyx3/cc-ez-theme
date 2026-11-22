@@ -28,8 +28,8 @@ const CONFIGURED = Object.fromEntries(
   [...CONFIG.matchAll(ROW)].map(([, handle, maximum]) => [handle.toLowerCase(), Number(maximum)])
 );
 
-const BUNDLE_ADDON = 'mtg-star-trek-beam-me-up-bundle-exclusive-add-on';
-const COMBO_ADDON = 'mtg-star-trek-play-booster-box-plus-beam-me-up-bundle-combo-exclusive-add-on';
+const BUNDLE_ADDON = 'exclusive-add-on-mtg-star-trek-beam-me-up-bundle';
+const COMBO_ADDON = 'exclusive-add-on-mtg-star-trek-play-booster-box-plus-beam-me-up-bundle-combo';
 const ORIGINALS = ['mtg-trk-bmb-en', 'cc-bdl-trk-beammeupandplay-en'];
 
 /** Mirrors the Liquid pass: one rule per row, cart counted by handle. */
