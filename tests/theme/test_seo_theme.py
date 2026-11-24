@@ -27,9 +27,9 @@ class SeoThemeTests(unittest.TestCase):
         self.assertIn('"@type": "WebSite"', website)
         self.assertIn('"@id": "https://cardboard.sg/#website"', website)
         self.assertIn('"name": {{ shop.name | json }}', website)
-        self.assertIn(
-            '"alternateName": ["Cardboard Collective", "cardboard.sg"]', website
-        )
+        # No fallback names: listing the domain handed Google "cardboard.sg"
+        # as the site name, and repeating the name gave it nothing new.
+        self.assertNotIn("alternateName", website)
         self.assertIn('"@id": "https://cardboard.sg/#organization"', website)
 
         self.assertIn('"@type": "OnlineStore"', organization)
@@ -61,7 +61,7 @@ class SeoThemeTests(unittest.TestCase):
                     encoding="utf-8"
                 )
                 self.assertIn(
-                    '"favicon_img": "https://cdn.store-assets.com/s/1441746/f/18151836.png"',
+                    '"favicon_img": "https://cdn.store-assets.com/s/1441746/f/18181591.png"',
                     settings,
                 )
 
