@@ -352,19 +352,20 @@ background.
 
 ### Navigation data
 
-The desktop header and mobile drawer expose a Browse dropdown followed by seven
+The desktop header and mobile drawer expose a Browse dropdown followed by eight
 top-level destinations in a fixed order. They are defined once in
 `snippets/navigation-top-links.liquid`, which `header.liquid` includes for both
 the desktop and mobile menus:
 
 1. Browse (EasyStore product collection hierarchy)
-2. Nauctis (`/collections/nauctis-the-sunken-realm`)
-3. Star Trek (`/collections/star-trek`)
-4. Reality Fracture (`/collections/reality-fracture`)
-5. Secret Lair (`/collections/secret-lair`)
-6. Pokemon TCG (`/collections/pokemon`)
-7. Accessories (`/collections/accessories`)
-8. About Us (`/pages/about-us`)
+2. Black Friday (`/collections/black-friday-2026`)
+3. Nauctis (`/collections/nauctis-the-sunken-realm`)
+4. Star Trek (`/collections/star-trek`)
+5. Reality Fracture (`/collections/reality-fracture`)
+6. Secret Lair (`/collections/secret-lair`)
+7. Pokemon TCG (`/collections/pokemon`)
+8. Accessories (`/collections/accessories`)
+9. About Us (`/pages/about-us`)
 
 About Us is pushed to the right edge of the desktop navigation area. The
 Browse reads `contents.catalog.links` and renders up to three collection levels
