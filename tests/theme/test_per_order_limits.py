@@ -29,6 +29,23 @@ TRK_COMBO_ADDON = "exclusive-add-on-mtg-star-trek-play-booster-box-plus-beam-me-
 # them one.
 TRK_ORIGINALS = ("mtg-trk-bmb-en", "cc-bdl-trk-beammeupandplay-en")
 
+# Vault Break (Black Friday 2026) per-order limits from Berne's brief: the
+# Marvel Super Heroes Prerelease Kit at 2 per order and the Foundations
+# Commander Set of 5 at 1 per order. Keyed on product handle.
+MSH_PRERELEASE_KIT = "mtg-msh-prk-en"
+FDN_COMMANDER_SET5 = "mtg-fdn-cmd-en-set5"
+# The Foundations singles are separate listings and get no limit from the set.
+FDN_COMMANDER_SINGLES = tuple(
+    f"mtg-foundations-commander-deck-{deck}"
+    for deck in (
+        "calling-all-angels",
+        "keen-engineering",
+        "wretched-ranks",
+        "reign-of-dragons",
+        "tramplesaurus-rex",
+    )
+)
+
 
 class PerOrderLimitTests(unittest.TestCase):
     def read(self, relative: str) -> str:
@@ -132,6 +149,20 @@ class PerOrderLimitTests(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/e2e-theme.yml").read_text(encoding="utf-8")
         self.assertIn("tests/e2e/per-order-limit-config.spec.js", workflow)
 
+    def test_vault_break_kit_and_foundations_set_are_limited_per_order_by_handle(self) -> None:
+        config = self.read("snippets/per-order-limit-config.liquid")
+
+        for handle, maximum in ((MSH_PRERELEASE_KIT, 2), (FDN_COMMANDER_SET5, 1)):
+            with self.subTest(handle=handle):
+                self.assertIn(
+                    "{% include 'per-order-limit-row', order_limit_handle: "
+                    f"'{handle}', order_limit_maximum: {maximum} %}}",
+                    config,
+                )
+        for handle in FDN_COMMANDER_SINGLES:
+            with self.subTest(handle=handle):
+                self.assertNotIn(f"'{handle}'", config.lower())
+
 
 @unittest.skipIf(
     Environment is None and not REQUIRE_ENGINE,
@@ -185,6 +216,21 @@ class PerOrderLimitRenderingTests(unittest.TestCase):
         self.assertEqual(cart[TRK_BUNDLE_ADDON], 4)
         self.assertEqual(cart[TRK_COMBO_ADDON], 6)
         for handle in TRK_ORIGINALS:
+            with self.subTest(handle=handle):
+                self.assertNotIn(handle, maximums)
+
+    def test_vault_break_rows_publish_independent_limits(self) -> None:
+        maximums, cart = self.render([
+            {"product": {"handle": MSH_PRERELEASE_KIT}, "sku": "MTG-MSH-PRK-EN", "quantity": 2},
+            {"product": {"handle": FDN_COMMANDER_SET5}, "sku": "MTG-FDN-CMD-EN-SET5", "quantity": 1},
+            {"product": {"handle": FDN_COMMANDER_SINGLES[3]}, "sku": "MTG-FDN-CMD-EN-R", "quantity": 3},
+        ])
+
+        self.assertEqual(maximums[MSH_PRERELEASE_KIT], 2)
+        self.assertEqual(maximums[FDN_COMMANDER_SET5], 1)
+        self.assertEqual(cart[MSH_PRERELEASE_KIT], 2)
+        self.assertEqual(cart[FDN_COMMANDER_SET5], 1)
+        for handle in FDN_COMMANDER_SINGLES:
             with self.subTest(handle=handle):
                 self.assertNotIn(handle, maximums)
 
