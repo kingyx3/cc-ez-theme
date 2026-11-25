@@ -50,12 +50,13 @@
     only appear on later pages. Each page of a collection is its own page.
   {% endcomment %}
   {% assign page_canonical_url = canonical_url %}
-  {% if template contains 'collection' and current_page != blank and current_page != 1 %}
+  {% assign canonical_page_number = paginate.current_page | default: current_page | default: 1 | plus: 0 %}
+  {% if template contains 'collection' and canonical_page_number > 1 %}
     {% unless canonical_url contains 'page=' %}
       {% if canonical_url contains '?' %}
-        {% assign page_canonical_url = canonical_url | append: '&page=' | append: current_page %}
+        {% assign page_canonical_url = canonical_url | append: '&page=' | append: canonical_page_number %}
       {% else %}
-        {% assign page_canonical_url = canonical_url | append: '?page=' | append: current_page %}
+        {% assign page_canonical_url = canonical_url | append: '?page=' | append: canonical_page_number %}
       {% endif %}
     {% endunless %}
   {% endif %}
@@ -217,6 +218,19 @@
   
   {{ 'base.css' | asset_url | stylesheet_tag }}
   {{ 'conversion-theme.css' | asset_url | stylesheet_tag }}
+  {% comment %}
+    The homepage stacks several featured-collection sections, and EasyStore
+    does not share variables between sections, so each one linked the same
+    six files again. On the homepage they are linked once here instead.
+  {% endcomment %}
+  {% if template contains 'index' %}
+    {{ 'component-price.css' | asset_url | stylesheet_tag }}
+    {{ 'component-card.css' | asset_url | stylesheet_tag }}
+    {{ 'component-product-grid.css' | asset_url | stylesheet_tag }}
+    {{ 'component-loading-overlay.css' | asset_url | stylesheet_tag }}
+    {{ 'component-slider.css' | asset_url | stylesheet_tag }}
+    {{ 'template-collection.css' | asset_url | stylesheet_tag }}
+  {% endif %}
 
   {% comment %}
     These two are the storefront's last word on spacing and card polish, so

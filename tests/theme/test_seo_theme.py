@@ -159,7 +159,8 @@ class SeoThemeTests(unittest.TestCase):
 
         self.assertIn('<link rel="canonical" href="{{ page_canonical_url }}">', layout)
         self.assertNotIn('<link rel="canonical" href="{{ canonical_url }}">', layout)
-        self.assertIn("append: '?page=' | append: current_page", layout)
+        self.assertIn("paginate.current_page", layout)
+        self.assertIn("append: '?page=' | append: canonical_page_number", layout)
 
     def test_twitter_descriptions_use_the_written_meta_description(self) -> None:
         social = (THEME_ROOT / "snippets" / "social-meta-tags.liquid").read_text(
@@ -194,17 +195,30 @@ class SeoThemeTests(unittest.TestCase):
                 self.assertNotIn(".alt | _default: product.title", source)
 
     def test_homepage_links_shared_collection_styles_once(self) -> None:
+        # EasyStore does not share variables between sections, so a guard
+        # variable cannot dedupe them; the homepage links them in the head.
+        layout = (THEME_ROOT / "layout" / "theme.liquid").read_text(encoding="utf-8")
         section = (THEME_ROOT / "sections" / "featured-collection.liquid").read_text(
             encoding="utf-8"
         )
 
-        self.assertTrue(section.startswith("{% comment %}"))
-        self.assertIn("{% unless featured_collection_assets_loaded %}", section)
-        self.assertIn("{% assign featured_collection_assets_loaded = true %}", section)
-        self.assertLess(
-            section.index("{% unless featured_collection_assets_loaded %}"),
-            section.index("component-card.css"),
-        )
+        self.assertIn("{% unless template contains 'index' %}", section)
+        head = layout[layout.index("{% if template contains 'index' %}") :]
+        head = head[: head.index("{% endif %}")]
+        for stylesheet in (
+            "component-price.css",
+            "component-card.css",
+            "component-product-grid.css",
+            "component-loading-overlay.css",
+            "component-slider.css",
+            "template-collection.css",
+        ):
+            with self.subTest(stylesheet=stylesheet):
+                self.assertIn(f"'{stylesheet}' | asset_url | stylesheet_tag", head)
+                self.assertLess(
+                    section.index("{% unless template contains 'index' %}"),
+                    section.index(stylesheet),
+                )
 
 if __name__ == "__main__":
     unittest.main()
