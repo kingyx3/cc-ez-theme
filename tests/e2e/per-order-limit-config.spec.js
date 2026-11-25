@@ -150,3 +150,57 @@ test.describe('Star Trek exclusive add-on per-order limits', () => {
     }
   });
 });
+
+const MSH_PRERELEASE_KIT = 'mtg-msh-prk-en';
+const FDN_COMMANDER_SET5 = 'mtg-fdn-cmd-en-set5';
+const FDN_COMMANDER_SINGLE = 'mtg-foundations-commander-deck-reign-of-dragons';
+
+test.describe('Vault Break per-order limits', () => {
+  test('the config publishes 2 for the Marvel kit and 1 for the Foundations set only', () => {
+    expect(CONFIGURED[MSH_PRERELEASE_KIT]).toBe(2);
+    expect(CONFIGURED[FDN_COMMANDER_SET5]).toBe(1);
+    expect(CONFIGURED).not.toHaveProperty(FDN_COMMANDER_SINGLE);
+  });
+
+  test('Marvel Prerelease Kit: 2 can be added, 3 cannot', async ({ page }) => {
+    const errors = await load(page);
+
+    expect(await addToCart(page, MSH_PRERELEASE_KIT, 2)).toEqual({ added: true, message: '' });
+    const over = await addToCart(page, MSH_PRERELEASE_KIT, 3);
+    expect(over.added).toBe(false);
+    expect(over.message).toBe('Maximum 2 units per order.');
+    expect(errors).toEqual([]);
+  });
+
+  test('Foundations Set of 5: 1 can be added, and a second is blocked', async ({ page }) => {
+    const errors = await load(page);
+
+    expect(await addToCart(page, FDN_COMMANDER_SET5, 1)).toEqual({ added: true, message: '' });
+    const over = await addToCart(page, FDN_COMMANDER_SET5, 2);
+    expect(over.added).toBe(false);
+    expect(over.message).toBe('Maximum 1 unit per order.');
+    expect(errors).toEqual([]);
+
+    await load(page, { [FDN_COMMANDER_SET5]: 1 });
+    const again = await addToCart(page, FDN_COMMANDER_SET5, 1);
+    expect(again.added).toBe(false);
+    expect(again.message).toContain('Limit reached: 1 unit per order.');
+  });
+
+  test('checkout allows 2 kits + 1 set and blocks one over on either', async ({ page }) => {
+    await load(page, { [MSH_PRERELEASE_KIT]: 2, [FDN_COMMANDER_SET5]: 1 });
+
+    expect(await checkoutViolation(page, { [MSH_PRERELEASE_KIT]: 2, [FDN_COMMANDER_SET5]: 1 })).toBeNull();
+    expect(await checkoutViolation(page, { [MSH_PRERELEASE_KIT]: 3, [FDN_COMMANDER_SET5]: 1 }))
+      .toMatchObject({ handle: MSH_PRERELEASE_KIT, allowedQuantity: 2 });
+    expect(await checkoutViolation(page, { [MSH_PRERELEASE_KIT]: 2, [FDN_COMMANDER_SET5]: 2 }))
+      .toMatchObject({ handle: FDN_COMMANDER_SET5, allowedQuantity: 1 });
+  });
+
+  test('a Foundations single deck stays unlimited per order', async ({ page }) => {
+    await load(page, { [FDN_COMMANDER_SET5]: 1 });
+
+    expect(await page.evaluate((h) => window.PerOrderLimits.ruleFor(h), FDN_COMMANDER_SINGLE)).toBeNull();
+    expect(await addToCart(page, FDN_COMMANDER_SINGLE, 5)).toEqual({ added: true, message: '' });
+  });
+});
