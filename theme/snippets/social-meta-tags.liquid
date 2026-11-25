@@ -100,7 +100,7 @@
 {% endif %}
 {% if template contains 'index' %}
   <meta name="twitter:title" content="{{ page_title | escape }}">
-  <meta name="twitter:description" content="{{ page_description | default: shop.description | strip_html | strip_newlines | truncate: 200, '' | escape }}">
+  <meta name="twitter:description" content="{{ page_description | _default: shop.description | strip_html | strip_newlines | truncate: 200, '' | escape }}">
   {% if settings.meta_img %}
     <meta property="twitter:image" content="{{ settings.meta_img }}">
     <meta property="twitter:image:secure_url" content="{{ settings.meta_img }}">
@@ -114,7 +114,7 @@
     The SEO meta description is written for this; the product description
     opens with promotion banners and arrival panels.
   {% endcomment %}
-  <meta name="twitter:description" content="{{ page_description | default: product.description | strip_html | strip_newlines | truncate: 200, '' | escape }}">
+  <meta name="twitter:description" content="{{ page_description | _default: product.description | strip_html | strip_newlines | truncate: 200, '' | escape }}">
   <meta name="twitter:image" content="{{ product | img_url: 'large' }}">
   <meta name="twitter:image:width" content="480">
   <meta name="twitter:image:height" content="480">

@@ -168,10 +168,10 @@ class SeoThemeTests(unittest.TestCase):
 
         self.assertNotIn("pages[settings.home_page_content].content", social)
         self.assertIn(
-            "page_description | default: product.description | strip_html", social
+            "page_description | _default: product.description | strip_html", social
         )
         self.assertIn(
-            "page_description | default: shop.description | strip_html", social
+            "page_description | _default: shop.description | strip_html", social
         )
 
     def test_product_images_do_not_use_upload_file_names_as_alt_text(self) -> None:

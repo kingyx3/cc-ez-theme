@@ -1,4 +1,7 @@
 {% comment %}
+  Use `_default`, not `default`, for text fallbacks: on EasyStore `default`
+  does not replace an empty string, so an empty meta description stayed empty.
+
   Product structured data for Google Search and merchant listings.
 
   This replaces EasyStore's `product | structured_data: shop` output, which:
@@ -20,7 +23,7 @@
 {% assign product_schema_price_value = product_schema_price | plus: 0 %}
 
 {% if product_schema_price_value > 0 %}
-  {% assign product_schema_brand = product.brands.first | default: shop.name %}
+  {% assign product_schema_brand = product.brands.first | _default: shop.name %}
   {% if product.tags contains 'MTG' %}
     {% assign product_schema_brand = 'Magic: The Gathering' %}
   {% endif %}
@@ -39,7 +42,7 @@
     {% assign product_schema_shipping = '0' %}
   {% endif %}
 
-  {% assign product_schema_description = page_description | default: product.description | strip_html | strip_newlines | truncate: 4900, '' %}
+  {% assign product_schema_description = page_description | _default: product.description | strip_html | strip_newlines | truncate: 4900, '' %}
   {% assign product_schema_barcode = product_schema_variant.barcode | strip %}
 <script type="application/ld+json">
 {
@@ -49,7 +52,9 @@
   "name": {{ product.title | strip_html | json }},
   "url": {{ canonical_url | json }},
   "description": {{ product_schema_description | json }},
-  "image": [{% for image in product.images limit: 5 %}{{ image.src | json }}{% unless forloop.last %}, {% endunless %}{% endfor %}],
+  {% comment %}EasyStore leaves forloop.last unset, so the separator goes before every image but the first.{% endcomment %}
+  {% assign product_schema_image_separator = '' %}
+  "image": [{% for image in product.images limit: 5 %}{{ product_schema_image_separator }}{{ image.src | json }}{% assign product_schema_image_separator = ', ' %}{% endfor %}],
   "brand": {
     "@type": "Brand",
     "name": {{ product_schema_brand | json }}
