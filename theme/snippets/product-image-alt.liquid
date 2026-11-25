@@ -1,0 +1,20 @@
+{% comment %}
+  Usage:
+    {% capture my_alt %}{% include 'product-image-alt', image_alt: image.alt, image_alt_fallback: product.title %}{% endcapture %}
+
+  Outputs the image's own alt text when someone wrote it, and the product
+  title when the alt is only the uploaded file's name. Most product images
+  arrive with names like "Screenshot 2026-10-07 at 4.40.46 PM",
+  "WhatsApp Image ...", "image_B31DA2A7-...", or a bare id, which tell a
+  screen reader and Google Images nothing. Output is unescaped: escape it
+  where it is used.
+{% endcomment %}
+{% assign product_image_alt_value = image_alt | strip %}
+{% assign product_image_alt_words = product_image_alt_value | split: ' ' %}
+{% assign product_image_alt_is_filename = false %}
+{% if product_image_alt_value == blank or product_image_alt_words.size < 2 %}
+  {% assign product_image_alt_is_filename = true %}
+{% elsif product_image_alt_value contains 'Screenshot' or product_image_alt_value contains 'WhatsApp Image' or product_image_alt_value contains 'Empty Image' or product_image_alt_value contains 'IMG_' or product_image_alt_value contains 'image_' %}
+  {% assign product_image_alt_is_filename = true %}
+{% endif %}
+{% if product_image_alt_is_filename %}{{ image_alt_fallback | strip_html | strip }}{% else %}{{ product_image_alt_value }}{% endif %}

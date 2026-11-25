@@ -1,9 +1,15 @@
-{{ 'component-price.css' | asset_url | stylesheet_tag }}
-{{ 'component-card.css' | asset_url | stylesheet_tag }}
-{{ 'component-product-grid.css' | asset_url | stylesheet_tag }}
-{{ 'component-loading-overlay.css' | asset_url | stylesheet_tag }}
-{{ 'component-slider.css' | asset_url | stylesheet_tag }}
-{{ 'template-collection.css' | asset_url | stylesheet_tag }}
+{% comment %}
+  On the homepage these styles are linked once in the layout head (see
+  layout/theme.liquid); elsewhere the section links its own.
+{% endcomment %}
+{% unless template contains 'index' %}
+  {{ 'component-price.css' | asset_url | stylesheet_tag }}
+  {{ 'component-card.css' | asset_url | stylesheet_tag }}
+  {{ 'component-product-grid.css' | asset_url | stylesheet_tag }}
+  {{ 'component-loading-overlay.css' | asset_url | stylesheet_tag }}
+  {{ 'component-slider.css' | asset_url | stylesheet_tag }}
+  {{ 'template-collection.css' | asset_url | stylesheet_tag }}
+{% endunless %}
 
 {% assign collection_id = section.settings.collection__id %}
 {% assign collection = collections[collection_id] %}
