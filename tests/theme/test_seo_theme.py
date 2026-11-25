@@ -115,6 +115,96 @@ class SeoThemeTests(unittest.TestCase):
             "their text in the ellipsis span",
         )
 
+    def test_product_schema_describes_preorders_brand_shipping_and_returns(self) -> None:
+        section = (THEME_ROOT / "sections" / "main-product.liquid").read_text(
+            encoding="utf-8"
+        )
+        schema = (THEME_ROOT / "snippets" / "product-schema.liquid").read_text(
+            encoding="utf-8"
+        )
+
+        # EasyStore's built-in filter marked pre-orders InStock and branded
+        # every bundle with the store name.
+        self.assertNotIn("structured_data", section)
+        self.assertIn("{% include 'product-schema' %}", section)
+
+        self.assertIn('"@type": "Product"', schema)
+        self.assertIn("{% if product_schema_price_value > 0 %}", schema)
+        self.assertIn("{% if product.tags contains 'Pre-order' %}", schema)
+        self.assertIn("https://schema.org/PreOrder", schema)
+        self.assertIn("{% if product.tags contains 'MTG' %}", schema)
+        self.assertIn("'Magic: The Gathering'", schema)
+        self.assertIn('"gtin"', schema)
+        self.assertIn('"shippingDetails"', schema)
+        self.assertIn("{% if product_schema_price_value >= 500 %}", schema)
+        self.assertIn('"addressCountry": "SG"', schema)
+        self.assertIn("https://schema.org/MerchantReturnNotPermitted", schema)
+        self.assertIn('"@id": "https://cardboard.sg/#organization"', schema)
+
+    def test_store_plumbing_pages_are_kept_out_of_the_index(self) -> None:
+        layout = (THEME_ROOT / "layout" / "theme.liquid").read_text(encoding="utf-8")
+        robots = (THEME_ROOT / "snippets" / "robots-meta.liquid").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("{% include 'robots-meta' %}", layout)
+        for handle in ("feature-on-homepage", "product-types", "exclusive-add-ons"):
+            with self.subTest(handle=handle):
+                self.assertIn(f"collection.handle == '{handle}'", robots)
+        self.assertIn("product.handle contains 'exclusive-add-on-'", robots)
+        self.assertIn('<meta name="robots" content="noindex, follow">', robots)
+
+    def test_paginated_collections_point_their_canonical_at_themselves(self) -> None:
+        layout = (THEME_ROOT / "layout" / "theme.liquid").read_text(encoding="utf-8")
+
+        self.assertIn('<link rel="canonical" href="{{ page_canonical_url }}">', layout)
+        self.assertNotIn('<link rel="canonical" href="{{ canonical_url }}">', layout)
+        self.assertIn("append: '?page=' | append: current_page", layout)
+
+    def test_twitter_descriptions_use_the_written_meta_description(self) -> None:
+        social = (THEME_ROOT / "snippets" / "social-meta-tags.liquid").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertNotIn("pages[settings.home_page_content].content", social)
+        self.assertIn(
+            "page_description | default: product.description | strip_html", social
+        )
+        self.assertIn(
+            "page_description | default: shop.description | strip_html", social
+        )
+
+    def test_product_images_do_not_use_upload_file_names_as_alt_text(self) -> None:
+        alt = (THEME_ROOT / "snippets" / "product-image-alt.liquid").read_text(
+            encoding="utf-8"
+        )
+        for marker in ("Screenshot", "WhatsApp Image", "image_", "IMG_"):
+            with self.subTest(marker=marker):
+                self.assertIn(f"contains '{marker}'", alt)
+        self.assertIn("product_image_alt_words.size < 2", alt)
+
+        for path in (
+            "sections/main-product.liquid",
+            "snippets/product-card.liquid",
+            "snippets/product-quickview.liquid",
+        ):
+            source = (THEME_ROOT / path).read_text(encoding="utf-8")
+            with self.subTest(path=path):
+                self.assertIn("{% include 'product-image-alt'", source)
+                self.assertNotIn(".alt | _default: product.title", source)
+
+    def test_homepage_links_shared_collection_styles_once(self) -> None:
+        section = (THEME_ROOT / "sections" / "featured-collection.liquid").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertTrue(section.startswith("{% comment %}"))
+        self.assertIn("{% unless featured_collection_assets_loaded %}", section)
+        self.assertIn("{% assign featured_collection_assets_loaded = true %}", section)
+        self.assertLess(
+            section.index("{% unless featured_collection_assets_loaded %}"),
+            section.index("component-card.css"),
+        )
 
 if __name__ == "__main__":
     unittest.main()

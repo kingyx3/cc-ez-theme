@@ -44,7 +44,23 @@
   {% include 'social-meta-tags' %}
 
   <!-- Helpers ================================================== -->
-  <link rel="canonical" href="{{ canonical_url }}">
+  {% comment %}
+    EasyStore's canonical_url drops ?page=, so every page of a long
+    collection claimed to be page 1 and Google could skip the products that
+    only appear on later pages. Each page of a collection is its own page.
+  {% endcomment %}
+  {% assign page_canonical_url = canonical_url %}
+  {% if template contains 'collection' and current_page != blank and current_page != 1 %}
+    {% unless canonical_url contains 'page=' %}
+      {% if canonical_url contains '?' %}
+        {% assign page_canonical_url = canonical_url | append: '&page=' | append: current_page %}
+      {% else %}
+        {% assign page_canonical_url = canonical_url | append: '?page=' | append: current_page %}
+      {% endif %}
+    {% endunless %}
+  {% endif %}
+  <link rel="canonical" href="{{ page_canonical_url }}">
+  {% include 'robots-meta' %}
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="{{ settings.colors_accent_1 }}">
 

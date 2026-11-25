@@ -1,0 +1,23 @@
+{% comment %}
+  Pages that exist for the store's own plumbing, not for shoppers arriving
+  from search, are kept out of the index. `follow` lets Google keep crawling
+  the products they link to.
+
+  - feature-on-homepage: feeds the homepage "Best Sellers" row.
+  - product-types: a navigation grouping that repeats other collections.
+  - exclusive-add-ons and exclusive-add-on-* products: login-gated add-ons
+    priced for existing orders only.
+{% endcomment %}
+{% assign robots_noindex = false %}
+{% if template contains 'collection' %}
+  {% if collection.handle == 'feature-on-homepage' or collection.handle == 'product-types' or collection.handle == 'exclusive-add-ons' %}
+    {% assign robots_noindex = true %}
+  {% endif %}
+{% elsif template contains 'product' %}
+  {% if product.handle contains 'exclusive-add-on-' %}
+    {% assign robots_noindex = true %}
+  {% endif %}
+{% endif %}
+{% if robots_noindex %}
+  <meta name="robots" content="noindex, follow">
+{% endif %}

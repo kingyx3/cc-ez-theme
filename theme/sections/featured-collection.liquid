@@ -1,9 +1,16 @@
-{{ 'component-price.css' | asset_url | stylesheet_tag }}
-{{ 'component-card.css' | asset_url | stylesheet_tag }}
-{{ 'component-product-grid.css' | asset_url | stylesheet_tag }}
-{{ 'component-loading-overlay.css' | asset_url | stylesheet_tag }}
-{{ 'component-slider.css' | asset_url | stylesheet_tag }}
-{{ 'template-collection.css' | asset_url | stylesheet_tag }}
+{% comment %}
+  The homepage stacks several of these sections. Link their shared styles
+  once, not once per section: the same six files were linked six times.
+{% endcomment %}
+{% unless featured_collection_assets_loaded %}
+  {{ 'component-price.css' | asset_url | stylesheet_tag }}
+  {{ 'component-card.css' | asset_url | stylesheet_tag }}
+  {{ 'component-product-grid.css' | asset_url | stylesheet_tag }}
+  {{ 'component-loading-overlay.css' | asset_url | stylesheet_tag }}
+  {{ 'component-slider.css' | asset_url | stylesheet_tag }}
+  {{ 'template-collection.css' | asset_url | stylesheet_tag }}
+  {% assign featured_collection_assets_loaded = true %}
+{% endunless %}
 
 {% assign collection_id = section.settings.collection__id %}
 {% assign collection = collections[collection_id] %}
