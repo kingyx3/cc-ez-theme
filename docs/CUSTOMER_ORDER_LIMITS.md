@@ -6,27 +6,23 @@ This feature limits a signed-in customer to a configured number of units for an 
 
 | EasyStore product handle | Per-customer maximum |
 | --- | ---: |
-| `MTG-HOB-BDL-EN` | 6 |
-| `MTG-HOB-CBB-EN` | 1 |
-| `MTG-HOB-CBB-EN-CASE6` | 1 |
 | `MTG-HOB-CBB-EN-PACK` | 4 |
 | `MTG-HOB-DNK-EN` | 3 |
-| `MTG-HOB-GFB-EN` | 1 |
-| `MTG-HOB-PBB-EN` | 12 |
 | `MTG-HOB-PRK-EN-SET4` | 3 |
-| `MTG-HOB-OBP-EN` | 2 |
-| `MTG-HOB-SCN-EN-SET2` | 2 |
-| `MTG-MSH-JBB-EN` | 6 |
-| `MTG-MSH-CMD-EN-CE-SET4` | 1 |
-| `CC-BDL-SCENES3-EN` | 1 |
+| `MTG-FRA-SLB-EN` | 4 |
+| `reality-fracture-secret-lair-bundle-en` | 1 |
+| `MTG-FRA-CBB-EN` | 2 |
 | `CC-BDL-FRIENDS3-EN-SPM` | 1 |
 | `CC-BDL-FRIENDS3-EN-MSH` | 1 |
-| `CC-BDL-SPIDERVAULT-EN` | 1 |
 | `CC-BDL-UNEXPECTED-EN` | 2 |
+| `CC-BDL-MANYREALITIES-EN` | 1 |
+| `CC-BDL-TWINBOX-EN` | 2 |
+| `MTG-HOB-GFB-EN` | 1 |
 | `late-night-crackers-ep3` | 2 |
-| `late-night-crackers-ep4-1` | 4 |
-| `late-night-crackers-ep4-2` | 1 |
 | `mtg-fin-cmd-en-set4` | 1 |
+| `packing-day-bundle-a` | 1 |
+| `packing-day-bundle-b` | 1 |
+| `packing-day-bundle-c` | 1 |
 
 Rows supplied with a blank promo maximum are intentionally not configured and remain unlimited. This includes the remaining `MTG-MSH-*`, `MTG-SOS-*`, and `MTG-SPM-*` handles not listed above, plus `CC-BDL-HAPPYHAMPER-EN` and `CC-BDL-HAPPYHAMPER-EN-PBB`.
 
