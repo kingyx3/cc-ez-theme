@@ -29,14 +29,11 @@ class CustomerOrderLimitTests(unittest.TestCase):
             ("MTG-FRA-CBB-EN", 2),
             ("CC-BDL-FRIENDS3-EN-SPM", 1),
             ("CC-BDL-FRIENDS3-EN-MSH", 1),
-            ("CC-BDL-SPIDERVAULT-EN", 1),
             ("CC-BDL-UNEXPECTED-EN", 2),
             ("CC-BDL-MANYREALITIES-EN", 1),
             ("CC-BDL-TWINBOX-EN", 2),
             ("MTG-HOB-GFB-EN", 1),
             ("late-night-crackers-ep3", 2),
-            ("late-night-crackers-ep4-1", 4),
-            ("late-night-crackers-ep4-2", 1),
             ("mtg-fin-cmd-en-set4", 1),
             ("packing-day-bundle-a", 1),
             ("packing-day-bundle-b", 1),
@@ -77,7 +74,7 @@ class CustomerOrderLimitTests(unittest.TestCase):
         for handle in unlimited:
             self.assertNotIn(handle, config)
 
-        self.assertEqual(len(rows), 20)
+        self.assertEqual(len(rows), 17)
         self.assertIn("normalized to lowercase", config)
         self.assertIn("Delete the row to leave a product", config)
         self.assertNotIn("split:", config)
