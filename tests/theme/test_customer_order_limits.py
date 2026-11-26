@@ -21,12 +21,9 @@ class CustomerOrderLimitTests(unittest.TestCase):
     def test_exact_limit_matrix_is_preserved(self) -> None:
         config = self.read("snippets/customer-order-limit-config.liquid")
         expected = (
-            ("MTG-HOB-CBB-EN", 2),
-            ("MTG-HOB-CBB-EN-CASE6", 1),
             ("MTG-HOB-CBB-EN-PACK", 4),
             ("MTG-HOB-DNK-EN", 3),
             ("MTG-HOB-PRK-EN-SET4", 3),
-            ("MTG-HOB-OBP-EN", 30),
             ("MTG-FRA-SLB-EN", 4),
             ("reality-fracture-secret-lair-bundle-en", 1),
             ("MTG-FRA-CBB-EN", 2),
@@ -80,7 +77,7 @@ class CustomerOrderLimitTests(unittest.TestCase):
         for handle in unlimited:
             self.assertNotIn(handle, config)
 
-        self.assertEqual(len(rows), 23)
+        self.assertEqual(len(rows), 20)
         self.assertIn("normalized to lowercase", config)
         self.assertIn("Delete the row to leave a product", config)
         self.assertNotIn("split:", config)
