@@ -21,13 +21,16 @@ SNIPPETS = THEME / "snippets"
 REQUIRE_ENGINE = bool(os.environ.get("CI"))
 
 # The Star Trek exclusive add-ons are separate listings from the products they
-# duplicate, each with its own per-order limit. Rows key on the product handle
-# because that is what every add-to-cart, Buy Now and checkout check looks up.
+# duplicate, each limited independently. Rows key on the product handle because
+# that is what every add-to-cart, Buy Now and checkout check looks up.
+# The Beam Me Up add-on is limited per account (customer-order-limit-config), so
+# it has no per-order row; the combo add-on stays at 6 per order.
 TRK_BUNDLE_ADDON = "exclusive-add-on-mtg-star-trek-beam-me-up-bundle"
 TRK_COMBO_ADDON = "exclusive-add-on-mtg-star-trek-play-booster-box-plus-beam-me-up-bundle-combo"
-# The originals carry no per-order limit, and adding the add-ons must not give
-# them one.
-TRK_ORIGINALS = ("mtg-trk-bmb-en", "cc-bdl-trk-beammeupandplay-en")
+# The regular Beam Me Up Bundle is limited to 2 per order of its own.
+TRK_BUNDLE = "mtg-trk-bmb-en"
+# The regular combo carries no per-order limit.
+TRK_COMBO = "cc-bdl-trk-beammeupandplay-en"
 
 # Vault Break (Black Friday 2026) per-order limits from Berne's brief: the
 # Marvel Super Heroes Prerelease Kit at 2 per order and the Foundations
@@ -128,19 +131,27 @@ class PerOrderLimitTests(unittest.TestCase):
         self.assertNotIn("HISTORY_URL", storefront)
         self.assertNotIn("redirectToLogin", storefront)
 
-    def test_star_trek_add_ons_are_limited_per_order_by_handle(self) -> None:
+    def test_star_trek_rows_are_keyed_by_handle(self) -> None:
         config = self.read("snippets/per-order-limit-config.liquid")
 
-        for handle, maximum in ((TRK_BUNDLE_ADDON, 4), (TRK_COMBO_ADDON, 6)):
+        for handle, maximum in ((TRK_COMBO_ADDON, 6), (TRK_BUNDLE, 2)):
             with self.subTest(handle=handle):
                 self.assertIn(
                     "{% include 'per-order-limit-row', order_limit_handle: "
                     f"'{handle}', order_limit_maximum: {maximum} %}}",
                     config,
                 )
-        for handle in TRK_ORIGINALS:
+        for handle in (TRK_BUNDLE_ADDON, TRK_COMBO):
             with self.subTest(handle=handle):
                 self.assertNotIn(f"'{handle}'", config.lower())
+
+        # The Beam Me Up add-on's limit is per account instead.
+        customer = self.read("snippets/customer-order-limit-config.liquid")
+        self.assertIn(
+            "{% include 'customer-order-limit-row', limit_handle: "
+            f"'{TRK_BUNDLE_ADDON}', limit_maximum: 4, limit_refresh: '' %}}",
+            customer,
+        )
 
         # tests/e2e/per-order-limit-config.spec.js runs these rows through the
         # real validator; it only guards anything if CI runs it.
@@ -205,15 +216,17 @@ class PerOrderLimitRenderingTests(unittest.TestCase):
         maximums, cart = self.render([
             {"product": {"handle": TRK_BUNDLE_ADDON}, "sku": "MTG-TRK-BMB-EN-ADDON", "quantity": 4},
             {"product": {"handle": TRK_COMBO_ADDON}, "sku": "CC-BDL-TRK-BEAMMEUPANDPLAY-EN-ADDON", "quantity": 6},
-            {"product": {"handle": "mtg-trk-bmb-en"}, "sku": "MTG-TRK-BMB-EN", "quantity": 9},
+            {"product": {"handle": TRK_BUNDLE}, "sku": "MTG-TRK-BMB-EN", "quantity": 2},
+            {"product": {"handle": TRK_COMBO}, "sku": "CC-BDL-TRK-BEAMMEUPANDPLAY-EN", "quantity": 9},
         ])
 
-        self.assertEqual(maximums[TRK_BUNDLE_ADDON], 4)
         self.assertEqual(maximums[TRK_COMBO_ADDON], 6)
-        # Each add-on's cart count is its own lines only.
-        self.assertEqual(cart[TRK_BUNDLE_ADDON], 4)
+        self.assertEqual(maximums[TRK_BUNDLE], 2)
+        # Each row's cart count is its own lines only: the add-on's 4 units do
+        # not count against the regular bundle.
         self.assertEqual(cart[TRK_COMBO_ADDON], 6)
-        for handle in TRK_ORIGINALS:
+        self.assertEqual(cart[TRK_BUNDLE], 2)
+        for handle in (TRK_BUNDLE_ADDON, TRK_COMBO):
             with self.subTest(handle=handle):
                 self.assertNotIn(handle, maximums)
 
