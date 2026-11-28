@@ -30,7 +30,9 @@ const CONFIGURED = Object.fromEntries(
 
 const BUNDLE_ADDON = 'exclusive-add-on-mtg-star-trek-beam-me-up-bundle';
 const COMBO_ADDON = 'exclusive-add-on-mtg-star-trek-play-booster-box-plus-beam-me-up-bundle-combo';
-const ORIGINALS = ['mtg-trk-bmb-en', 'cc-bdl-trk-beammeupandplay-en'];
+// The Beam Me Up add-on is limited per account (customer-order-limit-config.liquid).
+const BUNDLE = 'mtg-trk-bmb-en';
+const COMBO = 'cc-bdl-trk-beammeupandplay-en';
 
 /** Mirrors the Liquid pass: one rule per row, cart counted by handle. */
 const orderLimits = (cart) => ({
@@ -94,33 +96,35 @@ const checkoutViolation = (page, totals) => page.evaluate(
   totals
 );
 
-test.describe('Star Trek exclusive add-on per-order limits', () => {
-  test('the config publishes 4 and 6 per order, and nothing for the originals', () => {
-    expect(CONFIGURED[BUNDLE_ADDON]).toBe(4);
+test.describe('Star Trek per-order limits', () => {
+  test('the config publishes 6 for the combo add-on and 2 for the regular bundle only', () => {
     expect(CONFIGURED[COMBO_ADDON]).toBe(6);
-    for (const handle of ORIGINALS) expect(CONFIGURED).not.toHaveProperty(handle);
+    expect(CONFIGURED[BUNDLE]).toBe(2);
+    // The Beam Me Up add-on is limited per account, not per order.
+    expect(CONFIGURED).not.toHaveProperty(BUNDLE_ADDON);
+    expect(CONFIGURED).not.toHaveProperty(COMBO);
   });
 
-  test('Beam Me Up add-on: 4 can be added, 5 cannot', async ({ page }) => {
+  test('regular Beam Me Up Bundle: 2 can be added, 3 cannot', async ({ page }) => {
     const errors = await load(page);
 
-    expect(await addToCart(page, BUNDLE_ADDON, 4)).toEqual({ added: true, message: '' });
-    const over = await addToCart(page, BUNDLE_ADDON, 5);
+    expect(await addToCart(page, BUNDLE, 2)).toEqual({ added: true, message: '' });
+    const over = await addToCart(page, BUNDLE, 3);
     expect(over.added).toBe(false);
-    expect(over.message).toBe('Maximum 4 units per order.');
+    expect(over.message).toBe('Maximum 2 units per order.');
     expect(errors).toEqual([]);
   });
 
-  test('Beam Me Up add-on: with 4 in the cart, one more is blocked', async ({ page }) => {
-    await load(page, { [BUNDLE_ADDON]: 4 });
+  test('regular Beam Me Up Bundle: with 2 in the cart, one more is blocked', async ({ page }) => {
+    await load(page, { [BUNDLE]: 2 });
 
-    const over = await addToCart(page, BUNDLE_ADDON, 1);
+    const over = await addToCart(page, BUNDLE, 1);
     expect(over.added).toBe(false);
-    expect(over.message).toContain('Limit reached: 4 units per order.');
+    expect(over.message).toContain('Limit reached: 2 units per order.');
   });
 
-  test('combo add-on: 6 can be added while the Beam Me Up add-on is at its limit, 7 cannot', async ({ page }) => {
-    const errors = await load(page, { [BUNDLE_ADDON]: 4 });
+  test('combo add-on: 6 can be added while the regular bundle is at its limit, 7 cannot', async ({ page }) => {
+    const errors = await load(page, { [BUNDLE]: 2 });
 
     expect(await addToCart(page, COMBO_ADDON, 6)).toEqual({ added: true, message: '' });
     const over = await addToCart(page, COMBO_ADDON, 7);
@@ -129,22 +133,22 @@ test.describe('Star Trek exclusive add-on per-order limits', () => {
     expect(errors).toEqual([]);
   });
 
-  test('checkout allows 4 + 6 and blocks one over on either add-on only', async ({ page }) => {
-    await load(page, { [BUNDLE_ADDON]: 4, [COMBO_ADDON]: 6 });
+  test('checkout allows 2 + 6 and blocks one over on either row only', async ({ page }) => {
+    await load(page, { [BUNDLE]: 2, [COMBO_ADDON]: 6 });
 
-    expect(await checkoutViolation(page, { [BUNDLE_ADDON]: 4, [COMBO_ADDON]: 6 })).toBeNull();
+    expect(await checkoutViolation(page, { [BUNDLE]: 2, [COMBO_ADDON]: 6 })).toBeNull();
 
-    const bundleOver = await checkoutViolation(page, { [BUNDLE_ADDON]: 5, [COMBO_ADDON]: 6 });
-    expect(bundleOver).toMatchObject({ handle: BUNDLE_ADDON, allowedQuantity: 4 });
+    const bundleOver = await checkoutViolation(page, { [BUNDLE]: 3, [COMBO_ADDON]: 6 });
+    expect(bundleOver).toMatchObject({ handle: BUNDLE, allowedQuantity: 2 });
 
-    const comboOver = await checkoutViolation(page, { [BUNDLE_ADDON]: 4, [COMBO_ADDON]: 7 });
+    const comboOver = await checkoutViolation(page, { [BUNDLE]: 2, [COMBO_ADDON]: 7 });
     expect(comboOver).toMatchObject({ handle: COMBO_ADDON, allowedQuantity: 6 });
   });
 
-  test('the original listings stay unlimited per order', async ({ page }) => {
-    await load(page, { [BUNDLE_ADDON]: 4, [COMBO_ADDON]: 6 });
+  test('the Beam Me Up add-on and the regular combo stay unlimited per order', async ({ page }) => {
+    await load(page, { [BUNDLE]: 2, [COMBO_ADDON]: 6 });
 
-    for (const handle of ORIGINALS) {
+    for (const handle of [BUNDLE_ADDON, COMBO]) {
       expect(await page.evaluate((h) => window.PerOrderLimits.ruleFor(h), handle)).toBeNull();
       expect(await addToCart(page, handle, 10)).toEqual({ added: true, message: '' });
     }

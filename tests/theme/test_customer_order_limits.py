@@ -38,6 +38,8 @@ class CustomerOrderLimitTests(unittest.TestCase):
             ("packing-day-bundle-a", 1),
             ("packing-day-bundle-b", 1),
             ("packing-day-bundle-c", 1),
+            # Star Trek Beam Me Up add-on: 4 per account, no per-order row.
+            ("exclusive-add-on-mtg-star-trek-beam-me-up-bundle", 4),
         )
         rows = configured_rows(config)
         self.assertEqual([(handle, maximum) for handle, maximum, _ in rows], list(expected))
@@ -74,7 +76,7 @@ class CustomerOrderLimitTests(unittest.TestCase):
         for handle in unlimited:
             self.assertNotIn(handle, config)
 
-        self.assertEqual(len(rows), 17)
+        self.assertEqual(len(rows), 18)
         self.assertIn("normalized to lowercase", config)
         self.assertIn("Delete the row to leave a product", config)
         self.assertNotIn("split:", config)
